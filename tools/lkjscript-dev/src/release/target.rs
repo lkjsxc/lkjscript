@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) const TARGET_TRIPLE: &str = "x86_64-unknown-linux-musl";
 pub(super) const ARCHIVE_NAME: &str = "lkjscript-x86_64-unknown-linux-musl.tar.gz";
+pub(super) const TAR_NAME: &str = "lkjscript-x86_64-unknown-linux-musl.tar";
 pub(super) const LINKAGE_MODEL: &str = "static-musl";
 pub(super) const ELF_INSPECTOR: &str = "lkjscript-elf64-little-endian-inspector-1";
 pub(super) const POLICY_SCHEMA: &str = "lkjscript-release-target-policy";
@@ -178,7 +179,12 @@ pub(super) fn print_policy(arguments: impl Iterator<Item = OsString>) -> Result<
     }
     println!(
         "{}",
-        serde_json::to_string(&policy()).map_err(|error| {
+        serde_json::to_string(&serde_json::json!({
+            "status": "passed",
+            "policy_sha256": policy_sha256()?,
+            "policy": policy(),
+        }))
+        .map_err(|error| {
             DevError::infrastructure(format!("encode release target policy: {error}"))
         })?
     );
@@ -763,6 +769,14 @@ mod tests {
             package.version == MUSL_PACKAGE_VERSION && package.sha256.len() == 64
         }));
         assert!(!ARCHIVE_NAME.contains("unknown-linux-gnu"));
+    }
+
+    #[test]
+    fn target_policy_summary_binds_the_canonical_policy_digest() {
+        let policy = policy();
+        let bytes = archive::canonical_json(&policy).expect("canonical target policy");
+        let expected = archive::sha256_bytes(&bytes).expect("target policy digest");
+        assert_eq!(policy_sha256().expect("policy SHA-256"), expected.as_str());
     }
 
     #[test]

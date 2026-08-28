@@ -81,6 +81,28 @@ functions reject, and changing type arguments through polymorphic recursion reje
 values contain stable named-function identity, not a runtime address or captured lexical
 environment. These checks provide language consistency, not hostile-code isolation.
 
+## Prepared static distribution boundary
+
+The pending release path selects one `x86_64-unknown-linux-musl` candidate and treats every build,
+handoff, archive, manifest, checksum, receipt, image, and downloaded asset as hostile or mutable
+input until validated. First-party ELF inspection requires little-endian ELF64 x86-64 with no
+runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. Strict archive
+verification rejects links, traversal, duplicates, extras, noncanonical metadata, target/linkage
+contradiction, checksum corruption, candidate substitution, and unsafe extraction targets.
+
+Exact candidate execution has been prepared for one pinned musl userland and one pinned older-glibc
+userland with network unavailable and no host library mounts. Transferred application verification
+receives only exact candidate/verifier bytes, an explicit create-new private root, loopback HTTP, and
+the exact isolated PostgreSQL prerequisite required by the stateful oracle. It does not gain a
+checkout, Cargo, application helper, raw retained secret, or publication permission. The separate
+publication job receives no verifier and executes no repository code.
+
+These are source-candidate controls until immutable publication and anonymous exact/latest behavior
+are proved. They establish static runtime linkage and only the named Linux/amd64 userland boundary;
+they do not establish a minimum kernel, every CPU feature or filesystem, container independence,
+reproducible-build provenance, binary signing, or universal Linux compatibility. Immutable
+`v0.1.7` remains the current public release during this prepared state.
+
 ## Explicit non-claims
 
 The system does not isolate hostile lkjscript programs, native dependencies, an OS administrator,
@@ -88,7 +110,7 @@ database superusers, object-store administrators, or co-resident processes. It d
 tenant CPU/RSS isolation, encrypted stores/backups, artifact signatures, authenticated provenance,
 distributed consensus, multi-node publication, cross-authority transactions, certificate
 management, CSRF middleware, audit-log durability, or production portability beyond retained
-Linux x86-64 evidence.
+exact Linux x86-64 target and userland evidence.
 
 The HTTP listener is plaintext, and PostgreSQL connections use `NoTls`. lkjscript does not plan to
 implement HTTP TLS termination, PostgreSQL TLS, certificate parsing or management, certificate

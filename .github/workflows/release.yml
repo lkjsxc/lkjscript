@@ -26,7 +26,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: never
   RUST_BACKTRACE: "0"
-  RELEASE_ARCHIVE: lkjscript-x86_64-unknown-linux-gnu.tar.gz
   RELEASE_CHECKSUMS: SHA256SUMS
   RELEASE_RECEIPT: release-receipt.json
   RELEASE_HANDOFF: release-handoff-${{ github.run_id }}-${{ github.run_attempt }}
@@ -35,7 +34,6 @@ env:
   VERIFIER_IDENTITY: verifier-identity.json
   CARGO_ABOUT_VERSION: 0.9.2
   CARGO_ABOUT_ARCHIVE_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
-  POSTGRES_IMAGE: postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571
 
 jobs:
   build-verify-package:
@@ -55,6 +53,10 @@ jobs:
       verifier_artifact_digest: ${{ steps.verifier-upload.outputs.artifact-digest }}
       verifier_file_bytes: ${{ steps.verifier.outputs.bytes }}
       verifier_file_sha256: ${{ steps.verifier.outputs.sha256 }}
+      release_archive: ${{ steps.target.outputs.archive_name }}
+      target_triple: ${{ steps.target.outputs.target_triple }}
+      target_policy_sha256: ${{ steps.target.outputs.policy_sha256 }}
+      postgres_image: ${{ steps.target.outputs.postgres_image }}
     steps:
       - name: Check out the exact source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -110,7 +112,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rustup toolchain install 1.98.0 --profile minimal --component clippy --component rustfmt --target x86_64-unknown-linux-gnu
+          rustup toolchain install 1.98.0 --profile minimal --component clippy --component rustfmt
           rustup override set 1.98.0
           rustc -Vv
           cargo -V
@@ -160,33 +162,77 @@ jobs:
           echo "cargo_registry_bytes=$registry_bytes"
           echo "cargo_fetch_elapsed_nanoseconds=$((completed - started))"
 
-      - name: Build the release candidate
+      - name: Build the host verifier
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --workspace --release --locked
-          test -f target/release/lkjscript
-          test -x target/release/lkjscript
+          cargo build --release --locked -p lkjscript-dev
+          test -f target/release/lkjscript-dev
+          test -x target/release/lkjscript-dev
 
-      - name: Provision the exact service dependency
+      - name: Resolve the typed target policy and install exact native inputs
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary="$RUNNER_TEMP/target-policy-summary.json"
+          target/release/lkjscript-dev release target | tee "$summary"
+          test "$(wc -l < "$summary")" -eq 1
+          jq -e \
+            '.status == "passed" and .policy.schema == {identity:"lkjscript-release-target-policy",version:1} and .policy.target_triple == "x86_64-unknown-linux-musl" and .policy.runtime_linkage == "static-musl" and (.policy.userlands | length) == 2 and (.policy.musl_packages | length) == 3' \
+            "$summary" > /dev/null
+          target_triple=$(jq -er '.policy.target_triple' "$summary")
+          archive_name=$(jq -er '.policy.archive_name' "$summary")
+          policy_sha256=$(jq -er '.policy_sha256' "$summary")
+          postgres_image=$(jq -er '.policy.postgres_image' "$summary")
+          [[ "$policy_sha256" =~ ^[0-9a-f]{64}$ ]]
+          rustup target add --toolchain 1.98.0 "$target_triple"
+          package_root="$RUNNER_TEMP/musl-packages"
+          mkdir -m 0700 "$package_root"
+          packages=()
+          while IFS=$'\t' read -r file_name url sha256; do
+            [[ "$file_name" =~ ^musl(-dev|-tools)?_[0-9][0-9A-Za-z.+:~-]*_amd64\.deb$ ]]
+            [[ "$sha256" =~ ^[0-9a-f]{64}$ ]]
+            package="$package_root/$file_name"
+            curl --fail --location --silent --show-error --output "$package" "$url"
+            printf '%s  %s\n' "$sha256" "$package" | sha256sum --check --strict
+            packages+=("$package")
+          done < <(jq -r '.policy.musl_packages[] | [.file_name,.url,.sha256] | @tsv' "$summary")
+          test "${#packages[@]}" -eq 3
+          sudo dpkg --install "${packages[@]}"
+          test "$(musl-gcc -dumpmachine)" = x86_64-linux-gnu
+          {
+            echo "RELEASE_ARCHIVE=$archive_name"
+            echo "RELEASE_TARGET=$target_triple"
+            echo "POSTGRES_IMAGE=$postgres_image"
+          } >> "$GITHUB_ENV"
+          {
+            echo "archive_name=$archive_name"
+            echo "target_triple=$target_triple"
+            echo "policy_sha256=$policy_sha256"
+            echo "postgres_image=$postgres_image"
+            echo "summary=$summary"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Provision the exact target-admission dependencies
         shell: bash
         run: |
           set -euo pipefail
           docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
           started=$(date +%s%N)
-          timeout 10m docker pull "$POSTGRES_IMAGE"
+          while IFS= read -r image; do
+            test -n "$image"
+            timeout 10m docker pull --platform linux/amd64 "$image"
+            platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
+            image_id=$(docker image inspect --format '{{.Id}}' "$image")
+            image_bytes=$(docker image inspect --format '{{.Size}}' "$image")
+            test "$platform" = linux/amd64
+            [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+            [[ "$image_bytes" =~ ^[1-9][0-9]*$ ]]
+            echo "target_prerequisite=$image platform=$platform image_id=$image_id image_bytes=$image_bytes"
+          done < <(jq -r '.policy.userlands[].image, .policy.postgres_image' "${{ steps.target.outputs.summary }}")
           completed=$(date +%s%N)
-          platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$POSTGRES_IMAGE")
-          image_id=$(docker image inspect --format '{{.Id}}' "$POSTGRES_IMAGE")
-          image_bytes=$(docker image inspect --format '{{.Size}}' "$POSTGRES_IMAGE")
-          test "$platform" = linux/amd64
-          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [[ "$image_bytes" =~ ^[1-9][0-9]*$ ]]
-          echo "postgres_image=$POSTGRES_IMAGE"
-          echo "postgres_platform=$platform"
-          echo "postgres_image_id=$image_id"
-          echo "postgres_image_bytes=$image_bytes"
-          echo "postgres_pull_elapsed_nanoseconds=$((completed - started))"
+          echo "target_prerequisite_pull_elapsed_nanoseconds=$((completed - started))"
 
       - name: Run fresh full verification
         id: full
@@ -242,6 +288,70 @@ jobs:
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/*.log
             ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/receipt.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/*.log
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/stateful-http/*/receipt.json
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/stateful-http/*/*.log
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
+      - name: Build and admit the exact static candidate
+        id: admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/target-admission"
+          mkdir -m 0700 "$root"
+          candidate="$root/lkjscript"
+          build_receipt="$root/build-receipt.json"
+          target/release/lkjscript-dev release build \
+            --output "$candidate" \
+            --receipt "$build_receipt" | tee "$root/build-summary.json"
+          evidence="$root/acceptance"
+          target/release/lkjscript-dev release admit \
+            --candidate "$candidate" \
+            --build-receipt "$build_receipt" \
+            --evidence-root "$evidence" | tee "$root/admission-summary.json"
+          test "$(wc -l < "$root/build-summary.json")" -eq 1
+          test "$(wc -l < "$root/admission-summary.json")" -eq 1
+          candidate_sha=$(sha256sum "$candidate" | cut -d' ' -f1)
+          jq -e \
+            --arg commit "${{ steps.identity.outputs.commit_sha }}" \
+            --arg target "${{ steps.target.outputs.target_triple }}" \
+            --arg policy "${{ steps.target.outputs.policy_sha256 }}" \
+            --arg candidate_sha "$candidate_sha" \
+            '.status == "passed" and .source_commit == $commit and .target_triple == $target and .runtime_linkage == "static-musl" and .target_policy_sha256 == $policy and .candidate_sha256 == $candidate_sha and .userlands == 2 and .oracles == 3 and .cleanup_complete == true' \
+            "$root/admission-summary.json" > /dev/null
+          receipt=$(jq -er '.receipt' "$root/admission-summary.json")
+          test "$receipt" = "$evidence/receipt.json"
+          test "$(sha256sum "$receipt" | cut -d' ' -f1)" = \
+            "$(jq -er '.receipt_sha256' "$root/admission-summary.json")"
+          {
+            echo "candidate=$candidate"
+            echo "build_receipt=$build_receipt"
+            echo "receipt=$receipt"
+            echo "evidence=$root"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Retain bounded target-admission evidence
+        if: always() && steps.admission.outputs.evidence != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: target-admission-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.admission.outputs.evidence }}/build-receipt.json
+            ${{ steps.admission.outputs.evidence }}/build-receipt.cargo.stdout.log
+            ${{ steps.admission.outputs.evidence }}/build-receipt.cargo.stderr.log
+            ${{ steps.admission.outputs.evidence }}/build-summary.json
+            ${{ steps.admission.outputs.evidence }}/admission-summary.json
+            ${{ steps.admission.outputs.evidence }}/acceptance/receipt.json
+            ${{ steps.admission.outputs.evidence }}/acceptance/*.log
+            ${{ steps.admission.outputs.evidence }}/acceptance/distributed-http/receipt.json
+            ${{ steps.admission.outputs.evidence }}/acceptance/distributed-http/*.log
+            ${{ steps.admission.outputs.evidence }}/acceptance/stateful-http/receipt.json
+            ${{ steps.admission.outputs.evidence }}/acceptance/stateful-http/*.log
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/receipt.json
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/*.log
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 7
@@ -253,16 +363,17 @@ jobs:
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/release-output"
-          cargo run --locked -p lkjscript-dev -- release prepare \
-            --candidate "$GITHUB_WORKSPACE/target/release/lkjscript" \
+          target/release/lkjscript-dev release prepare \
+            --candidate "${{ steps.admission.outputs.candidate }}" \
             --cargo-about "${{ steps.cargo-about.outputs.executable }}" \
             --cargo-about-archive "${{ steps.cargo-about.outputs.archive }}" \
             --output "$output" \
             --tag "${{ steps.identity.outputs.tag }}" \
             --publication "${{ steps.identity.outputs.publication_mode }}" \
             --full-verification-receipt "${{ steps.full.outputs.receipt }}" \
+            --target-admission-receipt "${{ steps.admission.outputs.receipt }}" \
             --require-full-verification | tee "$RUNNER_TEMP/release-prepare-summary.json"
-          cargo run --locked -p lkjscript-dev -- release verify \
+          target/release/lkjscript-dev release verify \
             --archive "$output/$RELEASE_ARCHIVE" \
             --checksums "$output/$RELEASE_CHECKSUMS" \
             --receipt "$output/$RELEASE_RECEIPT" \
@@ -273,7 +384,7 @@ jobs:
           test "$(find "$output" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
           echo "output=$output" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare the transferable HTTP verifier handoff
+      - name: Prepare the transferable application verifier handoff
         id: verifier
         shell: bash
         env:
@@ -282,32 +393,17 @@ jobs:
         run: |
           set -euo pipefail
           handoff="$RUNNER_TEMP/verifier-handoff"
-          test ! -e "$handoff"
-          mkdir -m 0700 "$handoff"
-          cp "$GITHUB_WORKSPACE/target/release/lkjscript-dev" "$handoff/$VERIFIER_EXECUTABLE"
-          chmod 0755 "$handoff/$VERIFIER_EXECUTABLE"
-          test -f "$handoff/$VERIFIER_EXECUTABLE"
-          test ! -L "$handoff/$VERIFIER_EXECUTABLE"
-          test -x "$handoff/$VERIFIER_EXECUTABLE"
-          bytes=$(stat -c '%s' "$handoff/$VERIFIER_EXECUTABLE")
-          mode=$(stat -c '%a' "$handoff/$VERIFIER_EXECUTABLE")
-          sha256=$(sha256sum "$handoff/$VERIFIER_EXECUTABLE" | cut -d' ' -f1)
-          [[ "$bytes" =~ ^[1-9][0-9]*$ ]]
-          test "$mode" = 755
-          [[ "$sha256" =~ ^[0-9a-f]{64}$ ]]
-          jq -n \
-            --arg tag "$TAG" \
-            --arg commit "$COMMIT_SHA" \
-            --arg file "$VERIFIER_EXECUTABLE" \
-            --arg sha256 "$sha256" \
-            --argjson bytes "$bytes" \
-            --argjson mode 493 \
-            '{schema:{identity:"lkjscript-http-verifier-handoff",version:1},tag:$tag,commit_sha:$commit,file:{name:$file,byte_length:$bytes,sha256:$sha256,mode:$mode}}' \
-            > "$handoff/$VERIFIER_IDENTITY"
-          expected=$(printf '%s\n' "$VERIFIER_EXECUTABLE" "$VERIFIER_IDENTITY" | sort)
-          observed=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
-          test "$observed" = "$expected"
-          test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          target/release/lkjscript-dev release verifier prepare \
+            --executable "$GITHUB_WORKSPACE/target/release/lkjscript-dev" \
+            --output "$handoff" \
+            --tag "$TAG" \
+            --commit "$COMMIT_SHA" | tee "$RUNNER_TEMP/verifier-prepare-summary.json"
+          test "$(wc -l < "$RUNNER_TEMP/verifier-prepare-summary.json")" -eq 1
+          bytes=$(jq -er '.bytes' "$RUNNER_TEMP/verifier-prepare-summary.json")
+          sha256=$(jq -er '.sha256' "$RUNNER_TEMP/verifier-prepare-summary.json")
+          test "$(jq -er '.directory' "$RUNNER_TEMP/verifier-prepare-summary.json")" = "$handoff"
+          test "$(jq -er '.schema.identity' "$RUNNER_TEMP/verifier-prepare-summary.json")" = \
+            lkjscript-application-verifier-handoff
           {
             echo "directory=$handoff"
             echo "bytes=$bytes"
@@ -324,7 +420,7 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-      - name: Upload the transient HTTP verifier handoff
+      - name: Upload the transient application verifier handoff
         id: verifier-upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -334,19 +430,24 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-  pre-publication-http:
-    name: Verify transferred packaged HTTP candidate
+  pre-publication-applications:
+    name: Verify transferred packaged application candidate
     needs: build-verify-package
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: read
+    env:
+      RELEASE_ARCHIVE: ${{ needs.build-verify-package.outputs.release_archive }}
+      POSTGRES_IMAGE: ${{ needs.build-verify-package.outputs.postgres_image }}
     outputs:
       evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
       evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
-      receipt_digest: ${{ steps.acceptance.outputs.receipt_digest }}
-      receipt_sha256: ${{ steps.acceptance.outputs.receipt_sha256 }}
+      distributed_receipt_digest: ${{ steps.acceptance.outputs.distributed_receipt_digest }}
+      distributed_receipt_sha256: ${{ steps.acceptance.outputs.distributed_receipt_sha256 }}
+      stateful_receipt_digest: ${{ steps.acceptance.outputs.stateful_receipt_digest }}
+      stateful_receipt_sha256: ${{ steps.acceptance.outputs.stateful_receipt_sha256 }}
     steps:
       - name: Download the exact release handoff by artifact identity
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -414,14 +515,6 @@ jobs:
           test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
           identity="$handoff/$VERIFIER_IDENTITY"
           verifier="$handoff/$VERIFIER_EXECUTABLE"
-          jq -e \
-            --arg tag "$TAG" \
-            --arg commit "$COMMIT_SHA" \
-            --arg file "$VERIFIER_EXECUTABLE" \
-            --arg sha "$VERIFIER_FILE_SHA256" \
-            --argjson bytes "$VERIFIER_FILE_BYTES" \
-            'keys == ["commit_sha","file","schema","tag"] and .schema == {identity:"lkjscript-http-verifier-handoff",version:1} and .tag == $tag and .commit_sha == $commit and (.file | keys == ["byte_length","mode","name","sha256"]) and .file.name == $file and .file.byte_length == $bytes and .file.sha256 == $sha and .file.mode == 493' \
-            "$identity" > /dev/null
           test -f "$verifier"
           test ! -L "$verifier"
           observed_bytes=$(stat -c '%s' "$verifier")
@@ -437,6 +530,14 @@ jobs:
           test -x "$verifier"
           test "$(stat -c '%s' "$verifier")" = "$VERIFIER_FILE_BYTES"
           test "$(sha256sum "$verifier" | cut -d' ' -f1)" = "$VERIFIER_FILE_SHA256"
+          "$verifier" release verifier verify \
+            --executable "$verifier" \
+            --identity "$identity" \
+            --tag "$TAG" \
+            --commit "$COMMIT_SHA" \
+            --expected-sha256 "$VERIFIER_FILE_SHA256" \
+            --expected-bytes "$VERIFIER_FILE_BYTES" | tee "$RUNNER_TEMP/verifier-verify-summary.json"
+          test "$(wc -l < "$RUNNER_TEMP/verifier-verify-summary.json")" -eq 1
           {
             echo "release=$release"
             echo "verifier=$verifier"
@@ -445,7 +546,16 @@ jobs:
             echo "verifier_artifact_bytes=$verifier_artifact_bytes"
           } >> "$GITHUB_OUTPUT"
 
-      - name: First-party verify, extract, and run packaged HTTP acceptance
+      - name: Provision the exact transferred PostgreSQL prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
+          timeout 10m docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$POSTGRES_IMAGE")" = linux/amd64
+          [[ "$(docker image inspect --format '{{.Id}}' "$POSTGRES_IMAGE")" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+      - name: First-party verify, extract, and run packaged application acceptance
         id: acceptance
         shell: bash
         env:
@@ -485,19 +595,19 @@ jobs:
             '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == $mode and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
             "$release_summary" > /dev/null
 
-          evidence="$root/http-evidence"
-          http_summary="$root/http-summary.json"
-          env -i LANG=C "$VERIFIER" distributed-http \
+          distributed_evidence="$root/distributed-http"
+          distributed_summary="$root/distributed-http-summary.json"
+          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" distributed-http \
             --binary "$candidate" \
-            --evidence-root "$evidence" \
-            --machine | tee "$http_summary"
-          test "$(wc -l < "$http_summary")" -eq 1
-          receipt=$(jq -er '.receipt' "$http_summary")
-          test "$receipt" = "$evidence/receipt.json"
-          test -f "$receipt"
-          receipt_sha256=$(sha256sum "$receipt" | cut -d' ' -f1)
-          test "$receipt_sha256" = "$(jq -er '.receipt_sha256' "$http_summary")"
-          receipt_digest=$(jq -er '.receipt_digest' "$http_summary")
+            --evidence-root "$distributed_evidence" \
+            --machine | tee "$distributed_summary"
+          test "$(wc -l < "$distributed_summary")" -eq 1
+          distributed_receipt=$(jq -er '.receipt' "$distributed_summary")
+          test "$distributed_receipt" = "$distributed_evidence/receipt.json"
+          test -f "$distributed_receipt"
+          distributed_receipt_sha256=$(sha256sum "$distributed_receipt" | cut -d' ' -f1)
+          test "$distributed_receipt_sha256" = "$(jq -er '.receipt_sha256' "$distributed_summary")"
+          distributed_receipt_digest=$(jq -er '.receipt_digest' "$distributed_summary")
           manifest_cli=$(jq -er '.executable.cli_contract' "$manifest")
           manifest_registry=$(jq -er '.executable.executable_registry_digest' "$manifest")
           manifest_version=$(jq -er '.package.version' "$manifest")
@@ -507,27 +617,52 @@ jobs:
             --arg registry "$manifest_registry" \
             --argjson cli "$manifest_cli" \
             '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
-            "$receipt" > /dev/null
+            "$distributed_receipt" > /dev/null
+
+          stateful_evidence="$root/stateful-http"
+          stateful_summary="$root/stateful-http-summary.json"
+          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" stateful-http \
+            --binary "$candidate" \
+            --evidence-root "$stateful_evidence" \
+            --machine | tee "$stateful_summary"
+          test "$(wc -l < "$stateful_summary")" -eq 1
+          stateful_receipt=$(jq -er '.receipt' "$stateful_summary")
+          test "$stateful_receipt" = "$stateful_evidence/receipt.json"
+          test -f "$stateful_receipt"
+          stateful_receipt_sha256=$(sha256sum "$stateful_receipt" | cut -d' ' -f1)
+          test "$stateful_receipt_sha256" = "$(jq -er '.receipt_sha256' "$stateful_summary")"
+          stateful_receipt_digest=$(jq -er '.receipt_digest' "$stateful_summary")
+          jq -e \
+            --arg candidate_sha "$candidate_sha" \
+            --arg postgres "$POSTGRES_IMAGE" \
+            '.schema == {identity:"lkjscript-stateful-http-acceptance",version:2} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.request_records == 1010 and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.postgres_image == $postgres and .result.live.persistence_after_restart == true and .result.live.invalid_secret_no_ready == true and .result.live.migration_divergence_safe_failure == true and .result.live.statement_failure_rolled_back == true and .result.live.authority_unchanged == true and .result.live.container_cleanup_complete == true and .cleanup.temporary_root_removed == true and .cleanup.database_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
+            "$stateful_receipt" > /dev/null
           {
-            echo "evidence=$evidence"
-            echo "receipt=$receipt"
-            echo "receipt_digest=$receipt_digest"
-            echo "receipt_sha256=$receipt_sha256"
+            echo "distributed_receipt=$distributed_receipt"
+            echo "distributed_receipt_digest=$distributed_receipt_digest"
+            echo "distributed_receipt_sha256=$distributed_receipt_sha256"
+            echo "stateful_receipt=$stateful_receipt"
+            echo "stateful_receipt_digest=$stateful_receipt_digest"
+            echo "stateful_receipt_sha256=$stateful_receipt_sha256"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Retain bounded pre-publication HTTP evidence
+      - name: Retain bounded pre-publication application evidence
         id: evidence-upload
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pre-publication-http-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: pre-publication-application-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/prepublication/release-verify-summary.json
-            ${{ runner.temp }}/prepublication/http-summary.json
+            ${{ runner.temp }}/prepublication/distributed-http-summary.json
+            ${{ runner.temp }}/prepublication/stateful-http-summary.json
             ${{ runner.temp }}/prepublication/extracted/RELEASE-MANIFEST.json
-            ${{ runner.temp }}/prepublication/http-evidence/receipt.json
-            ${{ runner.temp }}/prepublication/http-evidence/*.log
+            ${{ runner.temp }}/prepublication/distributed-http/receipt.json
+            ${{ runner.temp }}/prepublication/distributed-http/*.log
+            ${{ runner.temp }}/prepublication/stateful-http/receipt.json
+            ${{ runner.temp }}/prepublication/stateful-http/*.log
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json
+            ${{ runner.temp }}/verifier-verify-summary.json
             ${{ runner.temp }}/artifact-*.json
           if-no-files-found: error
           include-hidden-files: true
@@ -539,11 +674,13 @@ jobs:
     if: needs.build-verify-package.outputs.publish == 'true'
     needs:
       - build-verify-package
-      - pre-publication-http
+      - pre-publication-applications
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      RELEASE_ARCHIVE: ${{ needs.build-verify-package.outputs.release_archive }}
     outputs:
       release_url: ${{ steps.publish.outputs.release_url }}
       immutable: ${{ steps.publish.outputs.immutable }}
@@ -777,7 +914,7 @@ jobs:
     if: needs.build-verify-package.outputs.publish == 'true'
     needs:
       - build-verify-package
-      - pre-publication-http
+      - pre-publication-applications
       - publish
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -785,6 +922,9 @@ jobs:
       actions: read
       attestations: read
       contents: read
+    env:
+      RELEASE_ARCHIVE: ${{ needs.build-verify-package.outputs.release_archive }}
+      POSTGRES_IMAGE: ${{ needs.build-verify-package.outputs.postgres_image }}
     outputs:
       evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
       evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
@@ -832,14 +972,6 @@ jobs:
           test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
           identity="$handoff/$VERIFIER_IDENTITY"
           verifier="$handoff/$VERIFIER_EXECUTABLE"
-          jq -e \
-            --arg tag "$TAG" \
-            --arg commit "$COMMIT_SHA" \
-            --arg file "$VERIFIER_EXECUTABLE" \
-            --arg sha "$VERIFIER_FILE_SHA256" \
-            --argjson bytes "$VERIFIER_FILE_BYTES" \
-            'keys == ["commit_sha","file","schema","tag"] and .schema == {identity:"lkjscript-http-verifier-handoff",version:1} and .tag == $tag and .commit_sha == $commit and (.file | keys == ["byte_length","mode","name","sha256"]) and .file.name == $file and .file.byte_length == $bytes and .file.sha256 == $sha and .file.mode == 493' \
-            "$identity" > /dev/null
           test -f "$verifier"
           test ! -L "$verifier"
           observed_bytes=$(stat -c '%s' "$verifier")
@@ -853,11 +985,29 @@ jobs:
             *) echo "unexpected verifier transport mode: $transport_mode" >&2; exit 1 ;;
           esac
           test -x "$verifier"
+          test "$(stat -c '%s' "$verifier")" = "$VERIFIER_FILE_BYTES"
           test "$(sha256sum "$verifier" | cut -d' ' -f1)" = "$VERIFIER_FILE_SHA256"
+          "$verifier" release verifier verify \
+            --executable "$verifier" \
+            --identity "$identity" \
+            --tag "$TAG" \
+            --commit "$COMMIT_SHA" \
+            --expected-sha256 "$VERIFIER_FILE_SHA256" \
+            --expected-bytes "$VERIFIER_FILE_BYTES" | tee "$RUNNER_TEMP/verifier-verify-summary.json"
+          test "$(wc -l < "$RUNNER_TEMP/verifier-verify-summary.json")" -eq 1
           {
             echo "path=$verifier"
             echo "transport_mode=$transport_mode"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Provision the exact public PostgreSQL prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
+          timeout 10m docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$POSTGRES_IMAGE")" = linux/amd64
+          [[ "$(docker image inspect --format '{{.Id}}' "$POSTGRES_IMAGE")" =~ ^sha256:[0-9a-f]{64}$ ]]
 
       - name: Download exact and latest assets anonymously
         id: download
@@ -976,7 +1126,7 @@ jobs:
           verify_asset_attestation \
             "$EXACT/$RELEASE_CHECKSUMS" "$RUNNER_TEMP/checksum-attestation.json"
 
-      - name: Independently verify and exercise exact and latest HTTP binaries
+      - name: Independently verify and exercise exact and latest application binaries
         id: acceptance
         shell: bash
         env:
@@ -991,13 +1141,15 @@ jobs:
           test ! -e "$root"
           mkdir -m 0700 "$root"
 
-          verify_public_http() {
+          verify_public_application() {
             local label=$1
             local asset_root=$2
             local extraction="$root/$label-extracted"
             local release_summary="$root/$label-release-summary.json"
-            local evidence="$root/$label-http-evidence"
-            local http_summary="$root/$label-http-summary.json"
+            local distributed_evidence="$root/$label-distributed-http"
+            local distributed_summary="$root/$label-distributed-http-summary.json"
+            local stateful_evidence="$root/$label-stateful-http"
+            local stateful_summary="$root/$label-stateful-http-summary.json"
             env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release verify \
               --archive "$asset_root/$RELEASE_ARCHIVE" \
               --checksums "$asset_root/$RELEASE_CHECKSUMS" \
@@ -1021,19 +1173,19 @@ jobs:
               --argjson bytes "$candidate_bytes" \
               '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == "release" and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
               "$release_summary" > /dev/null
-            env -i LANG=C "$VERIFIER" distributed-http \
+            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" distributed-http \
               --binary "$candidate" \
-              --evidence-root "$evidence" \
-              --machine | tee "$http_summary"
-            test "$(wc -l < "$http_summary")" -eq 1
-            local receipt
-            local receipt_sha256
-            local receipt_digest
-            receipt=$(jq -er '.receipt' "$http_summary")
-            test "$receipt" = "$evidence/receipt.json"
-            receipt_sha256=$(sha256sum "$receipt" | cut -d' ' -f1)
-            test "$receipt_sha256" = "$(jq -er '.receipt_sha256' "$http_summary")"
-            receipt_digest=$(jq -er '.receipt_digest' "$http_summary")
+              --evidence-root "$distributed_evidence" \
+              --machine | tee "$distributed_summary"
+            test "$(wc -l < "$distributed_summary")" -eq 1
+            local distributed_receipt
+            local distributed_receipt_sha256
+            local distributed_receipt_digest
+            distributed_receipt=$(jq -er '.receipt' "$distributed_summary")
+            test "$distributed_receipt" = "$distributed_evidence/receipt.json"
+            distributed_receipt_sha256=$(sha256sum "$distributed_receipt" | cut -d' ' -f1)
+            test "$distributed_receipt_sha256" = "$(jq -er '.receipt_sha256' "$distributed_summary")"
+            distributed_receipt_digest=$(jq -er '.receipt_digest' "$distributed_summary")
             local manifest_cli
             local manifest_registry
             local manifest_version
@@ -1046,42 +1198,72 @@ jobs:
               --arg registry "$manifest_registry" \
               --argjson cli "$manifest_cli" \
               '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and (.result.responses | length) == 2 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
-              "$receipt" > /dev/null
+              "$distributed_receipt" > /dev/null
+
+            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" stateful-http \
+              --binary "$candidate" \
+              --evidence-root "$stateful_evidence" \
+              --machine | tee "$stateful_summary"
+            test "$(wc -l < "$stateful_summary")" -eq 1
+            local stateful_receipt
+            local stateful_receipt_sha256
+            local stateful_receipt_digest
+            stateful_receipt=$(jq -er '.receipt' "$stateful_summary")
+            test "$stateful_receipt" = "$stateful_evidence/receipt.json"
+            stateful_receipt_sha256=$(sha256sum "$stateful_receipt" | cut -d' ' -f1)
+            test "$stateful_receipt_sha256" = "$(jq -er '.receipt_sha256' "$stateful_summary")"
+            stateful_receipt_digest=$(jq -er '.receipt_digest' "$stateful_summary")
+            jq -e \
+              --arg candidate_sha "$candidate_sha" \
+              --arg postgres "$POSTGRES_IMAGE" \
+              '.schema == {identity:"lkjscript-stateful-http-acceptance",version:2} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.request_records == 1010 and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.postgres_image == $postgres and .result.live.persistence_after_restart == true and .result.live.invalid_secret_no_ready == true and .result.live.migration_divergence_safe_failure == true and .result.live.statement_failure_rolled_back == true and .result.live.authority_unchanged == true and .result.live.container_cleanup_complete == true and .cleanup.temporary_root_removed == true and .cleanup.database_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
+              "$stateful_receipt" > /dev/null
             {
-              echo "${label}_receipt=$receipt"
-              echo "${label}_receipt_digest=$receipt_digest"
-              echo "${label}_receipt_sha256=$receipt_sha256"
+              echo "${label}_distributed_receipt=$distributed_receipt"
+              echo "${label}_distributed_receipt_digest=$distributed_receipt_digest"
+              echo "${label}_distributed_receipt_sha256=$distributed_receipt_sha256"
+              echo "${label}_stateful_receipt=$stateful_receipt"
+              echo "${label}_stateful_receipt_digest=$stateful_receipt_digest"
+              echo "${label}_stateful_receipt_sha256=$stateful_receipt_sha256"
               echo "${label}_candidate_sha256=$candidate_sha"
               echo "${label}_manifest=$manifest"
             } >> "$GITHUB_OUTPUT"
           }
 
-          verify_public_http exact "$EXACT"
-          verify_public_http latest "$LATEST"
+          verify_public_application exact "$EXACT"
+          verify_public_application latest "$LATEST"
           cmp "$root/exact-extracted/lkjscript" "$root/latest-extracted/lkjscript"
           cmp "$root/exact-extracted/RELEASE-MANIFEST.json" "$root/latest-extracted/RELEASE-MANIFEST.json"
-          test "$(jq -er '.candidate.sha256' "$root/exact-http-evidence/receipt.json")" = \
-            "$(jq -er '.candidate.sha256' "$root/latest-http-evidence/receipt.json")"
-          test "$(jq -er '.result.registry_digest' "$root/exact-http-evidence/receipt.json")" = \
-            "$(jq -er '.result.registry_digest' "$root/latest-http-evidence/receipt.json")"
-          test "$(jq -er '.result.cli_contract_version' "$root/exact-http-evidence/receipt.json")" = \
-            "$(jq -er '.result.cli_contract_version' "$root/latest-http-evidence/receipt.json")"
-          test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-http-evidence/receipt.json")" = \
-            "$(jq -er '.result.responses[0].body_sha256' "$root/latest-http-evidence/receipt.json")"
+          test "$(jq -er '.candidate.sha256' "$root/exact-distributed-http/receipt.json")" = \
+            "$(jq -er '.candidate.sha256' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.result.registry_digest' "$root/exact-distributed-http/receipt.json")" = \
+            "$(jq -er '.result.registry_digest' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.result.cli_contract_version' "$root/exact-distributed-http/receipt.json")" = \
+            "$(jq -er '.result.cli_contract_version' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-distributed-http/receipt.json")" = \
+            "$(jq -er '.result.responses[0].body_sha256' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.candidate.sha256' "$root/exact-stateful-http/receipt.json")" = \
+            "$(jq -er '.candidate.sha256' "$root/latest-stateful-http/receipt.json")"
+          test "$(jq -er '.result.incremental_sha256' "$root/exact-stateful-http/receipt.json")" = \
+            "$(jq -er '.result.incremental_sha256' "$root/latest-stateful-http/receipt.json")"
 
-      - name: Retain bounded exact and latest public HTTP evidence
+      - name: Retain bounded exact and latest public application evidence
         id: evidence-upload
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: public-http-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: public-application-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/public-verification/*-release-summary.json
-            ${{ runner.temp }}/public-verification/*-http-summary.json
+            ${{ runner.temp }}/public-verification/*-distributed-http-summary.json
+            ${{ runner.temp }}/public-verification/*-stateful-http-summary.json
             ${{ runner.temp }}/public-verification/*-extracted/RELEASE-MANIFEST.json
-            ${{ runner.temp }}/public-verification/*-http-evidence/receipt.json
-            ${{ runner.temp }}/public-verification/*-http-evidence/*.log
+            ${{ runner.temp }}/public-verification/*-distributed-http/receipt.json
+            ${{ runner.temp }}/public-verification/*-distributed-http/*.log
+            ${{ runner.temp }}/public-verification/*-stateful-http/receipt.json
+            ${{ runner.temp }}/public-verification/*-stateful-http/*.log
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json
+            ${{ runner.temp }}/verifier-verify-summary.json
             ${{ runner.temp }}/verifier-artifact.json
             ${{ runner.temp }}/*-attestation.json
             ${{ runner.temp }}/*-attestation.stderr

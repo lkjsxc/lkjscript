@@ -2,6 +2,7 @@ mod admission;
 mod archive;
 mod model;
 mod target;
+mod verifier;
 
 use crate::error::DevError;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
@@ -104,6 +105,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         "target" => target::print_policy(arguments),
         "build" => target::build(arguments),
         "admit" => admission::command(arguments),
+        "verifier" => verifier::command(arguments),
         "prepare" => prepare(parse_prepare(arguments)?),
         "verify" => verify(parse_verify(arguments)?),
         value => Err(DevError::usage(format!(
@@ -321,12 +323,12 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         })?;
     let archive_one = archive::create_archive(
         &payload_parent,
-        &package_one.join("lkjscript-x86_64-unknown-linux-musl.tar"),
+        &package_one.join(target::TAR_NAME),
         source.commit_timestamp_unix_seconds,
     )?;
     let archive_two = archive::create_archive(
         &payload_parent,
-        &package_two.join("lkjscript-x86_64-unknown-linux-musl.tar"),
+        &package_two.join(target::TAR_NAME),
         source.commit_timestamp_unix_seconds,
     )?;
     require_equal_files(
@@ -1740,6 +1742,12 @@ mod tests {
         }
         let policy = serde_json::to_string(&target::policy()).expect("target policy");
         assert!(!policy.contains(&format!("\"product_version\":\"{product_version}\"")));
+        let about = fs::read_to_string(repository.join("about.toml")).expect("cargo-about policy");
+        assert!(
+            !about
+                .lines()
+                .any(|line| line.trim_start().starts_with("targets"))
+        );
     }
 
     #[test]
@@ -1824,11 +1832,11 @@ mod tests {
         }
         let jobs = workflow.split_once("\njobs:\n").expect("workflow jobs").1;
         let build = jobs
-            .split_once("\n  pre-publication-http:\n")
+            .split_once("\n  pre-publication-applications:\n")
             .expect("pre-publication job")
             .0;
         let pre_publication = jobs
-            .split_once("\n  pre-publication-http:\n")
+            .split_once("\n  pre-publication-applications:\n")
             .expect("pre-publication job")
             .1
             .split_once("\n  publish:\n")
@@ -1850,6 +1858,10 @@ mod tests {
         assert!(build.contains("verifier-upload.outputs.artifact-digest"));
         assert!(build.contains("target/release/lkjscript-dev"));
         assert!(build.contains(".artifacts/lkjscript-dev/distributed-http/*/receipt.json"));
+        assert!(build.contains(".artifacts/lkjscript-dev/stateful-http/*/receipt.json"));
+        assert!(build.contains("release admit"));
+        assert!(build.contains("release verifier prepare"));
+        assert!(build.contains("rustup target add --toolchain 1.98.0 \"$target_triple\""));
         assert!(build.contains("name: ${{ env.RELEASE_HANDOFF }}"));
         assert!(build.contains("name: ${{ env.VERIFIER_HANDOFF }}"));
         assert!(pre_publication.contains("actions: read"));
@@ -1858,8 +1870,11 @@ mod tests {
         assert!(!pre_publication.contains("actions/checkout"));
         assert!(!pre_publication.contains("cargo "));
         assert!(pre_publication.contains("release verify"));
+        assert!(pre_publication.contains("release verifier verify"));
         assert!(pre_publication.contains("--extract-to"));
         assert!(pre_publication.contains("distributed-http"));
+        assert!(pre_publication.contains("stateful-http"));
+        assert!(pre_publication.contains("request_records == 1010"));
         assert!(pre_publication.contains("--evidence-root"));
         assert!(pre_publication.contains("env -i LANG=C"));
         assert!(!pre_publication.contains("tar -"));
@@ -1873,7 +1888,7 @@ mod tests {
             .expect("verified mode restoration");
         assert!(verifier_hash < verifier_chmod);
         assert!(publish.contains("contents: write"));
-        assert!(publish.contains("- pre-publication-http"));
+        assert!(publish.contains("- pre-publication-applications"));
         assert!(!publish.contains("actions/checkout"));
         assert!(!publish.contains("cargo "));
         assert!(!publish.contains("target/"));
@@ -1901,14 +1916,17 @@ mod tests {
         assert!(!post_release.contains("cargo "));
         assert!(post_release.contains(".executable.cli_contract"));
         assert!(post_release.contains(".executable.executable_registry_digest"));
-        assert!(post_release.contains("verify_public_http exact"));
-        assert!(post_release.contains("verify_public_http latest"));
+        assert!(post_release.contains("verify_public_application exact"));
+        assert!(post_release.contains("verify_public_application latest"));
         assert!(post_release.contains("release verify"));
+        assert!(post_release.contains("release verifier verify"));
         assert!(post_release.contains("distributed-http"));
+        assert!(post_release.contains("stateful-http"));
+        assert!(post_release.contains("request_records == 1010"));
         assert!(post_release.contains("--evidence-root"));
         assert!(post_release.contains("env -i LANG=C"));
         assert!(!post_release.contains("tar -"));
-        assert!(post_release.contains("public-http-verification-evidence-"));
+        assert!(post_release.contains("public-application-verification-evidence-"));
         assert!(!post_release.contains("--template command"));
         assert!(!post_release.contains("run main"));
         assert!(
@@ -1933,7 +1951,8 @@ mod tests {
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));
-        assert!(workflow.contains(crate::service::POSTGRES_IMAGE));
+        assert!(build.contains("postgres_image=$(jq -er '.policy.postgres_image'"));
+        assert!(!workflow.contains(crate::service::POSTGRES_IMAGE));
         assert!(!workflow.contains("postgres:16-alpine"));
         assert!(workflow.matches("timeout-minutes:").count() >= 3);
     }

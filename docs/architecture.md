@@ -84,47 +84,54 @@ linker decisions.
 
 ## Derived release distribution path
 
-The repository has one tag-driven public binary path for the admitted Linux target:
+The repository has one prepared tag-driven path for the sole current release target,
+`x86_64-unknown-linux-musl`:
 
 ```text
-annotated SemVer tag on origin/main
+locked source + typed target policy
                   │
-                  ▼
-read-only build / full verification / exact-candidate acceptance
-                  │
-                  ▼
-deterministic release handoff + byte-bound verifier handoff
-                  │
-                  ▼
-read-only no-checkout release verification + HTTP oracle
-                  │
-                  ▼
-no-checkout publication job with contents:write and release handoff only
-                  │
-                  ▼
-immutable GitHub Release and release attestation
-                  │
-                  ▼
-anonymous exact/latest download + independent transferred HTTP oracle runs
+                  ├─ host application verifier
+                  └─ exact static-musl product candidate
+                              │
+             fresh source full + target admission
+                              │
+              deterministic release handoff
+                 + byte-bound verifier handoff
+                              │
+        read-only no-checkout package/static verification
+             + transferred distributed/stateful HTTP
+                              │
+       no-checkout publication job with contents:write only
+                              │
+               immutable GitHub Release
+                              │
+ anonymous exact/latest static + distributed/stateful acceptance
 ```
 
-`tools/lkjscript-dev` owns typed release preparation and strict archive verification. The hosted
-workflow supplies exact runner context and two bounded transient handoffs. The release handoff owns
-the archive, checksum, and private release receipt. The separate verifier handoff binds the exact
-release-built `lkjscript-dev` bytes; read-only jobs verify those bytes before restoring executable
-mode after artifact transport. The pre-publication job checks out no source, safely extracts the
-packaged candidate through the first-party release verifier, and runs the same distributed HTTP
-oracle used by contributor profiles. The publication job receives only the release handoff and is
-the only job with release-write authority. Post-publication verification downloads exact and
-latest assets anonymously and runs the transferred oracle independently against both.
+`tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
+preparation, strict archive/static verification, and application-verifier handoff. Target admission
+binds source and candidate identities to direct ELF inspection, two pinned networkless userland
+command lifecycles, and the distributed HTTP, stateful HTTP, and standalone service oracles. A host
+build and the source-wide full receipt remain distinct from this exact-candidate evidence.
 
-The public release, transient artifacts, archive, manifest, checksum, verifier receipts, asset
-digest, and attestation are all derived distribution evidence. None can select or edit Graph 5
-meaning, executable contracts, compilation semantics, or deployment data. The root package version
-and annotated tag bind release identity; recovery from a published content defect uses a new patch
-identity rather than mutation. Immutable `v0.1.7` is the first public release admitted through this
-complete path: its pre-publication package run and both independent anonymous exact/latest HTTP
-oracles passed in [workflow 33150527883](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883).
+The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
+handoff owns the archive, checksum, and private release receipt. The verifier handoff binds the exact
+host `lkjscript-dev` bytes and its release/distributed/stateful roles. Read-only jobs verify those
+bytes before restoring executable mode after artifact transport. The pre-publication job checks out
+no source, safely extracts and re-inspects the packaged candidate, then runs both transferred
+application oracles. The publication job receives only the release handoff and is the only job with
+release-write authority. Post-publication verification downloads exact and latest assets
+anonymously and runs strict static inspection plus both oracles independently against each.
+
+The public release, transient artifacts, archive, manifest, checksum, receipts, asset digest, and
+attestation are derived distribution evidence. None can select or edit Graph 5 meaning, executable
+contracts, compilation semantics, or deployment data. The root package version and annotated tag
+bind the human-facing product snapshot while contract identities remain independently owned.
+Published content recovers through a new patch rather than mutation.
+
+Immutable `v0.1.7` remains the current public release until the prepared `v0.1.8` path completes
+anonymous exact/latest acceptance. The predecessor release's successful public HTTP evidence remains
+historical and is not evidence for the pending static target or stateful public boundary.
 
 ## Layer ownership
 
@@ -316,17 +323,20 @@ changes an HTTP project, checks and deterministically builds it, starts and rest
 sends raw loopback HTTP, exercises startup failures, and compares exact accepted-authority
 inventories. Its stable receipt binds the verifier and candidate bytes. An explicit absolute
 create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
-checkout path. Product, service, full, pre-publication package admission, and both anonymous public
-asset checks all use this same owner.
+checkout path. Product/full verification and the prepared target-admission, pre-publication, and
+anonymous exact/latest paths all use this same owner.
 
-The separate `stateful_http_application` service/full gate copies the candidate to a fresh root,
-uses its discovery output to construct the request and deployment, plans and applies once through
-the public CLI, compares clean and incremental artifacts, then drives real BBS HTTP and PostgreSQL
-behavior through one `lkjscript serve` process. It proves malformed input and failed statements do
-not mutate rows, migration checksum divergence fails safely, persistence survives restart, and
-build/runtime work leaves the accepted Graph inventory unchanged. The existing service oracle and
-this gate share exact PostgreSQL 16.15 process/version/cleanup support; the static HTTP gate remains
-an independent faster no-database oracle.
+The separate `stateful_http_application` owner has the same contributor/transferred context seam and
+copies the candidate to a fresh root. It uses executable discovery to construct the 1,010-record BBS
+request and deployment, plans and applies through the public CLI, compares clean and incremental
+artifacts, then drives real BBS HTTP and PostgreSQL behavior through one `lkjscript serve` process.
+It proves malformed input and failed statements do not mutate rows, migration checksum divergence
+fails safely, persistence survives restart, failed startup emits no readiness, and build/runtime
+work leaves accepted Graph authority unchanged. Its schema-2 receipt binds verifier/source/copied
+candidate identities, execution context, optional checkout, PostgreSQL authority, redaction, and
+complete cleanup. Service/full verification and the prepared target-admission, pre-publication, and
+anonymous exact/latest paths share this owner. The existing `lkjournal` service oracle remains a
+separate maintained workload, and distributed HTTP remains the faster no-database oracle.
 
 ## Security and replaceability
 
