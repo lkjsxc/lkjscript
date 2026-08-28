@@ -9,7 +9,7 @@ This document maps implemented layers and dependency direction. Normative behavi
 All current finite graph and command operations converge on Graph 5 authority:
 
 ```text
-argv / compact records / bounded JSON arguments
+argv / compact records / bounded JSON arguments / offline discovery
                      │
                      ▼
        exhaustive executable registry and typed adapters
@@ -130,16 +130,16 @@ oracles passed in [workflow 33150527883](https://github.com/lkjsxc/lkjscript/act
 
 | Layer | Primary code | Owns | Does not own |
 |---|---|---|---|
-| Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, response bounds, exit mapping | semantic records or repository layout |
+| Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed Graph 5 meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
-| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard` | exact public interfaces, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | a general registry or ambient resolver |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact 10 | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
-| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | strict typed descriptors, starter HTTP defaults, artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | one strict descriptor/schema inventory, starter HTTP defaults, artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
@@ -196,7 +196,9 @@ incremental manifests and artifacts are compared in tests.
 `packages/standard` owns two generated assets: a package transport for dependency installation and
 an artifact-10 bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
 and checks package, semantic revision, logical package revision, interface, and artifact identities
-for agreement. Public inspection/export exposes the exact bytes without permitting replacement.
+for agreement. Public bounded query/detail exposes the implementation-free interface and exact
+compact references; inspection/export exposes identities and exact bytes without permitting
+replacement.
 
 The command recipe constructs typed meaning directly. It resolves the public standard identity
 function through the validated built-in interface and stores an exact declaration reference. The
@@ -210,6 +212,47 @@ authority revision, loopback listener, one byte-stream grant, and independent bo
 Publishing it beside Graph authority in one complete directory does not merge their identity or
 mutation rules. There is no source template, migration reader, path lookup, network fetch, hidden
 sidecar, or prebuilt application artifact.
+
+## Public stateful HTTP authoring path
+
+The starter topology is extended through the ordinary reviewed writer rather than a second recipe
+or private graph builder:
+
+```text
+copied binary discovery
+  ├─ compact operation/type/expression grammar
+  ├─ exact built-in declarations/interfaces/operations
+  └─ strict deployment adapter schema
+                     │
+                     ▼
+       compact change 5 typed authored intent
+       requirement + task effect + generic expressions
+                     │
+            plan / exact-base apply
+                     ▼
+       one accepted Graph 5 application revision
+                     │
+          check + deterministic Artifact 10
+                     ▼
+HTTP client -> HTTP adapter -> graph handler/domain policy
+                             -> graph persistence functions
+                             -> exact database requirement
+                             -> PostgreSQL adapter
+```
+
+The graph owns route selection, header/body admission, strict JSON interpretation, post domain
+types and validation, response status/headers/body, migration identity/checksum, parameterized
+statements, typed row conversion, and transaction boundaries. HTTP/domain functions call a narrow
+application-owned persistence layer and contain no provider coordinates or driver representation.
+Deployment separately owns the PostgreSQL adapter, connection secret name, pool/timeouts, listener,
+and runtime limits. PostgreSQL rows are operational state; SQL and PostgreSQL remain replaceable
+current mechanisms rather than language meaning.
+
+`SetFunctionContract` updates the starter handler's exact result/effect requirement closure while
+preserving its identity and parameter. Generic runtime call frames carry concrete Graph type
+substitutions for standard JSON/list declarations in both production and reference tiers. An
+idempotent apply retry reopens the accepted request's exact parent and hides only the child-added
+physical type objects, preserving logical reprepare even though immutable storage grows.
 
 ## Artifact and execution boundaries
 
@@ -275,6 +318,15 @@ inventories. Its stable receipt binds the verifier and candidate bytes. An expli
 create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
 checkout path. Product, service, full, pre-publication package admission, and both anonymous public
 asset checks all use this same owner.
+
+The separate `stateful_http_application` service/full gate copies the candidate to a fresh root,
+uses its discovery output to construct the request and deployment, plans and applies once through
+the public CLI, compares clean and incremental artifacts, then drives real BBS HTTP and PostgreSQL
+behavior through one `lkjscript serve` process. It proves malformed input and failed statements do
+not mutate rows, migration checksum divergence fails safely, persistence survives restart, and
+build/runtime work leaves the accepted Graph inventory unchanged. The existing service oracle and
+this gate share exact PostgreSQL 16.15 process/version/cleanup support; the static HTTP gate remains
+an independent faster no-database oracle.
 
 ## Security and replaceability
 

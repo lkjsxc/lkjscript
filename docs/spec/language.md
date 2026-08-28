@@ -1,14 +1,14 @@
 # Language meaning
 
-Status: normative for meaning graph contract 4.
+Status: normative for meaning graph contract 5.
 
 ## Representation and evaluation
 
-Language constructs are typed semantic records in canonical module objects. There is no maintained
-source grammar. The current change JSON contract, identified by the executable
-[contract registry](../generated/contracts.md), describes bounded authoring intent; deterministic review JSON is a
-non-authoritative projection. Names locate meaning, while typed stable IDs own references,
-continuity, generic parameters, and selected expression/member sites.
+Language constructs are typed semantic records in canonical owner objects. There is no maintained
+source grammar. Compact change contract 5, identified by the executable
+[contract registry](../generated/contracts.md), describes bounded authored intent; the request and
+logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own
+references, continuity, generic parameters, and selected expression/member sites.
 
 Evaluation is strict and left-to-right except `if` and variant `match`, which evaluate only the
 selected branch. `let` bindings and `do` expressions evaluate in declared order. Capability
@@ -98,11 +98,13 @@ conditional, lexical let, sequencing, direct call with explicit type arguments, 
 reference with explicit type arguments, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
-CLI change v3 currently exposes a concise subset for created/replaced bodies: unit, bool, i64, text,
-static text, lexical variable, exact constant reference, direct call, named function value,
-invoke, record, and typed list. Other accepted
-expression kinds remain authorable through exact maintained construction/transaction consumers;
-the public high-level change grammar must expand before claiming full concise authoring parity.
+Compact change 5 exposes unit, bool, i64, text, and static-text literals; lexical variables and
+constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
+construction and field projection; variants and exhaustive matches; typed lists; exact requirement
+capability calls; and lexical transactions. Function references, invocation, and maps remain graph
+forms used by maintained typed construction where applicable but are not public compact expression
+forms. The generated [change grammar](../generated/change-grammar.md) is the exhaustive public
+inventory; this specification does not duplicate its fields and edges.
 
 Bindings and expression sites receive typed IDs only where operations, diagnostics, or relations
 need robust selection. Structural paths are canonical within the owning declaration. Paths, source

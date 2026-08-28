@@ -378,22 +378,22 @@ classified unavailable rather than pass. The one-million-owner public workflow w
 
 ## Current artifact-10 resident deployment
 
-The maintained `lkjournal` bundle remains 685,766 bytes and contains two packages, 2,280 closure
-objects (465,145 object bytes), 120 compiler units, and one artifact segment. Strict reload observed
-the same 2,280 objects and object bytes. Its manifest is
-`artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834`
+The maintained `lkjournal` bundle is now 697,403 bytes and contains two packages, 2,319 closure
+objects (472,791 object bytes), 124 compiler units, and one artifact segment. Strict reload observes
+the same 2,319 objects and object bytes. Its manifest is
+`artifact_manifest_bab49942d015f38ac1898c43a15db56a25cd7a782411f6b94b40cbe86c9e51f9`
 and bundle identity is
-`artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501`.
+`artifact_bundle_79b9bb47b065d545402af21eb69057752e9f496e472475f030f5287139e592de`.
 
-The local campaign host freshly rebuilt and byte-compared that bundle, then classified live service
-acceptance unavailable because Docker was absent; the preliminary run took 1.192 seconds and is not
-a service latency result. The supported copied-binary HTTP/worker/PostgreSQL observations, including
-readiness, per-request, worker, shutdown, CPU/RSS, backup, object, authority-inventory, and evidence
-sizes, are owned by
-[`202608272159-artifact10-service-cutover.json`](evidence/202608272159-artifact10-service-cutover.json).
-Filesystem cache state, scheduler noise, container startup, PostgreSQL behavior, and hosted-runner
-sampling remain uncontrolled point-observation limitations. No SLO or provider-cost inference is
-made.
+The service oracle still covers copied-binary HTTP/worker/PostgreSQL behavior, readiness,
+per-request and worker observations, shutdown, backup/restore, object state, and authority
+inventory. Contributor provisioning now accepts either its immutable pinned image or an exact
+verified local PostgreSQL 16.15 tool root while preserving one typed receipt and cleanup contract.
+The earlier cutover measurements remain in
+[`202608272159-artifact10-service-cutover.json`](evidence/202608272159-artifact10-service-cutover.json);
+they are historical timings for the earlier artifact, not measurements of this larger bundle.
+Filesystem cache state, scheduler noise, PostgreSQL behavior, and process sampling remain
+uncontrolled point-observation limitations. No SLO or provider-cost inference is made.
 
 The assembled release-mode product candidate was 15,386,696 bytes, 1,118,240 bytes smaller than
 the published `v0.1.4` executable observation. Its preliminary product profile passed 16/16 fresh
@@ -440,6 +440,33 @@ left accepted Graph authority unchanged. Sampled CPU was 0.600 seconds for each 
 child peak RSS was 11,044 and 10,992 KiB. Fresh projects intentionally allocate different semantic
 and artifact identities; candidate bytes, release manifests, contracts, response bytes, and every
 within-run clean/incremental artifact comparison agreed where equality is required.
+
+## Stateful HTTP authoring
+
+The maintained stateful workflow constructs one fresh BBS from executable discovery and a
+1,010-record, 68,630-byte compact request. One working-tree diagnostic observation produced a
+strict logical plan with 4,680 records and 1,179,591 bytes: 638 allocations, 648 owner effects,
+7 type additions, 6 retirements, 10 removed and 1,043 added relations, 646 structural and semantic
+validation owners, 11 selected tests, and 1,007 reasons. Planning is repeated before publication
+with byte-identical output; apply accepts once and an exact retry reconciles to the same revision.
+
+That sample's two-package Artifact 10 bundle was 466,938 bytes. Incremental and clean builds had
+the same SHA-256, `1dd53da43deae98f51549a72603a7f9051b4858b1804d478ba8c03688e6bb0b5`.
+The live oracle performs 22 HTTP observations covering root/list/create/update/delete,
+malformed/trailing/duplicate JSON, content-type and query identity admission, absence, unsupported
+method, unknown route, statement rollback, migration-checksum divergence, and persistence after
+restart. It also performs two startup attempts that must emit no readiness for missing/invalid
+database secrets. The sample's accepted project inventory remained 12 files and 1,538,302 bytes
+with equal `HEAD` and complete inventory digests before and after runtime work.
+
+One working-tree diagnostic observation with a debug candidate completed 57 bounded child commands
+and the live PostgreSQL workflow in 20.031 seconds. This is not the final optimized-candidate
+measurement or a latency distribution. Per-request bodies and SQL parameters are deliberately not
+retained; the receipt records request/response byte counts and response digests. Current command
+sampling exposes wall and 10 ms CPU observations but not reliable short-lived peak RSS, database
+statement/row telemetry, exact filesystem synchronization calls, or provider cost. Final
+implementation-bound receipt identities and resource observations are recorded by campaign
+`202608281817` after fresh full verification.
 
 ## Historical compiler, service, and verification receipts
 

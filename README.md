@@ -12,6 +12,11 @@ graph-owned tests, and build deterministic artifact-10 bundles. The HTTP workflo
 artifact through the standalone deployment boundary and serves it on loopback without Cargo, a
 checkout, database, container, or helper executable.
 
+Current `main` is the unreleased 0.1.8 source candidate. It adds executable-owned built-in and
+deployment discovery plus reviewed compact task/capability authoring sufficient for a persistent,
+request-dependent PostgreSQL-backed BBS. Those additions are not present in immutable v0.1.7 and
+no 0.1.8 tag, release, package, or deployment exists yet.
+
 The public binary target is exactly `x86_64-unknown-linux-gnu`. It requires the ELF interpreter
 `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and GLIBC 2.38 or newer.
 No broader Linux portability is claimed.
@@ -111,6 +116,44 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
+### Stateful HTTP from unreleased source
+
+Build the current source candidate, then use that same copied executable for all application-facing
+discovery and authoring:
+
+```sh
+cargo build --workspace --release --locked
+./target/release/lkjscript capabilities change
+./target/release/lkjscript capabilities --section deployment
+./target/release/lkjscript package builtin inspect
+./target/release/lkjscript package builtin query owners --name Database
+./target/release/lkjscript package builtin inspect owner interface decl_...
+```
+
+Compact change 5 can add exact component requirements, create task functions, update the starter
+handler contract, and compose structural records, lexical bindings, fields, lists, variants,
+matches, exact built-in calls, requirement-scoped capability calls, and lexical transactions. The
+generated [change grammar](docs/generated/change-grammar.md),
+[built-in interface](docs/generated/builtin-standard.md),
+[deployment schema](docs/generated/deployment.md), and
+[stateful walkthrough](docs/generated/stateful-http-authoring.md) are the offline executable-owned
+authoring references.
+
+The maintained acceptance authors a 1,010-record BBS from a fresh `http` project exclusively
+through those public records, builds equal clean/incremental artifacts, and runs create/read/update/
+delete plus strict-input, rollback, restart, and failure checks through one `lkjscript serve`
+process and isolated PostgreSQL instance:
+
+```sh
+LKJSCRIPT_POSTGRES_ROOT=/path/to/exact-postgresql-16.15-root \
+  cargo run --locked -p lkjscript-dev -- stateful-http \
+  --binary target/release/lkjscript --machine
+```
+
+The contributor harness may instead use its pinned immutable PostgreSQL image. Database
+provisioning and HTTP probing are independent test oracles; they do not supply application routes,
+storage semantics, or graph mutations.
+
 Project creation accepts an absent destination. It rejects invalid names, every existing
 destination (including an empty directory), non-directory parents, and symlink path components
 before visibility. The
@@ -194,6 +237,8 @@ The executable embeds one exact package transport and one exact artifact-10 bund
 
 ```sh
 ./lkjscript package builtin inspect
+./lkjscript package builtin query owners --kind interface --name Database
+./lkjscript package builtin inspect owner interface decl_...
 ./lkjscript package builtin export --kind transport --output ./standard.lkjp
 ./lkjscript package builtin export --kind artifact --output ./standard.lkja
 ```
@@ -266,6 +311,11 @@ cargo run --locked -p lkjscript-dev -- check product
 cargo run --locked -p lkjscript-dev -- check service
 cargo run --locked -p lkjscript-dev -- check full
 ```
+
+`stateful_http_application` is a non-cacheable required gate in service and full profiles; the
+separate `distributed_http_application` no-database gate remains required by product, service, and
+full. On hosts without the cached immutable image, service and stateful verification accept an
+exact PostgreSQL 16.15 tool root via `LKJSCRIPT_POSTGRES_ROOT`.
 
 The harness records exact fingerprints, classifications, receipts, and bounded child logs under
 `.artifacts/lkjscript-dev/check/`. The authoritative `full` profile requires fresh gates.

@@ -37,6 +37,12 @@ control. The adapter transaction creates/locks `lkjscript_schema_migrations`, re
 divergence, atomically applies a new migration and records it, or reports unchanged. Migration order
 is application-owned; deployments must invoke exact required migrations before dependent traffic.
 
+These existing operations are now reachable from public compact task/capability authoring as
+specified in [effects-capabilities.md](effects-capabilities.md). That authoring cutover does not
+change the database contract, elevate SQL or PostgreSQL into language semantics, or add an ambient
+database. Applications retain statements and row conversion behind explicit requirement-scoped
+persistence functions; deployment retains provider selection and connection authority.
+
 ## Named object storage
 
 An object grant binds memory, confined local root, or explicit S3-compatible endpoint/region/bucket

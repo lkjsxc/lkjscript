@@ -1,9 +1,10 @@
 # Public CLI
 
-Status: normative. CLI contract 11 is the current process boundary. Exact operations, grammar,
+Status: normative. CLI contract 12 is the current process boundary. Exact operations, grammar,
 request/response models, limits, diagnostics, authority effects, and security nonclaims are owned
 by the executable registry and generated into
-[operations.md](../generated/operations.md) and [contracts.md](../generated/contracts.md).
+[operations.md](../generated/operations.md), [contracts.md](../generated/contracts.md), and the
+other executable-generated catalogs in [`docs/generated/`](../generated/).
 
 ## Registry and dispatch
 
@@ -73,8 +74,8 @@ template language. Unknown template spellings, including `web`, `server`, and `s
 through `cli_usage` and are not aliases.
 
 Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
-source file, database, container, or helper command. The latest public release remains v0.1.6 and
-does not yet contain the HTTP recipe.
+source file, database, container, or helper command. Release availability is current distribution
+state and is intentionally not part of this normative contract.
 
 ## Status, inspection, and query
 
@@ -111,6 +112,23 @@ change apply (--input RECORDS | --input-file PATH) --plan TOKEN
 One direct adapter exists for exact owner rename. Its full usage and the exhaustive compact record,
 type, expression, precondition, selector, and field vocabularies are registry-owned.
 
+Compact change contract 5 supports `pure` and exact-requirement `task` function effects. Its public
+dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
+record types, lexical bindings, structural and nominal record construction/projection, typed lists,
+variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical
+database transactions. Nested shapes use ordered flat fragment records and explicit parent/index
+edges. Request-local labels are notation only; normalized authored intent owns stable allocation
+and request commitment. Higher-order function values/invocation, maps, and arbitrary component,
+interface, external, port, and target creation remain outside the compact surface.
+
+Task effect requirements are an ordered exact set of component-local requirement references. A
+new requirement names one exact built-in interface, an ordered admitted operation set, and separate
+named resource limits. Pure functions cannot call tasks or capabilities or open transactions;
+task capability calls must be admitted by both the function effect and component requirement.
+Foreign domains, duplicate requirements, interface/operation mismatch, escaping transaction
+bindings, nested transactions, shared owned fragments, unused fragments, and fragment cycles reject
+before publication.
+
 The strict record decoder rejects unknown or duplicate records/fields, invalid UTF-8 or escaping,
 foreign identity domains, noncanonical order, overflow, missing edges, trailing input, and exhausted
 admissions. Raw JSON and predecessor request/dry-run/commit forms are not alternate inputs.
@@ -122,6 +140,12 @@ reprepares against the exact base, checks the prepared commitment, and calls the
 boundary. A stale base, mismatch, invalid candidate, cancellation, or resource failure publishes
 nothing.
 
+An apply retry carrying the same valid idempotency key, normalized request, exact base, and reviewed
+plan is reprepared against that request's historical base and reconciles to the one already accepted
+revision. The retry path hides physical type objects introduced by the accepted child so append-only
+storage growth cannot change the logical plan. `change plan` still observes the current revision and
+rejects a stale base; idempotency is not a historical planning cursor.
+
 When apply accepts, its semantic records are final before any compiler-cache handoff. A
 `derived-cache` record reports `updated`, `not-available`, `not-attempted-replay`, or `failed`, plus
 manifest/work or diagnostic data as applicable. `failed` still accompanies a successful accepted
@@ -131,6 +155,9 @@ semantic result; it is never mapped to a failed change.
 
 ```text
 package builtin inspect
+package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] \
+  [--limit N] [--bytes N] [--continuation TOKEN]
+package builtin inspect owner KIND ID
 package builtin export --kind transport|artifact --output PATH
 ```
 
@@ -139,6 +166,22 @@ interface, artifact manifest/bundle, counts, and byte sizes. Export strictly val
 material and creates one absent output file. Existing paths, symlinks, directories, and invalid
 parents reject without replacement. No project, checkout lookup, mutable package source, or network
 registry is consulted.
+
+Owner query and exact inspection expose only the current implementation-free package interface.
+They report canonical compact references, declaration type parameters, ordered parameters, result
+types and effects, and interface operation signatures, idempotency, and external-visibility class.
+Results use deterministic owner-key order and bounded output. A `bcont_` continuation binds the
+exact package revision, normalized selector, order, and exclusive resume key. Malformed, oversized,
+foreign, selector-mismatched, or stale tokens reject. No private body, intrinsic implementation
+name, or artifact string scan is exposed or required.
+
+`capabilities --section deployment` and
+[`deployment.md`](../generated/deployment.md) project deployment contract 1 from the same closed
+descriptor inventory exercised by strict decoding. They enumerate top-level and nested fields,
+every adapter tag, required/optional status, scalar form, range, secret-name classification, and
+nested limit contract without secret values. The generated
+[`stateful-http-authoring.md`](../generated/stateful-http-authoring.md) walkthrough composes that
+schema with current built-in references and compact grammar; it is guidance, not program authority.
 
 ## Check
 
