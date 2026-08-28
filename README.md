@@ -6,23 +6,18 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.7 executable supports offline command and editable HTTP application lifecycles
-through one copied binary. Both create Graph 5 projects, inspect and change accepted meaning, run
-graph-owned tests, and build deterministic artifact-10 bundles. The HTTP workflow also starts the
-artifact through the standalone deployment boundary and serves it on loopback without Cargo, a
-checkout, database, container, or helper executable.
+The supported v0.1.9 executable provides offline command, editable HTTP, and reviewed stateful HTTP
+application lifecycles through one copied binary. They create Graph 5 projects, inspect and change
+accepted meaning, run graph-owned tests, build deterministic artifact-10 bundles, and execute
+through the standalone deployment boundary without Cargo, a checkout, or an application helper.
+The stateful workflow uses an explicitly provisioned PostgreSQL authority.
 
-Immutable v0.1.8 is externally committed but not closed. Its exact and latest static binaries each
-passed strict package, distributed HTTP, and stateful HTTP verification, but the release run then
-rejected the legitimately different artifact identities of two independently created applications.
-Current `main` is the unreleased 0.1.9 additive recovery candidate. The 0.1.8/0.1.9 source line adds
-executable-owned built-in and deployment discovery plus reviewed compact task/capability authoring
-sufficient for a persistent, request-dependent PostgreSQL-backed BBS.
-
-The supported v0.1.7 binary target remains exactly `x86_64-unknown-linux-gnu` during recovery. It
-requires the ELF interpreter `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`,
-`libc.so.6`, and GLIBC 2.38 or newer. Do not use the mutable latest-release alias until the additive
-recovery closes. No broader Linux portability is currently claimed.
+The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
+runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
+completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
+userlands, and its distributed and PostgreSQL-backed HTTP workflows passed independently from both
+exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
+environment, or broader Linux portability.
 
 ## Download
 
@@ -32,20 +27,20 @@ Download the latest supported archive and its checksum without running a remote 
 mkdir -p /tmp/lkjscript-download
 cd /tmp/lkjscript-download
 curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-musl.tar.gz
 curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/SHA256SUMS
+  https://github.com/lkjsxc/lkjscript/releases/latest/download/SHA256SUMS
 sha256sum --check SHA256SUMS
-tar -xzf lkjscript-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 ./lkjscript/lkjscript capabilities
 ```
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.7` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7) owns the immutable
+[`v0.1.9` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.9) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/lkjscript-x86_64-unknown-linux-gnu.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.9/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.9/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -82,7 +77,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.7 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.9 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -119,18 +114,16 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
-### Stateful HTTP from current source
+### Stateful HTTP from the public binary
 
-Build the current source candidate, then use that same copied executable for all application-facing
-discovery and authoring:
+Use the downloaded executable for all application-facing discovery and authoring:
 
 ```sh
-cargo build --workspace --release --locked
-./target/release/lkjscript capabilities change
-./target/release/lkjscript capabilities --section deployment
-./target/release/lkjscript package builtin inspect
-./target/release/lkjscript package builtin query owners --name Database
-./target/release/lkjscript package builtin inspect owner interface decl_...
+./lkjscript/lkjscript capabilities change
+./lkjscript/lkjscript capabilities --section deployment
+./lkjscript/lkjscript package builtin inspect
+./lkjscript/lkjscript package builtin query owners --name Database
+./lkjscript/lkjscript package builtin inspect owner interface decl_...
 ```
 
 Compact change 5 can add exact component requirements, create task functions, update the starter

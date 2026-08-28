@@ -4,6 +4,51 @@ Measurements are observations, not promises.
 
 ## Current public binary release
 
+Release `v0.1.9` was built and published by GitHub Actions run
+[`33200478399`](https://github.com/lkjsxc/lkjscript/actions/runs/33200478399) on explicit
+`ubuntu-24.04` with Rust/Cargo 1.98.0. Its read-only build/verification, no-checkout
+pre-publication, write-isolated publication, and anonymous post-publication jobs completed in about
+16 minutes 42 seconds, 25 seconds, 16 seconds, and 1 minute respectively. All passed on attempt 1.
+
+| Observation | Value |
+|---|---:|
+| fresh full verification | 342.653 s; 22/22 gates fresh passed; zero reused |
+| exact musl candidate build | 238.621 s; 0.880 s sampled child CPU; 78,360 KiB peak RSS |
+| target admission after build | 20.470 s; 6/6 required classifications fresh passed |
+| candidate command userlands | 12 commands each; Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31 |
+| target distributed HTTP oracle | 1.382 s; 23 commands; 2 runners; 2 requests |
+| target stateful HTTP oracle | 11.560 s; 61 commands; 3 runners; 22 requests |
+| target `lkjournal` service oracle | 3.157 s; 13 commands; 3 runners; 14 requests |
+| deterministic release preparation | 61.713 s including strict verification and command lifecycle |
+| transferred pre-publication application oracles | both passed; no checkout; complete cleanup |
+| anonymous exact distributed/stateful oracles | 1.374 s / 14.982 s |
+| anonymous latest distributed/stateful oracles | 1.757 s / 12.018 s |
+
+The exact release executable is 15,923,424 bytes with SHA-256
+`3f1505e716886d17c585e486e7535081ae4372e50ad87e826ab412a636dc2cbb`. Direct inspection found
+zero ELF interpreter headers, runtime-needed libraries, and GLIBC symbol-version requirements. The
+11,336-byte license, 315,160-byte generated notices, and 4,018-byte manifest bring uncompressed
+payload bytes to 16,253,938; the 7,197,143-byte archive has a 0.442794 ratio (55.72% smaller). The
+109-byte checksum contains exactly that archive.
+
+Exact and latest downloads each independently completed the distributed and PostgreSQL-backed BBS
+workflows. Their fresh BBS applications intentionally allocated different identities and artifact
+bytes; each run's clean and incremental artifact hashes agreed. All hosted downloads, attestations,
+and application oracles succeeded on their first attempt. A separate token-free client also
+downloaded and strictly verified exact and latest bytes; its first local orchestration stopped on
+an incorrect checksum-line assertion, then a read-only continuation completed latest verification.
+No external mutation was retried.
+
+These are point observations across one hosted runner and one client, not latency distributions or
+cross-run reproducibility evidence. Runner cache, scheduling, network, database, filesystem, and
+kernel effects were uncontrolled. Static linkage and the two named userlands do not establish a
+minimum kernel or universal Linux compatibility. Provider token use, monetary cost, exact syscalls,
+and reliable aggregate process CPU/RSS for containerized work were unavailable. Exact identities,
+classifications, and raw-evidence pointers are in
+[`202608290000-static-linux-distribution.json`](evidence/202608290000-static-linux-distribution.json).
+
+## Historical v0.1.7 public binary release
+
 Release `v0.1.7` was built and published by GitHub Actions run
 [`33150527883`](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883) on explicit
 `ubuntu-24.04` with Rust/Cargo 1.98.0. Its four jobs completed in 11 minutes 13 seconds for the

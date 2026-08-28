@@ -84,7 +84,7 @@ linker decisions.
 
 ## Derived release distribution path
 
-The repository has one prepared tag-driven path for the sole current release target,
+The repository has one tag-driven path for the sole current release target,
 `x86_64-unknown-linux-musl`:
 
 ```text
@@ -129,12 +129,12 @@ contracts, compilation semantics, or deployment data. The root package version a
 bind the human-facing product snapshot while contract identities remain independently owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.8` is externally committed but not closed: both exact and latest public binaries
-passed the static, distributed HTTP, and stateful HTTP boundaries, after which the workflow rejected
-their legitimately distinct fresh-project artifact identities. The prepared additive `v0.1.9`
-recovery removes that non-semantic cross-application predicate and must repeat every release
-boundary. `v0.1.7` remains the documented supported release until the recovery closes; predecessor
-evidence remains historical and is not evidence for the recovery candidate.
+Immutable `v0.1.9` closes this path at source commit
+`facebf51714b5a604434f49759e315ece0b4c218`. Its exact and latest downloads independently passed
+strict package and static inspection plus transferred distributed and stateful HTTP acceptance.
+Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
+but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
+advanced additively and moved no predecessor tag, release, or asset.
 
 ## Layer ownership
 
@@ -326,7 +326,7 @@ changes an HTTP project, checks and deterministically builds it, starts and rest
 sends raw loopback HTTP, exercises startup failures, and compares exact accepted-authority
 inventories. Its stable receipt binds the verifier and candidate bytes. An explicit absolute
 create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
-checkout path. Product/full verification and the prepared target-admission, pre-publication, and
+checkout path. Product/full verification and the target-admission, pre-publication, and
 anonymous exact/latest paths all use this same owner.
 
 The separate `stateful_http_application` owner has the same contributor/transferred context seam and
@@ -337,7 +337,7 @@ It proves malformed input and failed statements do not mutate rows, migration ch
 fails safely, persistence survives restart, failed startup emits no readiness, and build/runtime
 work leaves accepted Graph authority unchanged. Its schema-2 receipt binds verifier/source/copied
 candidate identities, execution context, optional checkout, PostgreSQL authority, redaction, and
-complete cleanup. Service/full verification and the prepared target-admission, pre-publication, and
+complete cleanup. Service/full verification and the target-admission, pre-publication, and
 anonymous exact/latest paths share this owner. The existing `lkjournal` service oracle remains a
 separate maintained workload, and distributed HTTP remains the faster no-database oracle.
 

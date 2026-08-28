@@ -38,31 +38,31 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.7`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7) is the current public and
+[`v0.1.9`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.9) is the current public and
 supported release. Its annotated tag object
-`92a6d0b68b8c524d058c51073e8dd28158a9247b` selects commit
-`be531d9c77d722559527bbfa3683da67d9055b89`; GitHub reports release `378319314` as immutable,
-non-draft, and non-prerelease. It includes the standalone artifact-10 `serve` and `worker`
-boundary plus the complete copied-binary HTTP creation, reviewed mutation, build, serve, restart,
-and failure workflow. The supported target remains exactly `x86_64-unknown-linux-gnu`. The
-executable is ELF64 x86-64, uses `/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`,
-`libgcc_s.so.1`, and `libm.so.6`, and has a measured maximum required symbol version of
-`GLIBC_2.38`.
+`caa78d6851c0f3cfc3d1dfeff78c122ce4780827` selects source commit
+`facebf51714b5a604434f49759e315ece0b4c218`; GitHub reports release `378702473` as immutable,
+latest, non-draft, and non-prerelease. The sole current target is
+`x86_64-unknown-linux-musl`. The 15,923,424-byte executable is ELF64 x86-64 and has no ELF
+interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 6,985,922 | `e62f080b39686603f0401dfd6faea57d00dbf5e37cd51c4f23e7b1b63904f455` |
-| `SHA256SUMS` | 108 | `f4db76f640618f97c3d981698f828f09f3730f3e5511eac7886977da5a9d5f1c` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,197,143 | `eeba53b4fe1fee8af7427dfc147f7a5be4b45bf8b7aff804b2d527132f89f4a0` |
+| `SHA256SUMS` | 109 | `ac9f4cbeee75c4d90eb93eccbe0bf71c815a6c0cd07e2a8fe8b1f12e84c776c4` |
 
 Release workflow
-[`33150527883`](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883) passed all four jobs on
-attempt 1. Its exact tagged content passed 21/21 fresh full gates with zero reuse, including
-PostgreSQL service and distributed HTTP acceptance. A separate read-only no-checkout job verified
-the release and verifier handoffs, safely extracted the package, and passed the transferred HTTP
-oracle before publication. Anonymous exact-tag and stable `releases/latest` downloads then matched
-the archive and checksum bytes, passed GitHub release and asset attestation, and independently
-completed the HTTP oracle twice. The archive holds only the executable, root license, generated
-third-party notices, and canonical release manifest under one `lkjscript/` directory.
+[`33200478399`](https://github.com/lkjsxc/lkjscript/actions/runs/33200478399) passed all four jobs on
+attempt 1. Tagged source passed 22/22 fresh full gates with zero reuse. Exact target admission
+directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
+and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed the
+distributed HTTP, stateful HTTP, and maintained `lkjournal` service oracles. A no-checkout job then
+verified the handoffs and passed both transferred application oracles before the write-isolated
+publication job ran. Anonymous exact-tag and `releases/latest` downloads independently passed
+checksum, attestation, strict extraction, static inspection, distributed HTTP, and stateful HTTP.
+Exact and latest candidate and manifest bytes agree; each fresh BBS independently proved its own
+clean/incremental artifact equality, persistence, rollback, failure behavior, authority equality,
+redaction, and cleanup.
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -71,19 +71,20 @@ CLI contract and registry digest from the verified release manifest, and recover
 `v0.1.6`; neither `v0.1.5` nor an older tag or asset was changed. The independent `v0.1.7`
 publication likewise moved or replaced no predecessor. Release files remain derived distribution
 evidence rather than program authority or independent build provenance. Exact evidence is retained
-in the historical [v0.1.6 record](evidence/20260828-v0.1.6-public-release.json) and the current
+in the historical [v0.1.6 record](evidence/20260828-v0.1.6-public-release.json) and
 [v0.1.7 public HTTP record](evidence/202608281451-public-http-release.json).
 
-Immutable `v0.1.8`, release `378668969`, is externally committed but not closed. Its exact and
-latest public musl binaries each passed strict extraction, static inspection, distributed HTTP, and
-stateful HTTP verification in release run `33196276783`. The run then failed only because its final
-predicate incorrectly required artifacts from two independently allocated fresh applications to
-have one digest. Current `main` is package version 0.1.9, the smallest unused additive recovery;
-the v0.1.8 tag, release, and assets will not be changed or removed.
+Immutable `v0.1.8`, release `378668969`, remains an unclosed historical recovery point. Its exact
+and latest application oracles passed, but run `33196276783` rejected legitimately distinct
+artifacts from separately allocated fresh applications. The workflow defect required changed
+source, so recovery advanced additively to v0.1.9 without moving or replacing the v0.1.8 tag,
+release, or assets. Current structured evidence is in
+[`202608290000-static-linux-distribution.json`](evidence/202608290000-static-linux-distribution.json).
 
-## Current-main application lifecycle
+## Current application lifecycle
 
-Current `main` is unreleased package version 0.1.9 with CLI contract 12. It exposes exactly
+Current `main` and public v0.1.9 have product version 0.1.9 with independent CLI contract 12. The
+executable exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
 `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. The registry digest is
@@ -105,7 +106,7 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public `v0.1.7` behavior. The 0.1.8/0.1.9 source line adds compact
+The closed HTTP and stateful recipes are public `v0.1.9` behavior. This source line adds compact
 change contract 5: task effects, `add.requirement`, `set.function-contract`, structural record
 types, and the lexical/record/field/list/variant/match/capability-call/transaction expression slice
 required to turn that starter into a request-dependent persistent application. It does not expose
@@ -200,10 +201,9 @@ sandbox or multi-tenant isolation boundary.
 - No million-owner complete application lifecycle, long-history retention policy, garbage
   collection, live-store packing, artifact signing, encrypted graph storage, or distributed
   publication protocol has been proved.
-- The supported public binary remains `x86_64-unknown-linux-gnu` with the measured dynamic runtime
-  above during additive recovery. The immutable v0.1.8 musl bytes passed the named static and
-  userland/application boundaries but their release run did not close. macOS, Windows, arm64,
-  generic Unix, additional Linux targets, and universal portability remain unproved.
+- The supported public binary is exactly `x86_64-unknown-linux-musl` with the static linkage and
+  pinned Alpine 3.22.5 and Debian 11 userland observations above. A minimum kernel, macOS, Windows,
+  arm64, generic Unix, additional Linux targets, and universal portability remain unproved.
 - The immutable GitHub release attestation and asset digests prove release identity and integrity;
   they are not code signing, compiler reproducibility, build provenance across runner images, or
   a general supply-chain policy.

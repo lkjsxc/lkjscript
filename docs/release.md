@@ -5,12 +5,11 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.8` is externally committed but not closed: its exact and latest public bytes each
-passed strict static, distributed HTTP, and stateful HTTP verification, but release run
-`33196276783` then applied an invalid equality predicate to artifacts from two independently
-allocated fresh applications. The source version `0.1.9` is the smallest unused additive recovery
-candidate. `v0.1.7` remains the documented supported release until that recovery completes the
-anonymous exact and latest boundary.
+Immutable `v0.1.9`, release `378702473`, is the current supported release. Release run
+`33200478399` completed fresh source and target verification, both no-checkout pre-publication
+application oracles, isolated publication, and independent anonymous exact/latest application
+oracles on attempt 1. Immutable `v0.1.8` remains the unmodified historical recovery point for the
+workflow-only cross-application equality defect described in the campaign evidence.
 
 ## Identity and authority
 
