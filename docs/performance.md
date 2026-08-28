@@ -459,14 +459,25 @@ restart. It also performs two startup attempts that must emit no readiness for m
 database secrets. The sample's accepted project inventory remained 12 files and 1,538,302 bytes
 with equal `HEAD` and complete inventory digests before and after runtime work.
 
-One working-tree diagnostic observation with a debug candidate completed 57 bounded child commands
-and the live PostgreSQL workflow in 20.031 seconds. This is not the final optimized-candidate
-measurement or a latency distribution. Per-request bodies and SQL parameters are deliberately not
-retained; the receipt records request/response byte counts and response digests. Current command
-sampling exposes wall and 10 ms CPU observations but not reliable short-lived peak RSS, database
-statement/row telemetry, exact filesystem synchronization calls, or provider cost. Final
-implementation-bound receipt identities and resource observations are recorded by campaign
-`202608281817` after fresh full verification.
+One earlier working-tree diagnostic observation with a debug candidate completed 57 bounded child
+commands and the live PostgreSQL workflow in 20.031 seconds. It is not a latency distribution.
+
+The final implementation-bound release candidate at commit
+`5986f7ab3a888bcae9839f621d1b7db0fb1a8975` was 15,768,360 bytes with SHA-256
+`a39c8c3317755f25c3c727f957c7e7f9aa01010db6ff37286fd6445bbcfb617e`. Its copied-binary
+stateful workflow completed in 14.640 seconds. The 57 child commands accumulated 5.560 seconds of
+sampled CPU, observed at most 13,456 KiB peak RSS, retained 285,426 stdout bytes and zero stderr
+bytes, and produced a 468,618-byte clean/incremental-equal artifact with SHA-256
+`4af1aed0d197e09658f5d535a82943da604648721a836f56febb20a128540485`. The accepted project
+inventory remained 12 files and 1,549,198 bytes before and after runtime work. The fresh full
+profile passed 22/22 gates with zero reuse in 33.187 seconds.
+
+Per-request bodies, SQL parameters, database control statements, secrets, and raw database errors
+are not retained; the receipt records request/response byte counts, response digests, and redacted
+database-control command arguments. Current sampling still does not expose reliable per-statement/
+row telemetry, exact filesystem synchronization calls, provider cost, or a latency distribution.
+Exact receipt identities and remaining limitations are in
+[`202608281817-public-stateful-http-authoring.json`](evidence/202608281817-public-stateful-http-authoring.json).
 
 ## Historical compiler, service, and verification receipts
 

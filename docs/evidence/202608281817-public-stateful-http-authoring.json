@@ -1,0 +1,676 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-stateful-http-authoring-evidence",
+    "version": 1
+  },
+  "campaign": "202608281817",
+  "recorded_utc": "2026-08-28T13:29:57Z",
+  "status": "complete",
+  "repository": {
+    "identity": "lkjsxc/lkjscript",
+    "branch": "main",
+    "orientation_baseline": "7ab63b0a1c732b83dd8b8e46a165948d0c30f34a",
+    "starting_head": "7ab63b0a1c732b83dd8b8e46a165948d0c30f34a",
+    "starting_origin_main": "7ab63b0a1c732b83dd8b8e46a165948d0c30f34a",
+    "starting_relation": {
+      "ahead": 0,
+      "behind": 0
+    },
+    "starting_worktree": [
+      "modified AGENTS.md",
+      "untracked docs/campaigns/202608281817.md"
+    ],
+    "preserved_preexisting_work": {
+      "path": "AGENTS.md",
+      "content_sha256": "930868776be0ed449137fbcaf361cbaaf973044c707ed21a973c741c76fbcf17",
+      "diff_sha256": "1312ba6122452bf10fbdd6d05fe8dee833798e8c2896f4adfe0c117ba5fbe8ed",
+      "included_in_campaign_commits": false,
+      "included_in_verification_input": true
+    },
+    "later_commits_at_entry": [],
+    "active_campaign": "202608281817",
+    "verified_implementation_commit": "5986f7ab3a888bcae9839f621d1b7db0fb1a8975",
+    "implementation_commits": [
+      {
+        "sha": "38bbf72ac8da83f38da7eaf89dfb2ea0ec439a7c",
+        "subject": "Expose public stateful authoring and discovery",
+        "purpose": "public discovery, compact task/capability forms, runtime generic substitutions, maintained consumer migration, and generated contracts"
+      },
+      {
+        "sha": "a47b37ff00d18c5a598c13596f3025fb3424a67a",
+        "subject": "Prove copied-binary stateful HTTP persistence",
+        "purpose": "stateful copied-binary workflow, shared PostgreSQL/process support, service/full gate registration, and cleanup evidence"
+      },
+      {
+        "sha": "a5ccbb6f1903a99bf85cccbb99f37901764fd378",
+        "subject": "Document unreleased stateful HTTP authoring",
+        "purpose": "normative/current/architecture/roadmap/performance documentation, active campaign record, and durable storage-seam decision"
+      },
+      {
+        "sha": "5986f7ab3a888bcae9839f621d1b7db0fb1a8975",
+        "subject": "Redact stateful database oracle evidence",
+        "purpose": "execute exact independent database controls while retaining only redacted SQL command arguments"
+      }
+    ],
+    "completion_commit": "reported externally because an evidence-only commit cannot name its own SHA"
+  },
+  "entry_reconciliation": {
+    "remote_default_branch": "main",
+    "orientation_baseline_was_current": true,
+    "apparently_incomplete_campaigns_reconciled": true,
+    "selected_campaign": "202608281817",
+    "superseding_campaign_found": false,
+    "open_issues_at_entry": [],
+    "open_pull_requests_at_entry": [],
+    "latest_public_release": {
+      "tag": "v0.1.7",
+      "release_id": 378319314,
+      "commit": "be531d9c77d722559527bbfa3683da67d9055b89",
+      "immutable": true
+    },
+    "unused_identifiers_confirmed": [
+      "source package 0.1.8",
+      "CLI contract 12",
+      "compact change contract 5"
+    ],
+    "docker": {
+      "client_available": true,
+      "daemon_available": false,
+      "classification": "local container prerequisite unavailable"
+    },
+    "objective_preserving_correction": {
+      "assumption": "the live gate would normally use the already pinned immutable PostgreSQL image",
+      "evidence": "the Docker daemon was unavailable, while exact Ubuntu PostgreSQL 16.15 packages could be obtained and executed locally",
+      "correction": "factor a shared exact-version, whole-root-digest-verified local process backend while retaining the immutable image backend",
+      "scope_effect": "contributor provisioning only; product deployment, data capability, Graph meaning, and PostgreSQL adapter contracts are unchanged"
+    }
+  },
+  "contracts": {
+    "package_version": {
+      "value": "0.1.8",
+      "release_state": "unreleased"
+    },
+    "registry": {
+      "identity": "lkjscript-contract-registry-3",
+      "version": 3,
+      "digest": "b03b152cd2de99b9879bb75731463891546fb91d8d41095f37f81b3f2ece57a8",
+      "change_reason": "registry contents changed; registry encoding contract did not"
+    },
+    "cli": "lkjscript-cli-12",
+    "compact_change": "lkjscript-change-records-5",
+    "authored_change_codec": {
+      "identity": "lkjscript-authored-change-codec-6",
+      "deviation": "advanced from 5 because declared match-arm binding types became serialized normalized authored intent"
+    },
+    "unchanged": [
+      "lkjscript-meaning-graph-5",
+      "lkjscript-project-creation-2",
+      "lkjscript-package-interface-owner-3",
+      "lkjscript-artifact-manifest-10",
+      "lkjscript-artifact-bundle-10",
+      "lkjscript-deployment-1",
+      "lkjscript-http-adapter-1",
+      "lkjscript-resident-runtime-1"
+    ],
+    "contributor_receipt_change": {
+      "service_receipt": "2 -> 3",
+      "reason": "the typed receipt now records immutable-image versus exact-local-tools PostgreSQL provisioning"
+    }
+  },
+  "discovery": {
+    "builtin_grammar": [
+      "package builtin inspect",
+      "package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN]",
+      "package builtin inspect owner KIND ID",
+      "package builtin export --kind transport|artifact --output PATH"
+    ],
+    "deployment_grammar": "capabilities --section deployment",
+    "generated_authorities": [
+      {
+        "path": "docs/generated/change-grammar.md",
+        "bytes": 35099,
+        "digest": "4eb87cab964f04f8b80667d51c3220967c875dee94ed03dd6d18e51956fda1d3"
+      },
+      {
+        "path": "docs/generated/deployment.md",
+        "bytes": 13573,
+        "digest": "a8f6039b1e779d2f7353ea35e2d459bd44c414793033ceb7254ea0069cb15d04"
+      },
+      {
+        "path": "docs/generated/builtin-standard.md",
+        "bytes": 103328,
+        "digest": "8251b241c062ea052f4470c31d865b1e2a8a26314c772ec0dcb74be822d9af04"
+      },
+      {
+        "path": "docs/generated/stateful-http-authoring.md",
+        "bytes": 3267,
+        "digest": "07fe6a24c22c8bc5e4753b0eadd776f21ecede7e79b8c2967136ab61109ea6c3"
+      }
+    ],
+    "builtin_query": {
+      "order": "canonical owner key",
+      "package_revision": "package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665",
+      "continuation_prefix": "bcont_",
+      "continuation_binding": [
+        "exact built-in package revision",
+        "normalized selector",
+        "canonical order",
+        "exclusive resume key"
+      ],
+      "private_implementation_exposed": false
+    },
+    "deployment_schema_owner": "src/platform/deployment.rs descriptor inventory shared by decoding and registry generation",
+    "walkthrough_contains_secret_values": false
+  },
+  "public_authored_change": {
+    "operations_added": [
+      "add.requirement",
+      "set.function-contract"
+    ],
+    "create_function_effects": [
+      "pure",
+      "task with ordered exact requirement references"
+    ],
+    "type_forms_added": [
+      "structural-record"
+    ],
+    "expression_forms_added": [
+      "let",
+      "record",
+      "field",
+      "list",
+      "variant",
+      "match",
+      "capability-call",
+      "transaction"
+    ],
+    "deliberately_private": [
+      "higher-order function values and invocation",
+      "maps",
+      "arbitrary external declarations",
+      "interfaces",
+      "components",
+      "ports",
+      "targets",
+      "workers",
+      "object and queue topology"
+    ],
+    "publication_path": "compact records -> typed authored request -> authored codec -> normalized intent -> logical plan -> exact-base apply -> repository publication",
+    "request_labels_are_authority": false,
+    "idempotent_apply": "same request, base, plan, and key reprepares the historical logical base and reconciles to one accepted child revision",
+    "stale_plan_behavior": "change plan continues to reject a stale base"
+  },
+  "standard_interface_inventory": {
+    "package": "pkg_10000000000000000000000000000001",
+    "package_revision": "package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665",
+    "capabilities": {
+      "ByteStream": {
+        "reference": "pkg_10000000000000000000000000000001/decl_e29e0ac407696662f355e9056172ac2b",
+        "used_operation": {
+          "name": "read-all",
+          "reference": "pkg_10000000000000000000000000000001/op_30cd44d5491201efdafea2b9e22adff0",
+          "signature": "(stream<bytes>, i64 maximum-bytes) -> bytes",
+          "idempotency": "non-idempotent",
+          "external_visibility": "none"
+        }
+      },
+      "Database": {
+        "reference": "pkg_10000000000000000000000000000001/decl_4c1cf20949507973e07ece4ec002c2d7",
+        "operations": [
+          {
+            "name": "execute",
+            "reference": "pkg_10000000000000000000000000000001/op_1e8d3c6da842f2e037b860f56c4b614f",
+            "signature": "(static-text, list<SqlValue>) -> i64",
+            "idempotency": "idempotent-with-key",
+            "external_visibility": "possible"
+          },
+          {
+            "name": "migration",
+            "reference": "pkg_10000000000000000000000000000001/op_5145165c3dbf5a9c775a08939a499371",
+            "signature": "(i64 migration-id, static-text checksum, static-text statement) -> bool",
+            "idempotency": "idempotent-with-key",
+            "external_visibility": "possible"
+          },
+          {
+            "name": "transaction",
+            "reference": "pkg_10000000000000000000000000000001/op_724ceb4324eb3260c9a1157603a57053",
+            "signature": "() -> unit lexical scope",
+            "idempotency": "idempotent-with-key",
+            "external_visibility": "possible"
+          },
+          {
+            "name": "query",
+            "reference": "pkg_10000000000000000000000000000001/op_a029bd829f03bb25fb11937c2fe81428",
+            "signature": "(static-text, list<SqlValue>, list<SqlType>, i64 maximum-rows) -> list<list<SqlValue>>",
+            "idempotency": "idempotent",
+            "external_visibility": "none"
+          }
+        ]
+      },
+      "Identifier": {
+        "reference": "pkg_10000000000000000000000000000001/decl_92bb73b52bc3654abcbde47513873f42",
+        "operation": "pkg_10000000000000000000000000000001/op_9c99e006fe32ed6d87c187ba9cdd6dab uuid-v4() -> text"
+      },
+      "WallClock": {
+        "reference": "pkg_10000000000000000000000000000001/decl_8d99ab2f1d59391e1e21c17cc8757731",
+        "operation": "pkg_10000000000000000000000000000001/op_2f02101a13d5b32d4be5e5ada08f8df4 utc-milliseconds() -> i64"
+      }
+    },
+    "typed_sql": {
+      "SqlType": "pkg_10000000000000000000000000000001/decl_a13dc461630ed371454d0e1c6e7e7c42",
+      "SqlValue": "pkg_10000000000000000000000000000001/decl_a332ba529dfe8f469867bac7e42a94fb",
+      "row_helpers": [
+        "pkg_10000000000000000000000000000001/decl_1b259316466499c8e0c27ed0c781ed91 sql-row-get",
+        "pkg_10000000000000000000000000000001/decl_85bc5be4d49d72570d1bf71893d6409b sql-rows-length",
+        "pkg_10000000000000000000000000000001/decl_8ad4df391222093c606b984548b2f83a sql-rows-get"
+      ]
+    },
+    "generic_pure_helpers": [
+      "pkg_10000000000000000000000000000001/decl_59f3b693468ea4478ef52d5c79ea034c json-decode-or<T>(bytes,T)->{error:text,valid:bool,value:T}",
+      "pkg_10000000000000000000000000000001/decl_e625d267874ff150c9e7e123bd11a879 json-encode<T>(T)->bytes",
+      "pkg_10000000000000000000000000000001/decl_9de45297544f0f5d3c933f6d16e3f685 list-length<T>(list<T>)->i64",
+      "pkg_10000000000000000000000000000001/decl_2afcba2a7b41a407a020891e0f65a161 list-get<T>(list<T>,i64)->T",
+      "pkg_10000000000000000000000000000001/decl_3c013cb0bb1f54dfe524eac974ffb126 query-get-or(map<text,list<text>>,text,list<text>)->list<text>"
+    ],
+    "complete_source": "docs/generated/builtin-standard.md",
+    "discovery_proof": "38 copied-binary discovery commands in the final stateful receipt"
+  },
+  "maintained_consumers": {
+    "standard": {
+      "revision": "rev_856f4cab0ddd42b2719694a3d1b23553f248b3bd887c54dc19b90d506724b234",
+      "semantic_state": "semantic_state_cbf582b416cbc57b10bbac45b2e728f6a1adea996c00066dd2efcb5b3e91559d",
+      "owners": 298,
+      "compiler_units": 64,
+      "graph_tests": 7,
+      "artifact_bytes": 194200,
+      "artifact_sha256": "b77cbde3e3fc6ffe7d0c3183e15f64368c87ff39a4e53d93b04185bb68e47073",
+      "transport_bytes": 74892,
+      "transport_sha256": "6fd29c86e43471f9d1ba2498d652a0865c4fe295caa177fa6afa410e6d9e0a00"
+    },
+    "lkjournal": {
+      "revision": "rev_dfde325dce6b59746f41b49777fbccb5d1efff50a53e0535c50b74cc98554d6f",
+      "semantic_state": "semantic_state_d41fc027d4781f36df1c965280acaf814f9871df0e30029ed0245edc8fafc5e4",
+      "owners": 1313,
+      "compiler_units": 124,
+      "graph_tests": 12,
+      "artifact_bytes": 697403,
+      "artifact_sha256": "95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af",
+      "artifact_bundle": "artifact_bundle_79b9bb47b065d545402af21eb69057752e9f496e472475f030f5287139e592de"
+    },
+    "production_reference_equality": true,
+    "generated_assets_exactly_rebuilt": true
+  },
+  "bbs": {
+    "authoring_source": "tools/lkjscript-dev/src/stateful_http_program.rs using only copied public CLI records",
+    "template": "http",
+    "module": "bbs",
+    "domain_types": [
+      "Post{id:text,author:text,body:text,created:i64,updated:i64}",
+      "WritePost{author:text,body:text}",
+      "Route",
+      "PostResult",
+      "PostsResult",
+      "MaybeText"
+    ],
+    "requirements": [
+      "starter byte-stream requirement",
+      "Database",
+      "Identifier",
+      "WallClock"
+    ],
+    "persistence_functions": [
+      "migrate",
+      "query-one-text",
+      "list-posts",
+      "create-post",
+      "update-post",
+      "delete-post"
+    ],
+    "http_functions": [
+      "select-route",
+      "handle-list-posts",
+      "handle-create-post",
+      "handle-update-post",
+      "handle-delete-post",
+      "starter handle with updated contract and body"
+    ],
+    "provider_seam": "HTTP/domain functions call application-owned typed persistence functions; only persistence meaning contains source-origin statements and typed SqlType/SqlValue conversion",
+    "migration": {
+      "identity": 1,
+      "checksum": "2a2ad515725d8c5ff2c286ce273a0624bc93b097de2063253df695355a3c8862"
+    },
+    "ordering": "created time then stable post identity",
+    "request_body_maximum_bytes": 65536,
+    "graph_tests_selected_by_change": 11,
+    "private_semantic_builder_used": false,
+    "second_application_process_used": false,
+    "checked_in_bbs_artifact_used": false
+  },
+  "copied_binary_stateful_acceptance": {
+    "command": "cargo run --locked -p lkjscript-dev -- stateful-http --binary target/release/lkjscript --machine",
+    "classification": "fresh passed",
+    "receipt": ".artifacts/lkjscript-dev/stateful-http/1787923671288571563-3350151/authoring.json",
+    "receipt_bytes": 87752,
+    "receipt_sha256": "09aa1baaddd6fa240c757cd01da43187c5274790e435b30cb15bb984987e982e",
+    "receipt_digest": "verification_3bbc303930cf04af8b80cab4295e4d96e9ea27a22d4f2c236efc9f9b1c2739c9",
+    "elapsed_nanoseconds": 14640334539,
+    "candidate": {
+      "bytes": 15768360,
+      "sha256": "a39c8c3317755f25c3c727f957c7e7f9aa01010db6ff37286fd6445bbcfb617e",
+      "verification_digest": "verification_c9f05d3e87efeeb9eb15ce02b4abb0c9cc3b3fae1b3a92c63dca06ccb86f7f65",
+      "copied_equal": true,
+      "isolated_root_outside_checkout": true
+    },
+    "discovery_commands": 38,
+    "change": {
+      "request_records": 1010,
+      "request_bytes": 68630,
+      "request_commitment": "request_d38462d687c6eac5e96670870d75fbada40c8b75f1f962391b0a7c12570d00e0",
+      "prepared_commitment": "prepared_9c1e13b82c39e03cf86398ddee26f693e0487966bcab593b591200fb957760d5",
+      "transaction": "transaction_4eee5176baa6de74de7fb966eb87a26a427aa9e373f0b7ee92123eea134451fb",
+      "semantic_diff": "semantic_diff_01d79f379b350579a3562e8dfaf03ea19d3aaa8d2ef5078c4c174de26784966d",
+      "initial_revision": "rev_abd53dc2a343cfbfa92e2c7fe488245f57ee69f2e34bd9ee9312207de2b41d70",
+      "accepted_revision": "rev_63b98360b56ce7ac25dbf0e55d4d71722202316c8a2b05fb9f2e30c9abafeacf",
+      "accepted_revision_advances": 1,
+      "idempotent_reconciliation": true
+    },
+    "plan": {
+      "token": "plan_d38462d687c6eac5e96670870d75fbada40c8b75f1f962391b0a7c12570d00e09c1e13b82c39e03cf86398ddee26f693e0487966bcab593b591200fb957760d5",
+      "records": 4680,
+      "bytes": 1179591,
+      "allocations": 638,
+      "owners": 648,
+      "types": 7,
+      "retirements": 6,
+      "relations_removed": 10,
+      "relations_added": 1043,
+      "structural_owners": 646,
+      "semantic_owners": 646,
+      "tests": 11,
+      "reasons": 1007,
+      "repeat_byte_equal": true,
+      "strictly_decoded": true
+    },
+    "check": {
+      "semantic_state": "semantic_state_c9b07bfbf4b14479a30ecd82a6ef2f66e7fd5455e781986447a03b8a46554419",
+      "compilation_manifest": "compilation_manifest_691e50bc8f8415f3889bb84dd68b3696f3c6cc8d645fd14fc435e775411fc11b",
+      "tests_passed": 19,
+      "tests_failed": 0,
+      "differential": "equal"
+    },
+    "artifact": {
+      "manifest": "artifact_manifest_e98c2af3e9e46c082e5ef80fdace23a11ed68d400b295d6e57ade07052d6317a",
+      "bundle": "artifact_bundle_cf001d328252ce986c5cff47fed577189142ef079adce8592d3bca562a5ed95d",
+      "bytes": 468618,
+      "sha256": "4af1aed0d197e09658f5d535a82943da604648721a836f56febb20a128540485",
+      "packages": 2,
+      "closure_objects": 1541,
+      "compiler_units": 108,
+      "clean_incremental_byte_equal": true
+    },
+    "database": {
+      "backend": "local-pinned-tools",
+      "version": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+      "root_inventory_sha256": "1201a77990ef1f03b6bfa8826a05e8b4664ce7c51c3c341c6a764947b5395d30",
+      "immutable_image_retained": "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571",
+      "migration_checksum_divergence_safe": true,
+      "statement_failure_rolled_back": true,
+      "persistence_after_restart": true
+    },
+    "http": {
+      "observations": 22,
+      "statuses": [
+        200,
+        201,
+        204,
+        400,
+        404,
+        405,
+        500
+      ],
+      "create_read_update_delete": true,
+      "malformed_trailing_duplicate_json": true,
+      "missing_malformed_duplicate_identity": true,
+      "unsupported_method": true,
+      "unknown_route": true,
+      "startup_failures_without_ready": 2,
+      "runner_restarts": 2
+    },
+    "authority": {
+      "files": 12,
+      "bytes": 1549198,
+      "head_sha256": "347036a7227244d008e515694680d69a395735c8fbe0ad47531eb2c07ef5b510",
+      "inventory_sha256": "8afb13757fc0ccb2117a3949589fc339bb08722d9ad6f66a07f759706503e856",
+      "unchanged_after_runtime": true
+    },
+    "resources": {
+      "child_commands": 57,
+      "child_cpu_nanoseconds": 5560000000,
+      "maximum_child_peak_rss_kib": 13456,
+      "child_elapsed_nanoseconds_sum": 9807196300,
+      "retained_stdout_bytes": 285426,
+      "retained_stderr_bytes": 0,
+      "shutdown_cleanup_failures": 0
+    },
+    "cleanup": {
+      "database_process": true,
+      "listeners_and_runners": true,
+      "temporary_root": true,
+      "private_stage": true,
+      "secret_values_retained": false
+    },
+    "evidence_hygiene": {
+      "database_control_arguments": "<redacted-sql>",
+      "database_control_stderr_bytes": 0,
+      "live_request_and_response_bodies_retained": false,
+      "response_digests_retained": true,
+      "raw_database_errors_retained": false
+    }
+  },
+  "existing_oracles": {
+    "distributed_http": {
+      "status": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/distributed-http/1787923676368790612-3350148-0/receipt.json",
+      "receipt_bytes": 43893,
+      "receipt_sha256": "6b9c7695548963b4cf813ac6747680e42e7f0912bf3aef6ec9204f7bb797467a",
+      "receipt_digest": "verification_eca57d89477b45701b8ad64c12d5aeb35a4147670c97806cb12a74045a0d23f0",
+      "commands": 23,
+      "resident_runners": 2,
+      "candidate_sha256": "a39c8c3317755f25c3c727f957c7e7f9aa01010db6ff37286fd6445bbcfb617e"
+    },
+    "service": {
+      "status": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1787923674191973944-3351655-0/receipt.json",
+      "receipt_bytes": 31462,
+      "receipt_sha256": "49e1e777f85ad975fb2a80ca810ebc0de8bbc168a73947ab7978bb26c4ec6bd6",
+      "receipt_digest": "verification_bb7eb6ed32c434c131f74bc2d41133ac8f66738fa6e7c4de66b2ef2c6041f6b7",
+      "postgres_backend": "local-pinned-tools",
+      "routes": 13,
+      "worker_productive_iterations": 1,
+      "backup_restore_equal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    }
+  },
+  "verification": {
+    "focused_commands": [
+      {
+        "command": "cargo test --locked --lib",
+        "classification": "fresh passed",
+        "passed": 393,
+        "ignored": 1,
+        "failed": 0
+      },
+      {
+        "command": "cargo test --locked --test general_service",
+        "classification": "fresh passed",
+        "passed": 8,
+        "failed": 0
+      },
+      {
+        "command": "cargo test --locked --test public_cli",
+        "classification": "fresh passed",
+        "passed": 20,
+        "ignored": 1,
+        "failed": 0
+      },
+      {
+        "command": "cargo test --locked -p lkjscript-dev",
+        "classification": "fresh passed",
+        "passed": 56,
+        "failed": 0
+      },
+      {
+        "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+        "classification": "fresh passed"
+      },
+      {
+        "command": "target/release/lkjscript capabilities --verify-generated docs/generated",
+        "classification": "fresh passed",
+        "generated_files": 7
+      }
+    ],
+    "changed": {
+      "command": "cargo run --locked -p lkjscript-dev -- check changed",
+      "classification": "fresh passed",
+      "passed": 2,
+      "reused": 0,
+      "elapsed_nanoseconds": 455930193,
+      "receipt": ".artifacts/lkjscript-dev/check/1787923813900063140-3360484-0/receipt.json",
+      "receipt_bytes": 6769,
+      "receipt_sha256": "d4626a92019a1a0208096aa144356cbb2859eac30ac1c03d72f017dd8d618dcd",
+      "receipt_digest": "verification_280eff54ab148495576908778a13a090f5c0f8aadf43100687da166f1fe11f26"
+    },
+    "product": {
+      "command": "cargo run --locked -p lkjscript-dev -- check product",
+      "classification": "fresh passed",
+      "passed": 17,
+      "reused": 0,
+      "elapsed_nanoseconds": 37592735699,
+      "receipt": ".artifacts/lkjscript-dev/check/1787923607221422415-3346044-0/receipt.json",
+      "receipt_bytes": 41252,
+      "receipt_sha256": "ae24ea23727e31a90823dab0cde08676f47644dd187a133180b9ea0d41d8e4dd",
+      "receipt_digest": "verification_08a4f8a3015144e02f4497a29b7747bc0fddb7afedbdf6f9393cee097e8d22c9"
+    },
+    "service": {
+      "command": "cargo run --locked -p lkjscript-dev -- check service",
+      "classification": "fresh passed",
+      "passed": 8,
+      "reused": 0,
+      "elapsed_nanoseconds": 14162571621,
+      "receipt": ".artifacts/lkjscript-dev/check/1787923648902099284-3347317-0/receipt.json",
+      "receipt_bytes": 19934,
+      "receipt_sha256": "073236bdbdfa7d1e97e83d65f9b917fff39394b04214e6d81e403ddaf0c01330",
+      "receipt_digest": "verification_611cfd7e53791a4bd3f3e992267e300198e60c3fe12c68ed0d17414cb8b1743d"
+    },
+    "full": {
+      "command": "cargo run --locked -p lkjscript-dev -- check full",
+      "classification": "fresh passed",
+      "verified_implementation_commit": "5986f7ab3a888bcae9839f621d1b7db0fb1a8975",
+      "worktree_input_digest": "verification_95ef13263066b4fb939b00a445321038487d472e172f5425fb2ed3ace5239049",
+      "final_worktree_input_digest": "verification_95ef13263066b4fb939b00a445321038487d472e172f5425fb2ed3ace5239049",
+      "input_stable": true,
+      "passed": 22,
+      "fresh_passed": 22,
+      "reused_passed": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 0,
+      "elapsed_nanoseconds": 33187316062,
+      "receipt": ".artifacts/lkjscript-dev/check/1787923669836143836-3349913-0/receipt.json",
+      "receipt_bytes": 52035,
+      "receipt_sha256": "d50b9f8e80afe947bbf962c570da8a12eed0c234c68429e94687842976fc9ffb",
+      "receipt_digest": "verification_5d06e6cd8351c850971894aeb2adc03bf755058e6460bed8f87cfb39dee7f0c1",
+      "profile_definition_digest": "verification_a1d9277d3acff1303f65b1c4aa64b7542daf03cd80bb9231af2ebf186fa0a1e3",
+      "runtime_digest": "verification_07604abdce9a2abe41446d74662a8c40f51880d7c42ce762e2ed18e4044b9944"
+    }
+  },
+  "empirical_answers": {
+    "1": "Copied-binary discovery selected ByteStream.read-all; strict generic json-decode-or/json-encode; generic list-length/list-get; query-get-or; SqlType/SqlValue and row helpers; Identifier.uuid-v4; WallClock.utc-milliseconds; and Database migration/transaction/execute/query. Exact references and signatures are recorded above and exhaustively in docs/generated/builtin-standard.md.",
+    "2": "Variant and match are required: the maintained BBS constructs SqlType and SqlValue variants, decodes typed database outcomes, and matches MaybeText/PostResult/PostsResult/Route. Neither form was exposed without maintained use.",
+    "3": "SetFunctionContract updated the starter handler to the exact stream/database/identifier/clock requirement set while preserving its function identity, request parameter, and structural response type; the final 1,010-record copied-binary plan/apply and 19-test check prove it.",
+    "4": "tools/lkjscript-dev/src/postgres.rs::LocalPostgresTools and shared process/authority/HTTP support were factored into service.rs and stateful_http.rs. The existing immutable Docker image remains supported; the exact local-root path closes this host's unavailable daemon without changing service semantics.",
+    "5": "The checkout exactly matched the orientation baseline with only the named campaign and pre-existing AGENTS.md work. Source 0.1.8, CLI 12, and compact change 5 were unused and selected. Authored codec 6 was additionally required by the serialized match-binding type cutover."
+  },
+  "deviations": [
+    {
+      "expected": "authored-change codec 5 remains unchanged",
+      "actual": "authored-change codec 6",
+      "reason": "match-arm bindings require an explicit declared type in normalized intent and its durable public codec",
+      "scope": "public authored intent only; Graph 5 is unchanged"
+    },
+    {
+      "expected": "the existing standard package may already suffice",
+      "actual": "added generic json-decode-or<T>, json-encode<T>, list-length<T>, and list-get<T>",
+      "reason": "exact interface inspection proved strict typed JSON and typed list traversal could not be expressed generically through the prior public declarations",
+      "scope": "generic standard declarations with production/reference implementations and maintained-consumer adoption; no BBS-specific intrinsic"
+    },
+    {
+      "expected": "the live gate normally uses the pinned container image",
+      "actual": "final proof used a whole-root-digest-pinned local PostgreSQL 16.15 backend",
+      "reason": "Docker daemon unavailable on this host",
+      "scope": "contributor provisioning only; the immutable image backend remains"
+    },
+    {
+      "expected": "one 256 MiB executable admission might cover candidate and verifier",
+      "actual": "debug verifier admission is 384 MiB while the product candidate remains 256 MiB and receipt admission remains 64 MiB",
+      "reason": "the expanded debug verifier exceeded 256 MiB during changed-profile acceptance",
+      "scope": "separate operational verifier resource dimension; product candidate bound did not change"
+    }
+  ],
+  "contraction": {
+    "removed_or_replaced": [
+      "public pure-only function effect inventory",
+      "assertions that the former ten-expression compact subset was complete",
+      "volatile v0.1.6 latest-release prose from normative semantic-cli specification",
+      "aggregate-only built-in inspection as the sole interface discovery path",
+      "handwritten deployment field discovery gap"
+    ],
+    "not_introduced": [
+      "bbs template",
+      "source language",
+      "JSON authoring",
+      "compatibility alias",
+      "fallback parser",
+      "ambient capability lookup",
+      "dual semantic writer",
+      "private BBS semantic builder",
+      "second application HTTP server",
+      "shell or JSON-file storage protocol"
+    ],
+    "retained_independent_oracles": [
+      "distributed_http_application",
+      "service_acceptance",
+      "standard and lkjournal production/reference equality",
+      "clean/incremental artifact equality"
+    ]
+  },
+  "external_actions": {
+    "normal_push": "pending final reconciliation and evidence-only commit",
+    "tag_created": false,
+    "release_created_or_mutated": false,
+    "deployment_created": false,
+    "package_published": false,
+    "workflow_dispatched": false,
+    "force_push_or_history_rewrite": false
+  },
+  "limitations": [
+    "source 0.1.8 is unreleased and immutable v0.1.7 does not contain these additions",
+    "native semantic storage and SQL/PostgreSQL removal are not implemented",
+    "remaining arbitrary topology and worker authoring are private",
+    "outbound HTTP is absent",
+    "only the measured GNU x86-64 distribution target exists; static/musl is unproved",
+    "HTTP and PostgreSQL transports are plaintext and require a trusted external boundary",
+    "hostile-code sandboxing and multi-tenant isolation are unproved",
+    "the receipt does not expose reliable per-statement/row telemetry, exact synchronization counts, provider cost, or a latency distribution"
+  ],
+  "next_campaign_candidates": [
+    "first-party semantic data engine and dependency-closed SQL/PostgreSQL cutover using the BBS and lkjournal workloads",
+    "remaining generic HTTP topology from another maintained workflow",
+    "bounded context traversal",
+    "worker authoring from a real binary-only consumer",
+    "measured static/musl distribution",
+    "outbound HTTP after exact URL/DNS/TLS/secret/redirect/limit/SSRF policy"
+  ]
+}
