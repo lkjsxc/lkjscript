@@ -1,0 +1,433 @@
+{
+  "schema": {
+    "identity": "lkjscript-distributed-http-application-evidence",
+    "version": 1
+  },
+  "campaign": "202608281025",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "starting_branch": "main",
+    "starting_head": "c1ac2bd66045937e2bfd5695b22ae332966fa41f",
+    "starting_origin_main": "c1ac2bd66045937e2bfd5695b22ae332966fa41f",
+    "later_baseline_commits": [],
+    "pre_existing_work_preserved": [
+      "modified root AGENTS.md",
+      "untracked implementation mandate docs/campaigns/202608281025.md"
+    ],
+    "latest_public_release": {
+      "tag": "v0.1.6",
+      "commit": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+      "immutable": true,
+      "contains_http_recipe": false
+    },
+    "verified_implementation_commit": "reported by the final handoff; recording a completion commit here would be self-referential"
+  },
+  "contracts": {
+    "package_version": "0.1.7",
+    "registry": "lkjscript-contract-registry-3",
+    "registry_digest": "dd11eb15c9642ba6c64a223b01236ecefcd9323d6ad3711e4b46a6689ebab77d",
+    "cli": "lkjscript-cli-11",
+    "project_creation": "lkjscript-project-creation-2",
+    "meaning_graph": "lkjscript-meaning-graph-5",
+    "change_records": "lkjscript-change-records-4",
+    "authored_change_codec": "lkjscript-authored-change-codec-5",
+    "artifact_manifest": "lkjscript-artifact-manifest-10",
+    "artifact_bundle": "lkjscript-artifact-bundle-10",
+    "deployment": "lkjscript-deployment-1",
+    "http_adapter": "lkjscript-http-adapter-1",
+    "stream": "lkjscript-stream-1",
+    "resident_runtime": "lkjscript-resident-runtime-1"
+  },
+  "public_creation": {
+    "grammar": "new DEST [--template minimal|command|http] [--name NAME]",
+    "templates": [
+      {
+        "name": "minimal",
+        "runner": "none",
+        "starter_deployment": false,
+        "recommended_artifact_output": null
+      },
+      {
+        "name": "command",
+        "runner": "command",
+        "starter_deployment": false,
+        "recommended_artifact_output": null
+      },
+      {
+        "name": "http",
+        "runner": "http",
+        "starter_deployment": true,
+        "recommended_artifact_output": "generated/application.lkja"
+      }
+    ],
+    "unknown_aliases_rejected": [
+      "web",
+      "server",
+      "service"
+    ],
+    "http_topology": {
+      "module": "application",
+      "response_function": "response-text",
+      "status_function": "status-code",
+      "handler": "handle",
+      "handler_effect": "task",
+      "component": "application",
+      "requirement": "streams",
+      "requirement_maximum_calls": 10000,
+      "port": "http",
+      "target": "serve",
+      "runner": "http",
+      "test": "status-is-200",
+      "owners": 20,
+      "dependencies": 1,
+      "targets": 1,
+      "tests": 1
+    },
+    "auxiliary_inventory": {
+      "descriptor": "service.deployment.json",
+      "generated_directory": "generated",
+      "prebuilt_artifact": false,
+      "visibility_renames": 1,
+      "graph_authority": "accepted Graph 5 repository",
+      "deployment_authority": "separate mutable deployment descriptor"
+    }
+  },
+  "standard_http_contract": {
+    "package": "pkg_10000000000000000000000000000001",
+    "semantic_revision": "rev_27c3a79c798fe402d114e0000fefa0d628916808062d63d1782a6d9ed5e5aa83",
+    "package_revision": "package_revision_4290e78132570943c17a9cd800af0742dfc8c16baa6f471354792dab1d0db981",
+    "transport": "package_transport_76566ff6df6024e573d3fc7f868cbc74760170dbd2111805c4c8c30a3a95b154",
+    "declarations": {
+      "core.text.from-static": {
+        "declaration": "decl_978f0bf14d4024393c96267886ca6968",
+        "parameter": "type_object_c9f786e9ed5d7fdd62cd6c706046aaf9892725129314bb64f764a5e2c34f5722",
+        "result": "type_object_9876e4c889450bb5705f472686b5648c6d7758a58f9df43eac594cab6e869ab8"
+      },
+      "core.bytes.from-text": {
+        "declaration": "decl_a84fb8598c42e86ff66208829b86ae55",
+        "parameter": "type_object_9876e4c889450bb5705f472686b5648c6d7758a58f9df43eac594cab6e869ab8",
+        "result": "type_object_3840ebc9ac30daad699d164329e0ea60f42e3cc7c2d962709bce3a02030166b4"
+      }
+    },
+    "byte_stream": {
+      "interface": "decl_e29e0ac407696662f355e9056172ac2b",
+      "owner_module": "mod_61cd69d18b50f5c6133ba8045d9abeba",
+      "operations": {
+        "read": "op_978a7cc298584794b2e39e1c71b3e512",
+        "close": "op_1e147ce49f34b68b669f643f92e5213a",
+        "read-all": "op_30cd44d5491201efdafea2b9e22adff0"
+      },
+      "exact_operation_set_size": 3,
+      "policies": {
+        "read": "non_idempotent_external_visibility_none",
+        "close": "idempotent_external_visibility_none",
+        "read-all": "non_idempotent_external_visibility_none"
+      }
+    }
+  },
+  "shared_http_semantic_types": {
+    "owner": "src/platform/http.rs::semantic_http_types",
+    "i64": "type_object_5c3868edb79e99f3c87a4dac5ce3a4133bc307627e63ea59995042688c3c1600",
+    "bytes": "type_object_3840ebc9ac30daad699d164329e0ea60f42e3cc7c2d962709bce3a02030166b4",
+    "text": "type_object_9876e4c889450bb5705f472686b5648c6d7758a58f9df43eac594cab6e869ab8",
+    "byte_stream": "type_object_cc02eb2a3637a88b0ae5ca4caa8fd7c77a65f2f2e8fa06d4ca3f4492c9e00f13",
+    "header": "type_object_d6d1f089a0f3370a8f301d564807a9946e808c1981e4bd961ae4777f0940610a",
+    "header_list": "type_object_0df0014645496ded29b932b8aeeaff881bc966766af0d5b52af5faa61bcfd51b",
+    "request": "type_object_65f52607a93f96e8c69faa5e878b33ee7966cac01e9e6a21801983479c71fe00",
+    "response": "type_object_fb835d066348051a10734744f1e74b42f987e56dc8f0039224d9019b2c9110a8",
+    "handler": "type_object_ebad8fc9f85a5108b31f735f51302c234f83f47a676419667bc50fcf12f1d7a9",
+    "independent_oracle": "focused test reconstructs every normative nested field and type without calling the shared constructor"
+  },
+  "release_candidate": {
+    "path": "target/release/lkjscript",
+    "bytes": 15463656,
+    "sha256": "033ad8a5cf52a06c67facd912d8abdca35b194ee9b9ee0804d6396cab29b352e",
+    "verification_digest": "verification_449bb531bda4928b46f64e1dcc24c212308036417379fb0372404d77baed6beb",
+    "v0_1_6_executable_bytes": 15390408,
+    "byte_delta": 73248,
+    "percent_delta": 0.48,
+    "copied_binary_equal": true
+  },
+  "copied_binary_acceptance": {
+    "command": "cargo run --locked -p lkjscript-dev -- distributed-http --binary $PWD/target/release/lkjscript --machine",
+    "classification": "fresh_passed_release_candidate",
+    "receipt": ".artifacts/lkjscript-dev/distributed-http/1787887903290692304-2828594-0/receipt.json",
+    "receipt_bytes": 42479,
+    "receipt_sha256": "6ec30b0c2d03c5924aff82ba618af10b14c8570315026361b0e25837a1848d3e",
+    "receipt_digest": "verification_f01fe5992d23f3c9c78e55a6355930676eb0f0f8a4c0385ce3382803cd4c9c6c",
+    "elapsed_nanoseconds": 1145639492,
+    "commands": 23,
+    "resident_runners": 2,
+    "environment_names": [
+      "LANG"
+    ],
+    "isolated_root_outside_checkout": true,
+    "product_inputs": "one copied executable plus files created by that executable",
+    "external_dependencies": [],
+    "project": {
+      "repository": "repo_b632f9e332b5403774c0d073b9499645",
+      "package": "pkg_4056a05f9df01a13bcd8d3507e374b4e",
+      "initial_revision": "rev_910c2991e42624f4ca29031250761852739d294e65b9a809c35f34ac8776a5e4",
+      "accepted_revision": "rev_f815f78ec3e5986048aed753bfd611907c71ab9f0663ddeb53652439a4007d14",
+      "semantic_state": "semantic_state_54f9d8da2815b97394d9753afeada32db8e3c38f9775cda8b489f9e0461a2409",
+      "semantic_root": "semantic_root_688ba58bbb4de87f48e27fc3de7d1e6b80de6c51d27d2aac330f6a97ca626fa5"
+    },
+    "reviewed_change": {
+      "request_bytes": 220,
+      "request_digest": "verification_1371b2d9df142511374087ed707e3407bf4591c072ca238eb9bfb8162a0ffcba",
+      "plan_bytes": 12085,
+      "plan_digest": "verification_966818ed889773e5831f2c14348de786123fdf93c17ae06a3eb75634124835af",
+      "plan_token": "plan_17ea59fd09e568569e03d569af633b7225ce68646395167e151ed36df40a8c0771ce5950e9c2e935c0fba37c6f8759b43c4b3960ef693bd69feb0f3d2ee41649",
+      "request_commitment": "request_17ea59fd09e568569e03d569af633b7225ce68646395167e151ed36df40a8c07",
+      "prepared_commitment": "prepared_71ce5950e9c2e935c0fba37c6f8759b43c4b3960ef693bd69feb0f3d2ee41649",
+      "created": 1,
+      "updated": 1,
+      "deleted": 1,
+      "retirements": 1,
+      "selected_compiler_units": 2,
+      "incremental_compiled": 2,
+      "incremental_reused": 4,
+      "incremental_removed": 0,
+      "revision_advances": 1,
+      "mismatched_and_stale_publish_nothing": true
+    },
+    "check": {
+      "graph_tests_passed": 8,
+      "graph_tests_failed": 0,
+      "differential": "equal",
+      "production_instructions": 62,
+      "reference_expressions": 44,
+      "compiled": 0,
+      "reused": 6,
+      "removed": 0
+    },
+    "artifact": {
+      "manifest": "artifact_manifest_4017af33cee4f965feafe7761cb0b896373ed24c03cda55eafafaac60ae54bdb",
+      "bundle": "artifact_bundle_6a42cef653915b8f968edffcd242d914ce90ad8ffdabef635348d9577fafaf07",
+      "sha256": "c42440341eb85e7843840baa9b10a8f16f7b685285ab4441ea9636995afd9f62",
+      "bytes": 194077,
+      "packages": 2,
+      "closure_objects": 604,
+      "root_compiler_units": 6,
+      "closure_compiler_units": 66,
+      "incremental": {
+        "compiled": 0,
+        "reused": 6,
+        "removed": 0
+      },
+      "clean": {
+        "compiled": 6,
+        "reused": 0,
+        "removed": 0
+      },
+      "clean_incremental_byte_equal": true,
+      "existing_output_preserved": true
+    },
+    "descriptor": {
+      "bytes": 1161,
+      "digest": "verification_2ffa86514e5e7ac6135cbf9f7f1f465a617a62bbbf681d690b42554d6d907e95",
+      "target": "serve",
+      "runner": "http",
+      "configured_listener": "127.0.0.1:0",
+      "grant": "streams:byte-stream",
+      "secrets": 0,
+      "configuration_fields": 0,
+      "artifact_path": "generated/application.lkja"
+    },
+    "live": {
+      "ready_latency_nanoseconds": [
+        25137642,
+        25135459
+      ],
+      "bound_listeners": [
+        "127.0.0.1:38559",
+        "127.0.0.1:42979"
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "body_bytes": 30,
+          "body_sha256": "a2ab3c627cb792d859512e4f2e6a49de7bf79699f53f2488c5eff84026133664",
+          "elapsed_nanoseconds": 444807
+        },
+        {
+          "status": 200,
+          "body_bytes": 30,
+          "body_sha256": "a2ab3c627cb792d859512e4f2e6a49de7bf79699f53f2488c5eff84026133664",
+          "elapsed_nanoseconds": 424218
+        }
+      ],
+      "restart_equal": true,
+      "shutdown_elapsed_nanoseconds": [
+        5170,
+        1323
+      ],
+      "admission_stopped": true,
+      "remaining_tasks": 0,
+      "cleanup_failures": 0
+    },
+    "authority_before_after": {
+      "files": 9,
+      "bytes": 164287,
+      "head_sha256": "eb772963f074903931f88a56075f6e43d7d19ca9efb3c9c215064fc4cdab9632",
+      "inventory_sha256": "4958d0f9724eb9129ed2bfa6b1e1c256fc0cffde9a85328604348f085218f140",
+      "unchanged": true
+    },
+    "startup_failures_without_ready": {
+      "count": 6,
+      "diagnostics": [
+        "deployment_read",
+        "deployment_input_kind",
+        "deployment_input_kind",
+        "artifact_bundle_length",
+        "artifact_bundle_end_magic",
+        "deployment_target_missing"
+      ]
+    },
+    "other_failure_proofs": {
+      "command_style_run_http_target": "normalized_runner_kind",
+      "altered_plan_request": "change_request_commitment_mismatch",
+      "stale_change": "change_authored_stale_base",
+      "existing_artifact_output": "output_conflict"
+    },
+    "cleanup": {
+      "runner_cleanup_complete": true,
+      "isolated_root_removed": true,
+      "child_or_listener_remaining": false
+    },
+    "resources": {
+      "sampled_child_cpu_nanoseconds": 380000000,
+      "maximum_sampled_peak_rss_kib": 8464,
+      "retained_log_bytes": 20457,
+      "stderr_bytes": 0,
+      "cpu_sampling_resolution_nanoseconds": 10000000
+    }
+  },
+  "atomicity_and_failure_tests": {
+    "project_creation": [
+      "destination conflict",
+      "non-directory parent",
+      "symlink traversal",
+      "injected graph publication failure",
+      "injected descriptor publication failure",
+      "raced visibility conflict preserving user data",
+      "visible auxiliary reconciliation"
+    ],
+    "deployment_preparation": [
+      "missing target",
+      "wrong runner",
+      "absent stream grant",
+      "ambiguous stream grants",
+      "request-body and stream-limit inconsistency"
+    ],
+    "artifact_output": [
+      "absent/nonregular/symlink/truncated/corrupt/foreign inputs produce no ready event",
+      "existing output is never overwritten"
+    ]
+  },
+  "design_corrections": [
+    {
+      "mandate_assumption": "a stream requirement without an explicit call maximum might prepare",
+      "checkout_evidence": "live deployment rejected the first recipe because every granted task capability requires a graph-owned call bound",
+      "correction": "set application/streams maximum_calls to 10000 Calls in Graph 5 meaning; runtime and deployment validation were not weakened"
+    },
+    {
+      "mandate_assumption": "current handwritten creation documentation said an existing empty destination was accepted",
+      "checkout_evidence": "safe_destination and black-box acceptance reject and preserve every existing destination with new_destination_not_empty",
+      "correction": "preserved executable behavior and corrected current README/spec wording to require an absent destination"
+    }
+  ],
+  "empirical_answers": {
+    "1_standard_contract": "core.text.from-static is decl_978f0bf14d4024393c96267886ca6968 with StaticText -> Text; core.bytes.from-text is decl_a84fb8598c42e86ff66208829b86ae55 with Text -> Bytes; ByteStream is decl_e29e0ac407696662f355e9056172ac2b with exactly read op_978a7cc298584794b2e39e1c71b3e512, close op_1e147ce49f34b68b669f643f92e5213a, and read-all op_30cd44d5491201efdafea2b9e22adff0. Exact type digests and policies are recorded above.",
+    "2_handler_effect": "The complete validator and normalized runtime require the starter handler to be task-effectful with explicit streams requirement closure. The accepted topology uses a task handler and a 10000-call requirement bound even though the request body is intentionally unread.",
+    "3_port_zero": "Deployment contract 1 accepts 127.0.0.1:0. Both supported serve starts reported distinct actual 127.0.0.1 ports in typed ready events and served through those addresses.",
+    "4_descriptor_owner": "platform/deployment.rs::DeploymentDescriptor, starter_http_deployment, validate_descriptor, and encode_deployment are the single typed owner. Contract, artifact, target, runtime, execution, HTTP/worker/stream limits, configuration, secrets, and grants are explicit descriptor fields; nested type defaults supply contract versions and unchanged conservative admission values before starter overrides.",
+    "5_publication_seam": "create_project_with_hook retains GraphPublished, BeforeDescriptor, DescriptorPublished, GeneratedDirectoryPublished, and BeforeVisibility seams inside the private sibling. publish_auxiliary synchronizes the descriptor and generated directory before the existing single rename; previsibility errors remove only the owned stage.",
+    "6_invalidation": "replace.body selected two compiler units. Accepted apply compiled 2, reused 4, and removed 0; subsequent check/build reused all 6. A cache-deleted clean build compiled all 6 and produced byte-identical Artifact 10 bytes.",
+    "7_process_and_http_helpers": "The gate reuses the first-party bounded process/process-group owner, extracts Graph authority observation into authority.rs, and extracts the independent raw TCP HTTP/1 client into http_probe.rs. service.rs now shares those helpers without bringing PostgreSQL or lkjournal into the new gate.",
+    "8_gate_ownership": "distributed_http_application is non-cacheable, depends on release_build, and is selected by product, service, and full. Release-mode preparation requires a fresh full receipt, so Docker unavailability cannot substitute for or hide the no-Docker gate.",
+    "9_graceful_stop": "On the supported GNU/Linux boundary the harness owns a process group, sends SIGINT, waits with a bound, records ready/stopped and bounded logs, and reserves SIGKILL for classified cleanup. Both proof runs exited 0 with zero remaining tasks and cleanup failures.",
+    "10_resources": "The release candidate, topology, compiler/artifact work, timing, CPU, RSS, response, shutdown, authority, and retained-log observations are recorded above. Exact filesystem-call, synchronized-byte, request-instruction, context-switch, provider telemetry, token, and cost dimensions are unavailable.",
+    "11_checkout_and_external_state": "HEAD and origin/main equaled the audited baseline with no later commits; no nested instruction overrode the root mandate; the upstream audit found no open issue or pull request and immutable v0.1.6 remained latest. Remote state is rechecked immediately before normal push.",
+    "unresolved": []
+  },
+  "focused_verification": [
+    {
+      "command": "cargo test --locked --lib semantic_http_type_owner_matches_the_independent_normative_field_oracle",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --lib embedded_standard_transport_and_artifact_bind_one_exact_package",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --lib http_recipe_resolution_rejects_interface_shape_drift",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --lib project_creation",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --lib starter_http_descriptor_is_strict_loopback_only_and_fresh",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --test public_cli capabilities_discovery_is_compact_focused_and_exportable -- --exact",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked --test public_cli copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinations -- --exact",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked -p lkjscript-dev authority",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo test --locked -p lkjscript-dev http_probe",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo clippy --locked -p lkjscript-dev --all-targets -- -D warnings",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo build --workspace --release --locked",
+      "classification": "fresh_passed"
+    },
+    {
+      "command": "cargo run --locked -p lkjscript-dev -- distributed-http --binary $PWD/target/release/lkjscript --machine",
+      "classification": "fresh_passed_release_candidate"
+    }
+  ],
+  "final_verification": {
+    "exact_final_content_results": "reported by the final handoff because adding their receipts here after execution would invalidate their exact-input fingerprints",
+    "required_profiles": [
+      "focused",
+      "changed",
+      "product",
+      "service",
+      "full"
+    ]
+  },
+  "limitations": [
+    "v0.1.6 remains the latest public release and does not contain the HTTP recipe",
+    "the recipe is a closed starter, not generic topology authoring or a web framework",
+    "the handler ignores the request and returns one bounded whole-byte response",
+    "the listener is plaintext loopback HTTP",
+    "only x86_64-unknown-linux-gnu is admitted",
+    "single-host point observations are not latency or memory distributions",
+    "no public tag or release was created by this campaign"
+  ],
+  "publication": {
+    "normal_push_permitted": true,
+    "tag_created": false,
+    "release_created": false,
+    "published_assets_modified": false
+  }
+}

@@ -69,18 +69,32 @@ distribution evidence rather than program authority or independent build provena
 evidence is retained in
 [the v0.1.6 public release record](evidence/20260828-v0.1.6-public-release.json).
 
-## Current public command lifecycle
+## Current-main application lifecycle
 
-CLI contract 10 exposes exactly `capabilities`, `new`, `status`, `inspect`, `query`, `change`,
-normalized built-in `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
+Current `main` is package version 0.1.7 with CLI contract 11. It exposes exactly `capabilities`,
+`new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`, `check`, `build`,
+`run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. The registry digest is
-`0bb0a7e50a31e94660d9dd1fd6466ba2cbf5d811a79044220d788d626f62d2d7` for the current generated
+`dd11eb15c9642ba6c64a223b01236ecefcd9323d6ad3711e4b46a6689ebab77d` for the current generated
 content.
 
 `new --template minimal` creates an empty package. `new --template command` creates an offline,
 standard-dependent pure command project with an application module, implementation, component,
 port, `main` target, and graph-owned test. Both recipes are typed executable-owned construction
-and publish through the same atomic Graph 5 creation boundary.
+and publish through the same atomic Graph 5 creation boundary. Project-creation contract 2 adds
+`new --template http`, which creates a 20-owner Graph 5 application with one exact built-in
+dependency, task HTTP handler, byte-stream requirement, HTTP port, `serve` target, and stable
+status-code test. It atomically includes `service.deployment.json` and an empty `generated/`
+directory before the one destination visibility rename; no application artifact is prebuilt.
+
+The starter descriptor remains separate operator authority. It names
+`generated/application.lkja`, target `serve`, one exact byte-stream grant, conservative independent
+resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actual bound loopback
+address. The graph's editable response text is changed only through reviewed `change plan` and
+`change apply`; build and resident execution do not open or advance project authority.
+
+This HTTP recipe is current-main candidate behavior, not public-release behavior. Immutable v0.1.6
+remains the latest public distribution and exposes only the minimal and command creation recipes.
 
 `status`, exact owner `inspect`, and normalized owner/name/relation `query` read one accepted
 revision. `change plan` and `change apply` share typed lowering and a reviewed logical-plan
@@ -142,7 +156,9 @@ sandbox or multi-tenant isolation boundary.
 - Removed draft/history/review/backup/restore/doctor workflows have not yet been reintroduced on
   Graph 5 authority.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
-  remain private until a complete public workflow exists.
+  remain private until a complete public workflow exists. The closed HTTP recipe is one complete
+  consumer of private topology construction; it does not expose generic component, requirement,
+  port, or target records.
 - Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
   budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
   registry data.
@@ -174,4 +190,9 @@ remain in
 [evidence/202608270014-normalized-command-lifecycle.json](evidence/202608270014-normalized-command-lifecycle.json);
 the artifact-10 resident cutover is bound by
 [evidence/202608272159-artifact10-service-cutover.json](evidence/202608272159-artifact10-service-cutover.json).
-These campaigns are summarized in [performance.md](performance.md).
+The current-main distributed HTTP closure is bound by campaign
+[202608281025](campaigns/202608281025.md) and
+[its structured evidence](evidence/202608281025-distributed-http-application.json). Its independent,
+no-Docker `distributed_http_application` gate is required by product, service, and full profiles
+and copies one candidate executable into a fresh root outside the checkout. These campaigns are
+summarized in [performance.md](performance.md).

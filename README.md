@@ -6,10 +6,12 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The released executable supports an offline command-application lifecycle through one copied
-binary. It creates Graph 5 projects, inspects and changes accepted meaning, runs graph-owned tests,
-builds deterministic artifact-10 bundles, and executes pure command targets through both the
-production VM and an implementation-disjoint semantic reference interpreter.
+The released v0.1.6 executable supports an offline command-application lifecycle through one copied
+binary. Current `main`, versioned as the unreleased 0.1.7 candidate, additionally closes an editable
+HTTP lifecycle through that same distribution form. Both create Graph 5 projects, inspect and
+change accepted meaning, run graph-owned tests, and build deterministic artifact-10 bundles. The
+HTTP candidate also starts the artifact through the standalone deployment boundary and serves it
+on loopback without Cargo, a checkout, database, container, or helper executable.
 
 The public binary target is exactly `x86_64-unknown-linux-gnu`. The current candidate requires
 the ELF interpreter `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and
@@ -71,8 +73,49 @@ and an exact dependency on the built-in standard package. It contains Graph 5 au
 does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
 for an empty dependency-free package.
 
-Project creation accepts an absent or empty ordinary destination. It rejects invalid names,
-nonempty destinations, non-directory parents, and symlink path components before visibility. The
+### Current 0.1.7 HTTP candidate (not yet released)
+
+The immutable v0.1.6 download above does not contain the `http` recipe. A copied executable built
+from current `main` exposes the following candidate workflow:
+
+```sh
+mkdir -p /tmp/lkjscript-http-candidate
+cp /path/to/verified/0.1.7-candidate/lkjscript /tmp/lkjscript-http-candidate/lkjscript
+cd /tmp/lkjscript-http-candidate
+./lkjscript capabilities new
+./lkjscript new ./site --template http --name site
+./lkjscript --project ./site status
+```
+
+Use the exact revision reported by `status` in the reviewed compact request:
+
+```text
+request base=rev_...
+expression.static-text as=$response value="changed through the public CLI"
+replace.body function=application/response-text body=$response
+```
+
+Save those records as `response-change.lkjc`, then use the `plan_...` token returned by the first
+command in the second:
+
+```sh
+./lkjscript --project ./site change plan --input-file ./response-change.lkjc \
+  --output ./response-change.logical-plan
+./lkjscript --project ./site change apply --input-file ./response-change.lkjc --plan plan_...
+./lkjscript --project ./site check
+./lkjscript --project ./site build --output ./site/generated/application.lkja
+./lkjscript serve --deployment ./site/service.deployment.json
+```
+
+The recipe creates one HTTP target, a graph-owned response function, handler, component, stream
+requirement, port, and stable status-code test. It also creates a separate operator-editable
+deployment descriptor and empty `generated/` directory before the destination becomes visible; it
+does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
+the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
+
+Project creation accepts an absent destination. It rejects invalid names, every existing
+destination (including an empty directory), non-directory parents, and symlink path components
+before visibility. The
 repository is built and synchronized in a private sibling stage, then made visible by one rename.
 
 `check`, `build`, and `run` share exact project discovery, dependency resolution, compilation,

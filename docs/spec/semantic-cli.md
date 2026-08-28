@@ -1,6 +1,6 @@
 # Public CLI
 
-Status: normative. CLI contract 10 is the current process boundary. Exact operations, grammar,
+Status: normative. CLI contract 11 is the current process boundary. Exact operations, grammar,
 request/response models, limits, diagnostics, authority effects, and security nonclaims are owned
 by the executable registry and generated into
 [operations.md](../generated/operations.md) and [contracts.md](../generated/contracts.md).
@@ -40,22 +40,41 @@ runtime, and adapter boundaries.
 ## Project creation
 
 ```text
-new DEST [--template minimal|command] [--name NAME]
+new DEST [--template minimal|command|http] [--name NAME]
 ```
 
-The parent must be an ordinary existing directory. The destination may be absent or empty and may
-not traverse a symlink. Creation validates the name and path before publication, constructs the
+The parent must be an ordinary existing directory. The destination must be absent and may not
+traverse a symlink; an existing empty directory is still a conflict. Creation validates the name
+and path before publication, constructs the
 complete Graph 5 repository in a private sibling, synchronizes canonical data, and makes it visible
 by one rename. Failed creation removes only its own stage and never changes an existing destination.
 
 `minimal` creates an empty dependency-free package. `command` creates one useful pure command
 application with an exact built-in standard dependency, application module, private function,
 component, port, target `main`, and graph-owned test. The implementation calls an exact public
-standard declaration and deterministically returns text `"hello"`. Both recipes are executable-
-owned typed construction, not source templates or a general template language.
+standard declaration and deterministically returns text `"hello"`.
 
-Creation through a copied release binary requires no Cargo, checkout-relative asset, network,
-source file, or helper command.
+`http` creates one exact-standard-dependent HTTP application. Graph meaning owns private pure
+`response-text` and `status-code` functions, a task handler with the normative structural HTTP
+request and response types, one byte-stream requirement, an HTTP port, target `serve`, and one
+status-code test. The handler returns status 200, no headers, and bounded bytes obtained from the
+editable response function through exact built-in standard declarations. The request is unused in
+this initial recipe.
+
+Before its one visibility rename, HTTP creation also synchronizes a strict deployment-contract-1
+descriptor at `service.deployment.json` and an empty `generated/` directory. The descriptor names
+`generated/application.lkja`, `serve`, `127.0.0.1:0`, and one byte-stream grant. It is separate
+mutable operator authority and is not part of semantic state. Creation returns its descriptor,
+recommended artifact output, target, runner, listener, and ordered next-action records. Minimal and
+command creation do not report a deployment.
+
+All three recipes are executable-owned typed construction, not source templates or a general
+template language. Unknown template spellings, including `web`, `server`, and `service`, reject
+through `cli_usage` and are not aliases.
+
+Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
+source file, database, container, or helper command. The latest public release remains v0.1.6 and
+does not yet contain the HTTP recipe.
 
 ## Status, inspection, and query
 

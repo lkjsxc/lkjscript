@@ -54,6 +54,8 @@ From a clean fast-forward checkout, build and prepare a dry-run package with abs
 ```sh
 cargo fetch --locked
 cargo build --workspace --release --locked
+cargo run --locked -p lkjscript-dev -- distributed-http \
+  --binary "$PWD/target/release/lkjscript" --machine
 cargo run --locked -p lkjscript-dev -- release prepare \
   --candidate "$PWD/target/release/lkjscript" \
   --cargo-about /absolute/path/to/cargo-about \
@@ -80,7 +82,10 @@ notice/archive, wrong inventory/order/mode, link, traversal, duplicate, corrupt 
 mismatch. Dry-run output is development evidence, not a public release.
 
 For a release-mode preparation, provide the fresh successful `check full` receipt and
-`--require-full-verification`. Every gate, including service acceptance, must be fresh and passed.
+`--require-full-verification`. Every gate, including independent no-Docker copied-binary HTTP
+acceptance and PostgreSQL service acceptance, must be fresh and passed. The direct
+`distributed-http` invocation above is a focused reusable receipt for candidate diagnosis; the
+full-profile gate remains the release-preparation dependency owner.
 
 ## Hosted dry run and tag publication
 
@@ -160,10 +165,15 @@ gh release verify-asset v0.1.6 /tmp/lkjscript-release-check/exact/archive.tar.gz
   --repo lkjsxc/lkjscript
 ```
 
-The post-release job additionally compares exact/latest archive and checksum bytes, checks GitHub's
+The v0.1.6 post-release job additionally compares exact/latest archive and checksum bytes, checks GitHub's
 asset digest, and uses only `contents: read` plus `attestations: read` to verify release and asset
 attestations. It validates the archive inventory before extraction and runs `capabilities`, `new`,
 `check`, `build`, and `run main` from the anonymous public bytes without a checkout or Cargo.
+
+The next patch publication must also invoke the first-party `distributed-http` acceptance owner
+against the anonymously downloaded exact-tag binary and the byte-equal `releases/latest` binary.
+That later publication campaign is responsible for changing the hosted smoke; this procedure does
+not credit immutable v0.1.6 with the current-main HTTP recipe.
 
 ## Recovery and maintenance
 

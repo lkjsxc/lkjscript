@@ -6,7 +6,7 @@ This document maps implemented layers and dependency direction. Normative behavi
 
 ## Current development path
 
-All released finite graph and command operations converge on Graph 5 authority:
+All current finite graph and command operations converge on Graph 5 authority:
 
 ```text
 argv / compact records / bounded JSON arguments
@@ -31,6 +31,29 @@ argv / compact records / bounded JSON arguments
 `GraphRepository` is the sole normal accepted-authority writer. Public adapters never write raw
 storage objects. Names and compact syntax are locators or transport; stable typed keys and the
 accepted semantic graph own continuity and meaning.
+
+Closed project creation enters that same authority boundary without first inventing source or a
+storage-shaped request:
+
+```text
+closed minimal / command / HTTP recipe
+            │ typed graph + complete validation
+            ▼
+ private sibling: canonical Graph 5 repository
+            │ HTTP only: typed deployment descriptor + empty generated/
+            │ synchronize complete private inventory
+            ▼
+       one destination visibility rename
+            │
+            ├─ Graph 5 authority: editable program meaning
+            └─ deployment 1: separate operator-editable authority
+```
+
+The executable embeds every recipe rule and exact standard package byte. HTTP creation and runtime
+admission share generation-neutral structural HTTP types from `platform/http.rs`; an independent
+normative field oracle prevents a shared constructor from becoming the only evidence. Project
+creation depends on the validated built-in package interface and typed deployment encoder, not on
+Axum, resident state, a checkout path, or a prebuilt application artifact.
 
 The command lifecycle continues from the same exact repository view:
 
@@ -98,11 +121,12 @@ content defect uses a new patch identity rather than mutation.
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed Graph 5 meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
-| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard` | exact public interfaces, closure transport, one validated embedded standard dependency | a general registry or ambient resolver |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard` | exact public interfaces, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | a general registry or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact 10 | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
-| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | strict artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
+| HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | strict typed descriptors, starter HTTP defaults, artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
@@ -154,7 +178,7 @@ contract, optimization policy, unit closure, and object digests agree. A missing
 A malformed or inconsistent cache is reported, then clean-built and replaced. Clean and
 incremental manifests and artifacts are compared in tests.
 
-## Built-in dependency and project recipe
+## Built-in dependency and project recipes
 
 `packages/standard` owns two generated assets: a package transport for dependency installation and
 an artifact-10 bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
@@ -162,10 +186,17 @@ and checks package, semantic revision, logical package revision, interface, and 
 for agreement. Public inspection/export exposes the exact bytes without permitting replacement.
 
 The command recipe constructs typed meaning directly. It resolves the public standard identity
-function through the validated built-in interface and stores an exact declaration reference. It
-then creates the package, application module, private pure function, component, port, target, and
-test through ordinary Graph 5 initial publication. There is no source template, migration reader,
-path lookup, or network fetch.
+function through the validated built-in interface and stores an exact declaration reference. The
+HTTP recipe likewise resolves and signature-checks `StaticText -> Text`, `Text -> Bytes`, and the
+exact ByteStream interface and operation policies without hard-coded semantic IDs. It constructs
+the application response policy, task handler, component requirement and port, HTTP target, and
+test through ordinary Graph 5 initial publication.
+
+The HTTP descriptor is encoded once through deployment-owned types with a fresh nonzero operational
+authority revision, loopback listener, one byte-stream grant, and independent bounded resources.
+Publishing it beside Graph authority in one complete directory does not merge their identity or
+mutation rules. There is no source template, migration reader, path lookup, network fetch, hidden
+sidecar, or prebuilt application artifact.
 
 ## Artifact and execution boundaries
 
@@ -222,6 +253,12 @@ The service harness freshly builds `lkjournal`, requires byte equality with the 
 then stages only a copied binary, the bundle, descriptors, configuration/secrets, a local object
 directory, and PostgreSQL coordinates. It snapshots canonical Graph authority before and after the
 live HTTP/worker/restart workflow. No deployment path opens or advances accepted `HEAD`.
+
+The independent `distributed_http_application` product gate has no database or container
+dependency. It copies one candidate executable to a fresh root outside the checkout, creates and
+changes an HTTP project, checks and deterministically builds it, starts and restarts the service,
+sends raw loopback HTTP, exercises startup failures, and compares exact accepted-authority
+inventories. Product, service, full, and release preparation all depend on this fresh boundary.
 
 ## Security and replaceability
 

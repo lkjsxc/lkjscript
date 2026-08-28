@@ -393,6 +393,38 @@ the published `v0.1.4` executable observation. Its preliminary product profile p
 gates in 240.796 seconds with no reuse. This size difference is contraction evidence, not a general
 binary-size trend; the exact final full profile remains the completion authority.
 
+## Current distributed HTTP application candidate
+
+The 0.1.7 release-mode executable measured 15,463,656 bytes with SHA-256
+`033ad8a5cf52a06c67facd912d8abdca35b194ee9b9ee0804d6396cab29b352e`. It is 73,248 bytes
+(0.48%) larger than the immutable v0.1.6 executable observation. The candidate was copied once to
+a fresh temporary root outside the checkout and completed 23 bounded child commands plus two
+resident runners in 1.146 seconds. The environment contained only `LANG`; no database, container,
+Cargo invocation, checkout input, network registry, or product-side helper participated.
+
+On this Linux x86-64 host, HTTP project creation took 97.504 ms wall / 30 ms sampled CPU with a
+6,496 KiB peak RSS observation. Reviewed plan and apply took 44.609 ms / 20 ms / 7,220 KiB and
+65.239 ms / 30 ms / 7,576 KiB respectively. Check took 65.188 ms / 50 ms / 8,020 KiB. The
+exact-current build reused all six compiler units in 64.574 ms / 40 ms / 8,012 KiB; after deleting
+the disposable cache, the clean build compiled all six in 74.921 ms / 40 ms / 8,124 KiB. Their
+194,077-byte Artifact 10 outputs were byte-equal with SHA-256
+`c42440341eb85e7843840baa9b10a8f16f7b685285ab4441ea9636995afd9f62`.
+
+First and restarted readiness took 25.138 ms and 25.135 ms. Raw loopback requests took 0.445 ms
+and 0.424 ms and both returned the same 30-byte body digest. Graceful shutdown observations took
+5,170 ns and 1,323 ns after admission stopped, with zero remaining tasks or cleanup failures. The
+largest sampled child peak was 8,464 KiB; sampled child CPU totaled 380 ms. Retained stdout/stderr
+logs totaled 20,457 bytes, all stderr streams were empty, and six invalid artifact/startup forms
+produced no ready event. Exact accepted authority remained 9 files / 164,287 bytes before and after
+build, serving, requests, shutdown, and restart.
+
+These are single warm-filesystem point observations with 10 ms CPU sampling resolution, not an SLO
+or cross-host distribution. Exact filesystem operation counts, synchronized bytes, request VM
+instruction counts, context switches, provider telemetry, and cost were unavailable without adding
+an invasive measurement boundary. The complete identities and per-command observations are in
+[`202608281025-distributed-http-application.json`](evidence/202608281025-distributed-http-application.json);
+bounded raw logs remain under the receipt directory named there.
+
 ## Historical compiler, service, and verification receipts
 
 Before the current cutover, graph packages passed 6 standard and 11 `lkjournal` tests with
