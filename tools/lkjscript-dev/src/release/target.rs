@@ -1,6 +1,7 @@
 use super::archive;
 use super::model::{ElfIdentity, SchemaIdentity};
 use crate::error::DevError;
+use crate::evidence;
 use crate::process::{self, ProcessSpec, ProcessStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -86,6 +87,7 @@ pub(super) struct TargetBuildReceipt {
     pub(super) completed_unix_nanoseconds: u128,
     pub(super) elapsed_nanoseconds: u64,
     pub(super) command: Vec<String>,
+    pub(super) build_process: crate::process::ProcessObservation,
     pub(super) rustc: String,
     pub(super) cargo: String,
     pub(super) musl_gcc: String,
@@ -198,12 +200,15 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
         .parent()
         .ok_or_else(|| DevError::usage("target build output has no parent"))?;
     archive::ensure_directory(parent, "target build output parent")?;
-    let work = tempfile::Builder::new()
-        .prefix(".lkjscript-target-build-")
-        .tempdir_in(parent)
-        .map_err(|error| DevError::infrastructure(format!("create target build work: {error}")))?;
-    let stdout = work.path().join("cargo-build.stdout.log");
-    let stderr = work.path().join("cargo-build.stderr.log");
+    let receipt_parent = options
+        .receipt
+        .parent()
+        .ok_or_else(|| DevError::usage("target build receipt has no parent"))?;
+    archive::ensure_directory(receipt_parent, "target build receipt parent")?;
+    let stdout = options.receipt.with_extension("cargo.stdout.log");
+    let stderr = options.receipt.with_extension("cargo.stderr.log");
+    archive::reject_existing(&stdout, "target build stdout log")?;
+    archive::reject_existing(&stderr, "target build stderr log")?;
     let command = vec![
         "cargo".to_owned(),
         "build".to_owned(),
@@ -235,7 +240,7 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
             stderr_path: stderr,
             unavailable_exit_code: None,
         },
-        &repository,
+        receipt_parent,
     );
     if observation.status != ProcessStatus::Passed {
         return Err(DevError::infrastructure(format!(
@@ -276,6 +281,7 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
         command,
+        build_process: observation,
         rustc,
         cargo,
         musl_gcc,
@@ -283,7 +289,7 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
         installed_musl_packages,
         candidate: output_candidate,
     };
-    validate_build_receipt(&receipt, &options.output)?;
+    validate_build_receipt(&receipt, &options.output, &options.receipt)?;
     archive::write_new(&options.receipt, &archive::canonical_json(&receipt)?, 0o644)?;
     println!(
         "{}",
@@ -499,11 +505,15 @@ pub(super) fn read_build_receipt(
             "target build receipt is not in canonical first-party encoding",
         ));
     }
-    validate_build_receipt(&receipt, candidate)?;
+    validate_build_receipt(&receipt, candidate, path)?;
     Ok(receipt)
 }
 
-fn validate_build_receipt(receipt: &TargetBuildReceipt, candidate: &Path) -> Result<(), DevError> {
+fn validate_build_receipt(
+    receipt: &TargetBuildReceipt,
+    candidate: &Path,
+    receipt_path: &Path,
+) -> Result<(), DevError> {
     let observed = observe_candidate(candidate)?;
     if receipt.schema.identity != BUILD_SCHEMA
         || receipt.schema.version != BUILD_SCHEMA_VERSION
@@ -519,6 +529,10 @@ fn validate_build_receipt(receipt: &TargetBuildReceipt, candidate: &Path) -> Res
                 "--target",
                 TARGET_TRIPLE,
             ]
+        || receipt.build_process.status != ProcessStatus::Passed
+        || receipt.build_process.exit_code != Some(0)
+        || receipt.build_process.stdout_limit_exhausted
+        || receipt.build_process.stderr_limit_exhausted
         || receipt.musl_gcc_dumpmachine != "x86_64-linux-gnu"
         || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
         || receipt.candidate.byte_length != observed.byte_length
@@ -528,7 +542,44 @@ fn validate_build_receipt(receipt: &TargetBuildReceipt, candidate: &Path) -> Res
     {
         return Err(DevError::corrupt("target build receipt binding mismatch"));
     }
+    validate_process_log(
+        receipt_path,
+        &receipt.build_process.stdout,
+        "target build stdout",
+    )?;
+    validate_process_log(
+        receipt_path,
+        &receipt.build_process.stderr,
+        "target build stderr",
+    )?;
     super::validate_git_sha(&receipt.source_commit, "target build receipt source commit")?;
+    Ok(())
+}
+
+fn validate_process_log(
+    receipt_path: &Path,
+    expected: &crate::evidence::FileProof,
+    label: &str,
+) -> Result<(), DevError> {
+    let parent = receipt_path
+        .parent()
+        .ok_or_else(|| DevError::corrupt("target build receipt has no parent"))?;
+    let relative = Path::new(&expected.path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|item| matches!(item, Component::CurDir | Component::ParentDir))
+    {
+        return Err(DevError::corrupt(format!(
+            "{label} proof path is not canonical and relative"
+        )));
+    }
+    let observed = evidence::proof(&parent.join(relative), expected.path.clone())?;
+    if &observed != expected {
+        return Err(DevError::corrupt(format!(
+            "{label} proof changed after the target build"
+        )));
+    }
     Ok(())
 }
 
