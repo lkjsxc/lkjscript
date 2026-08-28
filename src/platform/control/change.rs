@@ -2,26 +2,34 @@
 
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
-    AuthoredCase, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
-    AuthoredDeletePolicy, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
-    AuthoredFunctionEffect, AuthoredLocalReference, AuthoredOwnerParent, AuthoredParameter,
-    AuthoredPrecondition, AuthoredType, AuthoredTypeParameterReference, DeclarationSelector,
-    ModuleSelector, OwnerSelector, ParameterParentSelector,
+    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
+    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
+    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMatchExpressionArm,
+    AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPrecondition,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType,
+    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
+    ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
     DeclarationVisibility, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
+    ResourceUnit,
 };
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
-use crate::platform::semantic_id::{BindingId, DeclarationId, ModuleId, ParameterId, RevisionId};
+use crate::platform::semantic_id::{
+    BindingId, CaseId, DeclarationId, FieldId, ModuleId, OperationId, ParameterId, RequirementId,
+    RevisionId,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-4";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 4;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-5";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 5;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-5";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 5;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-6";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 6;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -29,7 +37,7 @@ pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibilit
     ("package", DeclarationVisibility::Package),
     ("public", DeclarationVisibility::Public),
 ];
-pub(crate) const COMPACT_FUNCTION_EFFECTS: &[&str] = &["pure"];
+pub(crate) const COMPACT_FUNCTION_EFFECTS: &[&str] = &["pure", "task"];
 pub const COMPACT_CHANGE_PRECONDITIONS: &[&str] = &[
     "precondition.owner-exists",
     "precondition.owner-absent",
@@ -63,6 +71,8 @@ pub(crate) enum CompactChangeOperation {
     AddField,
     AddCase,
     AddParameter,
+    AddRequirement,
+    SetFunctionContract,
     DeleteOwner,
     RenameOwner,
     MoveDeclaration,
@@ -70,7 +80,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -80,6 +90,8 @@ impl CompactChangeOperation {
         Self::AddField,
         Self::AddCase,
         Self::AddParameter,
+        Self::AddRequirement,
+        Self::SetFunctionContract,
         Self::DeleteOwner,
         Self::RenameOwner,
         Self::MoveDeclaration,
@@ -105,10 +117,12 @@ pub(crate) enum CompactChangeFieldForm {
     ExactPackage,
     ExactRevision,
     ExactPackageRevision,
+    RequestFragment,
+    DeclarationReference,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 16] = [
+    pub(crate) const ALL: [Self; 18] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -125,6 +139,8 @@ impl CompactChangeFieldForm {
         Self::ExactPackage,
         Self::ExactRevision,
         Self::ExactPackageRevision,
+        Self::RequestFragment,
+        Self::DeclarationReference,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -145,6 +161,8 @@ impl CompactChangeFieldForm {
             Self::ExactPackage => "exact_package",
             Self::ExactRevision => "exact_revision",
             Self::ExactPackageRevision => "exact_package_revision",
+            Self::RequestFragment => "request_fragment",
+            Self::DeclarationReference => "declaration_reference",
         }
     }
 
@@ -157,7 +175,7 @@ impl CompactChangeFieldForm {
             Self::ExactOwner => "DOMAIN_HEX",
             Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
             Self::DeclarationVisibility => "private|package|public",
-            Self::FunctionEffect => "pure",
+            Self::FunctionEffect => "pure|task",
             Self::TypeReference => "unit|bool|i64|bytes|text|static-text|secret|@NAME",
             Self::ExpressionReference => "$NAME",
             Self::DeletePolicy => "reject|owned-closure",
@@ -166,6 +184,8 @@ impl CompactChangeFieldForm {
             Self::ExactPackage => "pkg_HEX",
             Self::ExactRevision => "rev_HEX",
             Self::ExactPackageRevision => "package_revision_HEX",
+            Self::RequestFragment => "%NAME",
+            Self::DeclarationReference => "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
         }
     }
 }
@@ -463,6 +483,60 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddRequirement,
+        name: "add.requirement",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "component",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "interface",
+                required: true,
+                form: FieldForm::DeclarationReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetFunctionContract,
+        name: "set.function-contract",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestFragment,
+            },
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "result",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "effect",
+                required: true,
+                form: FieldForm::FunctionEffect,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::DeleteOwner,
         name: "delete.owner",
         fields: &[
@@ -659,6 +733,7 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "secret",
     "parameter",
     "named",
+    "structural-record",
     "list",
     "map",
     "option",
@@ -677,6 +752,750 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "if",
     "sequence",
     "call",
+    "let",
+    "record",
+    "variant",
+    "field",
+    "list",
+    "match",
+    "capability-call",
+    "transaction",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactFormField {
+    pub(crate) form: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) required: bool,
+    pub(crate) syntax: &'static str,
+}
+
+pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "unit",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "bool",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "i64",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "bytes",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "text",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "static-text",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "secret",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "parameter",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "parameter",
+        name: "parameter",
+        required: true,
+        syntax: "$NAME|tparam_HEX",
+    },
+    CompactFormField {
+        form: "named",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "named",
+        name: "declaration",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "structural-record",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "list",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "list",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "map",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "map",
+        name: "key",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "map",
+        name: "value",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "option",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "option",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "result",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "result",
+        name: "ok",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "result",
+        name: "error",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "stream",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "stream",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "function",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "function",
+        name: "result",
+        required: true,
+        syntax: "type-reference",
+    },
+];
+
+pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "unit",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "bool",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "bool",
+        name: "value",
+        required: true,
+        syntax: "true|false",
+    },
+    CompactFormField {
+        form: "i64",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "i64",
+        name: "value",
+        required: true,
+        syntax: "signed-i64",
+    },
+    CompactFormField {
+        form: "text",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "text",
+        name: "value",
+        required: true,
+        syntax: "escaped-utf8",
+    },
+    CompactFormField {
+        form: "static-text",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "static-text",
+        name: "value",
+        required: true,
+        syntax: "escaped-utf8",
+    },
+    CompactFormField {
+        form: "local",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "local",
+        name: "value",
+        required: true,
+        syntax: "$NAME|param_HEX|bind_HEX",
+    },
+    CompactFormField {
+        form: "constant",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "constant",
+        name: "declaration",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "if",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "if",
+        name: "condition",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "if",
+        name: "when-true",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "if",
+        name: "when-false",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "call",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "call",
+        name: "function",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "let",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "let",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "record",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "record",
+        name: "type",
+        required: false,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "variant",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "variant",
+        name: "case",
+        required: true,
+        syntax: "$NAME|pkg_HEX/case_HEX",
+    },
+    CompactFormField {
+        form: "variant",
+        name: "payload",
+        required: false,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "field",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "field",
+        name: "value",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "field",
+        name: "name",
+        required: false,
+        syntax: "structural-field-name",
+    },
+    CompactFormField {
+        form: "field",
+        name: "field",
+        required: false,
+        syntax: "$NAME|pkg_HEX/field_HEX",
+    },
+    CompactFormField {
+        form: "list",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "list",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "match",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "match",
+        name: "value",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "capability-call",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "capability-call",
+        name: "requirement",
+        required: true,
+        syntax: "$NAME|pkg_HEX/req_HEX",
+    },
+    CompactFormField {
+        form: "capability-call",
+        name: "operation",
+        required: true,
+        syntax: "$NAME|pkg_HEX/op_HEX",
+    },
+    CompactFormField {
+        form: "transaction",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction",
+        name: "requirement",
+        required: true,
+        syntax: "$NAME|pkg_HEX/req_HEX",
+    },
+    CompactFormField {
+        form: "transaction",
+        name: "binding",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction",
+        name: "name",
+        required: true,
+        syntax: "name",
+    },
+    CompactFormField {
+        form: "transaction",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactEdgeDescriptor {
+    pub(crate) name: &'static str,
+    pub(crate) parent: &'static str,
+    pub(crate) child: &'static str,
+    pub(crate) fields: &'static [CompactFormField],
+}
+
+pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
+    CompactEdgeDescriptor {
+        name: "expression.argument",
+        parent: "expression",
+        child: "expression",
+        fields: &[
+            CompactFormField {
+                form: "expression.argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.argument",
+                name: "expression",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "type.argument",
+        parent: "type-or-expression",
+        child: "type",
+        fields: &[
+            CompactFormField {
+                form: "type.argument",
+                name: "parent",
+                required: true,
+                syntax: "@NAME|$NAME",
+            },
+            CompactFormField {
+                form: "type.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "type.argument",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "type.field",
+        parent: "structural-record-type",
+        child: "structural-field",
+        fields: &[
+            CompactFormField {
+                form: "type.field",
+                name: "parent",
+                required: true,
+                syntax: "@NAME",
+            },
+            CompactFormField {
+                form: "type.field",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "type.field",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "type.field",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "effect.requirement",
+        parent: "task-function-or-contract-fragment",
+        child: "requirement-reference",
+        fields: &[
+            CompactFormField {
+                form: "effect.requirement",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "effect.requirement",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "effect.requirement",
+                name: "requirement",
+                required: true,
+                syntax: "$NAME|pkg_HEX/req_HEX",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "requirement.operation",
+        parent: "requirement",
+        child: "operation-reference",
+        fields: &[
+            CompactFormField {
+                form: "requirement.operation",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "requirement.operation",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "requirement.operation",
+                name: "operation",
+                required: true,
+                syntax: "$NAME|pkg_HEX/op_HEX",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "requirement.limit",
+        parent: "requirement",
+        child: "resource-limit",
+        fields: &[
+            CompactFormField {
+                form: "requirement.limit",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "requirement.limit",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "requirement.limit",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "requirement.limit",
+                name: "maximum",
+                required: true,
+                syntax: "positive-u64",
+            },
+            CompactFormField {
+                form: "requirement.limit",
+                name: "unit",
+                required: true,
+                syntax: "bytes|items|calls|tasks|milliseconds",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.binding",
+        parent: "let-expression",
+        child: "lexical-binding",
+        fields: &[
+            CompactFormField {
+                form: "expression.binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.binding",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.binding",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.binding",
+                name: "value",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.binding",
+                name: "type",
+                required: false,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.record-field",
+        parent: "record-expression",
+        child: "record-field",
+        fields: &[
+            CompactFormField {
+                form: "expression.record-field",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.record-field",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.record-field",
+                name: "name",
+                required: false,
+                syntax: "structural-field-name",
+            },
+            CompactFormField {
+                form: "expression.record-field",
+                name: "field",
+                required: false,
+                syntax: "$NAME|pkg_HEX/field_HEX",
+            },
+            CompactFormField {
+                form: "expression.record-field",
+                name: "value",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.match-arm",
+        parent: "match-expression",
+        child: "match-arm",
+        fields: &[
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "case",
+                required: true,
+                syntax: "$NAME|pkg_HEX/case_HEX",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "as",
+                required: false,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "name",
+                required: false,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "type",
+                required: false,
+                syntax: "type-reference",
+            },
+            CompactFormField {
+                form: "expression.match-arm",
+                name: "body",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
 ];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -725,12 +1544,22 @@ struct IndexedValue {
     location: SourceLocation,
 }
 
+#[derive(Clone, Debug)]
+struct IndexedRecord {
+    index: usize,
+    record: CompactRecord,
+}
+
 struct Decoder {
     records: Vec<CompactRecord>,
     types: BTreeMap<String, CompactRecord>,
     expressions: BTreeMap<String, CompactRecord>,
     arguments: BTreeMap<String, Vec<IndexedValue>>,
     type_parameters: BTreeMap<String, Vec<IndexedValue>>,
+    record_edges: BTreeMap<String, BTreeMap<String, Vec<IndexedRecord>>>,
+    consumed_record_edges: BTreeSet<(String, String)>,
+    consumed_value_edges: BTreeSet<(bool, String)>,
+    fragments: BTreeMap<String, SourceLocation>,
     preconditions: Vec<CompactRecord>,
     changes: Vec<(&'static CompactChangeOperationDescriptor, CompactRecord)>,
     type_cache: BTreeMap<String, AuthoredType>,
@@ -747,6 +1576,10 @@ impl Decoder {
             expressions: BTreeMap::new(),
             arguments: BTreeMap::new(),
             type_parameters: BTreeMap::new(),
+            record_edges: BTreeMap::new(),
+            consumed_record_edges: BTreeSet::new(),
+            consumed_value_edges: BTreeSet::new(),
+            fragments: BTreeMap::new(),
             preconditions: Vec::new(),
             changes: Vec::new(),
             type_cache: BTreeMap::new(),
@@ -772,6 +1605,31 @@ impl Decoder {
                 }
                 "expression.argument" => self.insert_indexed_edge(&record, "expression", false)?,
                 "type.argument" => self.insert_indexed_edge(&record, "type", true)?,
+                "type.field" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "name", "type"])?
+                }
+                "effect.requirement" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "requirement"])?
+                }
+                "requirement.operation" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "operation"])?
+                }
+                "requirement.limit" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "name", "maximum", "unit"],
+                )?,
+                "expression.binding" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "as", "name", "value", "type"],
+                )?,
+                "expression.record-field" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "name", "field", "value"],
+                )?,
+                "expression.match-arm" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "case", "as", "name", "type", "body"],
+                )?,
                 operation if operation.starts_with("type.") => {
                     let label = required(&record, "as")?.to_owned();
                     validate_local_label(&record, "as", &label, '@')?;
@@ -814,6 +1672,21 @@ impl Decoder {
                 }
                 operation => {
                     if let Some(descriptor) = compact_change_operation_descriptor(operation) {
+                        if descriptor.operation == CompactChangeOperation::SetFunctionContract {
+                            let label = fragment(&record, "as")?;
+                            if self
+                                .fragments
+                                .insert(label.clone(), record.location.clone())
+                                .is_some()
+                            {
+                                return Err(field_error(
+                                    &record,
+                                    "as",
+                                    "change_fragment_duplicate",
+                                    format!("fragment label '{label}' is defined more than once"),
+                                ));
+                            }
+                        }
                         self.changes.push((descriptor, record));
                     } else {
                         return Err(record_error(
@@ -902,6 +1775,42 @@ impl Decoder {
                 ));
             }
         }
+        for (type_edge, parents) in [(false, &self.arguments), (true, &self.type_parameters)] {
+            for (parent, edges) in parents {
+                if !self
+                    .consumed_value_edges
+                    .contains(&(type_edge, parent.clone()))
+                {
+                    return Err(Diagnostic::source(
+                        "change_edge_unconsumed",
+                        format!("child edges for '{parent}' are not accepted by its compact form"),
+                        edges
+                            .first()
+                            .map(|edge| edge.location.clone())
+                            .unwrap_or_else(|| request.location.clone()),
+                    ));
+                }
+            }
+        }
+        for (operation, parents) in &self.record_edges {
+            for (parent, edges) in parents {
+                if !self
+                    .consumed_record_edges
+                    .contains(&(operation.clone(), parent.clone()))
+                {
+                    return Err(Diagnostic::source(
+                        "change_edge_unconsumed",
+                        format!(
+                            "record edges '{operation}' for '{parent}' are not accepted by its compact form"
+                        ),
+                        edges
+                            .first()
+                            .map(|edge| edge.record.location.clone())
+                            .unwrap_or_else(|| request.location.clone()),
+                    ));
+                }
+            }
+        }
 
         let semantic = AuthoredChangeSet {
             base,
@@ -932,6 +1841,7 @@ impl Decoder {
     ) -> Result<(), Diagnostic> {
         check_fields(record, &["parent", "index", value_field])?;
         let parent = required(record, "parent")?.to_owned();
+        validate_fragment_parent(record, "parent", &parent)?;
         let index = parse_field::<usize>(record, "index")?;
         let value = required(record, value_field)?.to_owned();
         let edge = IndexedValue {
@@ -953,6 +1863,34 @@ impl Decoder {
             ));
         }
         edges.push(edge);
+        Ok(())
+    }
+
+    fn insert_indexed_record_edge(
+        &mut self,
+        record: CompactRecord,
+        allowed: &[&str],
+    ) -> Result<(), Diagnostic> {
+        check_fields(&record, allowed)?;
+        let parent = required(&record, "parent")?.to_owned();
+        validate_fragment_parent(&record, "parent", &parent)?;
+        let index = parse_field::<usize>(&record, "index")?;
+        let operation = record.operation.clone();
+        let edges = self
+            .record_edges
+            .entry(operation)
+            .or_default()
+            .entry(parent)
+            .or_default();
+        if edges.iter().any(|candidate| candidate.index == index) {
+            return Err(field_error(
+                &record,
+                "index",
+                "change_edge_index_duplicate",
+                format!("parent repeats child index {index}"),
+            ));
+        }
+        edges.push(IndexedRecord { index, record });
         Ok(())
     }
 
@@ -982,25 +1920,21 @@ impl Decoder {
                 cases: Vec::new(),
             }),
             CompactChangeOperation::CreateFunction => {
-                let effect = required(record, "effect")?;
-                if !COMPACT_FUNCTION_EFFECTS.contains(&effect) {
-                    return Err(field_error(
-                        record,
-                        "effect",
-                        "change_effect_unsupported",
-                        "the current compact create.function record supports effect=pure",
-                    ));
-                }
+                let function_symbol = symbol(record, "as")?;
                 let body = required(record, "body")?.to_owned();
                 Ok(AuthoredChange::CreateFunction {
-                    symbol: symbol(record, "as")?,
+                    symbol: function_symbol.clone(),
                     module: parse_module_selector(record, "module")?,
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     type_parameters: Vec::new(),
                     parameters: Vec::new(),
                     result: self.decode_type(required(record, "result")?)?,
-                    effect: AuthoredFunctionEffect::Pure {},
+                    effect: self.decode_function_effect(
+                        record,
+                        &function_symbol,
+                        required(record, "effect")?,
+                    )?,
                     body: self.decode_expression(&body)?,
                 })
             }
@@ -1055,6 +1989,50 @@ impl Decoder {
                     ty: self.decode_type(required(record, "type")?)?,
                 },
             }),
+            CompactChangeOperation::AddRequirement => {
+                let requirement_symbol = symbol(record, "as")?;
+                let operations = self
+                    .ordered_record_edges("requirement.operation", &requirement_symbol)?
+                    .iter()
+                    .map(|edge| {
+                        required(&edge.record, "operation")?;
+                        parse_operation_reference(&edge.record, "operation")
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let limits = self
+                    .ordered_record_edges("requirement.limit", &requirement_symbol)?
+                    .iter()
+                    .map(|edge| {
+                        Ok(AuthoredResourceLimit {
+                            name: parse_name(&edge.record, "name")?,
+                            maximum: parse_field(&edge.record, "maximum")?,
+                            unit: parse_resource_unit(&edge.record, "unit")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
+                Ok(AuthoredChange::AddRequirement {
+                    component: parse_declaration_selector(record, "component")?,
+                    requirement: AuthoredRequirement {
+                        symbol: requirement_symbol,
+                        name: parse_name(record, "name")?,
+                        interface: parse_declaration_reference(record, "interface")?,
+                        operations,
+                        limits,
+                    },
+                })
+            }
+            CompactChangeOperation::SetFunctionContract => {
+                let fragment = fragment(record, "as")?;
+                Ok(AuthoredChange::SetFunctionContract {
+                    function: parse_declaration_selector(record, "function")?,
+                    result: self.decode_type(required(record, "result")?)?,
+                    effect: self.decode_function_effect(
+                        record,
+                        &fragment,
+                        required(record, "effect")?,
+                    )?,
+                })
+            }
             CompactChangeOperation::DeleteOwner => {
                 let policy = required(record, "policy")?;
                 let policy = match policy {
@@ -1093,6 +2071,31 @@ impl Decoder {
                     body: self.decode_expression(&body)?,
                 })
             }
+        }
+    }
+
+    fn decode_function_effect(
+        &mut self,
+        record: &CompactRecord,
+        parent: &str,
+        effect: &str,
+    ) -> Result<AuthoredFunctionEffect, Diagnostic> {
+        match effect {
+            "pure" => Ok(AuthoredFunctionEffect::Pure {}),
+            "task" => {
+                let requirements = self
+                    .ordered_record_edges("effect.requirement", parent)?
+                    .iter()
+                    .map(|edge| parse_requirement_reference(&edge.record, "requirement"))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(AuthoredFunctionEffect::Task { requirements })
+            }
+            _ => Err(field_error(
+                record,
+                "effect",
+                "change_effect_unsupported",
+                format!("function effect must be pure or task; observed '{effect}'"),
+            )),
         }
     }
 
@@ -1176,6 +2179,20 @@ impl Decoder {
                 AuthoredType::Named {
                     declaration: parse_declaration_reference(&record, "declaration")?,
                 }
+            }
+            "type.structural-record" => {
+                check_fields(&record, &["as"])?;
+                let fields = self
+                    .ordered_record_edges("type.field", reference)?
+                    .iter()
+                    .map(|edge| {
+                        Ok(AuthoredStructuralTypeField {
+                            name: parse_name(&edge.record, "name")?,
+                            ty: self.decode_type(required(&edge.record, "type")?)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
+                AuthoredType::StructuralRecord { fields }
             }
             "type.parameter" => {
                 check_fields(&record, &["as", "parameter"])?;
@@ -1305,6 +2322,126 @@ impl Decoder {
                     arguments: self.decode_expression_edges(symbol)?,
                 }
             }
+            "expression.let" => {
+                check_fields(&record, &["as", "body"])?;
+                let mut bindings = Vec::new();
+                for edge in self.ordered_record_edges("expression.binding", symbol)? {
+                    let value = required(&edge.record, "value")?.to_owned();
+                    bindings.push(AuthoredLetBinding {
+                        symbol: symbol_field(&edge.record, "as")?,
+                        name: parse_name(&edge.record, "name")?,
+                        value: self.decode_expression(&value)?,
+                        declared_type: optional(&edge.record, "type")
+                            .map(|value| self.decode_type(value))
+                            .transpose()?,
+                    });
+                }
+                let body = required(&record, "body")?.to_owned();
+                AuthoredExpressionOperation::Let {
+                    bindings,
+                    body: Box::new(self.decode_expression(&body)?),
+                }
+            }
+            "expression.record" => {
+                check_fields(&record, &["as", "type"])?;
+                let nominal_type = optional(&record, "type")
+                    .map(|_| parse_declaration_reference(&record, "type"))
+                    .transpose()?;
+                let mut fields = Vec::new();
+                for edge in self.ordered_record_edges("expression.record-field", symbol)? {
+                    let selector = parse_field_selector(&edge.record)?;
+                    let value = required(&edge.record, "value")?.to_owned();
+                    fields.push(AuthoredRecordExpressionField {
+                        selector,
+                        value: self.decode_expression(&value)?,
+                    });
+                }
+                AuthoredExpressionOperation::Record {
+                    nominal_type,
+                    fields,
+                }
+            }
+            "expression.variant" => {
+                check_fields(&record, &["as", "case", "payload"])?;
+                let payload = optional(&record, "payload")
+                    .map(|value| self.decode_expression(value).map(Box::new))
+                    .transpose()?;
+                AuthoredExpressionOperation::Variant {
+                    case: parse_case_reference(&record, "case")?,
+                    payload,
+                }
+            }
+            "expression.field" => {
+                check_fields(&record, &["as", "value", "name", "field"])?;
+                let value = required(&record, "value")?.to_owned();
+                AuthoredExpressionOperation::Field {
+                    value: Box::new(self.decode_expression(&value)?),
+                    selector: parse_field_selector(&record)?,
+                }
+            }
+            "expression.list" => {
+                check_fields(&record, &["as", "item"])?;
+                AuthoredExpressionOperation::List {
+                    item_type: self.decode_type(required(&record, "item")?)?,
+                    items: self.decode_expression_edges(symbol)?,
+                }
+            }
+            "expression.match" => {
+                check_fields(&record, &["as", "value"])?;
+                let value = required(&record, "value")?.to_owned();
+                let mut arms = Vec::new();
+                for edge in self.ordered_record_edges("expression.match-arm", symbol)? {
+                    let binding_symbol = optional(&edge.record, "as");
+                    let binding_name = optional(&edge.record, "name");
+                    let binding_type = optional(&edge.record, "type");
+                    let payload_binding = match (binding_symbol, binding_name, binding_type) {
+                        (None, None, None) => None,
+                        (Some(_), Some(_), Some(binding_type)) => Some(AuthoredBindingDefinition {
+                            symbol: symbol_field(&edge.record, "as")?,
+                            name: parse_name(&edge.record, "name")?,
+                            declared_type: Some(self.decode_type(binding_type)?),
+                        }),
+                        _ => {
+                            return Err(record_error(
+                                &edge.record,
+                                "change_match_binding",
+                                "match arm payload binding requires as, name, and its exact type",
+                            ));
+                        }
+                    };
+                    let body = required(&edge.record, "body")?.to_owned();
+                    arms.push(AuthoredMatchExpressionArm {
+                        case: parse_case_reference(&edge.record, "case")?,
+                        payload_binding,
+                        body: self.decode_expression(&body)?,
+                    });
+                }
+                AuthoredExpressionOperation::Match {
+                    value: Box::new(self.decode_expression(&value)?),
+                    arms,
+                }
+            }
+            "expression.capability-call" => {
+                check_fields(&record, &["as", "requirement", "operation"])?;
+                AuthoredExpressionOperation::CapabilityCall {
+                    requirement: parse_requirement_reference(&record, "requirement")?,
+                    operation: parse_operation_reference(&record, "operation")?,
+                    arguments: self.decode_expression_edges(symbol)?,
+                }
+            }
+            "expression.transaction" => {
+                check_fields(&record, &["as", "requirement", "binding", "name", "body"])?;
+                let body = required(&record, "body")?.to_owned();
+                AuthoredExpressionOperation::Transaction {
+                    requirement: parse_requirement_reference(&record, "requirement")?,
+                    binding: AuthoredBindingDefinition {
+                        symbol: symbol_field(&record, "binding")?,
+                        name: parse_name(&record, "name")?,
+                        declared_type: None,
+                    },
+                    body: Box::new(self.decode_expression(&body)?),
+                }
+            }
             operation => {
                 return Err(record_error(
                     &record,
@@ -1331,7 +2468,7 @@ impl Decoder {
     }
 
     fn ordered_edges(
-        &self,
+        &mut self,
         parent: &str,
         type_edges: bool,
     ) -> Result<Vec<IndexedValue>, Diagnostic> {
@@ -1355,6 +2492,37 @@ impl Decoder {
                 ));
             }
         }
+        self.consumed_value_edges
+            .insert((type_edges, parent.to_owned()));
+        Ok(edges)
+    }
+
+    fn ordered_record_edges(
+        &mut self,
+        operation: &str,
+        parent: &str,
+    ) -> Result<Vec<IndexedRecord>, Diagnostic> {
+        let mut edges = self
+            .record_edges
+            .get(operation)
+            .and_then(|parents| parents.get(parent))
+            .cloned()
+            .unwrap_or_default();
+        edges.sort_by_key(|edge| edge.index);
+        for (expected, edge) in edges.iter().enumerate() {
+            if edge.index != expected {
+                return Err(Diagnostic::source(
+                    "change_edge_index_order",
+                    format!(
+                        "parent '{parent}' child indexes must be contiguous from zero; expected {expected}, observed {}",
+                        edge.index
+                    ),
+                    edge.record.location.clone(),
+                ));
+            }
+        }
+        self.consumed_record_edges
+            .insert((operation.to_owned(), parent.to_owned()));
         Ok(edges)
     }
 }
@@ -1656,6 +2824,10 @@ fn symbol(record: &CompactRecord, name: &str) -> Result<String, Diagnostic> {
     Ok(value)
 }
 
+fn symbol_field(record: &CompactRecord, name: &str) -> Result<String, Diagnostic> {
+    symbol(record, name)
+}
+
 fn validate_local_label(
     record: &CompactRecord,
     field_name: &str,
@@ -1681,6 +2853,36 @@ fn validate_local_label(
         ));
     }
     Ok(())
+}
+
+fn validate_fragment_parent(
+    record: &CompactRecord,
+    field_name: &str,
+    value: &str,
+) -> Result<(), Diagnostic> {
+    let Some(prefix) = value.chars().next() else {
+        return Err(field_error(
+            record,
+            field_name,
+            "change_edge_parent",
+            "edge parent requires a request-local $, @, or % label",
+        ));
+    };
+    if !['$', '@', '%'].contains(&prefix) {
+        return Err(field_error(
+            record,
+            field_name,
+            "change_edge_parent",
+            "edge parent requires a request-local $, @, or % label",
+        ));
+    }
+    validate_local_label(record, field_name, value, prefix)
+}
+
+fn fragment(record: &CompactRecord, name: &str) -> Result<String, Diagnostic> {
+    let value = required(record, name)?.to_owned();
+    validate_local_label(record, name, &value, '%')?;
+    Ok(value)
 }
 
 fn parse_visibility(
@@ -1799,6 +3001,179 @@ fn parse_declaration_reference(
     Ok(AuthoredDeclarationReference::Local {
         declaration: parse_declaration_selector(record, field_name)?,
     })
+}
+
+fn parse_field_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredFieldReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredFieldReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, field) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_field_reference",
+            "field reference requires $symbol or pkg_ID/field_ID",
+        )
+    })?;
+    Ok(AuthoredFieldReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        field: field.parse::<FieldId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_field_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
+fn parse_case_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredCaseReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredCaseReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, case) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_case_reference",
+            "case reference requires $symbol or pkg_ID/case_ID",
+        )
+    })?;
+    Ok(AuthoredCaseReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        case: case.parse::<CaseId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_case_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
+fn parse_operation_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredOperationReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredOperationReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, operation) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_operation_reference",
+            "operation reference requires $symbol or pkg_ID/op_ID",
+        )
+    })?;
+    Ok(AuthoredOperationReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        operation: operation.parse::<OperationId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_operation_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
+fn parse_requirement_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredRequirementReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredRequirementReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, requirement) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_requirement_reference",
+            "requirement reference requires $symbol or pkg_ID/req_ID",
+        )
+    })?;
+    Ok(AuthoredRequirementReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        requirement: requirement.parse::<RequirementId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_requirement_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
+fn parse_field_selector(record: &CompactRecord) -> Result<AuthoredFieldSelector, Diagnostic> {
+    match (optional(record, "name"), optional(record, "field")) {
+        (Some(_), None) => Ok(AuthoredFieldSelector::Structural {
+            name: parse_name(record, "name")?,
+        }),
+        (None, Some(_)) => Ok(AuthoredFieldSelector::Nominal {
+            field: parse_field_reference(record, "field")?,
+        }),
+        _ => Err(record_error(
+            record,
+            "change_field_selector",
+            "field selection requires exactly one of name or field",
+        )),
+    }
+}
+
+fn parse_resource_unit(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<ResourceUnit, Diagnostic> {
+    match required(record, field_name)? {
+        "bytes" => Ok(ResourceUnit::Bytes),
+        "items" => Ok(ResourceUnit::Items),
+        "calls" => Ok(ResourceUnit::Calls),
+        "tasks" => Ok(ResourceUnit::Tasks),
+        "milliseconds" => Ok(ResourceUnit::Milliseconds),
+        value => Err(field_error(
+            record,
+            field_name,
+            "change_resource_unit",
+            format!(
+                "resource unit must be bytes, items, calls, tasks, or milliseconds; observed '{value}'"
+            ),
+        )),
+    }
 }
 
 fn parse_type_parameter_reference(
@@ -1923,6 +3298,122 @@ mod tests {
             &items[0].operation,
             AuthoredExpressionOperation::Text { value } if value == "first"
         ));
+    }
+
+    #[test]
+    fn task_capability_and_structural_slice_decodes_from_flat_records() {
+        let package = PackageId::migrate(b"compact-task-package", 1);
+        let component = DeclarationId::migrate(b"compact-task-component", 1);
+        let handler = DeclarationId::migrate(b"compact-task-handler", 1);
+        let interface = DeclarationId::migrate(b"compact-task-interface", 1);
+        let operation = OperationId::migrate(b"compact-task-operation", 1);
+        let case = CaseId::migrate(b"compact-task-case", 1);
+        let input = format!(
+            "request base={}\n\
+             type.structural-record as=@response\n\
+             type.field parent=@response index=0 name=body type=bytes\n\
+             type.field parent=@response index=1 name=status type=i64\n\
+             create.module as=$module name=application_state\n\
+             add.requirement as=$database component={component} name=database interface={package}/{interface}\n\
+             requirement.operation parent=$database index=0 operation={package}/{operation}\n\
+             requirement.limit parent=$database index=0 name=calls maximum=32 unit=calls\n\
+             expression.text as=$let-value value=value\n\
+             expression.local as=$let-body value=$binding\n\
+             expression.let as=$let body=$let-body\n\
+             expression.binding parent=$let index=0 as=$binding name=binding value=$let-value type=text\n\
+             expression.i64 as=$record-value value=200\n\
+             expression.record as=$record\n\
+             expression.record-field parent=$record index=0 name=status value=$record-value\n\
+             expression.i64 as=$field-value value=201\n\
+             expression.record as=$field-record\n\
+             expression.record-field parent=$field-record index=0 name=status value=$field-value\n\
+             expression.field as=$field value=$field-record name=status\n\
+             expression.unit as=$list-item\n\
+             expression.list as=$list item=unit\n\
+             expression.argument parent=$list index=0 expression=$list-item\n\
+             expression.text as=$match-payload value=payload\n\
+             expression.variant as=$match-value case={package}/{case} payload=$match-payload\n\
+             expression.local as=$match-body value=$matched\n\
+             expression.match as=$match value=$match-value\n\
+             expression.match-arm parent=$match index=0 case={package}/{case} as=$matched name=matched type=text body=$match-body\n\
+             expression.unit as=$call-argument\n\
+             expression.capability-call as=$capability requirement=$database operation={package}/{operation}\n\
+             expression.argument parent=$capability index=0 expression=$call-argument\n\
+             expression.unit as=$transaction-body\n\
+             expression.transaction as=$transaction requirement=$database binding=$transaction-binding name=transaction body=$transaction-body\n\
+             expression.sequence as=$body\n\
+             expression.argument parent=$body index=0 expression=$let\n\
+             expression.argument parent=$body index=1 expression=$record\n\
+             expression.argument parent=$body index=2 expression=$field\n\
+             expression.argument parent=$body index=3 expression=$list\n\
+             expression.argument parent=$body index=4 expression=$match\n\
+             expression.argument parent=$body index=5 expression=$capability\n\
+             expression.argument parent=$body index=6 expression=$transaction\n\
+             create.function as=$task module=$module name=task visibility=private result=unit effect=task body=$body\n\
+             effect.requirement parent=$task index=0 requirement=$database\n\
+             set.function-contract as=%handler function={handler} result=@response effect=task\n\
+             effect.requirement parent=%handler index=0 requirement=$database\n",
+            revision()
+        );
+        let decoded = decode_compact_change("task.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.changes.len(), 4);
+        let AuthoredChange::AddRequirement { requirement, .. } = &decoded.semantic.changes[1]
+        else {
+            panic!("requirement change")
+        };
+        assert_eq!(requirement.operations.len(), 1);
+        assert_eq!(requirement.limits.len(), 1);
+        let AuthoredChange::CreateFunction { effect, body, .. } = &decoded.semantic.changes[2]
+        else {
+            panic!("task function")
+        };
+        assert!(matches!(
+            effect,
+            AuthoredFunctionEffect::Task { requirements } if requirements.len() == 1
+        ));
+        assert!(matches!(
+            body.operation,
+            AuthoredExpressionOperation::Sequence { ref items } if items.len() == 7
+        ));
+        let AuthoredChange::SetFunctionContract { result, effect, .. } =
+            &decoded.semantic.changes[3]
+        else {
+            panic!("function contract")
+        };
+        assert!(matches!(result, AuthoredType::StructuralRecord { fields } if fields.len() == 2));
+        assert!(matches!(
+            effect,
+            AuthoredFunctionEffect::Task { requirements } if requirements.len() == 1
+        ));
+    }
+
+    #[test]
+    fn task_edges_and_contract_fragments_fail_closed() {
+        let pure_with_requirement = format!(
+            "request base={}\n\
+             expression.unit as=$body\n\
+             create.module as=$module name=module\n\
+             create.function as=$function module=$module name=function visibility=private result=unit effect=pure body=$body\n\
+             effect.requirement parent=$function index=0 requirement=$requirement\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("pure.lkjc", pure_with_requirement.as_bytes()).unwrap_err()[0]
+                .code,
+            "change_edge_unconsumed"
+        );
+
+        let handler = DeclarationId::migrate(b"duplicate-contract-handler", 1);
+        let duplicate = format!(
+            "request base={}\n\
+             set.function-contract as=%contract function={handler} result=unit effect=pure\n\
+             set.function-contract as=%contract function={handler} result=unit effect=pure\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("duplicate.lkjc", duplicate.as_bytes()).unwrap_err()[0].code,
+            "change_fragment_duplicate"
+        );
     }
 
     #[test]

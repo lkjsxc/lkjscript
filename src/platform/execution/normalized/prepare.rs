@@ -11,15 +11,19 @@ use crate::platform::compiler::unit::{
     CompiledParameter, CompiledPortImplementation, CompiledText,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
     ExternalVisibility, FieldReference, Idempotency, ImplementationName, Name, OperationReference,
     OwnerKey, OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit,
-    SemanticStateDigest, TypeObject, TypeObjectDigest, decode_type_object,
+    SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
+    decode_type_object, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
-use crate::platform::semantic_id::{ParameterId, RepositoryId, RevisionId, TargetId};
+use crate::platform::semantic_id::{
+    ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
+};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
@@ -77,10 +81,12 @@ pub enum NormalizedInstruction {
     Jump(u32),
     Call {
         function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
     FunctionValue {
         function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
     },
     Invoke {
         arguments: u32,
@@ -144,6 +150,7 @@ pub enum NormalizedFunctionBody {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
     pub declaration: DeclarationReference,
+    pub type_parameters: Arc<[TypeParameterId]>,
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
     pub result: TypeObjectDigest,
@@ -359,6 +366,64 @@ impl NormalizedProgram {
 
     pub fn tests(&self) -> impl Iterator<Item = &NormalizedTest> {
         self.tests.values()
+    }
+
+    pub(crate) fn substitute_type(
+        &self,
+        digest: TypeObjectDigest,
+        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+    ) -> Option<TypeObjectDigest> {
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return None;
+        }
+        let object = self.types.get(&digest)?;
+        let next = depth.saturating_add(1);
+        let form = match &object.form {
+            TypeForm::TypeParameter { parameter } => {
+                let digest = substitutions.get(parameter).copied()?;
+                return self.types.contains_key(&digest).then_some(digest);
+            }
+            TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
+                fields: fields
+                    .iter()
+                    .map(|field| {
+                        Some(StructuralTypeField {
+                            name: field.name.clone(),
+                            ty: self.substitute_type(field.ty, substitutions, next)?,
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            },
+            TypeForm::List { item } => TypeForm::List {
+                item: self.substitute_type(*item, substitutions, next)?,
+            },
+            TypeForm::Map { key, value } => TypeForm::Map {
+                key: self.substitute_type(*key, substitutions, next)?,
+                value: self.substitute_type(*value, substitutions, next)?,
+            },
+            TypeForm::Option { item } => TypeForm::Option {
+                item: self.substitute_type(*item, substitutions, next)?,
+            },
+            TypeForm::Result { ok, error } => TypeForm::Result {
+                ok: self.substitute_type(*ok, substitutions, next)?,
+                error: self.substitute_type(*error, substitutions, next)?,
+            },
+            TypeForm::Stream { item } => TypeForm::Stream {
+                item: self.substitute_type(*item, substitutions, next)?,
+            },
+            TypeForm::Function { parameters, result } => TypeForm::Function {
+                parameters: parameters
+                    .iter()
+                    .map(|parameter| self.substitute_type(*parameter, substitutions, next))
+                    .collect::<Option<Vec<_>>>()?,
+                result: self.substitute_type(*result, substitutions, next)?,
+            },
+            other => other.clone(),
+        };
+        let object = TypeObject::new(form).ok()?;
+        let (digest, _) = encode_type_object(&object).ok()?;
+        self.types.contains_key(&digest).then_some(digest)
     }
 }
 
@@ -842,17 +907,19 @@ fn prepare_functions(
     let mut functions = vec![None; indexes.functions.len()];
     for (declaration, index) in &indexes.functions {
         let unit = declaration_unit(units, *declaration)?;
-        let (parameters, result, task_requirements, body) = match &unit.payload {
+        let (type_parameters, parameters, result, task_requirements, body) = match &unit.payload {
             CompilationPayload::External {
                 signature,
                 implementation,
             } => (
+                signature.type_parameters.clone(),
                 normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
                 index_copy(&unit.tables.types, signature.result, "external result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::External(implementation.clone()),
             ),
             CompilationPayload::Function { signature, code } => (
+                signature.type_parameters.clone(),
                 normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
                 index_copy(&unit.tables.types, signature.result, "function result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
@@ -861,6 +928,7 @@ fn prepare_functions(
                 )?),
             ),
             CompilationPayload::Constant { ty, code } => (
+                Vec::new(),
                 Vec::new(),
                 index_copy(&unit.tables.types, *ty, "constant type")?,
                 Vec::new(),
@@ -883,6 +951,7 @@ fn prepare_functions(
         let parameter_count = u32_index(parameters.len(), "function parameter count")?;
         functions[index.0 as usize] = Some(NormalizedFunction {
             declaration: *declaration,
+            type_parameters: type_parameters.into(),
             parameter_count,
             parameters: parameters.into(),
             result,
@@ -1179,8 +1248,8 @@ fn translate_code(
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
             CompiledInstruction::Call {
                 function,
+                type_arguments,
                 arguments,
-                ..
             } => {
                 let declaration = index_copy(
                     &unit.tables.declarations,
@@ -1189,10 +1258,20 @@ fn translate_code(
                 )?;
                 NormalizedInstruction::Call {
                     function: required_index(&indexes.functions, declaration, "function")?,
+                    type_arguments: type_arguments
+                        .iter()
+                        .map(|index| {
+                            index_copy(&unit.tables.types, *index, "normalized call type argument")
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
                     arguments: *arguments,
                 }
             }
-            CompiledInstruction::FunctionValue { function, .. } => {
+            CompiledInstruction::FunctionValue {
+                function,
+                type_arguments,
+            } => {
                 let declaration = index_copy(
                     &unit.tables.declarations,
                     *function,
@@ -1200,6 +1279,17 @@ fn translate_code(
                 )?;
                 NormalizedInstruction::FunctionValue {
                     function: required_index(&indexes.functions, declaration, "function")?,
+                    type_arguments: type_arguments
+                        .iter()
+                        .map(|index| {
+                            index_copy(
+                                &unit.tables.types,
+                                *index,
+                                "normalized function-value type argument",
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
                 }
             }
             CompiledInstruction::Invoke { arguments } => NormalizedInstruction::Invoke {

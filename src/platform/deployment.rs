@@ -1,7 +1,11 @@
 //! Strict standalone artifact-10 deployment and normalized resident execution.
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
-use super::configuration::{ConfigurationObservation, ConfigurationStore, ConfigurationValue};
+use super::configuration::{
+    ConfigurationObservation, ConfigurationStore, ConfigurationValue, MAXIMUM_CONFIGURATION_FIELDS,
+    MAXIMUM_CONFIGURATION_VALUE_BYTES,
+};
+use super::database::{MAXIMUM_DATABASE_CONNECTIONS, MAXIMUM_DATABASE_WAIT_MILLISECONDS};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::RunPolicy;
 use super::execution::normalized::{
@@ -12,16 +16,27 @@ use super::execution::normalized::{
 };
 use super::http::{
     HttpDispatchObservation, HttpLimits, HttpRequest, HttpResponse, HttpServerReceipt,
+    MAXIMUM_HTTP_BODY_BYTES, MAXIMUM_HTTP_HEADER_BYTES, MAXIMUM_HTTP_HEADERS,
 };
 use super::kernel::Name;
-use super::object::ObjectLimits;
+use super::object::{MAXIMUM_OBJECT_BYTES, MAXIMUM_OBJECT_KEY_BYTES, ObjectLimits};
 use super::package::RunnerKind;
-use super::queue::QueueLimits;
-use super::runtime::{ResidentLimits, ResidentObservation, ShutdownReceipt};
-use super::secrets::{EnvironmentSecretBinding, SecretCatalog};
+use super::queue::{
+    MAXIMUM_QUEUE_ATTEMPTS, MAXIMUM_QUEUE_LEASE_MILLISECONDS, MAXIMUM_QUEUE_PAYLOAD_BYTES,
+    QueueLimits,
+};
+use super::runtime::{
+    MAXIMUM_CONCURRENT_TASKS, MAXIMUM_OPERATIONAL_MILLISECONDS, MAXIMUM_QUEUED_TASKS,
+    ResidentLimits, ResidentObservation, ShutdownReceipt,
+};
+use super::secrets::{EnvironmentSecretBinding, MAXIMUM_SECRET_BYTES, SecretCatalog};
 use super::security::PasswordHashPolicy;
-use super::stream::StreamLimits;
-use super::worker::{WorkerLimits, WorkerReceipt};
+use super::stream::{
+    MAXIMUM_LIVE_STREAMS, MAXIMUM_STREAM_BUFFERED_CHUNKS, MAXIMUM_STREAM_CHUNK_BYTES, StreamLimits,
+};
+use super::worker::{
+    MAXIMUM_IDLE_WAIT_MILLISECONDS, MAXIMUM_RESIDENT_WORKERS, WorkerLimits, WorkerReceipt,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -91,7 +106,7 @@ pub struct DeploymentGrant {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(deny_unknown_fields, tag = "kind", rename_all = "snake_case")]
 pub enum AdapterDescriptor {
     Configuration,
     WallClock,
@@ -143,6 +158,868 @@ pub enum AdapterDescriptor {
         limits: QueueLimits,
     },
 }
+
+/// One field in the executable-owned strict deployment descriptor inventory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DeploymentSchemaField {
+    pub(crate) path: &'static str,
+    pub(crate) required: bool,
+    pub(crate) scalar: &'static str,
+    pub(crate) minimum: Option<u64>,
+    pub(crate) maximum: Option<u64>,
+    pub(crate) secret_name: bool,
+    pub(crate) nested: Option<&'static str>,
+}
+
+/// One closed adapter variant and its exact strict-JSON fields.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DeploymentAdapterSchema {
+    pub(crate) kind: &'static str,
+    pub(crate) fields: &'static [DeploymentSchemaField],
+}
+
+const fn schema_field(
+    path: &'static str,
+    scalar: &'static str,
+    minimum: Option<u64>,
+    maximum: Option<u64>,
+    secret_name: bool,
+    nested: Option<&'static str>,
+) -> DeploymentSchemaField {
+    DeploymentSchemaField {
+        path,
+        required: true,
+        scalar,
+        minimum,
+        maximum,
+        secret_name,
+        nested,
+    }
+}
+
+const fn optional_schema_field(
+    path: &'static str,
+    scalar: &'static str,
+    minimum: Option<u64>,
+    maximum: Option<u64>,
+    secret_name: bool,
+    nested: Option<&'static str>,
+) -> DeploymentSchemaField {
+    DeploymentSchemaField {
+        path,
+        required: false,
+        scalar,
+        minimum,
+        maximum,
+        secret_name,
+        nested,
+    }
+}
+
+pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "deployment.contract_version",
+        "u16",
+        Some(1),
+        Some(1),
+        false,
+        None,
+    ),
+    schema_field(
+        "deployment.artifact",
+        "relative-path",
+        Some(1),
+        Some(4096),
+        false,
+        None,
+    ),
+    schema_field("deployment.target", "name", Some(1), Some(128), false, None),
+    optional_schema_field(
+        "deployment.listen",
+        "null|string",
+        Some(1),
+        Some(512),
+        false,
+        None,
+    ),
+    schema_field(
+        "deployment.runtime",
+        "object",
+        None,
+        None,
+        false,
+        Some("runtime"),
+    ),
+    schema_field(
+        "deployment.execution",
+        "object",
+        None,
+        None,
+        false,
+        Some("execution"),
+    ),
+    optional_schema_field(
+        "deployment.http",
+        "null|object",
+        None,
+        None,
+        false,
+        Some("http"),
+    ),
+    optional_schema_field(
+        "deployment.worker",
+        "null|object",
+        None,
+        None,
+        false,
+        Some("worker"),
+    ),
+    schema_field(
+        "deployment.streams",
+        "object",
+        None,
+        None,
+        false,
+        Some("streams"),
+    ),
+    schema_field(
+        "deployment.configuration",
+        "map",
+        Some(0),
+        Some(MAXIMUM_CONFIGURATION_FIELDS as u64),
+        false,
+        Some("configuration-value"),
+    ),
+    schema_field(
+        "deployment.secrets",
+        "array",
+        Some(0),
+        Some(MAXIMUM_DEPLOYMENT_GRANTS as u64),
+        false,
+        Some("secret-binding"),
+    ),
+    schema_field(
+        "deployment.grants",
+        "array",
+        Some(0),
+        Some(MAXIMUM_DEPLOYMENT_GRANTS as u64),
+        false,
+        Some("grant"),
+    ),
+    schema_field(
+        "runtime.contract_version",
+        "u16",
+        Some(1),
+        Some(1),
+        false,
+        None,
+    ),
+    schema_field(
+        "runtime.maximum_concurrent_tasks",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_CONCURRENT_TASKS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "runtime.maximum_queued_tasks",
+        "usize",
+        Some(0),
+        Some(MAXIMUM_QUEUED_TASKS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "runtime.request_deadline_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_OPERATIONAL_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "runtime.shutdown_grace_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_OPERATIONAL_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "runtime.cancellation_grace_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_OPERATIONAL_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "execution.instruction_fuel",
+        "u64",
+        Some(1),
+        Some(u64::MAX),
+        false,
+        None,
+    ),
+    schema_field(
+        "execution.maximum_call_depth",
+        "usize",
+        Some(1),
+        Some(usize::MAX as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "execution.maximum_value_stack",
+        "usize",
+        Some(1),
+        Some(usize::MAX as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http.contract_version",
+        "u16",
+        Some(1),
+        Some(1),
+        false,
+        None,
+    ),
+    schema_field(
+        "http.maximum_request_body_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_BODY_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http.maximum_response_body_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_BODY_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http.maximum_header_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_HEADER_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http.maximum_headers",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_HEADERS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "worker.contract_version",
+        "u16",
+        Some(1),
+        Some(1),
+        false,
+        None,
+    ),
+    schema_field(
+        "worker.maximum_workers",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_RESIDENT_WORKERS as u64),
+        false,
+        Some("at-most-runtime.maximum_concurrent_tasks"),
+    ),
+    schema_field(
+        "worker.idle_wait_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_IDLE_WAIT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "streams.maximum_chunk_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_STREAM_CHUNK_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "streams.maximum_buffered_chunks",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_STREAM_BUFFERED_CHUNKS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "streams.maximum_total_bytes",
+        "u64",
+        Some(1),
+        Some(u64::MAX),
+        false,
+        None,
+    ),
+    schema_field(
+        "streams.maximum_live_streams",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_LIVE_STREAMS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "configuration-value.kind",
+        "enum:text|i64|bool",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "configuration-value.value",
+        "string|i64|bool",
+        Some(0),
+        Some(MAXIMUM_CONFIGURATION_VALUE_BYTES as u64),
+        false,
+        Some("kind-selected"),
+    ),
+    schema_field(
+        "configuration-entry.name",
+        "configuration-name",
+        Some(1),
+        Some(256),
+        false,
+        None,
+    ),
+    schema_field(
+        "secret-binding.name",
+        "name",
+        Some(1),
+        Some(256),
+        true,
+        None,
+    ),
+    schema_field(
+        "secret-binding.variable",
+        "environment-name",
+        Some(1),
+        Some(256),
+        false,
+        None,
+    ),
+    schema_field("grant.requirement", "name", Some(1), Some(128), false, None),
+    schema_field(
+        "grant.sharing_domain",
+        "name",
+        Some(1),
+        Some(128),
+        false,
+        None,
+    ),
+    schema_field(
+        "grant.authority_revision",
+        "lowercase-hex",
+        Some(64),
+        Some(64),
+        false,
+        None,
+    ),
+    schema_field(
+        "grant.adapter",
+        "tagged-object",
+        None,
+        None,
+        false,
+        Some("adapter"),
+    ),
+    schema_field(
+        "password-policy.memory_kibibytes",
+        "u32",
+        Some(8),
+        Some(1_048_576),
+        false,
+        Some("at-least-8-times-lanes"),
+    ),
+    schema_field(
+        "password-policy.iterations",
+        "u32",
+        Some(1),
+        Some(32),
+        false,
+        None,
+    ),
+    schema_field(
+        "password-policy.lanes",
+        "u32",
+        Some(1),
+        Some(16),
+        false,
+        None,
+    ),
+    schema_field(
+        "password-policy.output_bytes",
+        "usize",
+        Some(16),
+        Some(64),
+        false,
+        None,
+    ),
+    schema_field(
+        "object-limits.maximum_object_bytes",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_OBJECT_BYTES),
+        false,
+        None,
+    ),
+    schema_field(
+        "object-limits.maximum_whole_read_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_OBJECT_BYTES),
+        false,
+        Some("at-most-maximum_object_bytes"),
+    ),
+    schema_field(
+        "queue-limits.maximum_payload_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_QUEUE_PAYLOAD_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "queue-limits.maximum_result_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_QUEUE_PAYLOAD_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "queue-limits.maximum_lease_milliseconds",
+        "i64",
+        Some(1),
+        Some(MAXIMUM_QUEUE_LEASE_MILLISECONDS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "queue-limits.maximum_attempts",
+        "u32",
+        Some(1),
+        Some(MAXIMUM_QUEUE_ATTEMPTS as u64),
+        false,
+        None,
+    ),
+];
+
+const ADAPTER_CONFIGURATION_FIELDS: &[DeploymentSchemaField] = &[schema_field(
+    "adapter.configuration.kind",
+    "literal:configuration",
+    None,
+    None,
+    false,
+    None,
+)];
+const ADAPTER_WALL_CLOCK_FIELDS: &[DeploymentSchemaField] = &[schema_field(
+    "adapter.wall_clock.kind",
+    "literal:wall_clock",
+    None,
+    None,
+    false,
+    None,
+)];
+const ADAPTER_SECURE_RANDOM_FIELDS: &[DeploymentSchemaField] = &[schema_field(
+    "adapter.secure_random.kind",
+    "literal:secure_random",
+    None,
+    None,
+    false,
+    None,
+)];
+const ADAPTER_IDENTIFIER_FIELDS: &[DeploymentSchemaField] = &[schema_field(
+    "adapter.identifier.kind",
+    "literal:identifier",
+    None,
+    None,
+    false,
+    None,
+)];
+const ADAPTER_PASSWORD_HASH_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.password_hash.kind",
+        "literal:password_hash",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.password_hash.policy",
+        "object",
+        None,
+        None,
+        false,
+        Some("password-policy"),
+    ),
+];
+const ADAPTER_SECRET_VERIFIER_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.secret_verifier.kind",
+        "literal:secret_verifier",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.secret_verifier.secret",
+        "name",
+        Some(1),
+        Some(128),
+        true,
+        None,
+    ),
+    schema_field(
+        "adapter.secret_verifier.maximum_candidate_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SECRET_BYTES as u64),
+        false,
+        None,
+    ),
+];
+const ADAPTER_BYTE_STREAM_FIELDS: &[DeploymentSchemaField] = &[schema_field(
+    "adapter.byte_stream.kind",
+    "literal:byte_stream",
+    None,
+    None,
+    false,
+    None,
+)];
+const ADAPTER_POSTGRES_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.postgres.kind",
+        "literal:postgres",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.postgres.connection_secret",
+        "name",
+        Some(1),
+        Some(128),
+        true,
+        None,
+    ),
+    schema_field(
+        "adapter.postgres.maximum_connections",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATABASE_CONNECTIONS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.postgres.maximum_wait_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.postgres.statement_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
+        false,
+        None,
+    ),
+];
+const ADAPTER_OBJECT_MEMORY_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.object_memory.kind",
+        "literal:object_memory",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_memory.prefix",
+        "object-prefix",
+        Some(0),
+        Some(1024),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_memory.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("object-limits"),
+    ),
+];
+const ADAPTER_OBJECT_LOCAL_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.object_local.kind",
+        "literal:object_local",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_local.root",
+        "relative-path",
+        Some(1),
+        Some(4096),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_local.prefix",
+        "object-prefix",
+        Some(0),
+        Some(1024),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_local.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("object-limits"),
+    ),
+];
+const ADAPTER_OBJECT_S3_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.object_s3.kind",
+        "literal:object_s3",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.endpoint",
+        "string",
+        Some(1),
+        Some(4096),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.region",
+        "deployment-token",
+        Some(1),
+        Some(255),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.bucket",
+        "deployment-token",
+        Some(1),
+        Some(255),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.prefix",
+        "object-prefix",
+        Some(0),
+        Some(1024),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.allow_http",
+        "bool",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.path_style",
+        "bool",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.access_key_secret",
+        "name",
+        Some(1),
+        Some(128),
+        true,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.secret_key_secret",
+        "name",
+        Some(1),
+        Some(128),
+        true,
+        None,
+    ),
+    schema_field(
+        "adapter.object_s3.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("object-limits"),
+    ),
+];
+const ADAPTER_QUEUE_MEMORY_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.durable_queue_memory.kind",
+        "literal:durable_queue_memory",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_memory.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("queue-limits"),
+    ),
+];
+const ADAPTER_QUEUE_POSTGRES_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.durable_queue_postgres.kind",
+        "literal:durable_queue_postgres",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.connection_secret",
+        "name",
+        Some(1),
+        Some(128),
+        true,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.namespace",
+        "deployment-token",
+        Some(1),
+        Some(MAXIMUM_DEPLOYMENT_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.maximum_connections",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATABASE_CONNECTIONS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.maximum_wait_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.statement_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_postgres.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("queue-limits"),
+    ),
+];
+
+pub(crate) const DEPLOYMENT_ADAPTER_SCHEMAS: &[DeploymentAdapterSchema] = &[
+    DeploymentAdapterSchema {
+        kind: "configuration",
+        fields: ADAPTER_CONFIGURATION_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "wall_clock",
+        fields: ADAPTER_WALL_CLOCK_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "secure_random",
+        fields: ADAPTER_SECURE_RANDOM_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "identifier",
+        fields: ADAPTER_IDENTIFIER_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "password_hash",
+        fields: ADAPTER_PASSWORD_HASH_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "secret_verifier",
+        fields: ADAPTER_SECRET_VERIFIER_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "byte_stream",
+        fields: ADAPTER_BYTE_STREAM_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "postgres",
+        fields: ADAPTER_POSTGRES_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "object_memory",
+        fields: ADAPTER_OBJECT_MEMORY_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "object_local",
+        fields: ADAPTER_OBJECT_LOCAL_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "object_s3",
+        fields: ADAPTER_OBJECT_S3_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "durable_queue_memory",
+        fields: ADAPTER_QUEUE_MEMORY_FIELDS,
+    },
+    DeploymentAdapterSchema {
+        kind: "durable_queue_postgres",
+        fields: ADAPTER_QUEUE_POSTGRES_FIELDS,
+    },
+];
 
 pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnostic> {
     let descriptor = DeploymentDescriptor {
@@ -508,8 +1385,68 @@ pub fn decode_deployment(bytes: &[u8]) -> Result<DeploymentDescriptor, Diagnosti
             format!("deployment descriptor has trailing input: {error}"),
         )
     })?;
+    validate_raw_adapter_fields(bytes)?;
     validate_descriptor(&descriptor)?;
     Ok(descriptor)
+}
+
+fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        deployment_error(
+            "deployment_json",
+            format!("deployment descriptor is not strict JSON: {error}"),
+        )
+    })?;
+    let grants = value
+        .get("grants")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            deployment_error(
+                "deployment_json",
+                "deployment grants must be a strict JSON array",
+            )
+        })?;
+    for grant in grants {
+        let adapter = grant
+            .get("adapter")
+            .and_then(serde_json::Value::as_object)
+            .ok_or_else(|| {
+                deployment_error(
+                    "deployment_json",
+                    "deployment grant adapter must be a strict tagged object",
+                )
+            })?;
+        let kind = adapter
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                deployment_error(
+                    "deployment_json",
+                    "deployment grant adapter requires one string kind",
+                )
+            })?;
+        let schema = DEPLOYMENT_ADAPTER_SCHEMAS
+            .iter()
+            .find(|schema| schema.kind == kind)
+            .ok_or_else(|| {
+                deployment_error(
+                    "deployment_json",
+                    "deployment grant adapter names an unknown kind",
+                )
+            })?;
+        let expected = schema
+            .fields
+            .iter()
+            .filter_map(|field| field.path.rsplit('.').next())
+            .collect::<BTreeSet<_>>();
+        if adapter.keys().map(String::as_str).collect::<BTreeSet<_>>() != expected {
+            return Err(deployment_error(
+                "deployment_json",
+                "deployment grant adapter has a missing, duplicate, or unknown field",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnostic> {
@@ -540,12 +1477,29 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
     }
     descriptor.runtime.validate()?;
     descriptor.streams.validate()?;
+    if descriptor.execution.instruction_fuel == 0
+        || descriptor.execution.maximum_call_depth == 0
+        || descriptor.execution.maximum_value_stack == 0
+    {
+        return Err(deployment_error(
+            "deployment_execution_limit",
+            "execution fuel, call depth, and value stack limits must be positive",
+        ));
+    }
     if let Some(http) = &descriptor.http {
         http.validate()?;
     }
     if let Some(worker) = &descriptor.worker {
         worker.validate(descriptor.runtime.maximum_concurrent_tasks)?;
     }
+    ConfigurationStore::observe_values(&descriptor.configuration)?;
+    if descriptor.secrets.len() > MAXIMUM_DEPLOYMENT_GRANTS {
+        return Err(deployment_error(
+            "deployment_secret_limit",
+            format!("deployment has more than {MAXIMUM_DEPLOYMENT_GRANTS} secret bindings"),
+        ));
+    }
+    SecretCatalog::validate_bindings(&descriptor.secrets)?;
     let mut requirements = BTreeSet::new();
     for grant in &descriptor.grants {
         validate_name(&grant.requirement, "requirement")?;
@@ -567,34 +1521,156 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
 
 fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagnostic> {
     match adapter {
-        AdapterDescriptor::SecretVerifier { secret, .. }
-        | AdapterDescriptor::Postgres {
-            connection_secret: secret,
-            ..
+        AdapterDescriptor::PasswordHash { policy } => policy.validate()?,
+        AdapterDescriptor::SecretVerifier {
+            secret,
+            maximum_candidate_bytes,
+        } => {
+            validate_name(secret, "secret name")?;
+            if *maximum_candidate_bytes == 0 || *maximum_candidate_bytes > MAXIMUM_SECRET_BYTES {
+                return Err(deployment_error(
+                    "deployment_secret_candidate_limit",
+                    format!(
+                        "secret candidate limit must be 1 through {MAXIMUM_SECRET_BYTES} bytes"
+                    ),
+                ));
+            }
         }
-        | AdapterDescriptor::DurableQueuePostgres {
-            connection_secret: secret,
-            ..
-        } => validate_name(secret, "secret name")?,
-        AdapterDescriptor::ObjectLocal { root, .. } => {
+        AdapterDescriptor::Postgres {
+            connection_secret,
+            maximum_connections,
+            maximum_wait_milliseconds,
+            statement_timeout_milliseconds,
+        } => {
+            validate_name(connection_secret, "secret name")?;
+            validate_database_limits(
+                *maximum_connections,
+                *maximum_wait_milliseconds,
+                *statement_timeout_milliseconds,
+            )?;
+        }
+        AdapterDescriptor::ObjectMemory { prefix, limits } => {
+            validate_object_prefix(prefix)?;
+            limits.validate()?;
+        }
+        AdapterDescriptor::ObjectLocal {
+            root,
+            prefix,
+            limits,
+        } => {
             validate_relative(root, "object root")?;
+            validate_object_prefix(prefix)?;
+            limits.validate()?;
         }
         AdapterDescriptor::ObjectS3 {
+            endpoint,
+            region,
+            bucket,
+            prefix,
             access_key_secret,
             secret_key_secret,
+            limits,
             ..
         } => {
+            if endpoint.is_empty() || endpoint.len() > 4096 {
+                return Err(deployment_error(
+                    "deployment_object_endpoint",
+                    "object endpoint must contain 1 through 4096 bytes",
+                ));
+            }
+            validate_deployment_token(region, "object region", 255)?;
+            validate_deployment_token(bucket, "object bucket", 255)?;
+            validate_object_prefix(prefix)?;
             validate_name(access_key_secret, "access-key secret name")?;
             validate_name(secret_key_secret, "secret-key secret name")?;
+            limits.validate()?;
+        }
+        AdapterDescriptor::DurableQueueMemory { limits } => limits.validate()?,
+        AdapterDescriptor::DurableQueuePostgres {
+            connection_secret,
+            namespace,
+            maximum_connections,
+            maximum_wait_milliseconds,
+            statement_timeout_milliseconds,
+            limits,
+        } => {
+            validate_name(connection_secret, "secret name")?;
+            validate_deployment_token(namespace, "queue namespace", MAXIMUM_DEPLOYMENT_BYTES)?;
+            validate_database_limits(
+                *maximum_connections,
+                *maximum_wait_milliseconds,
+                *statement_timeout_milliseconds,
+            )?;
+            limits.validate()?;
         }
         AdapterDescriptor::Configuration
         | AdapterDescriptor::WallClock
         | AdapterDescriptor::SecureRandom
         | AdapterDescriptor::Identifier
-        | AdapterDescriptor::PasswordHash { .. }
-        | AdapterDescriptor::ByteStream
-        | AdapterDescriptor::ObjectMemory { .. }
-        | AdapterDescriptor::DurableQueueMemory { .. } => {}
+        | AdapterDescriptor::ByteStream => {}
+    }
+    Ok(())
+}
+
+fn validate_database_limits(
+    maximum_connections: usize,
+    maximum_wait_milliseconds: u64,
+    statement_timeout_milliseconds: u64,
+) -> Result<(), Diagnostic> {
+    if maximum_connections == 0 || maximum_connections > MAXIMUM_DATABASE_CONNECTIONS {
+        return Err(deployment_error(
+            "deployment_database_connections",
+            format!(
+                "database maximum_connections must be 1 through {MAXIMUM_DATABASE_CONNECTIONS}"
+            ),
+        ));
+    }
+    if maximum_wait_milliseconds == 0
+        || maximum_wait_milliseconds > MAXIMUM_DATABASE_WAIT_MILLISECONDS
+        || statement_timeout_milliseconds == 0
+        || statement_timeout_milliseconds > MAXIMUM_DATABASE_WAIT_MILLISECONDS
+    {
+        return Err(deployment_error(
+            "deployment_database_time",
+            format!(
+                "database wait and statement limits must be 1 through {MAXIMUM_DATABASE_WAIT_MILLISECONDS} milliseconds"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_object_prefix(prefix: &str) -> Result<(), Diagnostic> {
+    if prefix.is_empty() {
+        return Ok(());
+    }
+    if prefix.len() > MAXIMUM_OBJECT_KEY_BYTES
+        || prefix.starts_with('/')
+        || prefix.ends_with('/')
+        || prefix.contains('\0')
+        || prefix
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(deployment_error(
+            "deployment_object_prefix",
+            "object prefix is excessive or noncanonical",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_deployment_token(value: &str, label: &str, maximum: usize) -> Result<(), Diagnostic> {
+    if value.is_empty()
+        || value.len() > maximum
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_' | b':'))
+    {
+        return Err(deployment_error(
+            "deployment_token",
+            format!("{label} is not a canonical bounded deployment token"),
+        ));
     }
     Ok(())
 }
@@ -971,6 +2047,7 @@ fn deployment_error(code: &str, message: impl Into<String>) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     fn minimal() -> Vec<u8> {
         serde_json::to_vec(&serde_json::json!({
@@ -988,6 +2065,72 @@ mod tests {
             "grants": []
         }))
         .expect("deployment JSON")
+    }
+
+    fn adapter_samples() -> Vec<AdapterDescriptor> {
+        vec![
+            AdapterDescriptor::Configuration,
+            AdapterDescriptor::WallClock,
+            AdapterDescriptor::SecureRandom,
+            AdapterDescriptor::Identifier,
+            AdapterDescriptor::PasswordHash {
+                policy: PasswordHashPolicy::default(),
+            },
+            AdapterDescriptor::SecretVerifier {
+                secret: "candidate-secret".to_owned(),
+                maximum_candidate_bytes: 1024,
+            },
+            AdapterDescriptor::ByteStream,
+            AdapterDescriptor::Postgres {
+                connection_secret: "database-url".to_owned(),
+                maximum_connections: 4,
+                maximum_wait_milliseconds: 5_000,
+                statement_timeout_milliseconds: 10_000,
+            },
+            AdapterDescriptor::ObjectMemory {
+                prefix: "bbs".to_owned(),
+                limits: ObjectLimits::default(),
+            },
+            AdapterDescriptor::ObjectLocal {
+                root: "objects".to_owned(),
+                prefix: "bbs".to_owned(),
+                limits: ObjectLimits::default(),
+            },
+            AdapterDescriptor::ObjectS3 {
+                endpoint: "http://127.0.0.1:9000".to_owned(),
+                region: "test-region".to_owned(),
+                bucket: "test-bucket".to_owned(),
+                prefix: "bbs".to_owned(),
+                allow_http: true,
+                path_style: true,
+                access_key_secret: "object-access".to_owned(),
+                secret_key_secret: "object-secret".to_owned(),
+                limits: ObjectLimits::default(),
+            },
+            AdapterDescriptor::DurableQueueMemory {
+                limits: QueueLimits::default(),
+            },
+            AdapterDescriptor::DurableQueuePostgres {
+                connection_secret: "database-url".to_owned(),
+                namespace: "test:queue".to_owned(),
+                maximum_connections: 4,
+                maximum_wait_milliseconds: 5_000,
+                statement_timeout_milliseconds: 10_000,
+                limits: QueueLimits::default(),
+            },
+        ]
+    }
+
+    fn deployment_with_adapter(adapter: &AdapterDescriptor) -> serde_json::Value {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&minimal()).expect("minimal deployment");
+        value["grants"] = serde_json::json!([{
+            "requirement": "adapter",
+            "sharing_domain": "isolated",
+            "authority_revision": "11".repeat(32),
+            "adapter": serde_json::to_value(adapter).expect("adapter JSON")
+        }]);
+        value
     }
 
     #[test]
@@ -1074,6 +2217,122 @@ mod tests {
         assert_eq!(
             decoded.grants[0].authority_revision,
             grant.authority_revision
+        );
+    }
+
+    #[test]
+    fn executable_adapter_schema_matches_strict_decoder_fields() {
+        let samples = adapter_samples();
+        assert_eq!(samples.len(), DEPLOYMENT_ADAPTER_SCHEMAS.len());
+        for (sample, schema) in samples.iter().zip(DEPLOYMENT_ADAPTER_SCHEMAS) {
+            let adapter = serde_json::to_value(sample).expect("adapter JSON");
+            assert_eq!(adapter["kind"], schema.kind);
+            let observed = adapter
+                .as_object()
+                .expect("adapter object")
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let expected = schema
+                .fields
+                .iter()
+                .map(|field| {
+                    field
+                        .path
+                        .rsplit('.')
+                        .next()
+                        .expect("schema field name")
+                        .to_owned()
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(observed, expected, "{} schema fields", schema.kind);
+            let value = deployment_with_adapter(sample);
+            decode_deployment(&serde_json::to_vec(&value).expect("deployment JSON"))
+                .expect("schema sample must decode");
+            for field in &expected {
+                let mut missing = value.clone();
+                missing["grants"][0]["adapter"]
+                    .as_object_mut()
+                    .expect("adapter object")
+                    .remove(field);
+                assert_eq!(
+                    decode_deployment(&serde_json::to_vec(&missing).expect("missing field JSON"))
+                        .expect_err("required adapter field must reject")
+                        .code,
+                    "deployment_json",
+                    "{}.{}",
+                    schema.kind,
+                    field
+                );
+            }
+            let mut unknown = value;
+            unknown["grants"][0]["adapter"]["unknown"] = serde_json::json!(true);
+            assert_eq!(
+                decode_deployment(&serde_json::to_vec(&unknown).expect("unknown field JSON"))
+                    .expect_err("unknown adapter field must reject")
+                    .code,
+                "deployment_json",
+                "{} unknown field",
+                schema.kind
+            );
+        }
+    }
+
+    #[test]
+    fn postgres_schema_required_names_and_ranges_match_decoder() {
+        let postgres = adapter_samples()
+            .into_iter()
+            .find(|adapter| matches!(adapter, AdapterDescriptor::Postgres { .. }))
+            .expect("PostgreSQL sample");
+        let valid = deployment_with_adapter(&postgres);
+        for (field, invalid_values, code) in [
+            (
+                "maximum_connections",
+                vec![
+                    serde_json::json!(0),
+                    serde_json::json!(MAXIMUM_DATABASE_CONNECTIONS + 1),
+                ],
+                "deployment_database_connections",
+            ),
+            (
+                "maximum_wait_milliseconds",
+                vec![
+                    serde_json::json!(0),
+                    serde_json::json!(MAXIMUM_DATABASE_WAIT_MILLISECONDS + 1),
+                ],
+                "deployment_database_time",
+            ),
+            (
+                "statement_timeout_milliseconds",
+                vec![
+                    serde_json::json!(0),
+                    serde_json::json!(MAXIMUM_DATABASE_WAIT_MILLISECONDS + 1),
+                ],
+                "deployment_database_time",
+            ),
+        ] {
+            for invalid in invalid_values {
+                let mut value = valid.clone();
+                value["grants"][0]["adapter"][field] = invalid;
+                assert_eq!(
+                    decode_deployment(&serde_json::to_vec(&value).expect("invalid bound JSON"))
+                        .expect_err("invalid PostgreSQL bound")
+                        .code,
+                    code,
+                    "{field}"
+                );
+            }
+        }
+        let mut invalid_secret = valid;
+        invalid_secret["grants"][0]["adapter"]["connection_secret"] =
+            serde_json::json!("DATABASE_URL");
+        assert_eq!(
+            decode_deployment(
+                &serde_json::to_vec(&invalid_secret).expect("invalid secret name JSON")
+            )
+            .expect_err("invalid secret name")
+            .code,
+            "deployment_name"
         );
     }
 

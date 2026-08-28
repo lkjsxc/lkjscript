@@ -1162,7 +1162,17 @@ impl Writer {
                     writer.case_reference(&arm.case, definitions)?;
                     writer.optional(arm.payload_binding.as_ref(), |writer, binding| {
                         writer.symbol(&binding.symbol, definitions)?;
-                        writer.name(&binding.name)
+                        writer.name(&binding.name)?;
+                        writer.authored_type(
+                            binding.declared_type.as_ref().ok_or_else(|| {
+                                codec_error(
+                                    "change_codec_match_binding_type",
+                                    "match payload binding omitted its exact declared type",
+                                )
+                            })?,
+                            definitions,
+                            1,
+                        )
                     })?;
                     writer.expression(&arm.body, definitions, next)
                 })

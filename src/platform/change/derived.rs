@@ -209,8 +209,11 @@ fn insert_namespace_contribution(
             DiagnosticClass::Semantic,
             "change_namespace_candidate_duplicate",
             format!(
-                "changed owners {previous:?} and {:?} select the same namespace",
-                record.owner()
+                "changed owners {previous:?} and {:?} both select parent {:?}, class {:?}, name '{}'",
+                record.owner(),
+                namespace.parent,
+                namespace.class,
+                namespace.name
             ),
         ));
     }

@@ -14,7 +14,8 @@ use super::value::{
 };
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
-use crate::platform::kernel::{DeclarationReference, ImplementationName, Name};
+use crate::platform::kernel::{DeclarationReference, ImplementationName, Name, TypeObjectDigest};
+use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -63,6 +64,7 @@ pub trait NormalizedHost: Send + Sync {
         program: &NormalizedProgram,
         function: &super::prepare::NormalizedFunction,
         implementation: &ImplementationName,
+        type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
@@ -77,11 +79,18 @@ impl NormalizedHost for CoreNormalizedHost {
         program: &NormalizedProgram,
         function: &super::prepare::NormalizedFunction,
         implementation: &ImplementationName,
+        type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
-        call_core_intrinsic(program, function, implementation.as_str(), arguments)
+        call_core_intrinsic(
+            program,
+            function,
+            implementation.as_str(),
+            type_arguments,
+            arguments,
+        )
     }
 }
 
@@ -262,15 +271,15 @@ impl<'a> NormalizedVm<'a> {
         let result = (|| {
             let port_arguments = match entry {
                 NormalizedEntryPoint::Function(function) => {
-                    machine.call(function, arguments)?;
+                    machine.call(function, Arc::from([]), arguments)?;
                     None
                 }
                 NormalizedEntryPoint::Code(code) => {
-                    machine.call_code(code, arguments)?;
+                    machine.call_code(code, arguments, BTreeMap::new())?;
                     None
                 }
                 NormalizedEntryPoint::PortExpression(code) => {
-                    machine.call_code(code, Vec::new())?;
+                    machine.call_code(code, Vec::new(), BTreeMap::new())?;
                     Some(arguments)
                 }
             };
@@ -278,12 +287,16 @@ impl<'a> NormalizedVm<'a> {
             let Some(arguments) = port_arguments else {
                 return Ok(value);
             };
-            let NormalizedValue::Function(function) = value else {
+            let NormalizedValue::Function {
+                function,
+                type_arguments,
+            } = value
+            else {
                 return Err(type_error(
                     "expression-backed target port did not evaluate to a function",
                 ));
             };
-            machine.call(function, arguments)?;
+            machine.call(function, type_arguments, arguments)?;
             finish_admitted(&mut machine)
         })();
         match result {
@@ -315,6 +328,7 @@ struct Frame {
     code: NormalizedCode,
     instruction: usize,
     locals: Vec<Option<NormalizedValue>>,
+    type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     stack_base: usize,
 }
 
@@ -410,20 +424,33 @@ impl Machine<'_> {
                 NormalizedInstruction::Jump(target) => self.jump(target)?,
                 NormalizedInstruction::Call {
                     function,
+                    type_arguments,
                     arguments,
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
-                    self.call(function, arguments)?;
+                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    self.call(function, type_arguments, arguments)?;
                 }
-                NormalizedInstruction::FunctionValue { function } => {
-                    self.push(NormalizedValue::Function(function))?;
+                NormalizedInstruction::FunctionValue {
+                    function,
+                    type_arguments,
+                } => {
+                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    self.push(NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    })?;
                 }
                 NormalizedInstruction::Invoke { arguments } => {
                     let arguments = self.pop_many(arguments as usize)?;
-                    let NormalizedValue::Function(function) = self.pop()? else {
+                    let NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    } = self.pop()?
+                    else {
                         return Err(type_error("invoke callee is not a function"));
                     };
-                    self.call(function, arguments)?;
+                    self.call(function, type_arguments, arguments)?;
                 }
                 NormalizedInstruction::Record { layout, fields } => {
                     let values = self.pop_many(fields.len())?;
@@ -678,9 +705,37 @@ impl Machine<'_> {
         }
     }
 
+    fn resolve_type_arguments(
+        &self,
+        type_arguments: &[TypeObjectDigest],
+    ) -> Result<Arc<[TypeObjectDigest]>, ExecutionError> {
+        let substitutions = self
+            .frames
+            .last()
+            .map(|frame| &frame.type_arguments)
+            .ok_or_else(|| {
+                runtime_error(
+                    "normalized_frame_missing",
+                    "normalized call type arguments have no active frame",
+                )
+            })?;
+        type_arguments
+            .iter()
+            .map(|ty| {
+                self.program
+                    .substitute_type(*ty, substitutions, 0)
+                    .ok_or_else(|| {
+                        type_error("normalized call type argument escaped its exact function scope")
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(Into::into)
+    }
+
     fn call(
         &mut self,
         function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
         arguments: Vec<NormalizedValue>,
     ) -> Result<(), ExecutionError> {
         let function = self
@@ -696,6 +751,26 @@ impl Machine<'_> {
         if arguments.len() != function.parameter_count as usize {
             return Err(type_error("function argument count is foreign"));
         }
+        if !type_arguments.is_empty() && type_arguments.len() != function.type_parameters.len() {
+            return Err(type_error("function type-argument count is foreign"));
+        }
+        let type_arguments_by_parameter = function
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(type_arguments.iter().copied())
+            .collect::<BTreeMap<_, _>>();
+        if type_arguments_by_parameter.len() != type_arguments.len()
+            || type_arguments.iter().any(|ty| {
+                self.program
+                    .substitute_type(*ty, &BTreeMap::new(), 0)
+                    .is_none()
+            })
+        {
+            return Err(type_error(
+                "function type arguments are not exact runtime types",
+            ));
+        }
         if function.task_requirements.iter().any(|requirement| {
             self.capabilities
                 .is_none_or(|capabilities| !capabilities.requires(*requirement))
@@ -704,13 +779,16 @@ impl Machine<'_> {
         }
         self.observation.calls = self.observation.calls.saturating_add(1);
         match &function.body {
-            NormalizedFunctionBody::Code(code) => self.call_code(code.clone(), arguments),
+            NormalizedFunctionBody::Code(code) => {
+                self.call_code(code.clone(), arguments, type_arguments_by_parameter)
+            }
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
                 let value = self.host.call(
                     self.program,
                     function,
                     implementation,
+                    &type_arguments,
                     arguments,
                     self.control,
                 )?;
@@ -724,6 +802,7 @@ impl Machine<'_> {
         &mut self,
         code: NormalizedCode,
         arguments: Vec<NormalizedValue>,
+        type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<(), ExecutionError> {
         if arguments.len() != code.parameter_count as usize {
             return Err(type_error("code argument count is foreign"));
@@ -759,6 +838,7 @@ impl Machine<'_> {
             code,
             instruction: 0,
             locals,
+            type_arguments,
             stack_base: self.stack.len(),
         });
         self.observation.maximum_call_depth =
@@ -1181,7 +1261,7 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
-            | NormalizedValue::Function(_)
+            | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => {}
         }
     }
@@ -1200,6 +1280,7 @@ fn call_core_intrinsic(
     program: &NormalizedProgram,
     function: &super::prepare::NormalizedFunction,
     implementation: &str,
+    type_arguments: &[TypeObjectDigest],
     arguments: Vec<NormalizedValue>,
 ) -> Result<NormalizedValue, ExecutionError> {
     match implementation {
@@ -1386,7 +1467,16 @@ fn call_core_intrinsic(
                     "typed JSON encoder has no exact parameter type",
                 )
             })?;
-            encode_typed(program, value, parameter.ty, JsonLimits::default())
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => parameter.ty,
+                _ => {
+                    return Err(type_error(
+                        "typed JSON encoder requires one exact runtime type",
+                    ));
+                }
+            };
+            encode_typed(program, value, ty, JsonLimits::default())
                 .map(NormalizedValue::bytes)
                 .map_err(normalized_json_error)
         }
@@ -1400,7 +1490,16 @@ fn call_core_intrinsic(
                     "typed JSON decoder has no exact fallback type",
                 )
             })?;
-            let decoded = decode_typed(program, bytes, fallback_type.ty, JsonLimits::default());
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => fallback_type.ty,
+                _ => {
+                    return Err(type_error(
+                        "typed JSON decoder requires one exact runtime type",
+                    ));
+                }
+            };
+            let decoded = decode_typed(program, bytes, ty, JsonLimits::default());
             let (valid, value, error) = match decoded {
                 Ok(value) => (true, value, String::new()),
                 Err(error) => (false, fallback.clone(), error.code),
@@ -1768,10 +1867,12 @@ pub(crate) fn normalized_equal(
             }
             Ok(true)
         }
-        (NormalizedValue::Function(_), _) | (_, NormalizedValue::Function(_)) => Err(trap_error(
-            "normalized_value_not_comparable",
-            "functions do not support semantic equality",
-        )),
+        (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
+            Err(trap_error(
+                "normalized_value_not_comparable",
+                "functions do not support semantic equality",
+            ))
+        }
         (NormalizedValue::Resource(_), _) | (_, NormalizedValue::Resource(_)) => Err(trap_error(
             "normalized_value_not_comparable",
             "live resources do not support semantic equality",

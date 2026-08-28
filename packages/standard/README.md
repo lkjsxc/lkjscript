@@ -14,11 +14,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_27c3a79c798fe402d114e0000fefa0d628916808062d63d1782a6d9ed5e5aa83`;
-- package revision: `package_revision_4290e78132570943c17a9cd800af0742dfc8c16baa6f471354792dab1d0db981`;
-- package transport: `package_transport_76566ff6df6024e573d3fc7f868cbc74760170dbd2111805c4c8c30a3a95b154`;
-- artifact manifest: `artifact_manifest_1d2b53b867cbe1027d4b537f34ecf93007ea28ce54f28bd6674ebdba0b15fe6e`;
-- 284 semantic owners, 60 compiler units, and 7 graph tests.
+- semantic revision: `rev_856f4cab0ddd42b2719694a3d1b23553f248b3bd887c54dc19b90d506724b234`;
+- package revision: `package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665`;
+- package transport: `package_transport_dd83db89a5a492b9195e439b759eafe259911e967a254d6f0dfaba36442bec4c`;
+- artifact manifest: `artifact_manifest_844aed53e4be165ab6907147831a7b751e244b66dcd048000a7df2e65868d98b`;
+- artifact bundle: `artifact_bundle_e5f346fa99ea4346cfa76e4a7bc5e605dbbba72770ef65701ca1911756c6aa12`;
+- 298 semantic owners, 64 compiler units, and 7 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -29,11 +30,19 @@ target/release/lkjscript --project packages/standard check
 target/release/lkjscript --project packages/standard build \
   --output /tmp/standard-current.lkja
 target/release/lkjscript package builtin inspect
+target/release/lkjscript package builtin query owners --name json-decode-or
+target/release/lkjscript package builtin inspect owner external decl_...
 target/release/lkjscript package builtin export --kind transport \
   --output /tmp/builtin-standard.lkjp
 target/release/lkjscript package builtin export --kind artifact \
   --output /tmp/builtin-standard.lkja
 ```
+
+The current package includes generic strict `json-decode-or<T>`, `json-encode<T>`,
+`list-length<T>`, and `list-get<T>` declarations used by the maintained public stateful HTTP
+workflow. Their exact type parameters, signatures, implementation-free references, and the rest
+of the public interface are executable-generated in
+[`docs/generated/builtin-standard.md`](../../docs/generated/builtin-standard.md).
 
 `generated/standard.lkjp` and `generated/standard.lkja` are deterministic derived owners for the
 executable's embedded package transport and artifact-10 bytes. Product verification regenerates

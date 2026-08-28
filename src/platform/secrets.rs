@@ -55,10 +55,11 @@ impl fmt::Debug for SecretCatalog {
 }
 
 impl SecretCatalog {
-    pub fn from_environment(bindings: &[EnvironmentSecretBinding]) -> Result<Self, Diagnostic> {
+    pub(crate) fn validate_bindings(
+        bindings: &[EnvironmentSecretBinding],
+    ) -> Result<(), Diagnostic> {
         let mut names = BTreeSet::new();
         let mut variables = BTreeSet::new();
-        let mut values = BTreeMap::new();
         for binding in bindings {
             validate_token(&binding.name, "secret name")?;
             validate_environment_name(&binding.variable)?;
@@ -74,6 +75,14 @@ impl SecretCatalog {
                     "one environment variable may not implicitly share two secret authorities",
                 ));
             }
+        }
+        Ok(())
+    }
+
+    pub fn from_environment(bindings: &[EnvironmentSecretBinding]) -> Result<Self, Diagnostic> {
+        Self::validate_bindings(bindings)?;
+        let mut values = BTreeMap::new();
+        for binding in bindings {
             let value = std::env::var_os(&binding.variable).ok_or_else(|| {
                 secret_error(
                     "secret_missing",

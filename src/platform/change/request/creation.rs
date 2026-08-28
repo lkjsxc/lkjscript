@@ -275,6 +275,7 @@ pub struct AuthoredLetBinding {
 pub struct AuthoredBindingDefinition {
     pub symbol: String,
     pub name: Name,
+    pub declared_type: Option<AuthoredType>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1075,7 +1076,15 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             SymbolKind::MatchPayloadBinding => (
                 self.match_payload_symbol(&definition.symbol)?,
                 crate::platform::kernel::BindingKind::MatchPayload,
-                None,
+                Some(
+                    self.lower_type(definition.declared_type.as_ref().ok_or_else(|| {
+                        request_error(
+                            DiagnosticClass::Semantic,
+                            "change_match_binding_type",
+                            "match payload binding requires its exact case payload type",
+                        )
+                    })?)?,
+                ),
             ),
             SymbolKind::TransactionBinding => (
                 self.transaction_binding_symbol(&definition.symbol)?,

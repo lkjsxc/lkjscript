@@ -1,5 +1,9 @@
 //! Strict, bounded public graph-native command projection.
 
+use super::builtin_discovery::{
+    BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
+    BuiltinOwnerSelector, inspect_builtin_owner, parse_interface_owner_kind, query_builtin_owners,
+};
 use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
 use super::contract::{
@@ -401,24 +405,132 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
         ],
     )?;
     match action {
-        "inspect" => {
-            exact_arguments(&arguments, 3, "package builtin inspect")?;
+        "inspect" => match arguments.get(3).map(String::as_str) {
+            None => {
+                exact_arguments(&arguments, 3, "package builtin inspect")?;
+                append_compact_record(
+                    &mut output,
+                    "interface",
+                    &[
+                        ("owners", standard.interface_owners.len().to_string()),
+                        ("types", standard.interface_types.len().to_string()),
+                        (
+                            "transport-bytes",
+                            standard.transport_bytes().len().to_string(),
+                        ),
+                        (
+                            "artifact-bytes",
+                            standard.artifact_bytes().len().to_string(),
+                        ),
+                    ],
+                )?;
+            }
+            Some("owner") => {
+                exact_arguments(&arguments, 6, "package builtin inspect owner KIND ID")?;
+                let kind = parse_interface_owner_kind(&arguments[4])?;
+                let owner = parse_kernel_owner_key(&arguments[5])?;
+                for record in inspect_builtin_owner(standard, kind, owner)? {
+                    append_dynamic_record(&mut output, &record.operation, &record.fields)?;
+                }
+            }
+            Some(_) => {
+                return Err(usage_error(
+                    "package builtin inspect accepts no selector or owner KIND ID",
+                ));
+            }
+        },
+        "query" => {
+            if arguments.get(3).map(String::as_str) != Some("owners") {
+                return Err(usage_error(
+                    "package builtin query requires the exact owners action",
+                ));
+            }
+            ensure_options(
+                &arguments[4..],
+                &[
+                    "--kind",
+                    "--name",
+                    "--parent",
+                    "--limit",
+                    "--bytes",
+                    "--continuation",
+                ],
+                &[],
+            )?;
+            let kind = option_value(&arguments[4..], "--kind")?
+                .map(|value| parse_interface_owner_kind(&value))
+                .transpose()?;
+            let name = option_value(&arguments[4..], "--name")?
+                .map(|value| {
+                    Name::new(value)
+                        .map(|name| name.as_str().to_owned())
+                        .map_err(|error| {
+                            Diagnostic::new(error.class, "builtin_owner_name", error.message)
+                        })
+                })
+                .transpose()?;
+            let parent = option_value(&arguments[4..], "--parent")?
+                .map(|value| parse_kernel_owner_key(&value))
+                .transpose()?;
+            let limit = parse_usize_option(
+                option_value(&arguments[4..], "--limit")?,
+                "--limit",
+                BUILTIN_QUERY_DEFAULT_ITEMS,
+            )?;
+            let bytes = parse_usize_option(
+                option_value(&arguments[4..], "--bytes")?,
+                "--bytes",
+                BUILTIN_QUERY_DEFAULT_BYTES,
+            )?;
+            let continuation = option_value(&arguments[4..], "--continuation")?;
+            let selector = BuiltinOwnerSelector { kind, name, parent };
+            let page =
+                query_builtin_owners(standard, &selector, limit, bytes, continuation.as_deref())?;
             append_compact_record(
                 &mut output,
-                "interface",
+                "query",
                 &[
-                    ("owners", standard.interface_owners.len().to_string()),
-                    ("types", standard.interface_types.len().to_string()),
+                    ("operation", "owners".to_owned()),
+                    ("selector-digest", page.selector_digest.clone()),
+                    ("package-revision", standard.package_revision.to_string()),
+                    ("ordering", BUILTIN_QUERY_ORDERING.to_owned()),
                     (
-                        "transport-bytes",
-                        standard.transport_bytes().len().to_string(),
+                        "kind",
+                        selector
+                            .kind
+                            .map(KernelOwnerKind::name)
+                            .unwrap_or("any")
+                            .to_owned(),
                     ),
                     (
-                        "artifact-bytes",
-                        standard.artifact_bytes().len().to_string(),
+                        "name",
+                        selector.name.clone().unwrap_or_else(|| "any".to_owned()),
+                    ),
+                    (
+                        "parent",
+                        selector
+                            .parent
+                            .map(|parent| parent.to_string())
+                            .unwrap_or_else(|| "any".to_owned()),
                     ),
                 ],
             )?;
+            for record in page.records {
+                append_dynamic_record(&mut output, &record.operation, &record.fields)?;
+            }
+            append_compact_record(
+                &mut output,
+                "summary",
+                &[
+                    ("matched", page.matched.to_string()),
+                    ("returned", page.returned.to_string()),
+                    ("truncated", page.truncated.to_string()),
+                    ("owner-record-bytes", page.rendered_owner_bytes.to_string()),
+                ],
+            )?;
+            if let Some(token) = page.continuation {
+                append_compact_record(&mut output, "continuation", &[("token", token)])?;
+            }
         }
         "export" => {
             ensure_options(&arguments[3..], &["--kind", "--output"], &[])?;
@@ -458,7 +570,9 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             )?;
         }
         _ => {
-            return Err(usage_error("package builtin accepts inspect or export"));
+            return Err(usage_error(
+                "package builtin accepts inspect, query, or export",
+            ));
         }
     }
     Ok(output.finish())
@@ -2074,6 +2188,35 @@ fn append_compact_record(
         .map(|(name, value)| (*name, value.as_str()))
         .collect::<Vec<_>>();
     output.append_record(operation, &borrowed)
+}
+
+fn append_dynamic_record(
+    output: &mut CompactResponseWriter,
+    operation: &str,
+    fields: &[(String, String)],
+) -> Result<(), Diagnostic> {
+    let borrowed = fields
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect::<Vec<_>>();
+    output.append_record(operation, &borrowed)
+}
+
+fn parse_usize_option(
+    value: Option<String>,
+    option: &str,
+    default: usize,
+) -> Result<usize, Diagnostic> {
+    value
+        .map(|value| {
+            value.parse::<usize>().map_err(|_| {
+                usage_error(format!(
+                    "{option} requires a canonical nonnegative decimal integer"
+                ))
+            })
+        })
+        .transpose()
+        .map(|value| value.unwrap_or(default))
 }
 
 fn compact_response_writer() -> Result<CompactResponseWriter, Diagnostic> {

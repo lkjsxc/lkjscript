@@ -599,7 +599,23 @@ impl GraphRepository {
             record: parent.record,
         };
         let base_publication = read_publication(&store, base_head)?;
-        Ok(Some(RepositoryView::new(base_publication, store)))
+        let hidden_type_objects = match &accepted.semantic_diff.body {
+            crate::platform::publication::SemanticDiffBody::Change { type_additions, .. } => {
+                type_additions.iter().copied().collect()
+            }
+            crate::platform::publication::SemanticDiffBody::Bootstrap { .. } => {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_repository_idempotency_diff",
+                    "accepted idempotency result has a bootstrap semantic diff",
+                ));
+            }
+        };
+        Ok(Some(RepositoryView::new_idempotency_base(
+            base_publication,
+            store,
+            hidden_type_objects,
+        )))
     }
 
     /// Prepares one exact change against the currently observed revision without publishing it.

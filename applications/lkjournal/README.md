@@ -18,10 +18,10 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_0f660831701b710fc7cd6e5f2c87cd754a944adc4ce77e1aca4649711946b4db`;
-- semantic state: `semantic_state_067e2ba593a62c71757d24aaf717ddf28027454bf11b623e292d939120520cd4`;
-- artifact manifest: `artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834`;
-- artifact bundle: `artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501`;
+- semantic revision: `rev_dfde325dce6b59746f41b49777fbccb5d1efff50a53e0535c50b74cc98554d6f`;
+- semantic state: `semantic_state_d41fc027d4781f36df1c965280acaf814f9871df0e30029ed0245edc8fafc5e4`;
+- artifact manifest: `artifact_manifest_bab49942d015f38ac1898c43a15db56a25cd7a782411f6b94b40cbe86c9e51f9`;
+- artifact bundle: `artifact_bundle_79b9bb47b065d545402af21eb69057752e9f496e472475f030f5287139e592de`;
 - 1,313 root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
@@ -51,9 +51,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 685,766-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 697,403-byte
 artifact-10 bundle above (SHA-256
-`80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb`). `serve` resolves target
+`95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after required PostgreSQL and queue preflight. It does not discover this Graph 5
@@ -124,3 +124,8 @@ It never resolves or pulls a mutable image name itself. It starts an isolated da
 live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded evidence
 under `.artifacts/lkjscript-dev/service/`. Missing container/database prerequisites are reported as
 unavailable, never as pass.
+
+The same workflow can use a verified local PostgreSQL 16.15 tool root through
+`--postgres-root PATH` or `LKJSCRIPT_POSTGRES_ROOT`; the tool verifies the exact server/client
+version and preserves the same isolated database and cleanup contract. This is contributor-only
+test provisioning, not a product adapter or application helper.

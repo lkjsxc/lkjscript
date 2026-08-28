@@ -1,7 +1,11 @@
 use super::registry::{
-    RegistrySnapshot, contract_descriptors, diagnostic_class_name, diagnostic_descriptors,
-    exit_status_descriptors, operation_descriptors, registry_snapshot,
+    RegistrySection, RegistrySnapshot, contract_descriptors, diagnostic_class_name,
+    diagnostic_descriptors, exit_status_descriptors, operation_descriptors, registry_snapshot,
 };
+use crate::platform::builtin_discovery::inspect_builtin_owner;
+use crate::platform::builtin_standard::BuiltinStandard;
+use crate::platform::control::render_record;
+use crate::platform::kernel::{OwnerKey, OwnerKind, PackageInterfaceRecord};
 use crate::platform::project_creation::ProjectTemplate;
 use std::fmt::Write as _;
 
@@ -27,6 +31,36 @@ pub fn generated_documents() -> Result<Vec<GeneratedDocument>, String> {
         GeneratedDocument {
             relative_path: "diagnostics.md",
             bytes: diagnostics_markdown(&snapshot).into_bytes(),
+        },
+        GeneratedDocument {
+            relative_path: "change-grammar.md",
+            bytes: registry_sections_markdown(
+                &snapshot,
+                "Compact change grammar",
+                &[
+                    RegistrySection::Change,
+                    RegistrySection::Type,
+                    RegistrySection::Expression,
+                ],
+            )?
+            .into_bytes(),
+        },
+        GeneratedDocument {
+            relative_path: "deployment.md",
+            bytes: registry_sections_markdown(
+                &snapshot,
+                "Deployment descriptor schema",
+                &[RegistrySection::Deployment],
+            )?
+            .into_bytes(),
+        },
+        GeneratedDocument {
+            relative_path: "builtin-standard.md",
+            bytes: builtin_standard_markdown(&snapshot)?.into_bytes(),
+        },
+        GeneratedDocument {
+            relative_path: "stateful-http-authoring.md",
+            bytes: stateful_http_walkthrough(&snapshot)?.into_bytes(),
         },
     ])
 }
@@ -114,6 +148,315 @@ fn diagnostics_markdown(snapshot: &RegistrySnapshot) -> String {
     output
 }
 
+fn registry_sections_markdown(
+    snapshot: &RegistrySnapshot,
+    title: &str,
+    sections: &[RegistrySection],
+) -> Result<String, String> {
+    let mut output = generated_header(snapshot);
+    let _ = writeln!(output, "# {title}\n");
+    output.push_str(
+        "The following compact records are the executable-owned current contract.\n\n```text\n",
+    );
+    for section in sections {
+        let value = snapshot
+            .section(*section)
+            .ok_or_else(|| format!("generated document is missing '{}'", section.name()))?;
+        output.push_str(std::str::from_utf8(&value.bytes).map_err(|_| {
+            format!(
+                "registry section '{}' is not canonical UTF-8",
+                section.name()
+            )
+        })?);
+    }
+    output.push_str("```\n");
+    Ok(output)
+}
+
+fn builtin_standard_markdown(snapshot: &RegistrySnapshot) -> Result<String, String> {
+    let standard = BuiltinStandard::load().map_err(|error| error.to_string())?;
+    let mut output = generated_header(snapshot);
+    output.push_str("# Built-in standard package public interface\n\n");
+    let _ = writeln!(
+        output,
+        "Package `{}` at exact package revision `{}`.\n",
+        standard.package, standard.package_revision
+    );
+    output.push_str(
+        "The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.\n\n```text\n",
+    );
+    for (owner, value) in &standard.interface_owners {
+        if !matches!(value.record, PackageInterfaceRecord::Declaration(_)) {
+            continue;
+        }
+        for record in inspect_builtin_owner(standard, value.record.header().kind, *owner)
+            .map_err(|error| error.to_string())?
+        {
+            output.push_str(&record.render().map_err(|error| error.to_string())?);
+        }
+    }
+    output.push_str("```\n");
+    Ok(output)
+}
+
+fn stateful_http_walkthrough(snapshot: &RegistrySnapshot) -> Result<String, String> {
+    let standard = BuiltinStandard::load().map_err(|error| error.to_string())?;
+    let exact = |kind: OwnerKind, name: &str, parent: Option<OwnerKey>| {
+        standard
+            .interface_owners
+            .iter()
+            .find_map(|(owner, value)| {
+                (value.record.header().kind == kind
+                    && package_owner_name(&value.record) == name
+                    && package_owner_parent(&value.record) == parent)
+                    .then(|| format!("{}/{}", standard.package, owner))
+            })
+            .ok_or_else(|| format!("built-in standard lacks exact {kind:?} '{name}'"))
+    };
+    let byte_stream_owner = exact(OwnerKind::Interface, "ByteStream", None)?;
+    let byte_stream_id = parse_reference_owner(&byte_stream_owner)?;
+    let database_owner = exact(OwnerKind::Interface, "Database", None)?;
+    let database_id = parse_reference_owner(&database_owner)?;
+    let mut output = generated_header(snapshot);
+    output.push_str("# Stateful HTTP authoring walkthrough\n\n");
+    output.push_str(
+        "This is a generated composition guide, not a second authoring authority. Obtain project-local exact component, handler, parameter, and existing stream requirement identities with `query`/`inspect`; obtain standard identities with `package builtin query owners` and `package builtin inspect owner`. Secret values never enter semantic records or this guide.\n\n",
+    );
+    output.push_str("## Current exact capability and declaration references\n\n```text\n");
+    let walkthrough_records = [
+        (
+            "walkthrough.interface",
+            vec![
+                ("name", "byte-stream".to_owned()),
+                ("reference", byte_stream_owner.clone()),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "read-all".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "read-all", Some(byte_stream_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.interface",
+            vec![
+                ("name", "database".to_owned()),
+                ("reference", database_owner.clone()),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "migration".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "migration", Some(database_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "transaction".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "transaction", Some(database_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "execute".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "execute", Some(database_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "query".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "query", Some(database_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "json-decode-or".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::External, "json-decode-or", None)?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "json-encode".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::External, "json-encode", None)?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "list-length".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::External, "list-length", None)?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "list-get".to_owned()),
+                ("reference", exact(OwnerKind::External, "list-get", None)?),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "sql-value".to_owned()),
+                ("reference", exact(OwnerKind::Variant, "SqlValue", None)?),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "sql-type".to_owned()),
+                ("reference", exact(OwnerKind::Variant, "SqlType", None)?),
+            ],
+        ),
+    ];
+    for (operation, fields) in walkthrough_records {
+        let fields = fields
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect::<Vec<_>>();
+        output.push_str(&render_record(operation, &fields).map_err(|error| error.to_string())?);
+    }
+    output.push_str("```\n\n## Composition\n\n```text\n");
+    for (operation, fields) in [
+        (
+            "walkthrough.request",
+            vec![
+                ("parameter", "PROJECT_HANDLER_REQUEST"),
+                ("projection", "method,path,query_parameters,headers,body"),
+            ],
+        ),
+        (
+            "walkthrough.body",
+            vec![
+                ("form", "field+capability-call"),
+                ("stream-operation", "read-all"),
+                ("maximum", "65536"),
+                ("unit", "bytes"),
+            ],
+        ),
+        (
+            "walkthrough.json",
+            vec![
+                ("form", "call+type.argument+field"),
+                ("decoder", "json-decode-or"),
+                ("strict", "duplicate,trailing,shape reject"),
+                ("encoder", "json-encode"),
+            ],
+        ),
+        (
+            "walkthrough.database",
+            vec![
+                ("form", "transaction+capability-call"),
+                ("operations", "migration,execute,query"),
+                ("statements", "source-origin-static-text"),
+                ("parameters", "typed-sql-values"),
+            ],
+        ),
+        (
+            "walkthrough.response",
+            vec![
+                ("form", "structural-record"),
+                (
+                    "fields",
+                    "status:i64,headers:list<{name:text,value:bytes}>,body:bytes",
+                ),
+                ("policy", "graph-owned"),
+            ],
+        ),
+        (
+            "walkthrough.grant",
+            vec![
+                ("requirement", "database"),
+                ("adapter", "postgres"),
+                ("connection-secret", "BBS_DATABASE_URL"),
+                ("secret-value", "excluded"),
+                ("limits", "pool,wait,statement"),
+            ],
+        ),
+    ] {
+        output.push_str(&render_record(operation, &fields).map_err(|error| error.to_string())?);
+    }
+    output.push_str("```\n\nUse reviewed `change plan`, export and decode the complete logical plan, then apply the exact plan token. Run `check`, `build`, and `serve --deployment` only after publication. Runtime work reads the artifact and cannot advance project authority.\n");
+    Ok(output)
+}
+
+fn parse_reference_owner(reference: &str) -> Result<OwnerKey, String> {
+    reference
+        .split_once('/')
+        .ok_or_else(|| format!("exact reference '{reference}' has no owner"))?
+        .1
+        .parse()
+        .map_err(|error: crate::platform::diagnostic::Diagnostic| error.to_string())
+}
+
+fn package_owner_name(record: &PackageInterfaceRecord) -> &str {
+    match record {
+        PackageInterfaceRecord::Declaration(value) => value.name.as_str(),
+        PackageInterfaceRecord::TypeParameter(value) => value.name.as_str(),
+        PackageInterfaceRecord::Field(value) => value.name.as_str(),
+        PackageInterfaceRecord::Case(value) => value.name.as_str(),
+        PackageInterfaceRecord::Operation(value) => value.name.as_str(),
+        PackageInterfaceRecord::Parameter(value) => value.name.as_str(),
+        PackageInterfaceRecord::Requirement(value) => value.name.as_str(),
+        PackageInterfaceRecord::Port(value) => value.name.as_str(),
+    }
+}
+
+fn package_owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
+    match record {
+        PackageInterfaceRecord::Declaration(_) => None,
+        PackageInterfaceRecord::TypeParameter(value) => {
+            Some(OwnerKey::Declaration(value.declaration))
+        }
+        PackageInterfaceRecord::Field(value) => Some(OwnerKey::Declaration(value.declaration)),
+        PackageInterfaceRecord::Case(value) => Some(OwnerKey::Declaration(value.declaration)),
+        PackageInterfaceRecord::Operation(value) => Some(OwnerKey::Declaration(value.declaration)),
+        PackageInterfaceRecord::Parameter(value) => Some(match value.parent {
+            crate::platform::kernel::ParameterParent::Function(declaration) => {
+                OwnerKey::Declaration(declaration)
+            }
+            crate::platform::kernel::ParameterParent::Operation(operation) => {
+                OwnerKey::Operation(operation)
+            }
+        }),
+        PackageInterfaceRecord::Requirement(value) => {
+            Some(OwnerKey::Declaration(value.declaration))
+        }
+        PackageInterfaceRecord::Port(value) => Some(OwnerKey::Declaration(value.declaration)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,7 +465,7 @@ mod tests {
     fn generated_documents_are_unique_and_repeatable() {
         let first = generated_documents().expect("generated documents");
         let second = generated_documents().expect("generated documents");
-        assert_eq!(first.len(), 3);
+        assert_eq!(first.len(), 7);
         assert_eq!(first.len(), second.len());
         for (left, right) in first.iter().zip(second.iter()) {
             assert_eq!(left.relative_path, right.relative_path);

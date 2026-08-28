@@ -1,3 +1,7 @@
+use super::super::builtin_discovery::{
+    BUILTIN_CONTINUATION_MAXIMUM_BYTES, BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS,
+    BUILTIN_QUERY_MAXIMUM_BYTES, BUILTIN_QUERY_MAXIMUM_ITEMS, BUILTIN_QUERY_MINIMUM_BYTES,
+};
 use super::super::compiler::{
     ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_CONTRACT_IDENTITY,
     ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_CLOSURE_DIGEST_DOMAIN, ARTIFACT_CONTRACT_VERSION,
@@ -11,17 +15,21 @@ use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
     AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
     CHANGE_REQUEST_COMMITMENT_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
-    COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_OPERATION_DESCRIPTORS,
-    COMPACT_CHANGE_PRECONDITION_FIELDS, COMPACT_CHANGE_PRECONDITIONS,
-    COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS,
-    COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES, COMPACT_TYPE_FORMS,
+    COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_EDGE_DESCRIPTORS,
+    COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
+    COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
+    COMPACT_EXPRESSION_FORM_FIELDS, COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS,
+    COMPACT_NAMESPACE_CLASSES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
     CompactChangeFieldForm, CompactChangeOperation, LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
     LOGICAL_CHANGE_PLAN_CONTRACT_VERSION, LOGICAL_PLAN_RECORD_DESCRIPTORS,
     MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
     PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
-use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
+use super::super::deployment::{
+    DEPLOYMENT_ADAPTER_SCHEMAS, DEPLOYMENT_CONTRACT_VERSION, DEPLOYMENT_SCHEMA_FIELDS,
+    MAXIMUM_DEPLOYMENT_BYTES, MAXIMUM_DEPLOYMENT_GRANTS,
+};
 use super::super::diagnostic::DiagnosticClass;
 use super::super::execution::normalized::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
@@ -71,7 +79,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 11;
+pub const CLI_CONTRACT_VERSION: u16 = 12;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -334,7 +342,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-11",
+            identity: "lkjscript-cli-12",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -1046,7 +1054,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Package,
             "Inspect or export the executable's one exact built-in standard dependency.",
-            "package builtin inspect | package builtin export --kind transport|artifact --output PATH",
+            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH",
             (ControlModel::PackageRequest, ControlModel::PackageResult),
             AuthorityEffect::OptionalExternalOutput,
             ProjectRequirement::None,
@@ -1348,6 +1356,48 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
         limit(
             "query_continuation_bytes",
             MAXIMUM_QUERY_CONTINUATION_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "builtin_query_default_items",
+            BUILTIN_QUERY_DEFAULT_ITEMS,
+            LimitClass::DefaultPagination,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "builtin_query_items",
+            BUILTIN_QUERY_MAXIMUM_ITEMS,
+            LimitClass::ExplicitRequestBudget,
+            LimitUnit::Items,
+            OverridePolicy::RequestUpToMaximum,
+        ),
+        limit(
+            "builtin_query_default_bytes",
+            BUILTIN_QUERY_DEFAULT_BYTES,
+            LimitClass::DefaultPagination,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "builtin_query_minimum_bytes",
+            BUILTIN_QUERY_MINIMUM_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "builtin_query_bytes",
+            BUILTIN_QUERY_MAXIMUM_BYTES,
+            LimitClass::ExplicitRequestBudget,
+            LimitUnit::Bytes,
+            OverridePolicy::RequestUpToMaximum,
+        ),
+        limit(
+            "builtin_continuation_bytes",
+            BUILTIN_CONTINUATION_MAXIMUM_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
             OverridePolicy::Fixed,
@@ -2908,11 +2958,12 @@ pub enum RegistrySection {
     Diagnostics,
     Templates,
     Runners,
+    Deployment,
     Security,
 }
 
 impl RegistrySection {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Contracts,
         Self::Operations,
         Self::Change,
@@ -2925,6 +2976,7 @@ impl RegistrySection {
         Self::Diagnostics,
         Self::Templates,
         Self::Runners,
+        Self::Deployment,
         Self::Security,
     ];
 
@@ -2942,6 +2994,7 @@ impl RegistrySection {
             Self::Diagnostics => "diagnostics",
             Self::Templates => "templates",
             Self::Runners => "runners",
+            Self::Deployment => "deployment",
             Self::Security => "security",
         }
     }
@@ -3201,19 +3254,27 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     &[("name", name.to_owned()), ("syntax", syntax.to_owned())],
                 )?);
             }
-            for (name, parent, child) in [
-                ("expression.argument", "expression", "expression"),
-                ("type.argument", "type", "type"),
-            ] {
+            for edge in COMPACT_CHANGE_EDGE_DESCRIPTORS {
                 records.push(compact_record(
                     "change.edge",
                     &[
-                        ("name", name.to_owned()),
-                        ("parent", parent.to_owned()),
-                        ("child", child.to_owned()),
+                        ("name", edge.name.to_owned()),
+                        ("parent", edge.parent.to_owned()),
+                        ("child", edge.child.to_owned()),
                         ("order", "zero-based-contiguous-index".to_owned()),
                     ],
                 )?);
+                for field in edge.fields {
+                    records.push(compact_record(
+                        "change.edge-field",
+                        &[
+                            ("edge", edge.name.to_owned()),
+                            ("name", field.name.to_owned()),
+                            ("required", field.required.to_string()),
+                            ("syntax", field.syntax.to_owned()),
+                        ],
+                    )?);
+                }
             }
             for (name, syntax) in [
                 ("request_local_symbol", "$NAME"),
@@ -3365,12 +3426,34 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     &[("name", (*form).to_owned())],
                 )?);
             }
+            for field in COMPACT_TYPE_FORM_FIELDS {
+                records.push(compact_record(
+                    "type.field",
+                    &[
+                        ("form", field.form.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("syntax", field.syntax.to_owned()),
+                    ],
+                )?);
+            }
         }
         RegistrySection::Expression => {
             for form in COMPACT_EXPRESSION_FORMS {
                 records.push(compact_record(
                     "expression.form",
                     &[("name", (*form).to_owned())],
+                )?);
+            }
+            for field in COMPACT_EXPRESSION_FORM_FIELDS {
+                records.push(compact_record(
+                    "expression.field",
+                    &[
+                        ("form", field.form.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("syntax", field.syntax.to_owned()),
+                    ],
                 )?);
             }
         }
@@ -3455,6 +3538,65 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     "runner.kind",
                     &[("name", kind.name().to_owned())],
                 )?);
+            }
+        }
+        RegistrySection::Deployment => {
+            records.push(compact_record(
+                "deployment.schema",
+                &[
+                    ("contract", "lkjscript-deployment-1".to_owned()),
+                    ("version", DEPLOYMENT_CONTRACT_VERSION.to_string()),
+                    ("maximum-bytes", MAXIMUM_DEPLOYMENT_BYTES.to_string()),
+                    ("maximum-grants", MAXIMUM_DEPLOYMENT_GRANTS.to_string()),
+                    ("strict-json", "true".to_owned()),
+                    ("unknown-fields", "reject".to_owned()),
+                ],
+            )?);
+            for field in DEPLOYMENT_SCHEMA_FIELDS {
+                let mut fields = vec![
+                    ("path", field.path.to_owned()),
+                    ("required", field.required.to_string()),
+                    ("scalar", field.scalar.to_owned()),
+                    ("secret-name", field.secret_name.to_string()),
+                ];
+                if let Some(minimum) = field.minimum {
+                    fields.push(("minimum", minimum.to_string()));
+                }
+                if let Some(maximum) = field.maximum {
+                    fields.push(("maximum", maximum.to_string()));
+                }
+                if let Some(nested) = field.nested {
+                    fields.push(("nested", nested.to_owned()));
+                }
+                records.push(compact_record("deployment.field", &fields)?);
+            }
+            for adapter in DEPLOYMENT_ADAPTER_SCHEMAS {
+                records.push(compact_record(
+                    "deployment.adapter",
+                    &[
+                        ("kind", adapter.kind.to_owned()),
+                        ("fields", adapter.fields.len().to_string()),
+                    ],
+                )?);
+                for field in adapter.fields {
+                    let mut fields = vec![
+                        ("adapter", adapter.kind.to_owned()),
+                        ("path", field.path.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("scalar", field.scalar.to_owned()),
+                        ("secret-name", field.secret_name.to_string()),
+                    ];
+                    if let Some(minimum) = field.minimum {
+                        fields.push(("minimum", minimum.to_string()));
+                    }
+                    if let Some(maximum) = field.maximum {
+                        fields.push(("maximum", maximum.to_string()));
+                    }
+                    if let Some(nested) = field.nested {
+                        fields.push(("nested", nested.to_owned()));
+                    }
+                    records.push(compact_record("deployment.adapter-field", &fields)?);
+                }
             }
         }
         RegistrySection::Security => {
@@ -3568,6 +3710,155 @@ fn validate_registry() -> Result<(), String> {
         compact_change_validation_inventory();
     validate_compact_change_inventory(&change_operations, &change_fields, &advertised_forms)?;
     validate_compact_change_preconditions(&advertised_forms)?;
+    validate_compact_form_grammar()?;
+    validate_deployment_schema_inventory()?;
+    Ok(())
+}
+
+fn validate_deployment_schema_inventory() -> Result<(), String> {
+    unique(
+        DEPLOYMENT_SCHEMA_FIELDS.iter().map(|field| field.path),
+        "deployment schema field",
+    )?;
+    unique(
+        DEPLOYMENT_ADAPTER_SCHEMAS
+            .iter()
+            .map(|adapter| adapter.kind),
+        "deployment adapter kind",
+    )?;
+    let expected = [
+        "configuration",
+        "wall_clock",
+        "secure_random",
+        "identifier",
+        "password_hash",
+        "secret_verifier",
+        "byte_stream",
+        "postgres",
+        "object_memory",
+        "object_local",
+        "object_s3",
+        "durable_queue_memory",
+        "durable_queue_postgres",
+    ];
+    if DEPLOYMENT_ADAPTER_SCHEMAS
+        .iter()
+        .map(|adapter| adapter.kind)
+        .collect::<Vec<_>>()
+        != expected
+    {
+        return Err("deployment adapter schema does not match the closed decoder order".to_owned());
+    }
+    let mut paths = BTreeSet::new();
+    for adapter in DEPLOYMENT_ADAPTER_SCHEMAS {
+        if adapter.fields.is_empty()
+            || !adapter.fields.iter().any(|field| {
+                field.path == format!("adapter.{}.kind", adapter.kind) && field.required
+            })
+        {
+            return Err(format!(
+                "deployment adapter '{}' has no required discriminator",
+                adapter.kind
+            ));
+        }
+        for field in adapter.fields {
+            if field.path.is_empty()
+                || field.scalar.is_empty()
+                || !paths.insert(field.path)
+                || field
+                    .minimum
+                    .zip(field.maximum)
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+            {
+                return Err(format!(
+                    "deployment adapter field '{}' is empty, duplicated, or has inverted bounds",
+                    field.path
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_compact_form_grammar() -> Result<(), String> {
+    unique(COMPACT_TYPE_FORMS.iter().copied(), "compact type form")?;
+    unique(
+        COMPACT_EXPRESSION_FORMS.iter().copied(),
+        "compact expression form",
+    )?;
+    unique(
+        COMPACT_CHANGE_EDGE_DESCRIPTORS
+            .iter()
+            .map(|descriptor| descriptor.name),
+        "compact edge",
+    )?;
+    for (label, forms, fields) in [
+        ("type", COMPACT_TYPE_FORMS, COMPACT_TYPE_FORM_FIELDS),
+        (
+            "expression",
+            COMPACT_EXPRESSION_FORMS,
+            COMPACT_EXPRESSION_FORM_FIELDS,
+        ),
+    ] {
+        let mut names = BTreeSet::new();
+        for field in fields {
+            if !forms.contains(&field.form) {
+                return Err(format!(
+                    "compact {label} field '{}.{}' names an unknown form",
+                    field.form, field.name
+                ));
+            }
+            if field.name.is_empty()
+                || field.syntax.is_empty()
+                || !names.insert((field.form, field.name))
+            {
+                return Err(format!(
+                    "compact {label} field '{}.{}' is empty or duplicated",
+                    field.form, field.name
+                ));
+            }
+        }
+        for form in forms.iter().copied() {
+            if !fields
+                .iter()
+                .any(|field| field.form == form && field.name == "as" && field.required)
+            {
+                return Err(format!(
+                    "compact {label} form '{form}' has no required as field"
+                ));
+            }
+        }
+    }
+    for edge in COMPACT_CHANGE_EDGE_DESCRIPTORS {
+        if edge.parent.is_empty() || edge.child.is_empty() || edge.fields.is_empty() {
+            return Err(format!("compact edge '{}' is incomplete", edge.name));
+        }
+        let mut fields = BTreeSet::new();
+        for field in edge.fields {
+            if field.form != edge.name
+                || field.name.is_empty()
+                || field.syntax.is_empty()
+                || !fields.insert(field.name)
+            {
+                return Err(format!(
+                    "compact edge field '{}.{}' is inconsistent or duplicated",
+                    edge.name, field.name
+                ));
+            }
+        }
+        for required in ["parent", "index"] {
+            if !edge
+                .fields
+                .iter()
+                .any(|field| field.name == required && field.required)
+            {
+                return Err(format!(
+                    "compact edge '{}' has no required {required} field",
+                    edge.name
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -3589,7 +3880,7 @@ struct ChangeFieldValidation<'a> {
 fn compact_change_validation_inventory() -> (
     Vec<ChangeOperationValidation<'static>>,
     Vec<ChangeFieldValidation<'static>>,
-    [&'static str; 16],
+    Vec<&'static str>,
 ) {
     let operations = COMPACT_CHANGE_OPERATION_DESCRIPTORS
         .iter()
@@ -3613,7 +3904,9 @@ fn compact_change_validation_inventory() -> (
                 })
         })
         .collect();
-    let forms = CompactChangeFieldForm::ALL.map(CompactChangeFieldForm::name);
+    let forms = CompactChangeFieldForm::ALL
+        .map(CompactChangeFieldForm::name)
+        .to_vec();
     (operations, fields, forms)
 }
 

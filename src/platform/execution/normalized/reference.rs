@@ -17,9 +17,11 @@ use crate::platform::kernel::{
     BindingKind, CaseReference, DeclarationPayload, DeclarationReference, ExpressionOperation,
     FieldReference, FieldSelector, FunctionEffect, ImplementationName, KernelSnapshot,
     LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
-    PortImplementation, RequirementReference, SemanticStateDigest, TextValue,
+    PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeObjectDigest,
 };
-use crate::platform::semantic_id::{BindingId, ExpressionId, RepositoryId, RevisionId};
+use crate::platform::semantic_id::{
+    BindingId, ExpressionId, RepositoryId, RevisionId, TypeParameterId,
+};
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -116,6 +118,7 @@ pub trait NormalizedReferenceHost: Send + Sync {
         program: &NormalizedProgram,
         function: &super::prepare::NormalizedFunction,
         implementation: &ImplementationName,
+        type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
@@ -130,11 +133,18 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
         program: &NormalizedProgram,
         function: &super::prepare::NormalizedFunction,
         implementation: &ImplementationName,
+        type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
-        reference_intrinsic(program, function, implementation.as_str(), arguments)
+        reference_intrinsic(
+            program,
+            function,
+            implementation.as_str(),
+            type_arguments,
+            arguments,
+        )
     }
 }
 
@@ -179,7 +189,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         self.execute(capabilities, control, |state| {
-            state.call_declaration(declaration, arguments)
+            state.call_declaration(declaration, &[], arguments)
         })
     }
 
@@ -258,17 +268,21 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             }
             match port.implementation {
                 PortImplementation::Function(function) => {
-                    state.call_declaration(function, arguments)
+                    state.call_declaration(function, &[], arguments)
                 }
                 PortImplementation::Expression(expression) => {
                     let callee = state.evaluate(expression, &mut BTreeMap::new())?;
-                    let NormalizedValue::Function(function) = callee else {
+                    let NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    } = callee
+                    else {
                         return Err(reference_type_error(
                             "expression-backed target port did not evaluate to a function",
                         ));
                     };
                     let declaration = state.function_reference(function)?;
-                    state.call_declaration(declaration, arguments)
+                    state.call_declaration(declaration, &type_arguments, arguments)
                 }
             }
         })
@@ -330,6 +344,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             next_transaction: 0,
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
+            type_scopes: Vec::new(),
             observation: NormalizedReferenceObservation {
                 expressions: 0,
                 calls: 0,
@@ -383,6 +398,7 @@ struct ReferenceState<'a> {
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
     calls_by_requirement: BTreeMap<RequirementReference, u64>,
+    type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     observation: NormalizedReferenceObservation,
 }
 
@@ -426,12 +442,32 @@ impl ReferenceState<'_> {
         result
     }
 
+    fn resolve_type_arguments(
+        &self,
+        type_arguments: &[TypeObjectDigest],
+    ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        let empty = BTreeMap::new();
+        let substitutions = self.type_scopes.last().unwrap_or(&empty);
+        type_arguments
+            .iter()
+            .map(|ty| {
+                self.program
+                    .substitute_type(*ty, substitutions, 0)
+                    .ok_or_else(|| {
+                        reference_type_error("call type argument escaped its exact function scope")
+                    })
+            })
+            .collect()
+    }
+
     fn call_declaration(
         &mut self,
         reference: DeclarationReference,
+        type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.control.check()?;
+        let type_arguments = self.resolve_type_arguments(type_arguments)?;
         if self.program.artifact().package(reference.package).is_none() {
             return Err(reference_error(
                 "normalized_reference_dependency_package",
@@ -454,7 +490,13 @@ impl ReferenceState<'_> {
             let declaration = self.declaration(reference)?;
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
-                    if arguments.len() != function.parameters.len() {
+                    if !type_arguments.is_empty()
+                        && type_arguments.len() != function.type_parameters.len()
+                    {
+                        Err(reference_type_error(
+                            "function type-argument count disagrees with its exact signature",
+                        ))
+                    } else if arguments.len() != function.parameters.len() {
                         Err(reference_type_error(
                             "function argument count disagrees with canonical parameters",
                         ))
@@ -469,19 +511,40 @@ impl ReferenceState<'_> {
                     ) {
                         Err(reference_capabilities_unbound())
                     } else {
-                        let mut locals = function
-                            .parameters
-                            .into_iter()
-                            .zip(arguments)
-                            .map(|(parameter, value)| {
-                                (LocalValueReference::FunctionParameter(parameter), value)
-                            })
-                            .collect();
-                        self.evaluate(function.body, &mut locals)
+                        let type_scope = function
+                            .type_parameters
+                            .iter()
+                            .copied()
+                            .zip(type_arguments.iter().copied())
+                            .collect::<BTreeMap<_, _>>();
+                        if type_scope.len() != type_arguments.len() {
+                            Err(reference_type_error(
+                                "function type parameters are not unique",
+                            ))
+                        } else {
+                            let mut locals = function
+                                .parameters
+                                .into_iter()
+                                .zip(arguments)
+                                .map(|(parameter, value)| {
+                                    (LocalValueReference::FunctionParameter(parameter), value)
+                                })
+                                .collect();
+                            self.type_scopes.push(type_scope);
+                            let result = self.evaluate(function.body, &mut locals);
+                            self.type_scopes.pop();
+                            result
+                        }
                     }
                 }
                 DeclarationPayload::External(external) => {
-                    if arguments.len() != external.parameters.len() {
+                    if !type_arguments.is_empty()
+                        && type_arguments.len() != external.type_parameters.len()
+                    {
+                        Err(reference_type_error(
+                            "external type-argument count disagrees with its exact signature",
+                        ))
+                    } else if arguments.len() != external.parameters.len() {
                         Err(reference_type_error(
                             "external argument count disagrees with canonical parameters",
                         ))
@@ -509,6 +572,7 @@ impl ReferenceState<'_> {
                                 self.program,
                                 normalized_function,
                                 &external.implementation,
+                                &type_arguments,
                                 arguments,
                                 self.control,
                             )
@@ -519,7 +583,11 @@ impl ReferenceState<'_> {
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
-                    if arguments.is_empty() {
+                    if !type_arguments.is_empty() {
+                        Err(reference_type_error(
+                            "constant call received type arguments",
+                        ))
+                    } else if arguments.is_empty() {
                         self.evaluate(value, &mut BTreeMap::new())
                     } else {
                         Err(reference_type_error("constant call received arguments"))
@@ -579,7 +647,7 @@ impl ReferenceState<'_> {
                 )
             }),
             ExpressionOperation::Constant { declaration } => {
-                self.call_declaration(declaration, Vec::new())
+                self.call_declaration(declaration, &[], Vec::new())
             }
             ExpressionOperation::If {
                 condition,
@@ -630,30 +698,42 @@ impl ReferenceState<'_> {
             }
             ExpressionOperation::Call {
                 function,
+                type_arguments,
                 arguments,
-                ..
             } => {
                 let arguments = self.evaluate_many(&arguments, locals)?;
-                self.call_declaration(function, arguments)
+                self.call_declaration(function, &type_arguments, arguments)
             }
-            ExpressionOperation::FunctionValue { function, .. } => self
-                .program
-                .function(function)
-                .map(NormalizedValue::Function)
-                .ok_or_else(|| {
-                    reference_error(
-                        "normalized_reference_function_value",
-                        "exact function value has no executable artifact unit",
-                    )
-                }),
+            ExpressionOperation::FunctionValue {
+                function,
+                type_arguments,
+            } => {
+                let type_arguments = self.resolve_type_arguments(&type_arguments)?.into();
+                self.program
+                    .function(function)
+                    .map(|function| NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    })
+                    .ok_or_else(|| {
+                        reference_error(
+                            "normalized_reference_function_value",
+                            "exact function value has no executable artifact unit",
+                        )
+                    })
+            }
             ExpressionOperation::Invoke { callee, arguments } => {
                 let callee = self.evaluate(callee, locals)?;
-                let NormalizedValue::Function(function) = callee else {
+                let NormalizedValue::Function {
+                    function,
+                    type_arguments,
+                } = callee
+                else {
                     return Err(reference_type_error("invoke callee is not a function"));
                 };
                 let declaration = self.function_reference(function)?;
                 let arguments = self.evaluate_many(&arguments, locals)?;
-                self.call_declaration(declaration, arguments)
+                self.call_declaration(declaration, &type_arguments, arguments)
             }
             ExpressionOperation::Record {
                 nominal_type,
@@ -1374,6 +1454,7 @@ fn reference_intrinsic(
     program: &NormalizedProgram,
     function: &super::prepare::NormalizedFunction,
     implementation: &str,
+    type_arguments: &[TypeObjectDigest],
     arguments: Vec<NormalizedValue>,
 ) -> Result<NormalizedValue, ExecutionError> {
     match implementation {
@@ -1587,7 +1668,17 @@ fn reference_intrinsic(
                     "typed JSON encoder has no exact parameter type",
                 ));
             };
-            encode_typed(program, value, parameter.ty, JsonLimits::default())
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => parameter.ty,
+                _ => {
+                    return Err(reference_error(
+                        "reference_json_signature",
+                        "typed JSON encoder has no exact runtime type",
+                    ));
+                }
+            };
+            encode_typed(program, value, ty, JsonLimits::default())
                 .map(NormalizedValue::bytes)
                 .map_err(reference_json_error)
         }
@@ -1597,13 +1688,23 @@ fn reference_intrinsic(
                     "typed JSON decoding received foreign values",
                 ));
             };
-            let Some(parameter) = function.parameters.get(1) else {
+            let Some(fallback_type) = function.parameters.get(1) else {
                 return Err(reference_error(
                     "reference_json_signature",
                     "typed JSON decoder has no exact fallback type",
                 ));
             };
-            let decoded = decode_typed(program, bytes, parameter.ty, JsonLimits::default());
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => fallback_type.ty,
+                _ => {
+                    return Err(reference_error(
+                        "reference_json_signature",
+                        "typed JSON decoder has no exact runtime type",
+                    ));
+                }
+            };
+            let decoded = decode_typed(program, bytes, ty, JsonLimits::default());
             let (valid, value, error) = match decoded {
                 Ok(value) => (true, value, String::new()),
                 Err(diagnostic) => (false, fallback.clone(), diagnostic.code),
@@ -1989,7 +2090,7 @@ pub(crate) fn reference_equal(
             }
             Ok(true)
         }
-        (NormalizedValue::Function(_), _) | (_, NormalizedValue::Function(_)) => {
+        (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(reference_trap(
                 "normalized_reference_value_not_comparable",
                 "functions do not support semantic equality",
@@ -2130,7 +2231,7 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
-            | NormalizedValue::Function(_)
+            | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => {}
         }
     }

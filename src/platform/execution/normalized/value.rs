@@ -1,7 +1,7 @@
 //! Runtime-only dense values for normalized Graph 5 execution.
 
 use super::resource::NormalizedResourceHandle;
-use crate::platform::kernel::Name;
+use crate::platform::kernel::{Name, TypeObjectDigest};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -47,7 +47,10 @@ pub enum NormalizedValue {
     },
     List(Arc<Vec<NormalizedValue>>),
     Map(Arc<BTreeMap<NormalizedMapKey, NormalizedValue>>),
-    Function(FunctionIndex),
+    Function {
+        function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
+    },
     Resource(NormalizedResourceHandle),
 }
 
@@ -68,7 +71,7 @@ impl NormalizedValue {
     #[cfg(test)]
     pub fn is_durable(&self) -> bool {
         match self {
-            Self::Function(_) | Self::Resource(_) => false,
+            Self::Function { .. } | Self::Resource(_) => false,
             Self::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 fields.iter().all(Self::is_durable)
             }
@@ -112,7 +115,7 @@ impl NormalizedMapKey {
             | NormalizedValue::Variant { .. }
             | NormalizedValue::List(_)
             | NormalizedValue::Map(_)
-            | NormalizedValue::Function(_)
+            | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => None,
         }
     }

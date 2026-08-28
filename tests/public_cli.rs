@@ -303,6 +303,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert!(type_section.iter().any(|record| {
         record.operation == "type.form" && compact_field(record, "name") == Some("parameter")
     }));
+    assert!(type_section.iter().any(|record| {
+        record.operation == "type.form"
+            && compact_field(record, "name") == Some("structural-record")
+    }));
 
     let owner_section = compact_success(&["capabilities", "--section", "owners"]);
     assert!(owner_section.iter().any(|record| {
@@ -317,7 +321,18 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }));
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
-    for expected in ["call", "constant"] {
+    for expected in [
+        "call",
+        "constant",
+        "let",
+        "record",
+        "variant",
+        "field",
+        "list",
+        "match",
+        "capability-call",
+        "transaction",
+    ] {
         assert!(expression_section.iter().any(|record| {
             record.operation == "expression.form" && compact_field(record, "name") == Some(expected)
         }));
@@ -331,7 +346,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(change_contract, "request-commitment"),
-        Some("lkjscript-authored-change-codec-5")
+        Some("lkjscript-authored-change-codec-6")
     );
     assert_eq!(
         compact_field(change_contract, "prepared-plan"),
@@ -370,6 +385,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.field",
             "add.case",
             "add.parameter",
+            "add.requirement",
+            "set.function-contract",
             "delete.owner",
             "rename.owner",
             "move.declaration",
@@ -380,7 +397,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 49);
+    assert_eq!(operation_fields.len(), 57);
     assert_eq!(
         operation_fields
             .iter()
@@ -399,7 +416,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 16);
+    assert_eq!(field_forms.len(), 18);
     let name_form = change_section
         .iter()
         .find(|record| {
@@ -557,8 +574,27 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "change.function-effect")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["pure"]
+        vec!["pure", "task"]
     );
+
+    let deployment_section = compact_success(&["capabilities", "--section", "deployment"]);
+    assert!(deployment_section.iter().any(|record| {
+        record.operation == "deployment.adapter"
+            && compact_field(record, "kind") == Some("postgres")
+    }));
+    for field in [
+        "connection_secret",
+        "maximum_connections",
+        "maximum_wait_milliseconds",
+        "statement_timeout_milliseconds",
+    ] {
+        assert!(deployment_section.iter().any(|record| {
+            record.operation == "deployment.adapter-field"
+                && compact_field(record, "adapter") == Some("postgres")
+                && compact_field(record, "path")
+                    == Some(format!("adapter.postgres.{field}").as_str())
+        }));
+    }
     let direct = change_section
         .iter()
         .filter(|record| record.operation == "change.direct-operation")
@@ -727,7 +763,126 @@ fn generated_contract_documents_match_executable() {
             .iter()
             .filter(|record| record.operation == "file")
             .count(),
-        3
+        7
+    );
+}
+
+#[test]
+fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
+    let database = compact_success(&[
+        "package",
+        "builtin",
+        "query",
+        "owners",
+        "--kind",
+        "interface",
+        "--name",
+        "Database",
+        "--limit",
+        "1",
+        "--bytes",
+        "65536",
+    ]);
+    let package_revision = compact_field(compact_record(&database, "package"), "package-revision")
+        .expect("built-in package revision");
+    assert_eq!(
+        compact_field(compact_record(&database, "query"), "package-revision"),
+        Some(package_revision)
+    );
+    let owner = compact_record(&database, "owner");
+    assert_eq!(compact_field(owner, "kind"), Some("interface"));
+    assert_eq!(compact_field(owner, "name"), Some("Database"));
+    let identity = compact_field(owner, "id").expect("database interface identity");
+    let reference = compact_field(owner, "reference").expect("database interface reference");
+    assert!(reference.ends_with(identity));
+
+    let detail = compact_success(&[
+        "package",
+        "builtin",
+        "inspect",
+        "owner",
+        "interface",
+        identity,
+    ]);
+    for (name, idempotency, visibility) in [
+        ("execute", "idempotent-with-key", "possible"),
+        ("migration", "idempotent-with-key", "possible"),
+        ("transaction", "idempotent-with-key", "possible"),
+        ("query", "idempotent", "none"),
+    ] {
+        assert!(detail.iter().any(|record| {
+            record.operation == "operation"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "idempotency") == Some(idempotency)
+                && compact_field(record, "external-visibility") == Some(visibility)
+        }));
+    }
+    assert!(detail.iter().any(|record| {
+        record.operation == "type"
+            && compact_field(record, "path") == Some("parameter.statement")
+            && compact_field(record, "form") == Some("static-text")
+    }));
+
+    let first = compact_success(&[
+        "package",
+        "builtin",
+        "query",
+        "owners",
+        "--kind",
+        "interface",
+        "--limit",
+        "1",
+        "--bytes",
+        "1536",
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&first, "summary"), "truncated"),
+        Some("true")
+    );
+    let first_owner = compact_field(compact_record(&first, "owner"), "id")
+        .expect("first paged owner")
+        .to_owned();
+    let token = compact_field(compact_record(&first, "continuation"), "token")
+        .expect("built-in continuation")
+        .to_owned();
+    let resumed = compact_success(&[
+        "package",
+        "builtin",
+        "query",
+        "owners",
+        "--kind",
+        "interface",
+        "--limit",
+        "1",
+        "--bytes",
+        "1536",
+        "--continuation",
+        &token,
+    ]);
+    assert_ne!(
+        compact_field(compact_record(&resumed, "owner"), "id"),
+        Some(first_owner.as_str())
+    );
+
+    let mismatch = compact_failure_output(command(&[
+        "package",
+        "builtin",
+        "query",
+        "owners",
+        "--kind",
+        "interface",
+        "--name",
+        "Database",
+        "--limit",
+        "1",
+        "--bytes",
+        "1536",
+        "--continuation",
+        &token,
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&mismatch, "diagnostic"), "code"),
+        Some("builtin_continuation_selector")
     );
 }
 

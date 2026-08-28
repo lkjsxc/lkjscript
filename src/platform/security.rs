@@ -35,6 +35,16 @@ impl Default for PasswordHashPolicy {
 }
 
 impl PasswordHashPolicy {
+    pub(crate) fn validate(&self) -> Result<(), super::diagnostic::Diagnostic> {
+        self.params().map(|_| ()).map_err(|error| {
+            super::diagnostic::Diagnostic::new(
+                super::diagnostic::DiagnosticClass::Resource,
+                error.code,
+                error.message,
+            )
+        })
+    }
+
     fn params(&self) -> Result<Params, ExecutionError> {
         if !(8 * self.lanes..=1_048_576).contains(&self.memory_kibibytes)
             || !(1..=32).contains(&self.iterations)

@@ -562,11 +562,28 @@ fn logical_plan_evidence(
 pub struct RepositoryView {
     current: CurrentPublication,
     store: PackDirectoryStore,
+    hidden_type_objects: BTreeSet<TypeObjectDigest>,
 }
 
 impl RepositoryView {
     pub(super) const fn new(current: CurrentPublication, store: PackDirectoryStore) -> Self {
-        Self { current, store }
+        Self {
+            current,
+            store,
+            hidden_type_objects: BTreeSet::new(),
+        }
+    }
+
+    pub(super) const fn new_idempotency_base(
+        current: CurrentPublication,
+        store: PackDirectoryStore,
+        hidden_type_objects: BTreeSet<TypeObjectDigest>,
+    ) -> Self {
+        Self {
+            current,
+            store,
+            hidden_type_objects,
+        }
     }
 
     pub const fn revision(&self) -> RevisionId {
@@ -751,6 +768,14 @@ impl RepositoryView {
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<Option<TypeObject>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
+        // Repreparing an accepted idempotent request must observe the same exact base that its
+        // reviewed plan observed. Immutable content added by that accepted child can now exist in
+        // the append-only physical store even though it was absent at the historical base. The
+        // idempotency view hides exactly those child additions so physical store growth cannot
+        // change normalized intent, transaction identity, or reviewed plan identity.
+        if self.hidden_type_objects.contains(&digest) {
+            return Ok(self.read(None, work));
+        }
         let Some(bytes) = self.read_optional_object_admitted(
             ObjectDomain::Type,
             digest.bytes(),

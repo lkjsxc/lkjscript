@@ -6266,6 +6266,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                         binding: AuthoredBindingDefinition {
                             symbol: "$transaction_binding".to_owned(),
                             name: Name::new("transaction").unwrap(),
+                            declared_type: None,
                         },
                         body: Box::new(authored_expression(AuthoredExpressionOperation::Unit {})),
                     },
@@ -6498,6 +6499,111 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     assert_eq!(expected, Some(created.current.head));
     assert_eq!(observed, Some(prepared.head));
     assert_eq!(created.repository.current().unwrap().head, prepared.head);
+}
+
+#[test]
+fn idempotent_authored_reprepare_hides_child_type_objects_from_its_exact_base() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let module = logical
+        .owners
+        .keys()
+        .find_map(|owner| match owner {
+            OwnerKey::Module(module) => Some(*module),
+            _ => None,
+        })
+        .expect("fixture module");
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let structural = AuthoredType::StructuralRecord {
+        fields: vec![AuthoredStructuralTypeField {
+            name: Name::new("value").unwrap(),
+            ty: AuthoredType::Text {},
+        }],
+    };
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::CreateFunction {
+            symbol: "$identity".to_owned(),
+            module: ModuleSelector::Id { module },
+            name: Name::new("structural-identity").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            type_parameters: Vec::new(),
+            parameters: vec![AuthoredParameter {
+                symbol: "$value".to_owned(),
+                name: Name::new("value").unwrap(),
+                ty: structural.clone(),
+            }],
+            result: structural,
+            effect: AuthoredFunctionEffect::Pure {},
+            body: AuthoredExpression {
+                symbol: Some("$body".to_owned()),
+                operation: AuthoredExpressionOperation::Local {
+                    value: AuthoredLocalReference::Symbol {
+                        symbol: "$value".to_owned(),
+                    },
+                },
+            },
+        }],
+    };
+    let options = PublicationOptions {
+        idempotency_key: Some("type-object-reprepare".to_owned()),
+        intent: Some("stable historical reviewed plan".to_owned()),
+    };
+    let normalized = crate::platform::control::normalize_change_request(request, options)
+        .expect("normalize authored request");
+    let first = created
+        .repository
+        .prepare_authored_change(&normalized.semantic, normalized.options.clone())
+        .expect("prepare first authored request");
+    assert!(first.publication.receipt.counts.type_objects_added > 0);
+    let first_plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &first)
+            .expect("first logical plan");
+    let mut first_bytes = Vec::new();
+    let first_encoding =
+        crate::platform::control::encode_logical_change_plan(&first_plan, |record| {
+            first_bytes.extend_from_slice(record);
+            Ok(())
+        })
+        .expect("encode first logical plan");
+    assert!(matches!(
+        created.repository.publish(&first.publication).unwrap(),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let retry = created
+        .repository
+        .view_idempotency_base(
+            normalized
+                .options
+                .idempotency_key
+                .as_deref()
+                .expect("idempotency key"),
+            normalized.semantic.base,
+        )
+        .expect("open idempotency base")
+        .expect("accepted idempotency view")
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .expect("reprepare exact authored request");
+    let retry_plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &retry)
+            .expect("retry logical plan");
+    let mut retry_bytes = Vec::new();
+    let retry_encoding =
+        crate::platform::control::encode_logical_change_plan(&retry_plan, |record| {
+            retry_bytes.extend_from_slice(record);
+            Ok(())
+        })
+        .expect("encode retry logical plan");
+    assert_eq!(
+        retry.publication.transaction_digest,
+        first.publication.transaction_digest
+    );
+    assert_eq!(retry_encoding.token, first_encoding.token);
+    assert_eq!(retry_bytes, first_bytes);
 }
 
 #[test]

@@ -4,6 +4,7 @@
 //! inspection and mutation; artifacts, bytecode, runtime topology, and deployment bindings are
 //! derived consumers.
 
+pub(crate) mod builtin_discovery;
 pub(crate) mod builtin_standard;
 #[allow(
     dead_code,
