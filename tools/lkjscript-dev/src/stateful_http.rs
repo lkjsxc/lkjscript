@@ -2,39 +2,47 @@
 
 use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
-use crate::evidence::{self, FileProof};
+use crate::evidence::{self, FileProof, VerificationDigest};
 use crate::http_probe;
 use crate::postgres::{self, LocalPostgresTools};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
 use crate::service::POSTGRES_IMAGE;
 use crate::stateful_http_program::{ProjectReferences, StandardReferences, build_program_request};
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::{self, File};
-use std::io::{BufReader, Read};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufReader, Read};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAXIMUM_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
 const MAXIMUM_CANDIDATE_BINARY_BYTES: u64 = 256 * 1024 * 1024;
+const MAXIMUM_VERIFIER_BINARY_BYTES: u64 = 384 * 1024 * 1024;
+const MAXIMUM_RECEIPT_BYTES: u64 = 128 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
+const STATEFUL_SCHEMA_VERSION: u32 = 2;
+const STATEFUL_WORKFLOW: &str = "stateful-http-application";
+static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
 struct Options {
     binary: PathBuf,
     postgres_root: Option<PathBuf>,
+    evidence_root: Option<PathBuf>,
     machine: bool,
 }
 
@@ -42,6 +50,7 @@ struct Options {
 struct Context {
     binary: PathBuf,
     evidence: PathBuf,
+    observation_root: PathBuf,
     ordinal: u64,
     commands: Vec<CommandEvidence>,
 }
@@ -51,7 +60,7 @@ struct Output {
     bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CommandEvidence {
     name: String,
@@ -59,7 +68,35 @@ struct CommandEvidence {
     process: ProcessObservation,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SchemaIdentity {
+    identity: String,
+    version: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ExecutableObservation {
+    file: FileProof,
+    byte_length: u64,
+    mode: u32,
+    executable: bool,
+    sha256: String,
+    verification_digest: VerificationDigest,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PlatformObservation {
+    operating_system: String,
+    architecture: String,
+    process_control: String,
+    client: String,
+    database: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum StatefulStatus {
     Passed,
@@ -67,7 +104,7 @@ enum StatefulStatus {
     Unavailable,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Failure {
     class: String,
@@ -75,7 +112,7 @@ struct Failure {
     message: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct PlanObservation {
     bytes: u64,
@@ -93,7 +130,7 @@ struct PlanObservation {
     reasons: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct HttpObservation {
     name: String,
@@ -106,7 +143,7 @@ struct HttpObservation {
     elapsed_nanoseconds: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct LiveObservation {
     postgres_image: String,
@@ -131,6 +168,7 @@ struct LiveObservation {
 enum PostgresVerifier {
     Docker {
         container: String,
+        port: u16,
     },
     Local {
         tools: LocalPostgresTools,
@@ -158,12 +196,14 @@ impl PostgresVerifier {
             statement.to_owned(),
         ];
         let (command, environment) = match self {
-            Self::Docker { container } => {
+            Self::Docker { container, port } => {
                 let mut command = vec![
                     "docker".to_owned(),
                     "exec".to_owned(),
                     container.clone(),
                     "psql".to_owned(),
+                    "-p".to_owned(),
+                    port.to_string(),
                 ];
                 command.extend(arguments);
                 (command, process::environment())
@@ -187,10 +227,10 @@ fn redact_sql_command(command: &[String]) -> Vec<String> {
     recorded
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct AuthoringResult {
-    workflow: &'static str,
+    workflow: String,
     project: String,
     initial_revision: String,
     accepted_revision: String,
@@ -212,60 +252,138 @@ struct AuthoringResult {
     evidence: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct StatefulReceipt {
-    contract_version: u32,
+    schema: SchemaIdentity,
     status: StatefulStatus,
-    workflow: &'static str,
+    workflow: String,
+    platform: PlatformObservation,
     started_unix_nanoseconds: u128,
     completed_unix_nanoseconds: u128,
     elapsed_nanoseconds: u64,
-    source_binary: FileProof,
-    copied_binary: FileProof,
+    execution_context: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checkout_root: Option<String>,
+    evidence_root: String,
+    isolated_root: String,
     isolated_root_outside_checkout: bool,
-    temporary_root_cleanup_complete: bool,
-    secret_environment_names: Vec<String>,
-    raw_secret_values_retained: bool,
+    verifier: ExecutableObservation,
+    candidate: ExecutableObservation,
+    copied_candidate: ExecutableObservation,
+    environment_names: Vec<String>,
     commands: Vec<CommandEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<AuthoringResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     failure: Option<Failure>,
+    cleanup: CleanupObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CleanupObservation {
+    temporary_root_removed: bool,
+    database_cleanup_complete: bool,
+    runner_cleanup_complete: bool,
+    raw_secret_values_retained: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TransferredReceiptBinding {
+    pub(crate) receipt_bytes: u64,
+    pub(crate) receipt_sha256: String,
+    pub(crate) verifier_sha256: String,
+    pub(crate) candidate_sha256: String,
+    pub(crate) elapsed_nanoseconds: u64,
+    pub(crate) commands: u64,
+    pub(crate) requests: u64,
+    pub(crate) postgres_identity: String,
+    pub(crate) cleanup_complete: bool,
 }
 
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let options = parse_options(arguments)?;
-    let repository = repository_root()?;
-    let binary = resolve_binary(&repository, &options.binary)?;
+    let verifier_path = current_verifier()?;
+    let verifier = executable_observation(
+        &verifier_path,
+        "stateful HTTP verifier",
+        MAXIMUM_VERIFIER_BINARY_BYTES,
+    )?;
+    let (execution_context, checkout_root, binary, evidence_path, observation_root, postgres_root) =
+        if let Some(requested_evidence_root) = &options.evidence_root {
+            let binary = resolve_binary(None, &options.binary)?;
+            let evidence = create_explicit_evidence_root(requested_evidence_root)?;
+            (
+                "transferred".to_owned(),
+                None,
+                binary,
+                evidence.clone(),
+                evidence,
+                options.postgres_root.clone(),
+            )
+        } else {
+            let repository = repository_root()?;
+            let binary = resolve_binary(Some(&repository), &options.binary)?;
+            let evidence = new_evidence_directory(&repository)?;
+            (
+                "contributor".to_owned(),
+                Some(repository.clone()),
+                binary,
+                evidence,
+                repository,
+                options
+                    .postgres_root
+                    .clone()
+                    .or_else(postgres::configured_root),
+            )
+        };
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let evidence_parent = repository.join(".artifacts/lkjscript-dev/stateful-http");
-    fs::create_dir_all(&evidence_parent)?;
-    let evidence_path =
-        evidence_parent.join(format!("{}-{}", unix_nanoseconds()?, std::process::id()));
-    fs::create_dir(&evidence_path)?;
+    let candidate = executable_observation(
+        &binary,
+        "stateful HTTP candidate",
+        MAXIMUM_CANDIDATE_BINARY_BYTES,
+    )?;
     let temporary = tempfile::Builder::new()
         .prefix("lkjscript-stateful-http-")
         .tempdir()
         .map_err(|error| DevError::infrastructure(format!("create isolated root: {error}")))?;
     let isolated = temporary.path().canonicalize()?;
-    if isolated.starts_with(&repository) {
-        return Err(DevError::infrastructure(
-            "stateful HTTP isolated root is inside the checkout",
-        ));
-    }
+    let outside_checkout = checkout_root
+        .as_ref()
+        .is_none_or(|repository| !isolated.starts_with(repository));
     let copied = isolated.join("lkjscript");
     copy_binary(&binary, &copied)?;
-    let source_binary = evidence::proof(&binary, binary.display().to_string())?;
-    let copied_binary = evidence::proof(&copied, "isolated/lkjscript".to_owned())?;
+    let copied_candidate = executable_observation(
+        &copied,
+        "copied stateful HTTP candidate",
+        MAXIMUM_CANDIDATE_BINARY_BYTES,
+    )?;
+    if candidate.byte_length != copied_candidate.byte_length
+        || candidate.sha256 != copied_candidate.sha256
+        || candidate.verification_digest != copied_candidate.verification_digest
+        || candidate.mode != copied_candidate.mode
+    {
+        return Err(DevError::infrastructure(
+            "copied stateful HTTP candidate disagrees with the source candidate",
+        ));
+    }
     let mut context = Context {
         binary: copied,
         evidence: evidence_path.clone(),
+        observation_root,
         ordinal: 0,
         commands: Vec::new(),
     };
-    let workflow = run_authoring(&mut context, &isolated, options.postgres_root.as_deref());
+    let workflow = if outside_checkout {
+        run_authoring(&mut context, &isolated, postgres_root.as_deref())
+    } else {
+        Err(DevError::corrupt(
+            "stateful HTTP isolated root is inside the checkout",
+        ))
+    };
     let cleanup = temporary.close().map_err(|error| {
         DevError::infrastructure(format!("remove isolated stateful HTTP root: {error}"))
     });
@@ -287,41 +405,77 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         }
     };
     let elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    let database_cleanup_complete = result
+        .as_ref()
+        .is_some_and(|result| result.live.container_cleanup_complete);
+    let runner_cleanup_complete = result
+        .as_ref()
+        .is_some_and(|result| result.live.shutdown_cleanup_failures == 0);
+    let isolated_text = isolated.display().to_string();
     let receipt_value = StatefulReceipt {
-        contract_version: 1,
+        schema: SchemaIdentity {
+            identity: STATEFUL_SCHEMA.to_owned(),
+            version: STATEFUL_SCHEMA_VERSION,
+        },
         status,
-        workflow: "stateful-http-public-authoring",
+        workflow: STATEFUL_WORKFLOW.to_owned(),
+        platform: PlatformObservation {
+            operating_system: std::env::consts::OS.to_owned(),
+            architecture: std::env::consts::ARCH.to_owned(),
+            process_control: "linux-process-group-sigint-sigkill".to_owned(),
+            client: "first-party-bounded-raw-http1".to_owned(),
+            database: "isolated-postgresql".to_owned(),
+        },
         started_unix_nanoseconds: started_wall,
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds,
-        source_binary,
-        copied_binary,
-        isolated_root_outside_checkout: true,
-        temporary_root_cleanup_complete: cleanup_complete,
-        secret_environment_names: vec![
+        execution_context,
+        checkout_root: checkout_root.map(|path| path.display().to_string()),
+        evidence_root: evidence_path.display().to_string(),
+        isolated_root: isolated_text,
+        isolated_root_outside_checkout: outside_checkout,
+        verifier,
+        candidate,
+        copied_candidate,
+        environment_names: vec![
+            "LANG".to_owned(),
             "BBS_DATABASE_URL".to_owned(),
             "POSTGRES_PASSWORD".to_owned(),
         ],
-        raw_secret_values_retained: false,
         commands: context.commands,
         result,
         failure,
+        cleanup: CleanupObservation {
+            temporary_root_removed: cleanup_complete && !isolated.exists(),
+            database_cleanup_complete,
+            runner_cleanup_complete,
+            raw_secret_values_retained: false,
+        },
     };
-    let receipt = evidence_path.join("authoring.json");
+    let receipt = evidence_path.join("receipt.json");
     let published = evidence::publish_json(&receipt, &receipt_value)?;
+    let receipt_sha256 = sha256_file(&receipt, MAXIMUM_RECEIPT_BYTES)?;
     if options.machine {
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "ok": matches!(status, StatefulStatus::Passed),
                 "status": status,
-                "workflow": "stateful-http",
+                "schema": receipt_value.schema,
+                "workflow": receipt_value.workflow,
                 "receipt": receipt,
+                "receipt_bytes": published.bytes,
                 "receipt_digest": published.digest,
+                "receipt_sha256": receipt_sha256,
+                "verifier_sha256": receipt_value.verifier.sha256,
+                "candidate_sha256": receipt_value.candidate.sha256,
+                "execution_context": receipt_value.execution_context,
+                "cleanup_complete": receipt_value.cleanup.temporary_root_removed
+                    && receipt_value.cleanup.database_cleanup_complete
+                    && receipt_value.cleanup.runner_cleanup_complete,
             }))?
         );
     } else {
-        println!("stateful HTTP public authoring {status:?}");
+        println!("stateful HTTP application {status:?}");
         println!("receipt: {}", receipt.display());
         println!("receipt digest: {}", published.digest);
     }
@@ -329,6 +483,149 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         StatefulStatus::Passed => 0,
         StatefulStatus::Failed => 1,
         StatefulStatus::Unavailable => 2,
+    })
+}
+
+pub(crate) fn read_transferred_receipt(
+    path: &Path,
+    candidate_path: &Path,
+    verifier_path: &Path,
+) -> Result<TransferredReceiptBinding, DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect transferred stateful receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAXIMUM_RECEIPT_BYTES
+    {
+        return Err(DevError::corrupt(
+            "transferred stateful receipt is unsafe or oversized",
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "read transferred stateful receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    let receipt: StatefulReceipt = serde_json::from_slice(&bytes).map_err(|error| {
+        DevError::corrupt(format!("decode transferred stateful receipt: {error}"))
+    })?;
+    if evidence::encode_json(&receipt)? != bytes {
+        return Err(DevError::corrupt(
+            "transferred stateful receipt is not in canonical evidence encoding",
+        ));
+    }
+    let evidence_root = path
+        .parent()
+        .ok_or_else(|| DevError::corrupt("transferred stateful receipt has no parent"))?
+        .canonicalize()
+        .map_err(|error| {
+            DevError::infrastructure(format!(
+                "resolve transferred stateful evidence root: {error}"
+            ))
+        })?;
+    let expected_path = evidence_root.join("receipt.json");
+    let canonical_path = path.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!("resolve transferred stateful receipt: {error}"))
+    })?;
+    let candidate = executable_observation(
+        candidate_path,
+        "target-admission stateful candidate",
+        MAXIMUM_CANDIDATE_BINARY_BYTES,
+    )?;
+    let verifier = executable_observation(
+        verifier_path,
+        "target-admission stateful verifier",
+        MAXIMUM_VERIFIER_BINARY_BYTES,
+    )?;
+    let result = receipt
+        .result
+        .as_ref()
+        .ok_or_else(|| DevError::corrupt("passed stateful receipt omitted its result"))?;
+    let cleanup_complete = receipt.cleanup.temporary_root_removed
+        && receipt.cleanup.database_cleanup_complete
+        && receipt.cleanup.runner_cleanup_complete
+        && !receipt.cleanup.raw_secret_values_retained;
+    let copied_path = Path::new(&receipt.copied_candidate.file.path);
+    if canonical_path != expected_path
+        || receipt.schema.identity != STATEFUL_SCHEMA
+        || receipt.schema.version != STATEFUL_SCHEMA_VERSION
+        || receipt.status != StatefulStatus::Passed
+        || receipt.workflow != STATEFUL_WORKFLOW
+        || receipt.execution_context != "transferred"
+        || receipt.checkout_root.is_some()
+        || receipt.evidence_root != evidence_root.display().to_string()
+        || !receipt.isolated_root_outside_checkout
+        || Path::new(&receipt.isolated_root).exists()
+        || !copied_path.starts_with(Path::new(&receipt.isolated_root))
+        || receipt.environment_names != ["LANG", "BBS_DATABASE_URL", "POSTGRES_PASSWORD"]
+        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
+        || receipt.verifier.sha256 != verifier.sha256
+        || receipt.verifier.byte_length != verifier.byte_length
+        || receipt.verifier.mode != verifier.mode
+        || receipt.verifier.verification_digest != verifier.verification_digest
+        || receipt.candidate.sha256 != candidate.sha256
+        || receipt.candidate.byte_length != candidate.byte_length
+        || receipt.candidate.mode != candidate.mode
+        || receipt.candidate.verification_digest != candidate.verification_digest
+        || receipt.copied_candidate.sha256 != candidate.sha256
+        || receipt.copied_candidate.byte_length != candidate.byte_length
+        || receipt.copied_candidate.mode != candidate.mode
+        || receipt.copied_candidate.verification_digest != candidate.verification_digest
+        || receipt.failure.is_some()
+        || !cleanup_complete
+        || result.workflow != STATEFUL_WORKFLOW
+        || result.request_records != 1_010
+        || !result.idempotent_reconciliation
+        || result.discovery_commands == 0
+        || !result.deterministic
+        || result.incremental_sha256 != result.clean_sha256
+        || result.evidence != evidence_root.display().to_string()
+        || result.live.postgres_image != POSTGRES_IMAGE
+        || !result.live.persistence_after_restart
+        || result.live.startup_failures_without_ready != 2
+        || !result.live.invalid_secret_no_ready
+        || !result.live.migration_divergence_safe_failure
+        || !result.live.statement_failure_rolled_back
+        || result.live.runner_restarts != 2
+        || result.live.shutdown_cleanup_failures != 0
+        || !result.live.container_cleanup_complete
+        || !result.live.authority_unchanged
+        || result.live.authority_before != result.live.authority_after
+        || result.live.routes_checked != result.live.requests.len() as u64
+        || result.live.requests.is_empty()
+    {
+        return Err(DevError::corrupt(
+            "transferred stateful receipt binding or acceptance mismatch",
+        ));
+    }
+    if receipt.commands.iter().any(|command| {
+        command.command.first().is_some_and(|program| {
+            program == "cargo"
+                || program == "rustc"
+                || program.ends_with("/cargo")
+                || program.ends_with("/rustc")
+        })
+    }) {
+        return Err(DevError::corrupt(
+            "transferred stateful receipt invoked checkout build tooling",
+        ));
+    }
+    Ok(TransferredReceiptBinding {
+        receipt_bytes: metadata.len(),
+        receipt_sha256: sha256_file(path, MAXIMUM_RECEIPT_BYTES)?,
+        verifier_sha256: verifier.sha256,
+        candidate_sha256: candidate.sha256,
+        elapsed_nanoseconds: receipt.elapsed_nanoseconds,
+        commands: receipt.commands.len() as u64,
+        requests: result.live.requests.len() as u64,
+        postgres_identity: result.live.postgres_image.clone(),
+        cleanup_complete,
     })
 }
 
@@ -596,7 +893,7 @@ fn run_authoring(
         &request.migration_checksum,
     )?;
     Ok(AuthoringResult {
-        workflow: "stateful-http-public-authoring",
+        workflow: STATEFUL_WORKFLOW.to_owned(),
         project: project.display().to_string(),
         initial_revision,
         accepted_revision,
@@ -652,35 +949,34 @@ fn run_live(
     );
     let mut docker_environment = process::environment();
     docker_environment.insert("POSTGRES_PASSWORD".to_owned(), password.clone());
+    let postgres_port = free_port()?;
+    let postgres_port_text = postgres_port.to_string();
     let started = context.required_external(
         "postgres-start",
         &[
             "docker",
             "run",
             "--rm",
+            "--network",
+            "host",
             "--name",
             &container,
             "-e",
             "POSTGRES_PASSWORD",
             "-e",
             "POSTGRES_DB=bbs",
-            "-p",
-            "127.0.0.1::5432",
             "-d",
             POSTGRES_IMAGE,
+            "-p",
+            &postgres_port_text,
+            "-h",
+            "127.0.0.1",
         ],
         isolated,
         docker_environment,
     );
     started?;
     let workflow = (|| {
-        let port_output = context.success_external(
-            "postgres-port",
-            &["docker", "port", &container, "5432/tcp"],
-            isolated,
-            process::environment(),
-        )?;
-        let postgres_port = parse_host_port(&port_output.bytes)?;
         wait_for_postgres(context, isolated, &container, postgres_port)?;
         let database_url =
             format!("postgresql://postgres:{password}@127.0.0.1:{postgres_port}/bbs");
@@ -695,6 +991,7 @@ fn run_live(
             POSTGRES_IMAGE,
             &PostgresVerifier::Docker {
                 container: container.clone(),
+                port: postgres_port,
             },
             "bbs",
             migration_checksum,
@@ -1331,14 +1628,15 @@ impl ActiveRunner {
             stderr_path: stderr_path.clone(),
             unavailable_exit_code: None,
         };
-        let root = repository_root()?;
+        let observation_root = context.observation_root.clone();
         let control = ProcessControl::default();
         let child_control = control.clone();
         let (sender, receiver) = mpsc::channel();
         let thread = thread::Builder::new()
             .name(format!("stateful-http-{name}"))
             .spawn(move || {
-                let observation = process::run_controlled(&specification, &root, &child_control);
+                let observation =
+                    process::run_controlled(&specification, &observation_root, &child_control);
                 let _ = sender.send(observation);
             })
             .map_err(|error| DevError::infrastructure(format!("start runner thread: {error}")))?;
@@ -1822,15 +2120,6 @@ fn first_line(path: &Path) -> Result<Option<Vec<u8>>, DevError> {
     }
 }
 
-fn parse_host_port(bytes: &[u8]) -> Result<u16, DevError> {
-    std::str::from_utf8(bytes)
-        .ok()
-        .and_then(|value| value.trim().rsplit_once(':'))
-        .and_then(|(_, port)| port.parse::<u16>().ok())
-        .filter(|port| *port != 0)
-        .ok_or_else(|| DevError::corrupt("Docker did not report a valid PostgreSQL host port"))
-}
-
 fn free_port() -> Result<u16, DevError> {
     TcpListener::bind(("127.0.0.1", 0))
         .and_then(|listener| listener.local_addr())
@@ -1847,6 +2136,7 @@ fn wait_for_postgres(
     let address: SocketAddr = format!("127.0.0.1:{port}")
         .parse()
         .map_err(|error| DevError::infrastructure(format!("PostgreSQL address: {error}")))?;
+    let port_text = port.to_string();
     let started = Instant::now();
     let mut attempt = 0_u64;
     while started.elapsed() < READY_TIMEOUT {
@@ -1862,6 +2152,8 @@ fn wait_for_postgres(
                 "postgres",
                 "-d",
                 "bbs",
+                "-p",
+                &port_text,
             ],
             cwd,
             process::environment(),
@@ -2047,7 +2339,7 @@ impl Context {
             stderr_path,
             unavailable_exit_code: None,
         };
-        let observation = process::run(&specification, &repository_root()?);
+        let observation = process::run(&specification, &self.observation_root);
         let output = Output {
             bytes: process::read_bounded(&stdout_path, MAXIMUM_OUTPUT_BYTES)?,
         };
@@ -2146,6 +2438,7 @@ fn path_text(path: &Path) -> Result<&str, DevError> {
 fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
     let mut binary = None;
     let mut postgres_root = None;
+    let mut evidence_root = None;
     let mut machine = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "stateful HTTP option")? {
@@ -2164,6 +2457,13 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
                     return Err(DevError::usage("duplicate --postgres-root option"));
                 }
             }
+            "--evidence-root" => {
+                let value = crate::next_utf8(&mut arguments, "stateful HTTP evidence root")?
+                    .ok_or_else(|| DevError::usage("--evidence-root requires a path"))?;
+                if evidence_root.replace(PathBuf::from(value)).is_some() {
+                    return Err(DevError::usage("duplicate --evidence-root option"));
+                }
+            }
             "--machine" if !machine => machine = true,
             "--machine" => return Err(DevError::usage("duplicate --machine option")),
             other => return Err(DevError::usage(format!("unknown option '{other}'"))),
@@ -2171,7 +2471,8 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
     }
     Ok(Options {
         binary: binary.unwrap_or_else(|| PathBuf::from("target/release/lkjscript")),
-        postgres_root: postgres_root.or_else(postgres::configured_root),
+        postgres_root,
+        evidence_root,
         machine,
     })
 }
@@ -2185,12 +2486,23 @@ fn repository_root() -> Result<PathBuf, DevError> {
         .map_err(DevError::from)
 }
 
-fn resolve_binary(repository: &Path, path: &Path) -> Result<PathBuf, DevError> {
+fn resolve_binary(repository: Option<&Path>, path: &Path) -> Result<PathBuf, DevError> {
     let path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        repository.join(path)
+        repository
+            .ok_or_else(|| {
+                DevError::usage(
+                    "--binary must be absolute when --evidence-root selects transferred mode",
+                )
+            })?
+            .join(path)
     };
+    if !path.is_absolute() || has_noncanonical_component(&path) {
+        return Err(DevError::usage(
+            "stateful HTTP binary path must be absolute and lexically canonical",
+        ));
+    }
     let metadata = fs::symlink_metadata(&path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(DevError::usage(
@@ -2206,14 +2518,234 @@ fn resolve_binary(repository: &Path, path: &Path) -> Result<PathBuf, DevError> {
     if metadata.permissions().mode() & 0o111 == 0 {
         return Err(DevError::usage("stateful HTTP binary is not executable"));
     }
-    path.canonicalize().map_err(DevError::from)
+    let canonical = path.canonicalize().map_err(DevError::from)?;
+    if canonical != path {
+        return Err(DevError::usage(
+            "stateful HTTP binary contains a symlink or noncanonical component",
+        ));
+    }
+    Ok(canonical)
 }
 
 fn copy_binary(source: &Path, destination: &Path) -> Result<(), DevError> {
-    let metadata = fs::metadata(source)?;
-    fs::copy(source, destination)?;
-    fs::set_permissions(destination, metadata.permissions())?;
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(DevError::usage(
+            "stateful HTTP candidate must be a regular non-symlink file",
+        ));
+    }
+    let mut input = File::open(source)?;
+    let mut output = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(destination)?;
+    io::copy(&mut input, &mut output)?;
+    output.set_permissions(metadata.permissions())?;
+    output.sync_all()?;
+    drop(output);
+    File::open(
+        destination
+            .parent()
+            .ok_or_else(|| DevError::infrastructure("copied binary has no parent"))?,
+    )?
+    .sync_all()?;
     Ok(())
+}
+
+fn current_verifier() -> Result<PathBuf, DevError> {
+    let path = std::env::current_exe().map_err(|error| {
+        DevError::infrastructure(format!("resolve stateful HTTP verifier: {error}"))
+    })?;
+    resolve_regular_executable(
+        &path,
+        "stateful HTTP verifier",
+        MAXIMUM_VERIFIER_BINARY_BYTES,
+    )
+}
+
+fn resolve_regular_executable(
+    path: &Path,
+    label: &str,
+    maximum_bytes: u64,
+) -> Result<PathBuf, DevError> {
+    if !path.is_absolute() || has_noncanonical_component(path) {
+        return Err(DevError::usage(format!(
+            "{label} path '{}' must be absolute and lexically canonical",
+            path.display()
+        )));
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!("inspect {label} '{}': {error}", path.display()))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(DevError::usage(format!(
+            "{label} '{}' must be a regular non-symlink file",
+            path.display()
+        )));
+    }
+    if metadata.len() > maximum_bytes || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(DevError::usage(format!(
+            "{label} '{}' is oversized or non-executable",
+            path.display()
+        )));
+    }
+    let canonical = path.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!("resolve {label} '{}': {error}", path.display()))
+    })?;
+    if canonical != path {
+        return Err(DevError::usage(format!(
+            "{label} path '{}' contains a symlink or noncanonical component",
+            path.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn executable_observation(
+    path: &Path,
+    label: &str,
+    maximum_bytes: u64,
+) -> Result<ExecutableObservation, DevError> {
+    let path = resolve_regular_executable(path, label, maximum_bytes)?;
+    let file = evidence::proof(&path, path.display().to_string())?;
+    let byte_length = file
+        .bytes
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted byte length")))?;
+    let mode = file
+        .mode
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted mode")))?;
+    let verification_digest = file
+        .digest
+        .clone()
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted digest")))?;
+    Ok(ExecutableObservation {
+        file,
+        byte_length,
+        mode,
+        executable: mode & 0o111 != 0,
+        sha256: sha256_file(&path, maximum_bytes)?,
+        verification_digest,
+    })
+}
+
+fn sha256_file(path: &Path, maximum_bytes: u64) -> Result<String, DevError> {
+    use sha2::{Digest, Sha256};
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum_bytes {
+        return Err(DevError::usage(
+            "stateful HTTP SHA-256 input is unsafe or oversized",
+        ));
+    }
+    let mut input = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut observed = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = input.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        observed = observed
+            .checked_add(read as u64)
+            .ok_or_else(|| DevError::infrastructure("stateful SHA-256 length overflow"))?;
+        hasher.update(&buffer[..read]);
+    }
+    if observed != metadata.len() {
+        return Err(DevError::infrastructure(
+            "stateful SHA-256 input changed while reading",
+        ));
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn create_explicit_evidence_root(requested: &Path) -> Result<PathBuf, DevError> {
+    if !requested.is_absolute() || has_noncanonical_component(requested) {
+        return Err(DevError::usage(format!(
+            "evidence root '{}' must be absolute and lexically canonical",
+            requested.display()
+        )));
+    }
+    if fs::symlink_metadata(requested).is_ok() {
+        return Err(DevError::usage(format!(
+            "evidence root '{}' already exists",
+            requested.display()
+        )));
+    }
+    let parent = requested
+        .parent()
+        .ok_or_else(|| DevError::usage("evidence root has no parent"))?;
+    let metadata = fs::symlink_metadata(parent).map_err(|error| {
+        DevError::usage(format!(
+            "inspect evidence-root parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::usage(format!(
+            "evidence-root parent '{}' must be a regular non-symlink directory",
+            parent.display()
+        )));
+    }
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!(
+            "resolve evidence-root parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if canonical_parent != parent {
+        return Err(DevError::usage(format!(
+            "evidence-root parent '{}' contains a symlink or noncanonical component",
+            parent.display()
+        )));
+    }
+    let name = requested
+        .file_name()
+        .ok_or_else(|| DevError::usage("evidence root has no private directory name"))?;
+    let root = canonical_parent.join(name);
+    fs::create_dir(&root)?;
+    let result = (|| {
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
+        File::open(&canonical_parent)?.sync_all()?;
+        let canonical_root = root.canonicalize()?;
+        if canonical_root != root {
+            return Err(DevError::infrastructure(
+                "created evidence root escaped its canonical parent",
+            ));
+        }
+        Ok(canonical_root)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir(&root);
+    }
+    result
+}
+
+fn new_evidence_directory(repository: &Path) -> Result<PathBuf, DevError> {
+    let ordinal = RUN_ORDINAL.fetch_add(1, Ordering::Relaxed);
+    let parent = repository.join(".artifacts/lkjscript-dev/stateful-http");
+    fs::create_dir_all(&parent)?;
+    let metadata = fs::symlink_metadata(&parent)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::infrastructure(
+            "stateful evidence parent is not a regular non-symlink directory",
+        ));
+    }
+    let directory = parent.join(format!(
+        "{}-{}-{ordinal}",
+        unix_nanoseconds()?,
+        std::process::id()
+    ));
+    fs::create_dir(&directory)?;
+    Ok(directory)
+}
+
+fn has_noncanonical_component(path: &Path) -> bool {
+    path.components()
+        .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -2233,13 +2765,68 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
 mod tests {
     use super::*;
 
+    fn options(values: &[&str]) -> Result<Options, DevError> {
+        parse_options(values.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn stateful_http_schema_is_stable_and_campaign_independent() {
+        let schema = SchemaIdentity {
+            identity: STATEFUL_SCHEMA.to_owned(),
+            version: STATEFUL_SCHEMA_VERSION,
+        };
+        assert_eq!(
+            serde_json::to_string(&schema).expect("encode stateful schema"),
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":2}"#
+        );
+        assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
+    }
+
     #[test]
     fn options_are_closed() {
-        let options =
+        let parsed =
             parse_options([OsString::from("--machine")].into_iter()).expect("stateful options");
-        assert!(options.machine);
-        assert_eq!(options.postgres_root, postgres::configured_root());
+        assert!(parsed.machine);
+        assert!(parsed.postgres_root.is_none());
+        assert!(parsed.evidence_root.is_none());
         assert!(parse_options([OsString::from("--unknown")].into_iter()).is_err());
+        assert!(options(&["--binary"]).is_err());
+        assert!(options(&["--postgres-root"]).is_err());
+        assert!(options(&["--evidence-root"]).is_err());
+        assert!(options(&["--binary", "one", "--binary", "two"]).is_err());
+        assert!(options(&["--postgres-root", "one", "--postgres-root", "two"]).is_err());
+        assert!(options(&["--evidence-root", "/tmp/one", "--evidence-root", "/tmp/two"]).is_err());
+        assert!(options(&["--machine", "--machine"]).is_err());
+        assert!(resolve_binary(None, Path::new("relative-candidate")).is_err());
+    }
+
+    #[test]
+    fn explicit_evidence_root_is_absolute_private_and_create_new() {
+        let temporary = tempfile::tempdir().expect("temporary evidence-root parent");
+        assert!(create_explicit_evidence_root(Path::new("relative")).is_err());
+        let root = temporary.path().join("stateful");
+        let created = create_explicit_evidence_root(&root).expect("create evidence root");
+        assert_eq!(created, root);
+        let metadata = fs::symlink_metadata(&created).expect("evidence-root metadata");
+        assert!(metadata.is_dir());
+        #[cfg(unix)]
+        assert_eq!(metadata.permissions().mode() & 0o7777, 0o700);
+        assert!(create_explicit_evidence_root(&created).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_evidence_root_rejects_symlinked_boundaries() {
+        let temporary = tempfile::tempdir().expect("temporary evidence-root fixtures");
+        let real = temporary.path().join("real");
+        fs::create_dir(&real).expect("create real parent");
+        let link = temporary.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).expect("create parent symlink");
+        assert!(create_explicit_evidence_root(&link.join("escaped")).is_err());
+
+        let file = temporary.path().join("file");
+        fs::write(&file, b"retained").expect("write existing file");
+        assert!(create_explicit_evidence_root(&file).is_err());
     }
 
     #[test]
@@ -2266,12 +2853,36 @@ mod tests {
             .expect("extend oversized candidate");
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))
             .expect("make candidate executable");
-        assert!(resolve_binary(temporary.path(), &candidate).is_err());
+        assert!(resolve_binary(Some(temporary.path()), &candidate).is_err());
 
         file.set_len(1).expect("shrink bounded candidate");
-        assert!(resolve_binary(temporary.path(), &candidate).is_ok());
+        assert!(resolve_binary(Some(temporary.path()), &candidate).is_ok());
         let link = temporary.path().join("candidate-link");
         std::os::unix::fs::symlink(&candidate, &link).expect("create candidate link");
-        assert!(resolve_binary(temporary.path(), &link).is_err());
+        assert!(resolve_binary(Some(temporary.path()), &link).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copied_candidate_preserves_bytes_and_mode() {
+        let temporary = tempfile::tempdir().expect("temporary copy fixtures");
+        let source = temporary.path().join("source");
+        fs::write(&source, b"exact candidate").expect("write source candidate");
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o751)).expect("set source mode");
+        let destination = temporary.path().join("destination");
+        copy_binary(&source, &destination).expect("copy candidate");
+        assert_eq!(
+            fs::read(&source).expect("read source"),
+            fs::read(&destination).expect("read copy")
+        );
+        assert_eq!(
+            fs::metadata(&destination)
+                .expect("copy metadata")
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o751
+        );
+        assert!(copy_binary(&source, &destination).is_err());
     }
 }

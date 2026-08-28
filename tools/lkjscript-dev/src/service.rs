@@ -194,6 +194,19 @@ struct ServiceResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct ReceiptBinding {
+    pub(crate) receipt_bytes: u64,
+    pub(crate) receipt_sha256: String,
+    pub(crate) candidate_digest: VerificationDigest,
+    pub(crate) elapsed_nanoseconds: u64,
+    pub(crate) commands: u64,
+    pub(crate) runners: u64,
+    pub(crate) requests: u64,
+    pub(crate) cleanup_complete: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct ArtifactIdentity {
     repository: String,
     package: String,
@@ -350,6 +363,7 @@ struct ServiceContext {
     secret_values: Vec<Vec<u8>>,
     container_name: String,
     container_started: bool,
+    docker_postgres_port: Option<u16>,
     postgres_root: Option<PathBuf>,
     local_postgres: Option<LocalPostgresState>,
     cleanup: ContainerCleanup,
@@ -386,6 +400,117 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         ServiceStatus::Passed => 0,
         ServiceStatus::Failed => 1,
         ServiceStatus::Unavailable => 2,
+    })
+}
+
+pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBinding, DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect service receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > 128 * 1024 * 1024
+    {
+        return Err(DevError::corrupt("service receipt is unsafe or oversized"));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "read service receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    let receipt: ServiceReceipt = serde_json::from_slice(&bytes)
+        .map_err(|error| DevError::corrupt(format!("decode service receipt: {error}")))?;
+    if evidence::encode_json(&receipt)? != bytes {
+        return Err(DevError::corrupt(
+            "service receipt is not in canonical evidence encoding",
+        ));
+    }
+    let repository = repository_root()?.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!("resolve service receipt repository: {error}"))
+    })?;
+    let candidate = candidate
+        .canonicalize()
+        .map_err(|error| DevError::infrastructure(format!("resolve service candidate: {error}")))?;
+    let candidate_proof = proof_input(&repository, &candidate).map_err(|error| {
+        DevError::corrupt(format!("observe service candidate: {}", error.message))
+    })?;
+    let artifact_path = repository
+        .join("applications/lkjournal")
+        .join(SERVICE_ARTIFACT_RELATIVE);
+    let artifact_proof = proof_required_file_with_sha256(
+        &repository,
+        &artifact_path,
+        MAXIMUM_ARTIFACT_BYTES,
+        "maintained artifact-10 service bundle",
+        SERVICE_ARTIFACT_SHA256,
+    )
+    .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
+    let result = receipt
+        .result
+        .as_ref()
+        .ok_or_else(|| DevError::corrupt("passed service receipt omitted its result"))?;
+    let candidate_digest = candidate_proof
+        .digest
+        .clone()
+        .ok_or_else(|| DevError::corrupt("service candidate proof omitted its digest"))?;
+    let cleanup_complete = receipt.cleanup.attempted && receipt.cleanup.completed;
+    if receipt.contract_version != SERVICE_CONTRACT_VERSION
+        || receipt.status != ServiceStatus::Passed
+        || receipt.postgres_image != POSTGRES_IMAGE
+        || receipt.postgres_backend != "docker-pinned-image"
+        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
+        || receipt.binary.as_ref() != Some(&candidate_proof)
+        || receipt.artifact.as_ref() != Some(&artifact_proof)
+        || receipt.secret_environment_names
+            != [
+                "LKJOURNAL_BOOTSTRAP_TOKEN",
+                "LKJOURNAL_DATABASE_URL",
+                "POSTGRES_PASSWORD",
+            ]
+        || receipt.raw_secret_values_retained
+        || receipt.failure.is_some()
+        || !cleanup_complete
+        || !receipt.cleanup.exact_name.starts_with("lkjscript-service-")
+        || receipt.commands.is_empty()
+        || receipt.runners.is_empty()
+        || receipt.requests.is_empty()
+        || receipt.runners.iter().any(|runner| {
+            runner
+                .stopped
+                .as_ref()
+                .is_some_and(|stopped| !stopped.clean())
+        })
+        || !result.artifact_identity.fresh_build_equal
+        || !result.authority_unchanged
+        || result.authority_before != result.authority_after
+        || result.routes_checked != receipt.requests.len() as u64
+        || result.resource_revision == 0
+        || result.history_entries == 0
+        || result.object_bytes == 0
+        || result.worker_productive_iterations == 0
+        || !result.restored_read_equal
+        || result.shutdown_cleanup_failures != 0
+        || result.initialization_transport.status == 0
+        || result.initialization_observation.status == 0
+    {
+        return Err(DevError::corrupt(
+            "service receipt binding or maintained acceptance mismatch",
+        ));
+    }
+    Ok(ReceiptBinding {
+        receipt_bytes: metadata.len(),
+        receipt_sha256: sha256_hex(&bytes),
+        candidate_digest,
+        elapsed_nanoseconds: receipt.elapsed_nanoseconds,
+        commands: receipt.commands.len() as u64,
+        runners: receipt.runners.len() as u64,
+        requests: receipt.requests.len() as u64,
+        cleanup_complete,
     })
 }
 
@@ -496,6 +621,7 @@ impl ServiceContext {
             },
             container_name,
             container_started: false,
+            docker_postgres_port: None,
             postgres_root,
             local_postgres: None,
         }
@@ -794,6 +920,7 @@ impl ServiceContext {
         }
         self.cleanup.completed = true;
         self.container_started = false;
+        self.docker_postgres_port = None;
         Ok(())
     }
 
@@ -811,6 +938,13 @@ impl ServiceContext {
             self.container_name.clone(),
             tool.to_owned(),
         ];
+        let port = self.docker_postgres_port.ok_or_else(|| {
+            ServiceFailure::infrastructure(
+                "postgres_port_unbound",
+                "Docker PostgreSQL port was not bound",
+            )
+        })?;
+        command.extend(["-p".to_owned(), port.to_string()]);
         command.extend(arguments.iter().cloned());
         Ok(command)
     }
@@ -837,6 +971,13 @@ impl ServiceContext {
             self.container_name.clone(),
             tool.to_owned(),
         ];
+        let port = self.docker_postgres_port.ok_or_else(|| {
+            ServiceFailure::infrastructure(
+                "postgres_port_unbound",
+                "Docker PostgreSQL port was not bound",
+            )
+        })?;
+        command.extend(["-p".to_owned(), port.to_string()]);
         command.extend(arguments.iter().cloned());
         Ok(command)
     }
@@ -1565,6 +1706,8 @@ fn start_postgres(
     )?;
     let mut docker_environment = process::environment();
     docker_environment.insert("POSTGRES_PASSWORD".to_owned(), database_password.to_owned());
+    let port = free_port()?;
+    context.docker_postgres_port = Some(port);
     context.cleanup.attempted = true;
     // Once creation is attempted, cleanup targets the exact generated name even if the client
     // fails after the daemon accepts the container.
@@ -1576,34 +1719,24 @@ fn start_postgres(
                 "docker".to_owned(),
                 "run".to_owned(),
                 "--rm".to_owned(),
+                "--network".to_owned(),
+                "host".to_owned(),
                 "--name".to_owned(),
                 context.container_name.clone(),
                 "-e".to_owned(),
                 "POSTGRES_PASSWORD".to_owned(),
                 "-e".to_owned(),
                 "POSTGRES_DB=lkjournal".to_owned(),
-                "-p".to_owned(),
-                "127.0.0.1::5432".to_owned(),
                 "-d".to_owned(),
                 POSTGRES_IMAGE.to_owned(),
+                "-p".to_owned(),
+                port.to_string(),
+                "-h".to_owned(),
+                "127.0.0.1".to_owned(),
             ],
         )
         .environment(docker_environment),
     )?;
-    let container_name = context.container_name.clone();
-    let port_output = context.invoke(
-        CommandRequest::standard(
-            "postgres-port",
-            vec![
-                "docker".to_owned(),
-                "port".to_owned(),
-                container_name,
-                "5432/tcp".to_owned(),
-            ],
-        )
-        .output_limits(64 * 1024, MAXIMUM_COMMAND_STDERR_BYTES),
-    )?;
-    let port = parse_host_port(&port_output)?;
     wait_for_postgres(context, port)?;
     Ok((
         port,
@@ -2171,19 +2304,6 @@ fn free_port() -> Result<u16, ServiceFailure> {
         .and_then(|listener| listener.local_addr())
         .map(|address| address.port())
         .map_err(|error| ServiceFailure::infrastructure("free_port", error))
-}
-
-fn parse_host_port(bytes: &[u8]) -> Result<u16, ServiceFailure> {
-    let output = std::str::from_utf8(bytes)
-        .map_err(|_| ServiceFailure::failed("postgres_port", "Docker port output was not UTF-8"))?;
-    output
-        .trim()
-        .rsplit_once(':')
-        .and_then(|(_, port)| port.parse::<u16>().ok())
-        .filter(|port| *port != 0)
-        .ok_or_else(|| {
-            ServiceFailure::failed("postgres_port", "Docker did not report a valid host port")
-        })
 }
 
 fn random_hex(bytes: usize) -> Result<String, ServiceFailure> {

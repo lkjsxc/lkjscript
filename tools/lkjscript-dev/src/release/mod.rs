@@ -1,19 +1,21 @@
+mod admission;
 mod archive;
 mod model;
+mod target;
 
 use crate::error::DevError;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
 use archive::{ARCHIVE_NAME, CHECKSUM_NAME, RECEIPT_NAME};
 use model::{
-    ArtifactIdentity, ElfIdentity, EvidenceClassification, ExecutableIdentity, ExternalEvidence,
-    HostedContext, MANIFEST_SCHEMA, MANIFEST_SCHEMA_VERSION, NoticeIdentity, PackageIdentity,
-    PackagingIdentity, PayloadIdentity, PublicationMode, RECEIPT_SCHEMA, RECEIPT_SCHEMA_VERSION,
-    ReleaseManifest, ReleaseReceipt, SchemaIdentity, Sha256Digest, SourceIdentity,
-    ToolchainIdentity, VerificationClassification,
+    ArtifactIdentity, EvidenceClassification, ExecutableIdentity, ExternalEvidence, HostedContext,
+    MANIFEST_SCHEMA, MANIFEST_SCHEMA_VERSION, NoticeIdentity, PackageIdentity, PackagingIdentity,
+    PayloadIdentity, PublicationMode, RECEIPT_SCHEMA, RECEIPT_SCHEMA_VERSION, ReleaseManifest,
+    ReleaseReceipt, SchemaIdentity, Sha256Digest, SourceIdentity, ToolchainIdentity,
+    VerificationClassification,
 };
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -21,17 +23,17 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use target::TARGET_TRIPLE;
 
 const REPOSITORY_IDENTITY: &str = "lkjsxc/lkjscript";
 const PACKAGE_NAME: &str = "lkjscript";
-const TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN_CHANNEL: &str = "1.98.0";
 const CARGO_ABOUT_VERSION: &str = "0.9.2";
 const CARGO_ABOUT_ARCHIVE_SHA256: &str =
     "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af";
 const CARGO_ABOUT_EXECUTABLE_SHA256: &str =
     "b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8";
-const EXPECTED_CLASSIFICATIONS: [&str; 10] = [
+const EXPECTED_CLASSIFICATIONS: [&str; 11] = [
     "source_identity",
     "toolchain",
     "cargo_about",
@@ -39,6 +41,7 @@ const EXPECTED_CLASSIFICATIONS: [&str; 10] = [
     "candidate_capabilities",
     "candidate_lifecycle",
     "full_verification",
+    "target_admission",
     "deterministic_packaging",
     "archive_verification",
     "checksum_integrity",
@@ -53,6 +56,7 @@ struct PrepareOptions {
     tag: String,
     publication_mode: PublicationMode,
     full_verification_receipt: Option<PathBuf>,
+    target_admission_receipt: PathBuf,
     require_full_verification: bool,
 }
 
@@ -88,10 +92,18 @@ struct FullVerificationFacts {
     selected_gates: usize,
 }
 
+#[derive(Debug)]
+struct TargetAdmissionFacts {
+    evidence: ExternalEvidence,
+}
+
 pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let subcommand = crate::next_utf8(&mut arguments, "release subcommand")?
         .ok_or_else(|| DevError::usage("release subcommand is required"))?;
     match subcommand.as_str() {
+        "target" => target::print_policy(arguments),
+        "build" => target::build(arguments),
+        "admit" => admission::command(arguments),
         "prepare" => prepare(parse_prepare(arguments)?),
         "verify" => verify(parse_verify(arguments)?),
         value => Err(DevError::usage(format!(
@@ -111,12 +123,15 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     if let Some(path) = &options.full_verification_receipt {
         require_absolute_regular(path, "full verification receipt")?;
     }
+    require_absolute_regular(
+        &options.target_admission_receipt,
+        "target admission receipt",
+    )?;
     ensure_clean_checkout(&repository)?;
     let source = source_facts(&repository, &options.tag, options.publication_mode)?;
     let toolchain = toolchain_facts(&repository)?;
     let tar_version = command_version("tar", &["--version"], &repository)?;
     let gzip_version = command_version("gzip", &["--version"], &repository)?;
-    let readelf_version = command_version("readelf", &["--version"], &repository)?;
     let _sha256sum_version = command_version("sha256sum", &["--version"], &repository)?;
     let (cargo_lock_sha256, _) = archive::sha256_file(&repository.join("Cargo.lock"))?;
     let (license_sha256, license_bytes) = archive::sha256_file(&repository.join("LICENSE"))?;
@@ -140,7 +155,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         ));
     }
     let (candidate_sha256, candidate_bytes) = archive::sha256_file(&release_candidate)?;
-    let elf = inspect_elf(&release_candidate, &repository, readelf_version)?;
+    let elf = target::inspect_static_elf(&release_candidate)?;
     let capabilities = inspect_capabilities(&release_candidate, &repository)?;
     validate_candidate_cli_contract(capabilities.cli_contract)?;
     validate_registry_digest(&capabilities.registry_digest)?;
@@ -183,6 +198,11 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             "--require-full-verification requires --full-verification-receipt",
         ));
     }
+    let target_admission = inspect_target_admission(
+        &options.target_admission_receipt,
+        &source.commit_sha,
+        &options.candidate,
+    )?;
 
     let notice_one = work.path().join("THIRD-PARTY-LICENSES-1.html");
     let notice_two = work.path().join("THIRD-PARTY-LICENSES-2.html");
@@ -301,12 +321,12 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         })?;
     let archive_one = archive::create_archive(
         &payload_parent,
-        &package_one.join("lkjscript-x86_64-unknown-linux-gnu.tar"),
+        &package_one.join("lkjscript-x86_64-unknown-linux-musl.tar"),
         source.commit_timestamp_unix_seconds,
     )?;
     let archive_two = archive::create_archive(
         &payload_parent,
-        &package_two.join("lkjscript-x86_64-unknown-linux-gnu.tar"),
+        &package_two.join("lkjscript-x86_64-unknown-linux-musl.tar"),
         source.commit_timestamp_unix_seconds,
     )?;
     require_equal_files(
@@ -338,7 +358,11 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     verify_checksum_bytes(&checksum_bytes, &verified_one.archive_sha256)?;
     let checksum_sha256 = archive::sha256_bytes(&checksum_bytes)?;
     let completed_unix_nanoseconds = unix_nanoseconds()?;
-    let classifications = classifications(&full_verification, verified_one.members.len());
+    let classifications = classifications(
+        &full_verification,
+        &target_admission,
+        verified_one.members.len(),
+    );
     let receipt = ReleaseReceipt {
         schema: SchemaIdentity {
             identity: RECEIPT_SCHEMA.to_owned(),
@@ -363,6 +387,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             sha256: checksum_sha256,
         },
         full_verification_receipt: full_verification.map(|facts| facts.evidence),
+        target_admission_receipt: target_admission.evidence,
         candidate_lifecycle,
         classifications,
     };
@@ -565,7 +590,8 @@ fn parse_prepare(
             | "--output"
             | "--tag"
             | "--publication"
-            | "--full-verification-receipt" => argument,
+            | "--full-verification-receipt"
+            | "--target-admission-receipt" => argument,
             value => {
                 return Err(DevError::usage(format!(
                     "unknown release prepare option '{value}'"
@@ -582,6 +608,8 @@ fn parse_prepare(
     let full_verification_receipt = values
         .remove("--full-verification-receipt")
         .map(PathBuf::from);
+    let target_admission_receipt =
+        PathBuf::from(required(&mut values, "--target-admission-receipt")?);
     let options = PrepareOptions {
         candidate: PathBuf::from(required(&mut values, "--candidate")?),
         cargo_about: PathBuf::from(required(&mut values, "--cargo-about")?),
@@ -590,6 +618,7 @@ fn parse_prepare(
         tag: required(&mut values, "--tag")?,
         publication_mode,
         full_verification_receipt,
+        target_admission_receipt,
         require_full_verification,
     };
     if !values.is_empty() {
@@ -904,9 +933,7 @@ fn toolchain_facts(repository: &Path) -> Result<ToolchainIdentity, DevError> {
     if !toolchain
         .lines()
         .any(|line| line.trim() == format!("channel = \"{TOOLCHAIN_CHANNEL}\""))
-        || !toolchain
-            .lines()
-            .any(|line| line.contains("x86_64-unknown-linux-gnu"))
+        || !toolchain.lines().any(|line| line.contains(TARGET_TRIPLE))
     {
         return Err(DevError::corrupt(
             "rust-toolchain.toml does not pin the selected toolchain and target",
@@ -925,78 +952,6 @@ fn toolchain_facts(repository: &Path) -> Result<ToolchainIdentity, DevError> {
         rustc,
         cargo,
         toolchain_channel: TOOLCHAIN_CHANNEL.to_owned(),
-    })
-}
-
-fn inspect_elf(
-    candidate: &Path,
-    repository: &Path,
-    readelf_version: String,
-) -> Result<ElfIdentity, DevError> {
-    let bytes = fs::read(candidate).map_err(|error| {
-        DevError::infrastructure(format!("read release candidate ELF header: {error}"))
-    })?;
-    if bytes.len() < 64
-        || bytes[0..4] != [0x7f, b'E', b'L', b'F']
-        || bytes[4] != 2
-        || bytes[5] != 1
-        || u16::from_le_bytes([bytes[18], bytes[19]]) != 62
-    {
-        return Err(DevError::corrupt(
-            "release candidate is not a little-endian ELF64 x86-64 executable",
-        ));
-    }
-    let candidate_text = candidate
-        .to_str()
-        .ok_or_else(|| DevError::usage("candidate path must be portable UTF-8"))?;
-    let output = command_text(
-        "readelf",
-        &[
-            "--wide",
-            "--file-header",
-            "--program-headers",
-            "--dynamic",
-            "--version-info",
-            candidate_text,
-        ],
-        repository,
-        8 * 1024 * 1024,
-    )?;
-    let class = labeled_value(&output, "Class:")?;
-    let machine = labeled_value(&output, "Machine:")?;
-    if class != "ELF64" || machine != "Advanced Micro Devices X86-64" {
-        return Err(DevError::corrupt(
-            "readelf target identity does not match x86-64 ELF64",
-        ));
-    }
-    let interpreter = output
-        .lines()
-        .find_map(|line| {
-            line.split_once("[Requesting program interpreter: ")
-                .and_then(|(_, rest)| rest.strip_suffix(']'))
-                .map(str::to_owned)
-        })
-        .ok_or_else(|| DevError::corrupt("ELF interpreter is missing"))?;
-    let required_shared_libraries = output
-        .lines()
-        .filter(|line| line.contains("(NEEDED)"))
-        .map(|line| bracketed_value(line, "shared library"))
-        .collect::<Result<BTreeSet<_>, _>>()?
-        .into_iter()
-        .collect::<Vec<_>>();
-    if required_shared_libraries.is_empty() {
-        return Err(DevError::corrupt(
-            "GNU release candidate has no recorded shared libraries",
-        ));
-    }
-    let highest_required_glibc_symbol_version = highest_glibc_version(&output)?;
-    Ok(ElfIdentity {
-        class,
-        machine,
-        interpreter,
-        required_shared_libraries,
-        highest_required_glibc_symbol_version,
-        readelf_version,
     })
 }
 
@@ -1249,6 +1204,22 @@ fn inspect_full_verification(
     })
 }
 
+fn inspect_target_admission(
+    path: &Path,
+    commit_sha: &str,
+    candidate: &Path,
+) -> Result<TargetAdmissionFacts, DevError> {
+    admission::read_receipt(path, candidate, commit_sha)?;
+    let (sha256, byte_length) = archive::sha256_file(path)?;
+    Ok(TargetAdmissionFacts {
+        evidence: ExternalEvidence {
+            path: path.display().to_string(),
+            byte_length,
+            sha256,
+        },
+    })
+}
+
 fn require_json_string(
     object: &serde_json::Map<String, Value>,
     name: &str,
@@ -1337,14 +1308,14 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
         }
     }
     if manifest.executable.elf.class != "ELF64"
-        || manifest.executable.elf.machine != "Advanced Micro Devices X86-64"
-        || manifest.executable.elf.interpreter.is_empty()
-        || manifest.executable.elf.required_shared_libraries.is_empty()
-        || !manifest
-            .executable
-            .elf
-            .highest_required_glibc_symbol_version
-            .starts_with("GLIBC_")
+        || manifest.executable.elf.machine != "x86-64"
+        || manifest.executable.elf.inspector != target::ELF_INSPECTOR
+        || manifest.executable.elf.runtime_linkage != target::LINKAGE_MODEL
+        || manifest.executable.elf.program_headers == 0
+        || manifest.executable.elf.load_headers == 0
+        || manifest.executable.elf.interpreter_headers != 0
+        || manifest.executable.elf.needed_libraries != 0
+        || manifest.executable.elf.glibc_version_requirements != 0
         || manifest.third_party_notices.generator != "cargo-about"
         || manifest.third_party_notices.generator_version != CARGO_ABOUT_VERSION
         || manifest
@@ -1411,7 +1382,15 @@ fn validate_receipt(
         receipt.full_verification_receipt.as_ref(),
     ) {
         (EvidenceClassification::FreshPassed, Some(_))
-        | (EvidenceClassification::NotProvided, None) => Ok(()),
+        | (EvidenceClassification::NotProvided, None) => {
+            if receipt.target_admission_receipt.byte_length == 0 {
+                Err(DevError::corrupt(
+                    "target admission receipt evidence is empty",
+                ))
+            } else {
+                Ok(())
+            }
+        }
         _ => Err(DevError::corrupt(
             "full verification classification disagrees with its evidence",
         )),
@@ -1420,6 +1399,7 @@ fn validate_receipt(
 
 fn classifications(
     full: &Option<FullVerificationFacts>,
+    target_admission: &TargetAdmissionFacts,
     member_count: usize,
 ) -> Vec<VerificationClassification> {
     let fresh = |name: &str, detail: String| VerificationClassification {
@@ -1466,6 +1446,13 @@ fn classifications(
                 detail: "not provided to this preparation".to_owned(),
             },
         },
+        fresh(
+            "target_admission",
+            format!(
+                "exact {} candidate admitted by {} bytes of bound evidence",
+                TARGET_TRIPLE, target_admission.evidence.byte_length
+            ),
+        ),
         fresh(
             "deterministic_packaging",
             "two same-input archive preparations were byte-equal".to_owned(),
@@ -1666,55 +1653,6 @@ fn validate_candidate_cli_contract(observed: u16) -> Result<(), DevError> {
     Ok(())
 }
 
-fn labeled_value(output: &str, label: &str) -> Result<String, DevError> {
-    output
-        .lines()
-        .find_map(|line| line.trim().strip_prefix(label).map(str::trim))
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| DevError::corrupt(format!("readelf omitted '{label}'")))
-}
-
-fn bracketed_value(line: &str, label: &str) -> Result<String, DevError> {
-    let start = line
-        .find('[')
-        .ok_or_else(|| DevError::corrupt(format!("readelf {label} is malformed")))?;
-    let end = line[start + 1..]
-        .find(']')
-        .map(|offset| start + 1 + offset)
-        .ok_or_else(|| DevError::corrupt(format!("readelf {label} is malformed")))?;
-    Ok(line[start + 1..end].to_owned())
-}
-
-fn highest_glibc_version(output: &str) -> Result<String, DevError> {
-    let mut versions = BTreeSet::new();
-    for token in output.split(|character: char| {
-        !(character.is_ascii_alphanumeric() || character == '_' || character == '.')
-    }) {
-        let Some(version) = token.strip_prefix("GLIBC_") else {
-            continue;
-        };
-        if version.is_empty()
-            || version
-                .split('.')
-                .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
-        {
-            continue;
-        }
-        let parts = version
-            .split('.')
-            .map(|part| part.parse::<u64>())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| DevError::corrupt("GLIBC version component overflow"))?;
-        versions.insert((parts, token.to_owned()));
-    }
-    versions
-        .into_iter()
-        .next_back()
-        .map(|(_, value)| value)
-        .ok_or_else(|| DevError::corrupt("readelf output contains no numeric GLIBC requirement"))
-}
-
 fn unix_nanoseconds() -> Result<u128, DevError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1757,15 +1695,6 @@ mod tests {
     }
 
     #[test]
-    fn release_glibc_version_uses_numeric_order() {
-        let output = "GLIBC_2.9 GLIBC_2.34 GLIBC_2.3.4 GLIBC_ABI_DT_RELR";
-        assert_eq!(
-            highest_glibc_version(output).expect("version"),
-            "GLIBC_2.34"
-        );
-    }
-
-    #[test]
     fn release_registry_digest_requires_lowercase_sha256() {
         assert!(validate_registry_digest(&"0".repeat(64)).is_ok());
         assert!(validate_registry_digest(&"A".repeat(64)).is_err());
@@ -1782,6 +1711,35 @@ mod tests {
             expected.saturating_add(1)
         };
         assert!(validate_candidate_cli_contract(foreign).is_err());
+    }
+
+    #[test]
+    fn product_release_and_contributor_contract_versions_have_independent_owners() {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let (product_name, product_version) =
+            package_identity(&repository.join("Cargo.toml")).expect("root product identity");
+        let (tool_name, tool_version) =
+            package_identity(&repository.join("tools/lkjscript-dev/Cargo.toml"))
+                .expect("contributor tool identity");
+        assert_eq!(product_name, "lkjscript");
+        assert_eq!(tool_name, "lkjscript-dev");
+        assert_ne!(product_version, tool_version);
+        assert!(!repository.join("VERSION").exists());
+        let decision = fs::read_to_string(
+            repository.join("docs/decisions/20260829-release-contract-version-authority.md"),
+        )
+        .expect("release-version authority decision");
+        for required in [
+            "root `lkjscript` Cargo package",
+            "not a language edition",
+            "advances at its existing executable owner",
+            "does not inherit the root product version",
+            "No duplicate `VERSION` file",
+        ] {
+            assert!(decision.contains(required), "decision omitted {required}");
+        }
+        let policy = serde_json::to_string(&target::policy()).expect("target policy");
+        assert!(!policy.contains(&format!("\"product_version\":\"{product_version}\"")));
     }
 
     #[test]

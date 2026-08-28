@@ -3,9 +3,9 @@ use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
 pub(super) const MANIFEST_SCHEMA: &str = "lkjscript-release-manifest";
-pub(super) const MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub(super) const MANIFEST_SCHEMA_VERSION: u32 = 2;
 pub(super) const RECEIPT_SCHEMA: &str = "lkjscript-release-receipt";
-pub(super) const RECEIPT_SCHEMA_VERSION: u32 = 1;
+pub(super) const RECEIPT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -91,10 +91,16 @@ pub(super) struct ToolchainIdentity {
 pub(super) struct ElfIdentity {
     pub(super) class: String,
     pub(super) machine: String,
-    pub(super) interpreter: String,
-    pub(super) required_shared_libraries: Vec<String>,
-    pub(super) highest_required_glibc_symbol_version: String,
-    pub(super) readelf_version: String,
+    pub(super) object_type: String,
+    pub(super) inspector: String,
+    pub(super) program_headers: u32,
+    pub(super) load_headers: u32,
+    pub(super) dynamic_entries: u32,
+    pub(super) interpreter_headers: u32,
+    pub(super) needed_libraries: u32,
+    pub(super) glibc_version_requirements: u32,
+    pub(super) position_independent: bool,
+    pub(super) runtime_linkage: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -236,6 +242,7 @@ pub(super) struct ReleaseReceipt {
     pub(super) archive: ArtifactIdentity,
     pub(super) checksum_file: ArtifactIdentity,
     pub(super) full_verification_receipt: Option<ExternalEvidence>,
+    pub(super) target_admission_receipt: ExternalEvidence,
     pub(super) candidate_lifecycle: ProcessObservation,
     pub(super) classifications: Vec<VerificationClassification>,
 }

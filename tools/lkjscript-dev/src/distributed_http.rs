@@ -236,6 +236,20 @@ struct Failure {
     message: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TransferredReceiptBinding {
+    pub(crate) receipt_bytes: u64,
+    pub(crate) receipt_sha256: String,
+    pub(crate) verifier_sha256: String,
+    pub(crate) candidate_sha256: String,
+    pub(crate) elapsed_nanoseconds: u64,
+    pub(crate) commands: u64,
+    pub(crate) runners: u64,
+    pub(crate) responses: u64,
+    pub(crate) cleanup_complete: bool,
+}
+
 #[derive(Debug)]
 struct AcceptanceFailure {
     class: &'static str,
@@ -454,6 +468,137 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         0
     } else {
         1
+    })
+}
+
+pub(crate) fn read_transferred_receipt(
+    path: &Path,
+    candidate_path: &Path,
+    verifier_path: &Path,
+) -> Result<TransferredReceiptBinding, DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect transferred distributed HTTP receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAXIMUM_RECEIPT_BYTES
+    {
+        return Err(DevError::corrupt(
+            "transferred distributed HTTP receipt is unsafe or oversized",
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "read transferred distributed HTTP receipt '{}': {error}",
+            path.display()
+        ))
+    })?;
+    let receipt: AcceptanceReceipt = serde_json::from_slice(&bytes).map_err(|error| {
+        DevError::corrupt(format!(
+            "decode transferred distributed HTTP receipt: {error}"
+        ))
+    })?;
+    if evidence::encode_json(&receipt)? != bytes {
+        return Err(DevError::corrupt(
+            "transferred distributed HTTP receipt is not in canonical evidence encoding",
+        ));
+    }
+    let evidence_root = path
+        .parent()
+        .ok_or_else(|| DevError::corrupt("transferred distributed HTTP receipt has no parent"))?
+        .canonicalize()
+        .map_err(|error| {
+            DevError::infrastructure(format!(
+                "resolve transferred distributed HTTP evidence root: {error}"
+            ))
+        })?;
+    let canonical_path = path.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!(
+            "resolve transferred distributed HTTP receipt: {error}"
+        ))
+    })?;
+    let candidate = executable_observation(
+        candidate_path,
+        "target-admission distributed HTTP candidate",
+        MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,
+    )?;
+    let verifier = executable_observation(
+        verifier_path,
+        "target-admission distributed HTTP verifier",
+        MAXIMUM_VERIFIER_EXECUTABLE_BYTES,
+    )?;
+    let result = receipt
+        .result
+        .as_ref()
+        .ok_or_else(|| DevError::corrupt("passed distributed HTTP receipt omitted its result"))?;
+    let cleanup_complete =
+        receipt.cleanup.runner_cleanup_complete && receipt.cleanup.isolated_root_removed;
+    if canonical_path != evidence_root.join("receipt.json")
+        || receipt.schema.identity != ACCEPTANCE_SCHEMA
+        || receipt.schema.version != ACCEPTANCE_SCHEMA_VERSION
+        || receipt.status != AcceptanceStatus::Passed
+        || receipt.workflow != ACCEPTANCE_WORKFLOW
+        || receipt.execution_context != "transferred"
+        || receipt.checkout_root.is_some()
+        || receipt.evidence_root != evidence_root.display().to_string()
+        || !receipt.isolated_root_outside_checkout
+        || Path::new(&receipt.isolated_root).exists()
+        || receipt.environment_names != ["LANG"]
+        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
+        || receipt.verifier.sha256 != verifier.sha256
+        || receipt.verifier.byte_length != verifier.byte_length
+        || receipt.verifier.mode != verifier.mode
+        || receipt.verifier.verification_digest != verifier.verification_digest
+        || receipt.candidate.sha256 != candidate.sha256
+        || receipt.candidate.byte_length != candidate.byte_length
+        || receipt.candidate.mode != candidate.mode
+        || receipt.candidate.verification_digest != candidate.verification_digest
+        || receipt.copied_candidate.sha256 != candidate.sha256
+        || receipt.copied_candidate.byte_length != candidate.byte_length
+        || receipt.copied_candidate.mode != candidate.mode
+        || receipt.copied_candidate.verification_digest != candidate.verification_digest
+        || !Path::new(&receipt.copied_candidate.file.path)
+            .starts_with(Path::new(&receipt.isolated_root))
+        || receipt.failure.is_some()
+        || !cleanup_complete
+        || !result.clean_incremental_equal
+        || result.artifact_sha256 != result.clean_artifact_sha256
+        || !result.authority_unchanged
+        || result.authority_before != result.authority_after
+        || !result.restart_equal
+        || result.startup_failures_without_ready == 0
+        || result.responses.is_empty()
+    {
+        return Err(DevError::corrupt(
+            "transferred distributed HTTP receipt binding or acceptance mismatch",
+        ));
+    }
+    if receipt.commands.iter().any(|command| {
+        command.command.first().is_some_and(|program| {
+            program == "cargo"
+                || program == "rustc"
+                || program.ends_with("/cargo")
+                || program.ends_with("/rustc")
+        })
+    }) {
+        return Err(DevError::corrupt(
+            "transferred distributed HTTP receipt invoked checkout build tooling",
+        ));
+    }
+    Ok(TransferredReceiptBinding {
+        receipt_bytes: metadata.len(),
+        receipt_sha256: sha256_file(path, MAXIMUM_RECEIPT_BYTES)?,
+        verifier_sha256: verifier.sha256,
+        candidate_sha256: candidate.sha256,
+        elapsed_nanoseconds: receipt.elapsed_nanoseconds,
+        commands: receipt.commands.len() as u64,
+        runners: receipt.runners.len() as u64,
+        responses: result.responses.len() as u64,
+        cleanup_complete,
     })
 }
 

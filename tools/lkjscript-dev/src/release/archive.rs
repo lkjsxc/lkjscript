@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-pub(super) const ARCHIVE_NAME: &str = "lkjscript-x86_64-unknown-linux-gnu.tar.gz";
+pub(super) const ARCHIVE_NAME: &str = super::target::ARCHIVE_NAME;
 pub(super) const CHECKSUM_NAME: &str = "SHA256SUMS";
 pub(super) const RECEIPT_NAME: &str = "release-receipt.json";
 pub(super) const TOP_DIRECTORY: &str = "lkjscript/";
@@ -287,12 +287,21 @@ fn verify_archive_into(
         ));
     }
     cross_check_payloads(&manifest, &parsed.members)?;
+    let extracted_executable = extraction.join(EXECUTABLE_MEMBER);
+    let extracted_elf = super::target::inspect_static_elf(&extracted_executable)?;
+    if extracted_elf != manifest.executable.elf {
+        return Err(DevError::corrupt(
+            "extracted executable linkage disagrees with the release manifest",
+        ));
+    }
     if let Some(candidate) = candidate {
         let metadata = ensure_regular(candidate, "candidate executable")?;
         let (digest, length) = sha256_file(candidate)?;
+        let candidate_elf = super::target::inspect_static_elf(candidate)?;
         if length != manifest.executable.byte_length
             || digest != manifest.executable.sha256
             || metadata.permissions().mode() & 0o111 == 0
+            || candidate_elf != extracted_elf
         {
             return Err(DevError::corrupt(
                 "candidate executable does not match archived executable",
