@@ -90,7 +90,7 @@ release, or assets. Its structured evidence remains in
 
 Current source owns unreleased product version 0.1.11; immutable public latest remains v0.1.10.
 Both contain the higher-order and product-surface cutovers. Current source advances only the public
-CLI contract from 12 to 13 and normalized query contract from 3 to 4 for bounded context traversal;
+CLI and normalized-query encodings for bounded context traversal;
 meaning graph, storage, change, compiler, artifact, deployment, runtime, standard-package, and
 application identities remain unchanged. The source executable exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
