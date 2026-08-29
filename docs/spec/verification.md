@@ -102,14 +102,16 @@ Cargo, read a source/generated/template file, or use an ambient application help
 binds the verifier, source candidate, private copied candidate, execution context, optional checkout,
 result, bounded logs, and complete cleanup.
 
-The stateful owner constructs its 1,010-record BBS change from exact candidate discovery. It retains
+The stateful owner constructs its 982-record BBS change from exact candidate discovery. It retains
 one application definition across contributor, target-admission, pre-publication, and anonymous
 public verification. Passing evidence requires reviewed plan/apply, idempotent reprepare,
-clean/incremental artifact equality, real HTTP create/read/update/delete, strict malformed input,
-statement rollback, migration divergence failure, restart persistence, failed-startup behavior,
-graceful shutdown, unchanged accepted Graph authority, secret redaction, database cleanup, and
-runner-root cleanup. PostgreSQL unavailability, timeout, early exit, migration/statement failure,
-shutdown failure, or cleanup failure remains a typed non-pass. Workflow shell cannot reclassify it.
+clean/incremental artifact equality, the named reducer/function value/standard fold construction,
+real HTTP create/read/update/delete, missing/nonmatching/repeated/reordered header admission,
+strict malformed input, statement rollback, migration divergence failure, restart persistence,
+failed-startup behavior, graceful shutdown, unchanged accepted Graph authority, secret redaction,
+database cleanup, and runner-root cleanup. PostgreSQL unavailability, timeout, early exit,
+migration/statement failure, shutdown failure, or cleanup failure remains a typed non-pass.
+Workflow shell cannot reclassify it.
 
 The no-database distributed HTTP oracle remains an implementation-disjoint faster gate. Neither
 application oracle replaces the other at release admission.

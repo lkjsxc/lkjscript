@@ -580,7 +580,7 @@ pub(crate) fn read_transferred_receipt(
         || receipt.failure.is_some()
         || !cleanup_complete
         || result.workflow != STATEFUL_WORKFLOW
-        || result.request_records != 1_010
+        || result.request_records != 982
         || !result.idempotent_reconciliation
         || result.discovery_commands == 0
         || !result.deterministic
@@ -1430,6 +1430,7 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
         "add",
         "bool-and",
         "bool-not",
+        "bool-or",
         "bytes-equal",
         "bytes-from-text",
         "i64-equal",
@@ -1437,6 +1438,7 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
         "json-encode",
         "less",
         "less-equal",
+        "list-fold-left",
         "list-get",
         "list-length",
         "query-get-or",
@@ -1836,6 +1838,62 @@ fn exercise_before_restart(
         &[],
     )?;
     require_http(&missing_header, 400, Some("application/json"))?;
+
+    let nonmatching_header = request(
+        observations,
+        address,
+        "nonmatching-content-type",
+        "POST",
+        "/api/posts",
+        b"{\"author\":\"agent\",\"body\":\"header-probe\"}",
+        &[("Content-Type", "text/plain")],
+    )?;
+    require_http(&nonmatching_header, 400, Some("application/json"))?;
+
+    for (name, headers) in [
+        (
+            "matching-content-type-after-nonmatch",
+            [
+                ("Content-Type", "text/plain"),
+                ("X-Header-Order", "first"),
+                ("Content-Type", "application/json"),
+            ],
+        ),
+        (
+            "matching-content-type-before-nonmatch",
+            [
+                ("Content-Type", "application/json"),
+                ("X-Header-Order", "second"),
+                ("Content-Type", "text/plain"),
+            ],
+        ),
+    ] {
+        let admitted = request(
+            observations,
+            address,
+            name,
+            "POST",
+            "/api/posts",
+            b"{\"author\":\"agent\",\"body\":\"header-probe\"}",
+            &headers,
+        )?;
+        require_http(&admitted, 201, Some("application/json"))?;
+        let value: Value = serde_json::from_slice(&admitted.body)?;
+        let identity = value
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| DevError::corrupt("header probe omitted its post identity"))?;
+        let deleted = request(
+            observations,
+            address,
+            &format!("delete-{name}"),
+            "DELETE",
+            &format!("/api/posts?id={identity}"),
+            b"",
+            &[],
+        )?;
+        require_http(&deleted, 204, None)?;
+    }
 
     let created = request(
         observations,

@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-28 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-08-29 UTC. This file describes implemented checkout reality. Executable-derived
 contract and operation catalogs live in [generated/contracts.md](generated/contracts.md) and
 [generated/operations.md](generated/operations.md); this file does not duplicate them.
 
@@ -13,23 +13,23 @@ closure selected by `HEAD`. No maintained project contains a predecessor `.lkjsc
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_856f4cab0ddd42b2719694a3d1b23553f248b3bd887c54dc19b90d506724b234`; state `semantic_state_cbf582b416cbc57b10bbac45b2e728f6a1adea996c00066dd2efcb5b3e91559d` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_dfde325dce6b59746f41b49777fbccb5d1efff50a53e0535c50b74cc98554d6f`; state `semantic_state_d41fc027d4781f36df1c965280acaf814f9871df0e30029ed0245edc8fafc5e4` |
-| built-in standard dependency | package revision `package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665`; transport `package_transport_dd83db89a5a492b9195e439b759eafe259911e967a254d6f0dfaba36442bec4c`; artifact manifest `artifact_manifest_844aed53e4be165ab6907147831a7b751e244b66dcd048000a7df2e65868d98b` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_b7e85425b4d2a15c6e7cbdc2c9128addeaebf24b9cb3dd626f2570ba47da23ee`; state `semantic_state_7590ee186644db29e411c9f919dbbde32daee9382a68f39d7270ff791632c93f` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf`; state `semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479` |
+| built-in standard dependency | package revision `package_revision_b133c038d2997b440d5a6ec3fe9ec326e6c7c2c75259be7499aa234313bd6515`; transport `package_transport_9326e2744a3bfe401ef03750c162d32c1e3d4151a9b384fdd8fb28261601464a`; artifact manifest `artifact_manifest_48e18403aec9c5c74db8c4a0d75633cbe4f38648218c2e58fe5d7d3d1ca267a0` |
 
-The standard package owns 298 semantic owners, 64 compiler units, and 7 graph tests. Its current
-artifact has 611 closure objects and 194,200 bytes. `lkjournal` owns 1,313 semantic owners and one
-exact standard dependency; its two-package artifact has 124 compiler units, 2,319 closure objects,
-and 697,403 bytes. Its complete dependency closure runs 12 graph tests. Both consumers currently
+The standard package owns 381 semantic owners, 72 compiler units, and 11 graph tests. Its current
+artifact has 716 closure objects and 224,984 bytes. `lkjournal` owns 1,313 semantic owners and one
+exact standard dependency; its two-package artifact has 132 compiler units, 2,424 closure objects,
+and 728,187 bytes. Its complete dependency closure runs 16 graph tests. Both consumers currently
 pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 74,892 bytes | `6fd29c86e43471f9d1ba2498d652a0865c4fe295caa177fa6afa410e6d9e0a00` |
-| `packages/standard/generated/standard.lkja` | current artifact-10 standard bundle, 194,200 bytes | `b77cbde3e3fc6ffe7d0c3183e15f64368c87ff39a4e53d93b04185bb68e47073` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current artifact-10 application bundle, 697,403 bytes | `95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af` |
+| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 77,273 bytes | `b5514baecae1276b8bfc5e551859e0ed351ff8e29a4fcddb66b76ddf5f23479c` |
+| `packages/standard/generated/standard.lkja` | current artifact-10 standard bundle, 224,984 bytes | `e30f5c00166bb4b808e5e6557d5043faba492d44818a18e7a53d5113e9366485` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current artifact-10 application bundle, 728,187 bytes | `d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -83,12 +83,13 @@ release, or assets. Current structured evidence is in
 
 ## Current application lifecycle
 
-Current `main` and public v0.1.9 have product version 0.1.9 with independent CLI contract 12. The
-executable exposes exactly
+Current source has the unreleased product version 0.1.10; immutable public v0.1.9 remains the latest
+published binary and does not contain the source-only higher-order cutover. Both retain independent
+CLI contract 12. The source executable exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
 `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. The registry digest is
-`b03b152cd2de99b9879bb75731463891546fb91d8d41095f37f81b3f2ece57a8` for the current generated
+`9da55649bdf2f20969c8b2633792a7e3ac7782d1198f407a84cb22832283eb41` for the current generated
 content.
 
 `new --template minimal` creates an empty package. `new --template command` creates an offline,
@@ -106,12 +107,17 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP and stateful recipes are public `v0.1.9` behavior. This source line adds compact
-change contract 5: task effects, `add.requirement`, `set.function-contract`, structural record
-types, and the lexical/record/field/list/variant/match/capability-call/transaction expression slice
-required to turn that starter into a request-dependent persistent application. It does not expose
-arbitrary component, interface, external, port, or target creation, higher-order invocation, or
-map expressions.
+The closed HTTP and predecessor stateful recipes are public `v0.1.9` behavior. This source line
+advances only compact change contract 6: it retains the task/capability slice and adds the exact
+`add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
+values are explicit monomorphic references to pure named functions; generic task functions,
+capture, partial application, inference, maps, and arbitrary component, interface, external, port,
+or target creation remain unavailable. The built-in standard exports Graph-owned generic
+`list-fold-left<Item, State>`, and the source BBS authors its content-type predicate with a named
+header reducer and that fold. Public v0.1.9 remains unchanged.
+
+Exact source-campaign identities, receipts, classifications, and resource observations are retained
+in [`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json).
 
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
@@ -169,8 +175,8 @@ PostgreSQL, object, and queue codecs use one representation-neutral host engine 
 Adapter preparation is all-or-nothing, and repeated shutdown reuses one recorded cleanup outcome.
 
 Runtime call frames carry exact generic type substitutions so the generic `json-decode-or<T>`,
-`json-encode<T>`, `list-length<T>`, and `list-get<T>` standard declarations execute against the
-concrete Graph 5 runtime layout. Production and canonical-reference implementations remain
+`json-encode<T>`, `list-length<T>`, `list-get<T>`, and `list-fold-left<Item, State>` standard
+declarations execute against the concrete Graph 5 runtime layout. Production and canonical-reference implementations remain
 disjoint and agree for maintained pure behavior. The stateful BBS uses explicit database,
 identifier, wall-clock, and byte-stream requirements; its HTTP/domain layer is isolated from
 PostgreSQL coordinates and driver representation behind graph-owned persistence functions.
@@ -190,8 +196,9 @@ sandbox or multi-tenant isolation boundary.
   Graph 5 authority.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
   remain private until a complete public workflow exists. Existing component requirements can be
-  extended and existing function contracts changed, but generic component, interface, external,
-  port, and target creation remains private.
+  extended, existing function contracts changed, and pure functions given explicit type parameters,
+  named values, and invocation, but generic component, interface, external, port, and target
+  creation remains private.
 - Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
   budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
   registry data.
@@ -233,10 +240,10 @@ summarized in [performance.md](performance.md).
 Campaign [202608281817](campaigns/202608281817.md) adds the distinct non-cacheable
 `stateful_http_application` gate to service and full profiles. It copies the candidate outside the
 checkout, discovers current grammar/interfaces/deployment fields through that copy, authors a
-1,010-record BBS only through reviewed public changes, requires deterministic clean/incremental
+982-record fold-based BBS only through reviewed public changes, requires deterministic clean/incremental
 Artifact 10 bytes, and exercises PostgreSQL-backed create/read/update/delete, strict-input,
-rollback, checksum-divergence, no-readiness, shutdown, and restart behavior while Graph authority
-remains byte-identical. The contributor harness may provision the already supported service and
-stateful gates from either the pinned immutable PostgreSQL image or an exact verified local
-PostgreSQL 16.15 tool root; neither provisioning path is a product dependency or application
-helper.
+missing/nonmatching/repeated/reordered content-type, rollback, checksum-divergence, no-readiness,
+shutdown, and restart behavior while Graph authority remains byte-identical. The contributor
+harness may provision the already supported service and stateful gates from either the pinned
+immutable PostgreSQL image or an exact verified local PostgreSQL 16.15 tool root; neither
+provisioning path is a product dependency or application helper.

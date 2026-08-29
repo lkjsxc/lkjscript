@@ -5,7 +5,7 @@ Status: normative for meaning graph contract 5.
 ## Representation and evaluation
 
 Language constructs are typed semantic records in canonical owner objects. There is no maintained
-source grammar. Compact change contract 5, identified by the executable
+source grammar. Compact change contract 6, identified by the executable
 [contract registry](../generated/contracts.md), describes bounded authored intent; the request and
 logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own
 references, continuity, generic parameters, and selected expression/member sites.
@@ -81,7 +81,8 @@ derived and cannot change graph meaning or artifact determinism.
 
 ## Named function values and invocation
 
-`function_ref` identifies one named function and supplies all required type arguments.
+The public `function-value` expression identifies one named function and supplies all required type
+arguments.
 `invoke` evaluates a function-valued expression, then evaluates arguments left-to-right and calls
 the named function. Function values contain stable named-function provenance, not a code address,
 lexical scope, or captured environment.
@@ -98,13 +99,15 @@ conditional, lexical let, sequencing, direct call with explicit type arguments, 
 reference with explicit type arguments, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
-Compact change 5 exposes unit, bool, i64, text, and static-text literals; lexical variables and
+Compact change 6 exposes unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
 construction and field projection; variants and exhaustive matches; typed lists; exact requirement
-capability calls; and lexical transactions. Function references, invocation, and maps remain graph
-forms used by maintained typed construction where applicable but are not public compact expression
-forms. The generated [change grammar](../generated/change-grammar.md) is the exhaustive public
-inventory; this specification does not duplicate its fields and edges.
+capability calls; lexical transactions; named `function-value` expressions with ordered explicit
+type arguments; and `invoke` with ordered expression arguments. `add.type-parameter` adds an
+ordered stable parameter to a pure function created or selected through the current function
+surface. Generic task functions, map expressions, and arbitrary topology creation remain outside
+this compact slice. The generated [change grammar](../generated/change-grammar.md) is the
+exhaustive public inventory; this specification does not duplicate its fields and edges.
 
 Bindings and expression sites receive typed IDs only where operations, diagnostics, or relations
 need robust selection. Structural paths are canonical within the owning declaration. Paths, source

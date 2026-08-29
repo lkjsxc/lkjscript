@@ -1,7 +1,8 @@
 # Evidence-gated roadmap
 
 Implemented work is intentionally absent. Graph 5 authority, CLI 12, offline minimal, command, and
-HTTP recipes, exact built-in interface/deployment discovery, compact task/capability authoring,
+HTTP recipes, exact built-in interface/deployment discovery, compact task/capability and explicit
+named higher-order generic authoring, Graph-owned `list-fold-left`,
 normalized check/build/pure-run, artifact 10, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact-10 service/worker deployment, and both
 static and PostgreSQL-backed copied-binary HTTP acceptance are current architecture. Immutable
@@ -19,14 +20,14 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    reversal conditions before selecting storage representation. Cut over all maintained consumers,
    reject predecessor configuration, delete SQL-specific application meaning and permanent dual
    production paths, and retain PostgreSQL only as evidence where explicitly required.
-2. **Dependency-closed remaining HTTP topology authoring.** Expose component, requirement, port,
-   and target creation only when another maintained workflow needs topology beyond the closed
-   recipe. Move every maintained consumer in one cutover and retain exact review, validation,
-   failure, and predecessor-rejection evidence.
-3. **Bounded context traversal.** Select an explicit traversal contract and independently justify
+2. **Bounded context traversal.** Select an explicit traversal contract and independently justify
    a stateless continuation or bounded external output. Prove canonical ordering,
    revision/selector binding, cancellation, locality, and full-oracle equality without adapting a
    predecessor cursor or query index.
+3. **Dependency-closed remaining HTTP topology authoring.** Expose component, requirement, port,
+   and target creation only when another maintained workflow needs topology beyond the closed
+   recipe. Move every maintained consumer in one cutover and retain exact review, validation,
+   failure, and predecessor-rejection evidence.
 4. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
@@ -62,10 +63,11 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.
-13. **Language abstraction from real consumers.** Constraints, inference, lexical closures,
-   component composition, specialization, AOT, JIT, SIMD, or custom allocation require multiple
-   maintained workloads, independent semantic/reference behavior, measurements, and explicit
-   reversal conditions.
+13. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
+   implemented. Constraints, inference, lexical capture/closures, component composition,
+   specialization, AOT, JIT, SIMD, or custom allocation still require multiple maintained
+   workloads, independent semantic/reference behavior, measurements, and explicit reversal
+   conditions. Do not infer capture from the existence of named function values.
 
 TLS is not a roadmap item. The present HTTP/PostgreSQL boundary is plaintext and requires an
 appropriate external trusted transport boundary. Hostile-code sandboxing and multi-tenant

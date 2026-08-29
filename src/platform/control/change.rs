@@ -8,7 +8,7 @@ use crate::platform::change::{
     AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMatchExpressionArm,
     AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
     ParameterParentSelector,
 };
@@ -26,8 +26,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-5";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 5;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-6";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 6;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-6";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 6;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -70,6 +70,7 @@ pub(crate) enum CompactChangeOperation {
     CreateTest,
     AddField,
     AddCase,
+    AddTypeParameter,
     AddParameter,
     AddRequirement,
     SetFunctionContract,
@@ -80,7 +81,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 15] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -89,6 +90,7 @@ impl CompactChangeOperation {
         Self::CreateTest,
         Self::AddField,
         Self::AddCase,
+        Self::AddTypeParameter,
         Self::AddParameter,
         Self::AddRequirement,
         Self::SetFunctionContract,
@@ -456,6 +458,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddTypeParameter,
+        name: "add.type-parameter",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::AddParameter,
         name: "add.parameter",
         fields: &[
@@ -752,6 +776,8 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "if",
     "sequence",
     "call",
+    "function-value",
+    "invoke",
     "let",
     "record",
     "variant",
@@ -1049,6 +1075,30 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         name: "function",
         required: true,
         syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "function-value",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "function-value",
+        name: "function",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "invoke",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "invoke",
+        name: "function",
+        required: true,
+        syntax: "$NAME",
     },
     CompactFormField {
         form: "let",
@@ -1979,6 +2029,13 @@ impl Decoder {
                         .transpose()?,
                 },
             }),
+            CompactChangeOperation::AddTypeParameter => Ok(AuthoredChange::AddTypeParameter {
+                declaration: parse_declaration_selector(record, "function")?,
+                parameter: AuthoredTypeParameter {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                },
+            }),
             CompactChangeOperation::AddParameter => Ok(AuthoredChange::AddParameter {
                 parent: ParameterParentSelector::Declaration {
                     declaration: parse_declaration_selector(record, "function")?,
@@ -2319,6 +2376,25 @@ impl Decoder {
                         .into_iter()
                         .map(|edge| self.decode_type(&edge.value))
                         .collect::<Result<Vec<_>, _>>()?,
+                    arguments: self.decode_expression_edges(symbol)?,
+                }
+            }
+            "expression.function-value" => {
+                check_fields(&record, &["as", "function"])?;
+                AuthoredExpressionOperation::FunctionValue {
+                    function: parse_declaration_reference(&record, "function")?,
+                    type_arguments: self
+                        .ordered_edges(symbol, true)?
+                        .into_iter()
+                        .map(|edge| self.decode_type(&edge.value))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }
+            }
+            "expression.invoke" => {
+                check_fields(&record, &["as", "function"])?;
+                let function = required(&record, "function")?.to_owned();
+                AuthoredExpressionOperation::Invoke {
+                    callee: Box::new(self.decode_expression(&function)?),
                     arguments: self.decode_expression_edges(symbol)?,
                 }
             }
@@ -3271,6 +3347,90 @@ mod tests {
         );
         let repeated = decode_compact_change("other.lk", input.as_bytes()).unwrap();
         assert_eq!(decoded.request_commitment, repeated.request_commitment);
+    }
+
+    #[test]
+    fn generic_function_values_and_invocation_decode_through_one_public_vocabulary() {
+        let input = format!(
+            "request base={}\n\
+             type.parameter as=@item parameter=$item_type\n\
+             type.function as=@step result=@item\n\
+             type.argument parent=@step index=0 type=@item\n\
+             expression.local as=$step_local value=$step\n\
+             expression.local as=$value_local value=$value\n\
+             expression.invoke as=$apply_body function=$step_local\n\
+             expression.argument parent=$apply_body index=0 expression=$value_local\n\
+             create.module as=$module name=higher_order\n\
+             create.function as=$apply module=$module name=apply visibility=private result=@item effect=pure body=$apply_body\n\
+             add.type-parameter as=$item_type function=$apply name=Item\n\
+             add.parameter as=$value function=$apply name=value type=@item\n\
+             add.parameter as=$step function=$apply name=step type=@step\n\
+             expression.local as=$keep_body value=$keep_value\n\
+             create.function as=$keep module=$module name=keep visibility=private result=text effect=pure body=$keep_body\n\
+             add.parameter as=$keep_value function=$keep name=value type=text\n\
+             expression.function-value as=$apply_value function=$apply\n\
+             type.argument parent=$apply_value index=0 type=text\n\
+             expression.function-value as=$keep_value_expression function=$keep\n\
+             expression.text as=$text value=kept\n\
+             expression.invoke as=$entry_body function=$apply_value\n\
+             expression.argument parent=$entry_body index=0 expression=$text\n\
+             expression.argument parent=$entry_body index=1 expression=$keep_value_expression\n\
+             create.function as=$entry module=$module name=entry visibility=public result=text effect=pure body=$entry_body\n",
+            revision()
+        );
+        let decoded = decode_compact_change("higher-order.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.changes.len(), 8);
+        assert!(matches!(
+            &decoded.semantic.changes[2],
+            AuthoredChange::AddTypeParameter { parameter, .. }
+                if parameter.symbol == "$item_type" && parameter.name.as_str() == "Item"
+        ));
+        let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[7] else {
+            panic!("entry function")
+        };
+        let AuthoredExpressionOperation::Invoke { callee, arguments } = &body.operation else {
+            panic!("entry invocation")
+        };
+        assert_eq!(arguments.len(), 2);
+        assert!(matches!(
+            callee.operation,
+            AuthoredExpressionOperation::FunctionValue {
+                ref type_arguments,
+                ..
+            } if type_arguments.len() == 1
+        ));
+
+        let repeated = decode_compact_change("other.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.request_commitment, repeated.request_commitment);
+    }
+
+    #[test]
+    fn higher_order_aliases_and_incomplete_invoke_fail_closed() {
+        for alias in ["function-ref", "lambda", "apply"] {
+            let input = format!(
+                "request base={}\n\
+                 expression.{alias} as=$body function=$function\n\
+                 create.module as=$module name=module\n\
+                 create.function as=$function module=$module name=function visibility=private result=unit effect=pure body=$body\n",
+                revision()
+            );
+            assert_eq!(
+                decode_compact_change("alias.lkjc", input.as_bytes()).unwrap_err()[0].code,
+                "change_expression_form_unknown"
+            );
+        }
+
+        let missing_function = format!(
+            "request base={}\n\
+             expression.invoke as=$body\n\
+             create.module as=$module name=module\n\
+             create.function as=$function module=$module name=function visibility=private result=unit effect=pure body=$body\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("invoke.lkjc", missing_function.as_bytes()).unwrap_err()[0].code,
+            "change_field_missing"
+        );
     }
 
     #[test]

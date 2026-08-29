@@ -112,14 +112,23 @@ change apply (--input RECORDS | --input-file PATH) --plan TOKEN
 One direct adapter exists for exact owner rename. Its full usage and the exhaustive compact record,
 type, expression, precondition, selector, and field vocabularies are registry-owned.
 
-Compact change contract 5 supports `pure` and exact-requirement `task` function effects. Its public
+Compact change contract 6 supports `pure` and exact-requirement `task` function effects. Its public
 dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
 record types, lexical bindings, structural and nominal record construction/projection, typed lists,
 variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical
 database transactions. Nested shapes use ordered flat fragment records and explicit parent/index
 edges. Request-local labels are notation only; normalized authored intent owns stable allocation
-and request commitment. Higher-order function values/invocation, maps, and arbitrary component,
-interface, external, port, and target creation remain outside the compact surface.
+and request commitment.
+
+The higher-order slice has exactly three public spellings: `add.type-parameter` adds one ordered
+stable parameter to a pure function; `expression.function-value` names one exact pure function and
+receives all ordered `type.argument` children; and `expression.invoke` receives one function-valued
+expression plus ordered `expression.argument` children. A function value is monomorphic after
+complete explicit substitution, carries no capture or capability authority, and is evaluated once
+before invocation arguments are evaluated left-to-right. Missing, excess, duplicate, foreign, task,
+nonfunction, arity, and argument-type cases reject before publication. `function-ref`, `lambda`,
+`closure`, and `apply` are not aliases. Maps and arbitrary component, interface, external, port, and
+target creation remain outside the compact surface.
 
 Task effect requirements are an ordered exact set of component-local requirement references. A
 new requirement names one exact built-in interface, an ordered admitted operation set, and separate

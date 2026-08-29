@@ -18,10 +18,10 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_dfde325dce6b59746f41b49777fbccb5d1efff50a53e0535c50b74cc98554d6f`;
-- semantic state: `semantic_state_d41fc027d4781f36df1c965280acaf814f9871df0e30029ed0245edc8fafc5e4`;
-- artifact manifest: `artifact_manifest_bab49942d015f38ac1898c43a15db56a25cd7a782411f6b94b40cbe86c9e51f9`;
-- artifact bundle: `artifact_bundle_79b9bb47b065d545402af21eb69057752e9f496e472475f030f5287139e592de`;
+- semantic revision: `rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf`;
+- semantic state: `semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479`;
+- artifact manifest: `artifact_manifest_1d37694f0357f6d5895c7387d1bcd187a25baa1d570bd5090434edb9ebba9ada`;
+- artifact bundle: `artifact_bundle_35269bc05054dfb366f1fda3d00c83f3c951928f66abd463cf695c0008ec4d8a`;
 - 1,313 root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
@@ -39,8 +39,8 @@ target/release/lkjscript --project applications/lkjournal build \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure and runs 5 application tests plus 7 standard
-tests. All 12 must agree between normalized bytecode and the canonical reference interpreter.
+Check compiles and links the exact two-package closure and runs 5 application tests plus 11 standard
+tests. All 16 must agree between normalized bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact-10 output. Check and build do
 not change accepted `HEAD`.
 
@@ -51,9 +51,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 697,403-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 728,187-byte
 artifact-10 bundle above (SHA-256
-`95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af`). `serve` resolves target
+`d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after required PostgreSQL and queue preflight. It does not discover this Graph 5

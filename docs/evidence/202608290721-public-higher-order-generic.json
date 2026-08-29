@@ -1,0 +1,408 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-higher-order-generic-evidence",
+    "version": 1
+  },
+  "campaign": "202608290721",
+  "status": "implementation-stable-final-verification-pending",
+  "recorded_utc": "2026-08-29T08:53:59Z",
+  "repository": {
+    "identity": "lkjsxc/lkjscript",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "branch": "main",
+    "orientation_baseline": "c116ef624d346bb97c59f76c3efe7b9341435cfc",
+    "starting_head": "c116ef624d346bb97c59f76c3efe7b9341435cfc",
+    "starting_origin_main": "c116ef624d346bb97c59f76c3efe7b9341435cfc",
+    "starting_relation": {
+      "ahead": 0,
+      "behind": 0
+    },
+    "starting_worktree": [
+      "modified AGENTS.md supplied by the user",
+      "untracked docs/campaigns/202608290721.md supplied by the user"
+    ],
+    "preserved_preexisting_work": {
+      "paths": [
+        "AGENTS.md",
+        "docs/campaigns/202608290721.md"
+      ],
+      "agents_content_sha256": "41f53a471b245fae6fe95abab33d0ce955a16b09086027e0e8054adbe1b8f079",
+      "included_in_source_commit": true
+    },
+    "applicable_instructions": [
+      "AGENTS.md at repository root"
+    ],
+    "active_campaign_at_entry": "202608290721",
+    "later_commits_at_entry": [],
+    "implementation_commit": "reported after creation because tracked evidence cannot name its containing commit",
+    "completion_commit": "reported after creation because tracked evidence cannot name its containing commit"
+  },
+  "entry_reconciliation": {
+    "root_product_version": "0.1.9",
+    "v0_1_10_unused": true,
+    "open_issues": 0,
+    "open_pull_requests": 0,
+    "queued_or_running_relevant_workflows": 0,
+    "latest_public_release": {
+      "tag": "v0.1.9",
+      "release_id": 378702473,
+      "tag_object": "caa78d6851c0f3cfc3d1dfeff78c122ce4780827",
+      "source_commit": "facebf51714b5a604434f49759e315ece0b4c218",
+      "immutable": true
+    },
+    "source_campaign_kind": "unreleased source-only cutover",
+    "conflicting_campaign_or_external_operation": false
+  },
+  "public_contract_cutover": {
+    "product_version": {
+      "before": "0.1.9",
+      "after": "0.1.10",
+      "publication": "unreleased"
+    },
+    "registry_digest": {
+      "before": "b03b152cd2de99b9879bb75731463891546fb91d8d41095f37f81b3f2ece57a8",
+      "after": "9da55649bdf2f20969c8b2633792a7e3ac7782d1198f407a84cb22832283eb41"
+    },
+    "advanced_contract": {
+      "before": "lkjscript-change-records-5",
+      "after": "lkjscript-change-records-6"
+    },
+    "canonical_public_vocabulary": [
+      "add.type-parameter",
+      "expression.function-value",
+      "expression.invoke"
+    ],
+    "rejected_aliases": [
+      "expression.function-ref",
+      "expression.lambda",
+      "expression.apply"
+    ],
+    "unchanged_contracts": {
+      "registry_encoding": 3,
+      "cli": 12,
+      "meaning_graph": 5,
+      "authored_change_codec": 6,
+      "semantic_validator": 5,
+      "artifact_manifest": 10,
+      "artifact_bundle": 10,
+      "deployment": 1,
+      "runtime": 1
+    },
+    "semantics": {
+      "function_values": "complete explicit type substitution of exact pure named functions",
+      "invoke_order": "callee once, then arguments in increasing public index order",
+      "authority": "stable semantic provenance only; no capture, code address, capability, secret, transaction, stream, or live handle",
+      "publication": "plan/apply use the existing exact-base authored request, review, validation, and atomic repository publication path"
+    },
+    "explicit_nonfeatures": [
+      "lexical lambdas or capture",
+      "partial application",
+      "type inference or implicit conversion",
+      "higher-rank or constrained polymorphism",
+      "generic task functions",
+      "task function values",
+      "function equality, ordering, or durable value encoding",
+      "new component, interface, external, port, target, or map-expression authoring"
+    ]
+  },
+  "standard_package": {
+    "before": {
+      "semantic_revision": "rev_856f4cab0ddd42b2719694a3d1b23553f248b3bd887c54dc19b90d506724b234",
+      "semantic_state": "semantic_state_cbf582b416cbc57b10bbac45b2e728f6a1adea996c00066dd2efcb5b3e91559d",
+      "package_revision": "package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665",
+      "package_transport": "package_transport_dd83db89a5a492b9195e439b759eafe259911e967a254d6f0dfaba36442bec4c",
+      "artifact_manifest": "artifact_manifest_844aed53e4be165ab6907147831a7b751e244b66dcd048000a7df2e65868d98b",
+      "artifact_bundle": "artifact_bundle_e5f346fa99ea4346cfa76e4a7bc5e605dbbba72770ef65701ca1911756c6aa12",
+      "semantic_owners": 298,
+      "compiler_units": 64,
+      "graph_tests": 7,
+      "artifact_objects": 611,
+      "artifact_bytes": 194200,
+      "transport_bytes": 74892
+    },
+    "after": {
+      "semantic_revision": "rev_b7e85425b4d2a15c6e7cbdc2c9128addeaebf24b9cb3dd626f2570ba47da23ee",
+      "semantic_state": "semantic_state_7590ee186644db29e411c9f919dbbde32daee9382a68f39d7270ff791632c93f",
+      "package_revision": "package_revision_b133c038d2997b440d5a6ec3fe9ec326e6c7c2c75259be7499aa234313bd6515",
+      "package_transport": "package_transport_9326e2744a3bfe401ef03750c162d32c1e3d4151a9b384fdd8fb28261601464a",
+      "compilation_manifest": "compilation_manifest_b92a37c04d352300d3ac5feceb4a1b26d3d98b23c1457acfb58cabe7ffd8fdcd",
+      "artifact_manifest": "artifact_manifest_48e18403aec9c5c74db8c4a0d75633cbe4f38648218c2e58fe5d7d3d1ca267a0",
+      "artifact_bundle": "artifact_bundle_47b5cc49c1ca833538933091b6648ef953eaa546337a63974f1aed6467c17f1b",
+      "semantic_owners": 381,
+      "compiler_units": 72,
+      "graph_tests": 11,
+      "artifact_objects": 716,
+      "artifact_bytes": 224984,
+      "transport_bytes": 77273,
+      "production_instructions": 292,
+      "reference_expressions": 243
+    },
+    "fold": {
+      "public_declaration": "decl_07dace81aeeebbaa5afb29bcc93c6589",
+      "name": "list-fold-left",
+      "signature": "list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State",
+      "private_helper": "decl_b7d6bd65e8d623e7c342f2eef20b808a",
+      "ownership": "ordinary Graph 5 pure functions using list-length, list-get, direct recursion, and general invoke",
+      "host_intrinsic_or_special_opcode_added": false,
+      "graph_tests": [
+        "empty list returns initial without invoking step",
+        "singleton",
+        "order-sensitive multi-item i64 fold",
+        "distinct Bool state instantiation"
+      ]
+    },
+    "public_authored_change": {
+      "request_path": ".artifacts/campaigns/202608290721/standard-fold.lkjc",
+      "request_sha256": "b97f103cbde99931c57a13efb797cf3a0c3aa40ff67930e24f717ed7cb8665a8",
+      "request_records": 153,
+      "request_bytes": 11155,
+      "request_commitment": "request_76600e2ee03040a1d384965cc940eed308ddd1ea141b426edafd951068e243f9",
+      "logical_plan_path": ".artifacts/campaigns/202608290721/standard-fold.logical-plan",
+      "logical_plan_sha256": "05343f1be831b6a455a7fb867b4d002dfb36c4545eec6524b0e9fcb644f85fce",
+      "logical_plan_records": 657,
+      "logical_plan_bytes": 161311,
+      "plan_token": "plan_76600e2ee03040a1d384965cc940eed308ddd1ea141b426edafd951068e243f941aca537bf59db264c42e50e794cde24024c8a1eaf1858ce1fa72b7662b466d5",
+      "allocations": 83,
+      "type_additions": 8,
+      "relations_added": 143,
+      "selected_tests": 4,
+      "deterministic_repeated_plan": true
+    }
+  },
+  "maintained_consumer_cutover": {
+    "lkjournal": {
+      "before_revision": "rev_dfde325dce6b59746f41b49777fbccb5d1efff50a53e0535c50b74cc98554d6f",
+      "after_revision": "rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf",
+      "after_state": "semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479",
+      "compilation_manifest": "compilation_manifest_3d118b76eeb798093e93ed56415134ac791747e65249ee4b3606429fb2398f2a",
+      "artifact_manifest": "artifact_manifest_1d37694f0357f6d5895c7387d1bcd187a25baa1d570bd5090434edb9ebba9ada",
+      "artifact_bundle": "artifact_bundle_35269bc05054dfb366f1fda3d00c83f3c951928f66abd463cf695c0008ec4d8a",
+      "artifact_bytes": 728187,
+      "closure_objects": 2424,
+      "compiler_units": 132,
+      "tests": 16,
+      "production_instructions": 468,
+      "reference_expressions": 391,
+      "exact_standard_dependency": "package_revision_b133c038d2997b440d5a6ec3fe9ec326e6c7c2c75259be7499aa234313bd6515"
+    },
+    "bbs": {
+      "application_policy_function": "header-matches-json-content-type",
+      "function_value": "named pure reducer over Bool and Header",
+      "standard_call": "list-fold-left<Header, Bool>",
+      "predecessor_removed": [
+        "header index parameter",
+        "header length local",
+        "list-get index traversal",
+        "index increment",
+        "recursive has-json-content-type self-call"
+      ],
+      "request_records_before": 1010,
+      "request_records_after": 982,
+      "request_bytes_before": 68630,
+      "request_bytes_after": 67051
+    },
+    "other_exact_consumers": [
+      "embedded built-in package constants and bytes",
+      "command and HTTP project recipes",
+      "copied-binary product and service acceptance",
+      "generated built-in interface and stateful authoring walkthrough"
+    ],
+    "predecessor_selection_search": "no nonhistorical tracked source, maintained HEAD, generated asset, test, recipe, or current document selects the predecessor standard revision, package revision, transport, or artifact",
+    "historical_storage_note": "immutable predecessor packs and transport candidates remain repository history but are not selected by either maintained HEAD"
+  },
+  "generated_assets": {
+    "packages/standard/generated/standard.lkjp": {
+      "bytes": 77273,
+      "sha256": "b5514baecae1276b8bfc5e551859e0ed351ff8e29a4fcddb66b76ddf5f23479c"
+    },
+    "packages/standard/generated/standard.lkja": {
+      "bytes": 224984,
+      "sha256": "e30f5c00166bb4b808e5e6557d5043faba492d44818a18e7a53d5113e9366485"
+    },
+    "applications/lkjournal/generated/lkjournal.lkja": {
+      "bytes": 728187,
+      "sha256": "d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf"
+    }
+  },
+  "generated_documents": {
+    "command": "target/release/lkjscript capabilities --generate-docs docs/generated",
+    "verification": "target/release/lkjscript capabilities --verify-generated docs/generated",
+    "classification": "fresh passed",
+    "registry_digest": "9da55649bdf2f20969c8b2633792a7e3ac7782d1198f407a84cb22832283eb41",
+    "sha256": {
+      "docs/generated/contracts.md": "c0b5979f76c43e75916191a66744fb5db945ff08b928634f674ebe30884ed395",
+      "docs/generated/operations.md": "9c0ea7e8455dec189b52abc5b30f04901331e2ca4e367b64504e40e6abe776c3",
+      "docs/generated/diagnostics.md": "6ba6c175d6e7671ad900faffa812ab844b404e37c72f096344767a33818338e4",
+      "docs/generated/change-grammar.md": "b6902f0906959c2688c360ac403200e3b494b59b3419d58b0387ebec92870264",
+      "docs/generated/builtin-standard.md": "742d6069d88fd781e292716f5c9369b89cf2ae3d9418e6385bae94fefef671cc",
+      "docs/generated/deployment.md": "00bb1de9d0dd445b9544e48562614c9f26f835d6ad46a3d2725a5352b169dac1",
+      "docs/generated/stateful-http-authoring.md": "9b2791d752856548920a2ec05975d2d10a5f9014f5b3635666e90e6e2140be52"
+    }
+  },
+  "empirical_answers": {
+    "Q1_contract_owners": "src/platform/control/change.rs owns the descriptor, compact child-fragment decoder, and contract identity; authored intent remains src/platform/change/request/creation.rs plus codec.rs; registry.rs and generated docs project it. Only compact change contract 5 to 6 and the unreleased product snapshot advanced.",
+    "Q2_existing_partial_support": "Graph 5, authored intent, inference, compiler, VM, and reference already supported the forms; the executable compact registry omitted them. No later checkout implementation existed.",
+    "Q3_exact_standard_consumers": "executable discovery and exact searches found embedded built-in constants and bytes, command/HTTP project recipes, standard and lkjournal maintained repositories/assets, copied product/stateful/service acceptance, and generated/current documentation. All select package_revision_b133c038... after cutover.",
+    "Q4_graph_owners": "the standard collection module mod_1424cf669aac85e52e56b57899fe2c7c owns list-length/list-get and now decl_07dace... list-fold-left; tools/lkjscript-dev/src/stateful_http_program.rs owned the predecessor traversal and now authors the application reducer and fold call.",
+    "Q5_resources": "aggregate exact package counters are retained above. A copied 4,096-item public fold reached the existing normalized_call_depth admission at 4,096 frames with typed exit class 4, no abort, and unchanged accepted HEAD. No fold-specific limit or SLO was added.",
+    "Q6_service_prerequisite": "the pinned postgres@sha256:075f... container image was cached locally. A campaign-scoped Docker daemon made the supported pinned-container path available; the pre-edit service profile correctly classified both PostgreSQL gates unavailable before that daemon existed.",
+    "Q7_version_and_push": "v0.1.10 was unused and origin/main equaled the starting HEAD. Final fetch, fast-forward safety, push, and remote equality remain final-handoff checks."
+  },
+  "verification": {
+    "baseline_product": {
+      "classification": "fresh passed",
+      "command": "cargo run --locked -p lkjscript-dev -- check product",
+      "receipt": ".artifacts/lkjscript-dev/check/1787990689030680230-3907470-0/receipt.json",
+      "receipt_sha256": "d56ca6f54d2a4d0d57444ba53b5f8e1aabe5333519906286c7eb206357745475",
+      "worktree_digest": "verification_ef6ef8d934092658228a1103e1709b4445790decfa7e0a980d5115f58eface40",
+      "gates": 17,
+      "elapsed_nanoseconds": 7999485164
+    },
+    "baseline_service": {
+      "classification": "unavailable",
+      "command": "cargo run --locked -p lkjscript-dev -- check service",
+      "receipt": ".artifacts/lkjscript-dev/check/1787990710187420117-3908678-0/receipt.json",
+      "receipt_sha256": "5c78e801f96fd7edb033e495994cf454549fd523b2bf692ea9bfebd2360db0f4",
+      "fresh_passed_gates": 6,
+      "unavailable_gates": [
+        "stateful_http_application",
+        "service_acceptance"
+      ]
+    },
+    "copied_stateful_http": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/stateful-http/1787992393165113007-3935486-0/receipt.json",
+      "receipt_sha256": "ff9c60fb19e5bc6f52bb32583a8da3b15428bffa636297d82a0439163ba0ca69",
+      "candidate_sha256": "58f5263bdeb8c917dc72b7c17e96ede882e84f0099bd5545e75d46db2cc9807b",
+      "candidate_bytes": 15808424,
+      "outside_checkout": true,
+      "commands": 68,
+      "elapsed_nanoseconds": 10288071048,
+      "artifact_bytes": 495865,
+      "artifact_sha256": "b99e62191916e571ceb0b843cd703941308fc7844ee38fb94463e765295dff4b",
+      "clean_incremental_equal": true,
+      "http_routes": 27,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "lkjournal_service": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1787992419116279040-3937326-0/receipt.json",
+      "receipt_sha256": "17d369b70abf5b60eb7c23ba3d63d002789d711c21b9d41a206ef3e2d7268388",
+      "commands": 15,
+      "requests": 14,
+      "runners": 3,
+      "elapsed_nanoseconds": 4045205832,
+      "fresh_artifact_equal": true,
+      "backup_restore_equal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "focused_iteration_failures": [
+      {
+        "receipt": ".artifacts/lkjscript-dev/check/1787993059961220269-3946139-0/receipt.json",
+        "classification": "failed",
+        "cause": "project recipe test counts still expected seven predecessor standard tests",
+        "correction": "advance exact dependency-closure expectations from 8 to 12"
+      },
+      {
+        "receipt": ".artifacts/lkjscript-dev/check/1787993197846378067-3949559-0/receipt.json",
+        "classification": "failed",
+        "cause": "public CLI and maintained lkjournal checks retained predecessor aggregate test counts",
+        "correction": "advance new-project checks from 8 to 12 and lkjournal from 12 to 16"
+      }
+    ],
+    "final": {
+      "classification": "not run",
+      "commands": [],
+      "implementation_commit": "pending",
+      "worktree_digest": "pending",
+      "receipt": "pending",
+      "receipt_sha256": "pending",
+      "verification_digest": "pending",
+      "fresh_passed": 0,
+      "reused_passed": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 1
+    }
+  },
+  "resource_observations": {
+    "environment": {
+      "operating_system": "Linux 7.0.0-29-generic",
+      "architecture": "x86_64",
+      "visible_processors": 16,
+      "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+      "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+      "filesystem_cache": "warm and uncontrolled",
+      "child_cpu_sampling_resolution": "10 ms"
+    },
+    "bbs": {
+      "plan_records": 4562,
+      "plan_bytes": 1149755,
+      "allocations": 621,
+      "affected_owners": 631,
+      "type_additions": 7,
+      "retirements": 6,
+      "relations_removed": 10,
+      "relations_added": 1017,
+      "selected_tests": 11,
+      "impact_reasons": 983,
+      "sampled_child_cpu_nanoseconds": 5450000000,
+      "peak_child_rss_kib": 21648
+    },
+    "lkjournal_service": {
+      "sampled_child_cpu_nanoseconds": 440000000,
+      "peak_child_rss_kib": 21548
+    },
+    "interpretation": "point observations only; no SLO, provider cost, asymptotic improvement, tail-call property, or universal list scale is claimed"
+  },
+  "deviations_and_corrections": [
+    {
+      "assumption": "existing validation already rejected generic task functions",
+      "evidence": "public add.type-parameter reached a task declaration without an owning kernel rejection",
+      "correction": "add general kernel_owner_generic_task validation and a full-oracle test",
+      "objective_effect": "preserves the selected pure rank-1 boundary"
+    },
+    {
+      "assumption": "all maintained dependency replacement could use the selected compact vocabulary",
+      "evidence": "compact change 6 intentionally has no public dependency replacement operation",
+      "correction": "use the existing typed repository ReplaceDependency path once for lkjournal migration, then delete the temporary migration test",
+      "objective_effect": "current lkjournal HEAD and artifact select the sole new exact standard revision; no second public parser was added"
+    },
+    {
+      "assumption": "default canonical read admission covered the one-time lkjournal dependency migration",
+      "evidence": "the retained immutable repository catalog exceeded that default during exact dependency replacement",
+      "correction": "raise only the temporary typed migration admission; production defaults and contracts are unchanged",
+      "objective_effect": "no public resource contract changed"
+    },
+    {
+      "assumption": "a supported PostgreSQL prerequisite was active at entry",
+      "evidence": "the baseline service receipt classified both required database gates unavailable",
+      "correction": "start a campaign-scoped daemon over the already cached pinned image and require normal acceptance cleanup",
+      "objective_effect": "the exact maintained stateful and lkjournal boundaries became freshly observable without network pull or deployment"
+    }
+  ],
+  "external_actions": {
+    "normal_push": "pending final fast-forward reconciliation",
+    "tag_created_or_moved": false,
+    "release_created_or_changed": false,
+    "workflow_dispatched": false,
+    "deployment_performed": false,
+    "database_migration_outside_isolated_acceptance": false,
+    "published_v0_1_9_mutated": false
+  },
+  "known_limitations": [
+    "the source-only behavior is not present in immutable public v0.1.9",
+    "function values remain named, pure, monomorphic after explicit substitution, noncapturing, nonequatable, and nondurable",
+    "the fold uses ordinary recursion and therefore reaches the existing normalized call-depth admission on sufficiently large lists",
+    "historical immutable repository packs remain for revision history although current maintained HEADs select only the new dependency",
+    "measurements are warm-host point observations rather than distributions"
+  ],
+  "next_candidates": [
+    "first-party semantic data operations and complete SQL/PostgreSQL cutover",
+    "bounded context traversal for deterministic agent discovery",
+    "remaining topology authoring only from a maintained consumer"
+  ]
+}

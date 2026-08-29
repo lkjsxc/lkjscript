@@ -1226,7 +1226,7 @@ mod tests {
             .expect("prepare normalized command");
         let control = super::super::execution::ExecutionControl::default();
         let checked = prepared.check(&control).expect("check command graph tests");
-        assert_eq!(checked.passed, 8);
+        assert_eq!(checked.passed, 12);
         assert_eq!(checked.failed, 0);
         assert_eq!(checked.differential, "equal");
         let run = prepared
@@ -1291,7 +1291,7 @@ mod tests {
         let checked = prepared
             .check(&super::super::execution::ExecutionControl::default())
             .expect("check HTTP graph tests");
-        assert_eq!(checked.passed, 8);
+        assert_eq!(checked.passed, 12);
         assert_eq!(checked.failed, 0);
         assert_eq!(checked.differential, "equal");
 

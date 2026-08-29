@@ -267,6 +267,31 @@ exhaustion, failure, and shutdown.
 Do not add JIT, AOT, SIMD, memory mapping, custom allocators, resident sessions, specialization, or
 broad caching without a measured maintained workload, independent oracle, and reversal condition.
 
+## Language abstraction discipline
+
+- Treat a typed semantic form implemented by the graph, validator, compiler, and runtime but
+  unavailable through the distributed authoring surface as incomplete public capability, not as a
+  finished language feature.
+- Prefer completing an existing typed form and expressing reusable pure behavior in
+  `packages/standard/` before adding a host intrinsic, special opcode, source generator, macro, or
+  second authoring representation.
+- A reusable provider-independent operation belongs in standard Graph meaning when existing
+  language forms can express it correctly. Rust owns a new primitive only when maintained workloads
+  and independent evidence show that ordinary meaning cannot own the required semantics or resource
+  boundary.
+- Every new abstraction must define its exact types, effect boundary, evaluation order, identity,
+  equality and durability status, failure behavior, resource ownership, maintained consumers,
+  independent oracle, migration, deletion, and reversal condition.
+- Prefer named functions, explicit parameters, explicit type arguments, and explicit state before
+  adding hidden capture or inference. Do not add lambdas, lexical capture, implicit coercion,
+  constraints, dynamic dispatch, or textual metaprogramming merely to shorten compact requests.
+- Function values and other abstractions must not hide capabilities, grants, secrets, live handles,
+  external visibility, or mutable authority. Optimization representations remain derived and
+  replaceable.
+- A standard-library abstraction is complete only when at least one real maintained application
+  uses it through the public executable and production/reference behavior agrees. A contrived
+  fixture alone is not product evidence.
+
 ## Public CLI and protocols
 
 - The executable registry exhaustively owns finite public operations, grammar, request/response

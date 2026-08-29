@@ -221,6 +221,25 @@ impl<'a> Builder<'a> {
         Ok(label)
     }
 
+    fn function_value(
+        &mut self,
+        function: &str,
+        type_arguments: &[&str],
+    ) -> Result<String, DevError> {
+        let label = self.expression("function-value", vec![("function", function.to_owned())])?;
+        for (index, ty) in type_arguments.iter().enumerate() {
+            self.record(
+                "type.argument",
+                vec![
+                    ("parent", label.clone()),
+                    ("index", index.to_string()),
+                    ("type", (*ty).to_owned()),
+                ],
+            )?;
+        }
+        Ok(label)
+    }
+
     fn capability_call(
         &mut self,
         requirement: &str,
@@ -916,47 +935,42 @@ fn add_validation_and_route_functions(builder: &mut Builder<'_>) -> Result<(), D
         ],
     )?;
 
-    let index = builder.local("$header_index")?;
-    let length = builder.local("$header_length")?;
-    let within = builder.external_call("less", vec![index, length])?;
+    let previous = builder.local("$header_match_state")?;
+    let header = builder.local("$header_match_header")?;
+    let name = builder.field_name(header, "name")?;
+    let expected_name = builder.text("content-type")?;
+    let name_matches = builder.external_call("text-equal", vec![name, expected_name])?;
+    let header = builder.local("$header_match_header")?;
+    let value = builder.field_name(header, "value")?;
+    let expected_text = builder.text("application/json")?;
+    let expected = builder.external_call("bytes-from-text", vec![expected_text])?;
+    let value_matches = builder.external_call("bytes-equal", vec![value, expected])?;
+    let matches = builder.external_call("bool-and", vec![name_matches, value_matches])?;
+    let accumulated = builder.external_call("bool-or", vec![previous, matches])?;
+    builder.create_function(
+        "$header_matches_step",
+        "header-matches-json-content-type",
+        "bool",
+        &[],
+        accumulated,
+        &[
+            ("$header_match_state", "matched", "bool"),
+            ("$header_match_header", "header", "@header"),
+        ],
+    )?;
+
     let headers = builder.local("$header_values")?;
-    let index = builder.local("$header_index")?;
-    let selected = builder.generic_external_call("list-get", "@header", vec![headers, index])?;
-    let selected_body =
-        builder.let_one("header", selected, Some("@header"), |builder, binding| {
-            let header = builder.local(binding)?;
-            let name = builder.field_name(header, "name")?;
-            let expected_name = builder.text("content-type")?;
-            let name_matches = builder.external_call("text-equal", vec![name, expected_name])?;
-            let header = builder.local(binding)?;
-            let value = builder.field_name(header, "value")?;
-            let expected_text = builder.text("application/json")?;
-            let expected = builder.external_call("bytes-from-text", vec![expected_text])?;
-            let value_matches = builder.external_call("bytes-equal", vec![value, expected])?;
-            let matches = builder.external_call("bool-and", vec![name_matches, value_matches])?;
-            let yes = builder.boolean(true)?;
-            let index = builder.local("$header_index")?;
-            let one = builder.i64(1)?;
-            let next = builder.external_call("add", vec![index, one])?;
-            let headers = builder.local("$header_values")?;
-            let length = builder.local("$header_length")?;
-            let recurse =
-                builder.call("$has_json_content_type", &[], vec![headers, next, length])?;
-            builder.if_expression(matches, yes, recurse)
-        })?;
-    let no = builder.boolean(false)?;
-    let header_result = builder.if_expression(within, selected_body, no)?;
+    let initial = builder.boolean(false)?;
+    let step = builder.function_value("$header_matches_step", &[])?;
+    let fold = builder.standard.declaration("list-fold-left")?.to_owned();
+    let header_result = builder.call(&fold, &["@header", "bool"], vec![headers, initial, step])?;
     builder.create_function(
         "$has_json_content_type",
         "has-json-content-type",
         "bool",
         &[],
         header_result,
-        &[
-            ("$header_values", "headers", "@headers"),
-            ("$header_index", "index", "i64"),
-            ("$header_length", "length", "i64"),
-        ],
+        &[("$header_values", "headers", "@headers")],
     )?;
     Ok(())
 }
@@ -1513,11 +1527,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
 
 fn content_type_admitted(builder: &mut Builder<'_>, parameter: &str) -> Result<String, DevError> {
     let headers = builder.local(parameter)?;
-    let headers_for_length = builder.local(parameter)?;
-    let length =
-        builder.generic_external_call("list-length", "@header", vec![headers_for_length])?;
-    let zero = builder.i64(0)?;
-    builder.call("$has_json_content_type", &[], vec![headers, zero, length])
+    builder.call("$has_json_content_type", &[], vec![headers])
 }
 
 fn decode_write_body(

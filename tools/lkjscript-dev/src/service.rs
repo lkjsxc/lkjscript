@@ -25,7 +25,7 @@ pub(crate) const POSTGRES_IMAGE: &str =
     "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af";
+    "d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;

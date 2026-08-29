@@ -14,12 +14,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_856f4cab0ddd42b2719694a3d1b23553f248b3bd887c54dc19b90d506724b234`;
-- package revision: `package_revision_be57b4a64f267a5ffb64bc576e6546ac04d51aa79fd059ebecdac3558386a665`;
-- package transport: `package_transport_dd83db89a5a492b9195e439b759eafe259911e967a254d6f0dfaba36442bec4c`;
-- artifact manifest: `artifact_manifest_844aed53e4be165ab6907147831a7b751e244b66dcd048000a7df2e65868d98b`;
-- artifact bundle: `artifact_bundle_e5f346fa99ea4346cfa76e4a7bc5e605dbbba72770ef65701ca1911756c6aa12`;
-- 298 semantic owners, 64 compiler units, and 7 graph tests.
+- semantic revision: `rev_b7e85425b4d2a15c6e7cbdc2c9128addeaebf24b9cb3dd626f2570ba47da23ee`;
+- package revision: `package_revision_b133c038d2997b440d5a6ec3fe9ec326e6c7c2c75259be7499aa234313bd6515`;
+- package transport: `package_transport_9326e2744a3bfe401ef03750c162d32c1e3d4151a9b384fdd8fb28261601464a`;
+- artifact manifest: `artifact_manifest_48e18403aec9c5c74db8c4a0d75633cbe4f38648218c2e58fe5d7d3d1ca267a0`;
+- artifact bundle: `artifact_bundle_47b5cc49c1ca833538933091b6648ef953eaa546337a63974f1aed6467c17f1b`;
+- 381 semantic owners, 72 compiler units, and 11 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -39,9 +39,13 @@ target/release/lkjscript package builtin export --kind artifact \
 ```
 
 The current package includes generic strict `json-decode-or<T>`, `json-encode<T>`,
-`list-length<T>`, and `list-get<T>` declarations used by the maintained public stateful HTTP
-workflow. Their exact type parameters, signatures, implementation-free references, and the rest
-of the public interface are executable-generated in
+`list-length<T>`, `list-get<T>`, and
+`list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`.
+The fold and its private recursive helper are ordinary Graph meaning; no fold-specific intrinsic
+or runtime opcode exists. Empty, singleton, ordered multi-item, and distinct i64/bool
+instantiations are graph-owned tests, and the maintained stateful HTTP workflow passes its header
+predicate as a named function value. Exact type parameters, signatures, implementation-free
+references, and the rest of the public interface are executable-generated in
 [`docs/generated/builtin-standard.md`](../../docs/generated/builtin-standard.md).
 
 `generated/standard.lkjp` and `generated/standard.lkja` are deterministic derived owners for the

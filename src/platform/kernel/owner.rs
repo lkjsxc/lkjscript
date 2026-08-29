@@ -371,6 +371,12 @@ impl FunctionDeclaration {
         validate_ordered_unique("function type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("function parameters", &self.parameters, true)?;
         if let FunctionEffect::Task { requirements } = &self.effect {
+            if !self.type_parameters.is_empty() {
+                return Err(owner_error(
+                    "kernel_owner_generic_task",
+                    "task functions cannot declare type parameters",
+                ));
+            }
             validate_sorted_ids("task requirements", requirements, true)?;
         }
         Ok(())

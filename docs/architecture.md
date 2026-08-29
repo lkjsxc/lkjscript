@@ -235,8 +235,8 @@ copied binary discovery
   └─ strict deployment adapter schema
                      │
                      ▼
-       compact change 5 typed authored intent
-       requirement + task effect + generic expressions
+       compact change 6 typed authored intent
+ requirement + task effect + explicit generic/function values
                      │
             plan / exact-base apply
                      ▼
@@ -263,6 +263,15 @@ preserving its identity and parameter. Generic runtime call frames carry concret
 substitutions for standard JSON/list declarations in both production and reference tiers. An
 idempotent apply retry reopens the accepted request's exact parent and hides only the child-added
 physical type objects, preserving logical reprepare even though immutable storage grows.
+
+The built-in standard now exports Graph-owned
+`list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`. Its
+private index helper uses ordinary direct recursion, `list-length`, `list-get`, and general
+`invoke`; there is no fold intrinsic, opcode, or host callback. The BBS passes its private
+`(Bool, Header) -> Bool` reducer as a named function value, so application header policy flows into
+the standard dependency at runtime without reversing package dependency direction. Public compact
+records lower through the same authored-intent codec, validator, compiler, VM, and reference path
+as direct Graph construction.
 
 ## Artifact and execution boundaries
 
@@ -330,16 +339,18 @@ checkout path. Product/full verification and the target-admission, pre-publicati
 anonymous exact/latest paths all use this same owner.
 
 The separate `stateful_http_application` owner has the same contributor/transferred context seam and
-copies the candidate to a fresh root. It uses executable discovery to construct the 1,010-record BBS
+copies the candidate to a fresh root. It uses executable discovery to construct the 982-record BBS
 request and deployment, plans and applies through the public CLI, compares clean and incremental
 artifacts, then drives real BBS HTTP and PostgreSQL behavior through one `lkjscript serve` process.
-It proves malformed input and failed statements do not mutate rows, migration checksum divergence
-fails safely, persistence survives restart, failed startup emits no readiness, and build/runtime
-work leaves accepted Graph authority unchanged. Its schema-2 receipt binds verifier/source/copied
-candidate identities, execution context, optional checkout, PostgreSQL authority, redaction, and
-complete cleanup. Service/full verification and the target-admission, pre-publication, and
-anonymous exact/latest paths share this owner. The existing `lkjournal` service oracle remains a
-separate maintained workload, and distributed HTTP remains the faster no-database oracle.
+It requires the named header reducer/function value/standard fold records, proves missing,
+nonmatching, repeated, and reordered content-type behavior, and proves malformed input and failed
+statements do not mutate rows. Migration checksum divergence fails safely, persistence survives
+restart, failed startup emits no readiness, and build/runtime work leaves accepted Graph authority
+unchanged. Its schema-2 receipt binds verifier/source/copied candidate identities, execution
+context, optional checkout, PostgreSQL authority, redaction, and complete cleanup. Service/full
+verification and the target-admission, pre-publication, and anonymous exact/latest paths share this
+owner. The existing `lkjournal` service oracle remains a separate maintained workload, and
+distributed HTTP remains the faster no-database oracle.
 
 ## Security and replaceability
 

@@ -12,6 +12,11 @@ accepted meaning, run graph-owned tests, build deterministic artifact-10 bundles
 through the standalone deployment boundary without Cargo, a checkout, or an application helper.
 The stateful workflow uses an explicitly provisioned PostgreSQL authority.
 
+Current source is the unreleased 0.1.10 snapshot. It adds public explicit type-parameter,
+named-function-value, and invocation records plus a Graph-owned generic `list-fold-left`; the
+maintained source BBS uses that fold for header admission. The immutable v0.1.9 download remains the
+latest published binary and does not contain this source-only cutover.
+
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
@@ -126,19 +131,23 @@ Use the downloaded executable for all application-facing discovery and authoring
 ./lkjscript/lkjscript package builtin inspect owner interface decl_...
 ```
 
-Compact change 5 can add exact component requirements, create task functions, update the starter
-handler contract, and compose structural records, lexical bindings, fields, lists, variants,
-matches, exact built-in calls, requirement-scoped capability calls, and lexical transactions. The
-generated [change grammar](docs/generated/change-grammar.md),
+The v0.1.9 binary's compact change 5 can add exact component requirements, create task functions,
+update the starter handler contract, and compose structural records, lexical bindings, fields,
+lists, variants, matches, exact built-in calls, requirement-scoped capability calls, and lexical
+transactions. Current unreleased source advances that owner to compact change 6 and adds exactly
+`add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
+capture, partial application, or inference alias. The generated
+[change grammar](docs/generated/change-grammar.md),
 [built-in interface](docs/generated/builtin-standard.md),
 [deployment schema](docs/generated/deployment.md), and
 [stateful walkthrough](docs/generated/stateful-http-authoring.md) are the offline executable-owned
 authoring references.
 
-The maintained acceptance authors a 1,010-record BBS from a fresh `http` project exclusively
-through those public records, builds equal clean/incremental artifacts, and runs create/read/update/
-delete plus strict-input, rollback, restart, and failure checks through one `lkjscript serve`
-process and isolated PostgreSQL instance:
+The current maintained acceptance authors a 982-record BBS from a fresh `http` project exclusively
+through those public records. Its pure header reducer is passed as a named function value to the
+built-in standard fold. It builds equal clean/incremental artifacts and runs create/read/update/
+delete plus missing, nonmatching, repeated and reordered content-type, strict-input, rollback,
+restart, and failure checks through one `lkjscript serve` process and isolated PostgreSQL instance:
 
 ```sh
 LKJSCRIPT_POSTGRES_ROOT=/path/to/exact-postgresql-16.15-root \
@@ -242,6 +251,11 @@ The executable embeds one exact package transport and one exact artifact-10 bund
 Both assets are strictly decoded and cross-checked at initialization. Product verification
 regenerates their maintained owners and compares the bytes exactly. The built-in is not a general
 package registry and never performs ambient path or network resolution.
+
+The current source interface includes
+`list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`. The fold,
+its recursion, and its tests are Graph meaning; Rust contributes only the existing generic
+compiler/runtime mechanisms.
 
 ## Maintained consumers
 

@@ -524,6 +524,55 @@ row telemetry, exact filesystem synchronization calls, provider cost, or a laten
 Exact receipt identities and remaining limitations are in
 [`202608281817-public-stateful-http-authoring.json`](evidence/202608281817-public-stateful-http-authoring.json).
 
+## Higher-order generic and standard fold cutover
+
+The 2026-08-29 source observation used Linux `7.0.0-29-generic` x86-64, 16 visible processors,
+Rust/Cargo 1.98.0, and a warm filesystem. The PostgreSQL-backed runs used the already cached exact
+image `postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`
+through a campaign-scoped Docker data root. These are single point observations with 10 ms child
+CPU sampling, uncontrolled host load, and changing semantic inputs; they are not an SLO or a
+latency distribution.
+
+| Boundary | Before | Current source |
+|---|---:|---:|
+| standard owners / compiler units / tests | 298 / 64 / 7 | 381 / 72 / 11 |
+| standard artifact | 194,200 bytes; 611 objects | 224,984 bytes; 716 objects |
+| standard test work | 56 VM instructions / 41 reference expressions | 292 / 243 |
+| standard transport | 74,892 bytes | 77,273 bytes |
+| `lkjournal` two-package artifact | 697,403 bytes; 2,319 objects; 124 units | 728,187 bytes; 2,424 objects; 132 units |
+| `lkjournal` closure tests | 12; 232 VM instructions / 189 reference expressions | 16; 468 / 391 |
+| BBS compact request | 1,010 records / 68,630 bytes | 982 / 67,051 |
+| BBS logical plan | 4,680 records / 1,179,591 bytes | 4,562 / 1,149,755 |
+
+The current standard artifact grew by 30,784 bytes and the transport by 2,381 bytes. The exact
+same 30,784-byte dependency delta appears in `lkjournal`; the application's own 60 compiled units
+did not change. The additional four standard tests cover empty, singleton, order-sensitive
+multi-item, and distinct i64/bool fold instantiations. Their aggregate test counters include all
+standard behavior and therefore are not per-fold microbenchmarks.
+
+The copied-binary BBS run completed 68 bounded child commands in 10.288 seconds, accumulated 5.450
+seconds sampled child CPU, observed 21,648 KiB maximum child RSS, retained 286,355 stdout bytes and
+zero stderr bytes, and produced a 495,865-byte clean/incremental-equal artifact. Its reviewed plan
+contained 621 allocations, 631 owner effects, seven type additions, six retirements, 1,017 added
+relations, 11 selected tests, and 983 impact reasons. The live oracle performed 27 HTTP requests,
+including missing, nonmatching, repeated, and both relevant header orders, while retaining equal
+accepted authority across rollback and two runner restarts.
+
+A copied binary also authored a 4,096-item fold program. The default 4,096-frame runtime admission
+returned resource diagnostic `normalized_call_depth` with exit class 4; the process did not abort
+and accepted `HEAD` remained unchanged. This establishes the first existing admission boundary,
+not a fold-specific item limit or a claim about universal list scale.
+
+The fresh `lkjournal` service/worker/backup-restore observation took 4.045 seconds across 15 child
+commands, accumulated 0.440 seconds sampled CPU, and observed 21,548 KiB maximum child RSS. It
+rebuilt the checked-in 728,187-byte artifact byte-for-byte, exercised 13 service checks plus worker
+and `pg_dump`/`pg_restore`, restored an equal read, and removed its isolated container. The
+pre-edit local service profile was unavailable because no Docker daemon or verified local
+PostgreSQL root was active; unavailability was not counted as a pass.
+
+Exact receipts, byte digests, source identities, and evidence classifications are recorded in
+[`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json).
+
 ## Historical compiler, service, and verification receipts
 
 Before the current cutover, graph packages passed 6 standard and 11 `lkjournal` tests with

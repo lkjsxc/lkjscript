@@ -1460,6 +1460,37 @@ fn generic_call_substitutes_the_exact_type_parameter() {
 }
 
 #[test]
+fn full_oracle_rejects_generic_task_functions() {
+    let (mut snapshot, ids) = prototype_snapshot();
+    let parameter = TypeParameterId::migrate(TEST_SEED, 52);
+    insert(
+        &mut snapshot.owners,
+        OwnerRecord::TypeParameter(TypeParameterRecord {
+            header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
+            declaration: ids.caller,
+            name: name("TaskValue"),
+        }),
+    );
+    let Some(OwnerRecord::Declaration(caller)) =
+        snapshot.owners.get_mut(&OwnerKey::Declaration(ids.caller))
+    else {
+        panic!("caller must exist");
+    };
+    let DeclarationPayload::Function(caller) = &mut caller.payload else {
+        panic!("caller must be a function");
+    };
+    caller.type_parameters.push(parameter);
+    snapshot.root.owners = map_root(snapshot.owners.len(), 1);
+
+    let diagnostics = validate_full(&snapshot).expect_err("generic task function must reject");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_owner_generic_task")
+    );
+}
+
+#[test]
 fn owner_blob_roots_cover_expression_and_documentation_authority() {
     let text_digest = BlobObjectDigest::from_bytes([41; 32]);
     let expression = OwnerRecord::Expression(
