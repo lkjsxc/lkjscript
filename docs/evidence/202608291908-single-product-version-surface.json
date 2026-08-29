@@ -1,0 +1,727 @@
+{
+  "schema": {
+    "identity": "lkjscript-single-product-version-surface-evidence",
+    "version": 1
+  },
+  "campaign": "202608291908",
+  "status": "complete",
+  "recorded_utc": "2026-08-29T12:47:14Z",
+  "objective": "Make the root lkjscript product version the only version presented by current product-facing surfaces while retaining independently owned internal compatibility discriminants.",
+  "repository": {
+    "identity": "lkjsxc/lkjscript",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "branch": "main",
+    "orientation_baseline": "d53edc7b9bc017261a589ed117c441196e6c831a",
+    "starting_head": "d53edc7b9bc017261a589ed117c441196e6c831a",
+    "starting_origin_main": "d53edc7b9bc017261a589ed117c441196e6c831a",
+    "starting_relation": {
+      "ahead": 0,
+      "behind": 0
+    },
+    "starting_worktree": [
+      "modified AGENTS.md supplied by the user",
+      "untracked docs/campaigns/202608291908.md supplied by the user"
+    ],
+    "preserved_preexisting_work": {
+      "agents_path": "AGENTS.md",
+      "agents_sha256": "ee9309af567d66428e4e8ef0a74680cfee2122b8d7aeaa19739d23eb5ab7f395",
+      "agents_state": "preserved byte-for-byte, unstaged, and uncommitted",
+      "campaign_initial_sha256": "83454c4adf824bd4904e0b2d20438969b441e94e1472d04e97440ff2111b9dbb",
+      "campaign_state": "included unchanged in the implementation commit, then updated only by the evidence-only terminal commit"
+    },
+    "active_campaign_at_entry": "202608291908",
+    "latest_prior_campaign": {
+      "path": "docs/campaigns/202608290721.md",
+      "status": "complete"
+    },
+    "conflicting_active_campaigns": [],
+    "later_commits_at_entry": [],
+    "implementation_commits": [
+      {
+        "sha": "4477649c60c7bbb8c67cda6ef175e65ec42a5c7f",
+        "purpose": "Cut over the product version, capabilities, logical review, deployment and resident protocols, release metadata, current documentation, generated guides, consumers, and audit."
+      },
+      {
+        "sha": "54af61a9448b0f4ee5fe2e31ffeff4fc040e6b08",
+        "purpose": "Close the final stateful generated-guide consumer and remaining public diagnostic vocabulary, then regenerate owned guides and measurements."
+      }
+    ],
+    "completion_commit": "reported after creation because tracked evidence cannot name its containing commit"
+  },
+  "external_state": {
+    "entry": {
+      "open_pull_requests": 0,
+      "open_issues": 0,
+      "queued_or_running_actions": 0,
+      "v0_1_10_tag_exists": false
+    },
+    "pre_completion_refresh": {
+      "observed_utc": "2026-08-29T12:47:14Z",
+      "origin_main": "d53edc7b9bc017261a589ed117c441196e6c831a",
+      "local_relation": {
+        "ahead": 2,
+        "behind": 0
+      },
+      "open_pull_requests": 0,
+      "open_issues": 0,
+      "queued_actions": 0,
+      "in_progress_actions": 0,
+      "v0_1_10_tag_exists": false,
+      "immutable_releases_enabled": true,
+      "latest_public_release": {
+        "tag": "v0.1.9",
+        "release_id": 378702473,
+        "immutable": true,
+        "tag_object_sha": "caa78d6851c0f3cfc3d1dfeff78c122ce4780827",
+        "source_commit": "facebf51714b5a604434f49759e315ece0b4c218",
+        "publication_run": 33200478399
+      }
+    },
+    "mutation_policy": "Only a normal safe fast-forward push is authorized. No workflow dispatch, tag, release, package publication, deployment, migration, or published-object mutation is authorized.",
+    "push_at_record_assembly": "not yet attempted; the final report records the post-push remote relation"
+  },
+  "product_version": {
+    "canonical_owner": "src/lib.rs::PRODUCT_VERSION = env!(\"CARGO_PKG_VERSION\") from root Cargo.toml package version 0.1.10",
+    "published_release_remains": "v0.1.9",
+    "source_state": "0.1.10 unreleased",
+    "direct_candidate": {
+      "path": ".artifacts/campaigns/202608291908/final/direct-boundary/version.stdout",
+      "status": 0,
+      "stdout_utf8": "lkjscript 0.1.10\n",
+      "stdout_bytes": 17,
+      "stdout_hex": "6c6b6a73637269707420302e312e31300a",
+      "stderr_bytes": 0
+    },
+    "rejected_forms": [
+      {
+        "arguments": "version",
+        "status": 2,
+        "stderr_bytes": 0
+      },
+      {
+        "arguments": "-V",
+        "status": 2,
+        "stderr_bytes": 0
+      },
+      {
+        "arguments": "--version=0.1.10",
+        "status": 2,
+        "stderr_bytes": 0
+      },
+      {
+        "arguments": "--project /tmp/lkjscript-pvs-absent --version",
+        "status": 2,
+        "stderr_bytes": 0
+      },
+      {
+        "arguments": "--version extra",
+        "status": 2,
+        "stderr_bytes": 0
+      }
+    ],
+    "dispatcher_evidence": "src/bin/lkjscript.rs::main recognizes exactly [\"--version\"] before capability routing, project discovery, or Tokio runtime construction; tests/public_cli.rs::product_version_is_exact_and_has_no_alias_or_mixed_form proves the closed grammar."
+  },
+  "empirical_questions": {
+    "Q1_complete_public_leak_inventory": {
+      "orientation_baseline": [
+        {
+          "boundary": "default and focused capabilities",
+          "owners": [
+            "src/platform/cli.rs::append_registry_summary",
+            "src/platform/contract/registry.rs::RegistrySnapshot",
+            "src/platform/contract/registry.rs::RegistrySection::Contracts"
+          ],
+          "exposure": "registry record fields contract, version, graph, cli, and digest; the public contracts section emitted every ContractDescriptor identity/version, magic, and digest domain; --known-registry selected cache behavior."
+        },
+        {
+          "boundary": "generated public documentation",
+          "owners": [
+            "src/platform/contract/generated.rs::contracts_markdown",
+            "src/platform/contract/generated.rs::generated_documents",
+            "docs/generated/contracts.md"
+          ],
+          "exposure": "a complete internal contract ladder plus version-suffixed change, query, and deployment identities in generated guides."
+        },
+        {
+          "boundary": "logical review projection",
+          "owner": "src/platform/control/logical_plan.rs::LOGICAL_PLAN_RECORD_DESCRIPTORS and encode_logical_change_plan_admitted",
+          "exposure": "logical-plan fields contract/version and logical-plan.contracts fields graph, change, authored-request, semantic-diff, validator, and plan-file."
+        },
+        {
+          "boundary": "operator descriptors",
+          "owners": [
+            "src/platform/deployment.rs::DeploymentDescriptor",
+            "src/platform/runtime.rs::ResidentLimits",
+            "src/platform/http.rs::HttpLimits",
+            "src/platform/worker.rs::WorkerLimits"
+          ],
+          "exposure": "top-level and nested contract_version fields."
+        },
+        {
+          "boundary": "resident events",
+          "owner": "src/bin/lkjscript.rs resident ready, stopped, and write_failure encoders",
+          "exposure": "top-level event contract_version plus nested DeploymentObservation, WorkerReceipt, and ShutdownReceipt contract versions."
+        },
+        {
+          "boundary": "public release metadata",
+          "owners": [
+            "tools/lkjscript-dev/src/release/model.rs::ReleaseManifest",
+            "tools/lkjscript-dev/src/release/model.rs::ExecutableIdentity",
+            "tools/lkjscript-dev/src/release/mod.rs::CapabilitiesFacts",
+            ".github/workflows/release.yml"
+          ],
+          "exposure": "manifest schema identity/version, package identity, executable cli_contract, and executable_registry_digest; hosted transferred-oracle parsing repeated those fields."
+        },
+        {
+          "boundary": "public diagnostics and prose",
+          "owners": [
+            "src/platform/contract/registry.rs::diagnostic_descriptors",
+            "README.md",
+            "docs/status.md",
+            "docs/architecture.md",
+            "docs/roadmap.md",
+            "docs/security.md",
+            "docs/release.md",
+            "current docs/spec Markdown",
+            "packages/standard/README.md",
+            "applications/lkjournal/README.md"
+          ],
+          "exposure": "contract_registry_invalid, contract_generated_drift, generated contract/registry retry wording, and numbered subsystem branding."
+        }
+      ],
+      "closure": "The exact static candidate has 32 default records and contains only product, capabilities, result, summary, section, command, and next records at the summary level. The first-party audit scanned 28 current files plus 26 executable outputs with zero exceptions and zero violations."
+    },
+    "Q2_descriptor_and_event_consumer_closure": {
+      "encoders_and_decoders": [
+        "src/platform/deployment.rs descriptor/schema/project-recipe serialization and strict decode",
+        "src/platform/runtime.rs ResidentLimits and ShutdownReceipt",
+        "src/platform/http.rs HttpLimits",
+        "src/platform/worker.rs WorkerLimits and WorkerReceipt",
+        "src/bin/lkjscript.rs ready/stopped/failure JSON"
+      ],
+      "maintained_inputs_and_fixtures": [
+        "applications/lkjournal/service.deployment.json",
+        "applications/lkjournal/worker.deployment.json",
+        "tools/lkjscript-dev/src/stateful_http.rs::write_deployment",
+        "tools/lkjscript-dev/src/distributed_http.rs::validate_starter_files",
+        "tests/general_service.rs maintained descriptor fixtures"
+      ],
+      "event_consumers": [
+        "tools/lkjscript-dev/src/distributed_http.rs::parse_ready and parse_stopped",
+        "tools/lkjscript-dev/src/stateful_http.rs::Runner::wait_ready and stop",
+        "tools/lkjscript-dev/src/service.rs::parse_ready_event and parse_stopped_event",
+        "tests/general_service.rs resident failure checks"
+      ],
+      "last_predecessor_consumers": "All maintained writers and readers above now require the version-free shape. src/platform/deployment.rs::strict_current_descriptor_and_relative_paths_are_enforced and tests/general_service.rs::removed_descriptor_versions_reject_before_artifact_or_live_effects retain only negative predecessor fixtures for top, runtime, http, and worker nesting.",
+      "effect_order": "PreparedDeployment::load reads and strictly decodes the bounded descriptor before resolving or reading the artifact, validating adapters, reading secrets, or binding a listener; the black-box predecessor test points artifact at a missing file and still receives deployment_json with no ready event and no extra filesystem entry."
+    },
+    "Q3_release_metadata_dependency": {
+      "before_consumers": [
+        "tools/lkjscript-dev/src/release/mod.rs::inspect_capabilities and validate_candidate_cli_contract",
+        "tools/lkjscript-dev/src/release/admission.rs userland capability parsing",
+        "tools/lkjscript-dev/src/release/model.rs public manifest models",
+        ".github/workflows/release.yml pre-publication and anonymous exact/latest parsers"
+      ],
+      "current_binding": "Product version, capabilities digest, exact candidate SHA-256/ELF observation, exact source commit, target-policy digest, target triple, archive digest, and checksums provide at least the prior binding without publishing internal compatibility identities.",
+      "historical_parser_retained": false,
+      "reason": "No maintained current workflow reads immutable v0.1.9 metadata through the new writer/verifier. Historical assets remain immutable and their historical evidence remains readable without making an old parser selectable for new output."
+    },
+    "Q4_active_checkout_and_version_availability": {
+      "entry_branch": "main",
+      "entry_head": "d53edc7b9bc017261a589ed117c441196e6c831a",
+      "entry_origin_main": "d53edc7b9bc017261a589ed117c441196e6c831a",
+      "root_product_version": "0.1.10",
+      "v0_1_10_tag_exists": false,
+      "latest_release": "immutable v0.1.9",
+      "active_campaign": "202608291908 only",
+      "correction_to_audit_assumptions": "none"
+    },
+    "Q5_product_surface_audit_boundary": {
+      "owner": "tools/lkjscript-dev/src/check/surface.rs",
+      "explicit_current_files": [
+        ".github/workflows/release.yml",
+        "README.md",
+        "applications/lkjournal/README.md",
+        "applications/lkjournal/service.deployment.json",
+        "applications/lkjournal/worker.deployment.json",
+        "docs/architecture.md",
+        "docs/release.md",
+        "docs/roadmap.md",
+        "docs/security.md",
+        "docs/status.md",
+        "packages/standard/README.md"
+      ],
+      "current_directories": [
+        "docs/generated",
+        "docs/spec"
+      ],
+      "historical_exclusion": [
+        "docs/spec/semantic-diff-merge.md"
+      ],
+      "executable_boundary": "exact --version plus default capabilities, 12 command focuses, 13 public section focuses, and predecessor option/section probes",
+      "bounds": {
+        "maximum_file_bytes": 2097152,
+        "maximum_output_bytes": 2097152,
+        "maximum_directory_files": 128,
+        "maximum_reported_violations": 64
+      },
+      "result": {
+        "scanned_files": 28,
+        "executable_commands": 26,
+        "exceptions": 0,
+        "violations": 0,
+        "summary_path": ".artifacts/campaigns/202608291908/final/product-surface-summary.json",
+        "summary_sha256": "70d9428f312a6e1bd9019cd43e49ed55d3efc3360ff3cdf3996408f028ae46cd"
+      },
+      "negative_and_allowed_fixtures": "tools/lkjscript-dev/src/check/surface.rs::patterns_reject_numbered_subsystems_without_false_positives covers representative Graph, CLI, artifact, deployment, change, registry, contract_version, schema, old option, and old section leaks while allowing product SemVer, semantic revisions, digests, target triples, dates, status codes, bounds, and external tool versions."
+    },
+    "Q6_internal_binding_preservation": {
+      "retained_owners": [
+        "src/platform/contract/registry.rs::registry_snapshot and contract_descriptors retain the internal registry, CLI, graph, storage, witness, change, query, compiler, artifact, deployment, runtime, adapter, and package discriminants",
+        "src/platform/kernel/contract.rs graph identity/version and typed semantic headers",
+        "src/platform/storage/contract.rs and storage codecs/magic/checksums",
+        "src/platform/compiler/artifact.rs artifact contract, headers, strict ELF-independent bundle decoding, and graph binding",
+        "src/platform/compiler/cache.rs cache head magic/version and exact repository/revision/options/dependency binding",
+        "src/platform/control/logical_plan.rs internal plan-file contract and token commitments",
+        "src/platform/deployment.rs, runtime.rs, http.rs, and worker.rs internal typed current constants/defaults",
+        "private check, service, target-admission, release, and verifier receipts with independently owned evidence schemas"
+      ],
+      "logical_plan_binding": "The public plan now emits product/version and logical-plan.capabilities/digest. encode and decode both call bind_internal_registry with the complete internal registry digest before hashing the remaining body, so request commitment, prepared commitment, and plan token still change for hidden internal compatibility drift.",
+      "tests": [
+        "src/platform/contract/registry.rs::registry_is_unique_complete_and_deterministic",
+        "src/platform/control/logical_plan.rs::reviewed_change_plan_commitment_hides_but_binds_internal_registry",
+        "src/platform/deployment.rs::strict_current_descriptor_and_relative_paths_are_enforced",
+        "tests/public_cli.rs stale, foreign, malformed, predecessor, cancelled, and exhausted plan/publication tests",
+        "tools/lkjscript-dev/src/release/mod.rs::public_manifest_has_product_only_version_identity_and_rejects_predecessor_fields"
+      ],
+      "conclusion": "Only projections and operator JSON changed. Stored objects, packs, graph headers, compiler caches, artifact bytes, adapter/runtime typed checks, stale-plan checks, and private verifier bindings remain strict."
+    }
+  },
+  "cutover": {
+    "capabilities": {
+      "before": {
+        "default_records": 32,
+        "default_bytes": 2316,
+        "default_sha256": "4662c4758d398a2467a77ddbd44fae5b021f8d992ebb4d14e043bfde53a90963",
+        "common_section_focuses": 13,
+        "focused_records_sum": 1101,
+        "focused_bytes_sum": 115282,
+        "command_focuses": 12,
+        "command_records_sum": 176,
+        "command_bytes_sum": 13795,
+        "cache_option": "--known-registry",
+        "public_contracts_section": true
+      },
+      "after": {
+        "product_record": "product name=lkjscript version=0.1.10",
+        "capabilities_digest": "8d7be5f936571c83f03c3d4ac683bb5f3c7c2512fde19e99eea6ddc0e050ec0a",
+        "default_records": 32,
+        "default_bytes": 2151,
+        "default_sha256": "5a50ebd64b34dd5330444a4246eb37ab5b76ba6072651a6db4f62b8ffc8489ab",
+        "common_section_focuses": 13,
+        "focused_records_sum": 1102,
+        "focused_bytes_sum": 113576,
+        "command_focuses": 12,
+        "command_records_sum": 186,
+        "command_bytes_sum": 13154,
+        "cache_option": "--known-capabilities",
+        "public_contracts_section": false,
+        "direct_output": ".artifacts/campaigns/202608291908/final/direct-boundary/capabilities.stdout"
+      },
+      "negative": {
+        "known_registry_status": 2,
+        "contracts_section_status": 2,
+        "stderr_bytes_each": 0
+      }
+    },
+    "logical_plan": {
+      "removed_records": [
+        "logical-plan contract/version fields",
+        "logical-plan.contracts graph/change/authored-request/semantic-diff/validator/plan-file fields"
+      ],
+      "current_provenance": [
+        "logical-plan product=lkjscript version=0.1.10",
+        "logical-plan.capabilities digest"
+      ],
+      "retained_public_evidence": [
+        "repository and package identity",
+        "base and result revision",
+        "semantic state",
+        "request commitment",
+        "transaction and semantic-diff bindings",
+        "budgets and selected tests",
+        "prepared commitment and complete plan token"
+      ],
+      "same_request_measurement": {
+        "baseline_records": 20,
+        "baseline_bytes": 3721,
+        "baseline_sha256": "6043b83e40b5c403f72e4bbb7084a54f1000bdb33b4d762fae94ef0050f99f02",
+        "current_records": 20,
+        "current_bytes": 3538,
+        "current_sha256": "e9bb7fa61361b929924d35423da3b9c4ef55b5415d34edc1fe01404970548f84",
+        "owner": "docs/performance.md"
+      }
+    },
+    "descriptors_and_events": {
+      "removed_descriptor_fields": [
+        "contract_version",
+        "runtime.contract_version",
+        "http.contract_version",
+        "worker.contract_version"
+      ],
+      "maintained_service_descriptor_bytes": {
+        "before": 4542,
+        "after": 4463
+      },
+      "maintained_worker_descriptor_bytes": {
+        "before": 1758,
+        "after": 1679
+      },
+      "removed_event_fields": [
+        "ready.contract_version",
+        "ready.deployment.contract_version",
+        "stopped.contract_version",
+        "stopped.receipt.contract_version",
+        "stopped.receipt.shutdown.contract_version",
+        "failure.contract_version"
+      ],
+      "retained_event_evidence": "event kind, success/failure classification, exact artifact digest, target, runner, listener, grants, secret names, iterations, shutdown/admission state, remaining tasks, cleanup failures, and safe diagnostics"
+    },
+    "release_metadata": {
+      "removed_public_fields": [
+        "schema.identity",
+        "schema.version",
+        "package",
+        "executable.cli_contract",
+        "executable.executable_registry_digest"
+      ],
+      "current_top_level_keys": [
+        "cargo_lock_sha256",
+        "executable",
+        "packaging",
+        "product",
+        "publication_mode",
+        "root_license",
+        "source",
+        "target_triple",
+        "third_party_notices",
+        "toolchain"
+      ],
+      "manifest_path": ".artifacts/campaigns/202608291908/final/release-manifest.json",
+      "manifest_bytes": 3869,
+      "manifest_sha256": "8cfea0fcae3785427f220e7ca4d392806810aece037bec941125725846eefb60",
+      "historical_parser_retained": false,
+      "immutable_v0_1_9_changed": false
+    },
+    "generated_guides": {
+      "before_files": 7,
+      "before_bytes": 206605,
+      "after_files": 6,
+      "after_bytes": 201975,
+      "current_files": [
+        "docs/generated/builtin-standard.md",
+        "docs/generated/change-grammar.md",
+        "docs/generated/deployment.md",
+        "docs/generated/diagnostics.md",
+        "docs/generated/operations.md",
+        "docs/generated/stateful-http-authoring.md"
+      ],
+      "deleted": "docs/generated/contracts.md",
+      "verification": "exact static candidate capabilities --verify-generated docs/generated emitted 9 records, empty stderr, status 0"
+    },
+    "deletion_obligations": [
+      "public registry summary record and append_registry_summary path",
+      "--known-registry parser and help spelling",
+      "public capabilities --section contracts selection",
+      "contracts_markdown and docs/generated/contracts.md",
+      "public change/query/deployment contract identity fields",
+      "logical-plan.contracts projection and public contract/version fields",
+      "all four operator descriptor contract_version inputs/outputs",
+      "resident ready/stopped/failure contract_version outputs",
+      "public release manifest schema, CLI contract, and registry digest fields",
+      "workflow parsing of predecessor manifest and transferred-oracle fields",
+      "current numbered subsystem branding and predecessor diagnostic vocabulary",
+      "compatibility aliases, dual writers, current historical parser, and audit exceptions"
+    ]
+  },
+  "verification": {
+    "exact_implementation_content": "54af61a9448b0f4ee5fe2e31ffeff4fc040e6b08",
+    "environment": {
+      "operating_system": "linux",
+      "architecture": "x86_64",
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+      "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+      "docker": "Docker version 29.1.3, build 29.1.3-0ubuntu3~24.04.2",
+      "postgres_image": "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571",
+      "userland_images": [
+        "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+      ]
+    },
+    "commands": [
+      {
+        "command": "cargo fmt --all -- --check",
+        "classification": "fresh passed",
+        "result": "status 0"
+      },
+      {
+        "command": "cargo build --workspace --release --locked",
+        "classification": "fresh passed",
+        "result": "status 0; clean detached checkout; 2m30s cold release build",
+        "host_candidate_bytes": 15817352,
+        "host_candidate_sha256": "6911e870559e8d6cea6d7dc3cae565a0b7c84eadfa42f0f745ae34f8e271c020"
+      },
+      {
+        "command": "cargo run --locked -p lkjscript-dev -- check focused --fresh --machine",
+        "classification": "fresh passed",
+        "passed": 6,
+        "fresh": 6,
+        "reused": 0,
+        "elapsed_nanoseconds": 123376402269,
+        "receipt": ".artifacts/campaigns/202608291908/final/focused-receipt.json",
+        "receipt_digest": "verification_bb81af598b39ca118a68b3838d4095ad23011c76cde5df45c8a26b6253024dfb",
+        "receipt_sha256": "1d824746c09a34e8251701bfdc4fe268e23a00ed1f6f43694a9f8d1de3af356c"
+      },
+      {
+        "command": "cargo run --locked -p lkjscript-dev -- check product --fresh --machine",
+        "classification": "fresh passed",
+        "passed": 18,
+        "fresh": 18,
+        "reused": 0,
+        "elapsed_nanoseconds": 128148645526,
+        "receipt": ".artifacts/campaigns/202608291908/final/product-receipt.json",
+        "receipt_digest": "verification_57f0097224fc979455350427a97cd641ebf7fa93c45f51eed9d171f7ba8d1b0c",
+        "receipt_sha256": "2fb2709f8e49435c73626b37f03daaa6d7984288c149a9fc80253e36f8f99300"
+      },
+      {
+        "command": "cargo run --locked -p lkjscript-dev -- check service --fresh --machine",
+        "classification": "fresh passed",
+        "passed": 8,
+        "fresh": 8,
+        "reused": 0,
+        "elapsed_nanoseconds": 17451470578,
+        "receipt": ".artifacts/campaigns/202608291908/final/service-receipt.json",
+        "receipt_digest": "verification_62cf7d92569e61a62c34330a267e6d1bd8011b24e92ff9c735500c2791e363e6",
+        "receipt_sha256": "3ec23776697c5472985b52cff04d16114612419975f8ae57f015e34d6f6e40cc"
+      },
+      {
+        "command": "cargo run --locked -p lkjscript-dev -- check full --fresh --machine",
+        "classification": "fresh passed",
+        "passed": 23,
+        "fresh": 23,
+        "reused": 0,
+        "elapsed_nanoseconds": 214055771407,
+        "receipt": ".artifacts/campaigns/202608291908/final/full-receipt.json",
+        "receipt_digest": "verification_dbb48fa044c9a884f3539fe4780194084b1b5fee0b332d5726101fc6c9bb2e19",
+        "receipt_sha256": "581a111a8988be00665691ecb3b8139c5b19e55593d1f21ace2c8368b454574d"
+      },
+      {
+        "command": "target/release/lkjscript-dev release build --output .../lkjscript --receipt .../build-receipt.json",
+        "classification": "fresh passed",
+        "candidate_bytes": 15964384,
+        "candidate_sha256": "3e19a264b4bb3c44011e2de8159663dd5cbf1d0a31168ad373b47921422437aa",
+        "runtime_linkage": "static-musl",
+        "elapsed_nanoseconds": 144365456700,
+        "receipt": ".artifacts/campaigns/202608291908/final/build-receipt.json",
+        "receipt_sha256": "f35308e9332867750cfba1c83a0ec4acac86c0aadaa6e32b41343461032fb117"
+      },
+      {
+        "command": "target/release/lkjscript-dev release admit --candidate ... --build-receipt ... --evidence-root ...",
+        "classification": "fresh passed",
+        "classifications": 6,
+        "userlands": 2,
+        "oracles": 3,
+        "commands": 39,
+        "cleanup_complete": true,
+        "elapsed_nanoseconds": 21755415164,
+        "receipt": ".artifacts/campaigns/202608291908/final/target-admission-receipt.json",
+        "receipt_digest": "verification_bebc39a11afbcf40727d73d444466b1fe2905d2444a903bf066fbe66a0ff200a",
+        "receipt_sha256": "37b4c0b24d652236c808c64f419c67e2b9e3d5fa992d11fa65e1cbc5baa8d157"
+      },
+      {
+        "command": "target/release/lkjscript-dev release prepare ... --publication dry-run --require-full-verification",
+        "classification": "fresh passed",
+        "classifications": 11,
+        "archive_bytes": 7225037,
+        "archive_sha256": "789fa66c6b0c3bb410b8008cad872a0279aedd46fde64e26827456f2ae1c7d00",
+        "receipt": ".artifacts/campaigns/202608291908/final/release-receipt.json",
+        "receipt_sha256": "57d34c4a57d3c8d7598e8f1e6d16d5cc4b675c40f5b779a787c15d232ee349ca"
+      },
+      {
+        "command": "target/release/lkjscript-dev release verify ... --expected-tag v0.1.10 --expected-publication dry-run",
+        "classification": "fresh passed",
+        "members": 5,
+        "stderr_bytes": 0,
+        "summary": ".artifacts/campaigns/202608291908/final/release-verify-summary.json",
+        "summary_sha256": "9d8ee1a7fa79e43b71c6d263af37e7cc8b81d224021320b9378521cf31950ae5"
+      },
+      {
+        "command": "target/release/lkjscript-dev policy product-surface --binary <static-candidate> --machine",
+        "classification": "fresh passed",
+        "scanned_files": 28,
+        "executable_commands": 26,
+        "exceptions": 0,
+        "violations": 0
+      }
+    ],
+    "classification_totals": {
+      "repository_profile_gate_executions": {
+        "fresh_passed": 55,
+        "reused_passed": 0,
+        "skipped": 0,
+        "unavailable": 0,
+        "failed": 0,
+        "not_run": 0,
+        "note": "Counts are executions across focused, product, service, and full profiles; overlapping gates deliberately run fresh in more than one profile."
+      },
+      "target_admission_classifications": {
+        "fresh_passed": 6,
+        "reused_passed": 0,
+        "skipped": 0,
+        "unavailable": 0,
+        "failed": 0,
+        "not_run": 0
+      },
+      "release_prepare_classifications": {
+        "fresh_passed": 11,
+        "reused_passed": 0,
+        "skipped": 0,
+        "unavailable": 0,
+        "failed": 0,
+        "not_run": 0
+      },
+      "prohibited_or_out_of_scope": {
+        "hosted_workflow_dry_run": "not run because workflow dispatch is explicitly unauthorized",
+        "tag_and_release_publication": "not run because publication is explicitly unauthorized",
+        "deployment_and_production_migration": "not run because external operational mutation is explicitly unauthorized"
+      }
+    },
+    "recovered_diagnostic_attempts": [
+      "A focused run at exact content initially classified failed after five gates passed because /tmp reached Disk quota exceeded; two agent-owned obsolete verification worktrees were removed, then all six gates freshly passed.",
+      "The first target-admission attempt classified unavailable because privileged Docker export produced a root-owned rootfs archive; the temporary wrapper was narrowed to return only exported files to the invoking user.",
+      "The second admission attempt completed userland, distributed, and stateful work but could not resolve a service receipt because the verifier binary came from a different checkout root.",
+      "The third admission attempt classified failed because a fresh clone had not yet generated the ignored maintained lkjournal catalog.",
+      "After building the verifier and running fresh full verification in the same clone, final target admission freshly passed with cleanup complete. None of the recovered attempts is reported as final passed evidence."
+    ]
+  },
+  "maintained_consumer_evidence": {
+    "distributed_http": {
+      "receipt": ".artifacts/campaigns/202608291908/final/distributed-http-receipt.json",
+      "receipt_sha256": "2a76c8f9f4756efbb6232d7bc4dc4458e0f289ce240a2517cf5c912410aa843c",
+      "elapsed_nanoseconds": 1381235484,
+      "commands": 23,
+      "runners": 2,
+      "requests": 2,
+      "cleanup_complete": true
+    },
+    "stateful_http_bbs": {
+      "receipt": ".artifacts/campaigns/202608291908/final/stateful-http-receipt.json",
+      "receipt_sha256": "42455aedec6b47ef1a19e86db6ebebeb1b99c3c17bac53874b94931b9081d941",
+      "elapsed_nanoseconds": 10564583459,
+      "commands": 67,
+      "discovery_commands": 40,
+      "runners": 3,
+      "requests": 27,
+      "cleanup_complete": true,
+      "secrets_retained": false
+    },
+    "lkjournal_service_worker_backup_restore": {
+      "receipt": ".artifacts/campaigns/202608291908/final/service-acceptance-receipt.json",
+      "receipt_sha256": "3934dc085991121871d8314415dbe189a547bbf05ba13776dfb9000d6dfe57f6",
+      "elapsed_nanoseconds": 4798577963,
+      "commands": 16,
+      "runners": 3,
+      "requests": 14,
+      "cleanup_complete": true
+    }
+  },
+  "resource_observations": {
+    "capability_and_document_sizes": "Recorded under cutover.capabilities and cutover.generated_guides; the campaign makes no latency, token, cost, or SLO claim.",
+    "full_profile": {
+      "wall_nanoseconds": 214055771407,
+      "reported_child_cpu_nanoseconds_sum": 15780000000,
+      "maximum_gate_peak_rss_kib": 66416,
+      "gates": 23,
+      "maximum_workers": 4
+    },
+    "static_candidate_build": {
+      "wall_nanoseconds": 144365456700,
+      "reported_process_cpu_nanoseconds": 640000000,
+      "peak_rss_kib": 69848,
+      "candidate_bytes": 15964384
+    },
+    "release_dry_run": {
+      "prepare_wall_nanoseconds": 14654789564,
+      "candidate_lifecycle_wall_nanoseconds": 1003548076,
+      "candidate_lifecycle_peak_rss_kib": 64892,
+      "archive_bytes": 7225037,
+      "manifest_bytes": 3869
+    },
+    "cache_and_noise": "The first detached release build and the full-clone debug verifier build were cold for their target/profile. Final profile gates used repository-owned --fresh semantics but benefited from Cargo and filesystem caches. Target admission ran after exact image pulls. Measurements are from a shared container host with scheduler and filesystem-cache noise and are not universal performance evidence.",
+    "not_comparably_measured": [
+      "resident event byte deltas because lifecycle records contain dynamic exact identities and no first-party same-input baseline receipt was retained",
+      "baseline release archive bytes because v0.1.9 is a different immutable product snapshot rather than the same input",
+      "provider tokens or monetary cost"
+    ]
+  },
+  "documentation": {
+    "normative_owner_added": "docs/spec/product-surface.md",
+    "current_owners_updated": [
+      "README.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/security.md",
+      "docs/release.md",
+      "current docs/spec files",
+      "packages/standard/README.md",
+      "applications/lkjournal/README.md",
+      "docs/performance.md"
+    ],
+    "historical_records_deliberately_unchanged": [
+      "completed campaigns other than the new terminal record",
+      "docs/decisions",
+      "pre-existing docs/evidence",
+      "immutable v0.1.9 tag, release, assets, and release evidence",
+      "docs/spec/semantic-diff-merge.md historical predecessor description"
+    ]
+  },
+  "deviations_and_recovery": {
+    "selected_design_deviations": [],
+    "verification_environment_adjustments": [
+      "Release tooling requires a regular .git directory, so local release proof used a full clone at the exact implementation commit with the canonical GitHub origin fetched; linked-worktree verification remained valid for focused/product/service checks.",
+      "The host exposes Docker only through a root-owned socket. A temporary wrapper used passwordless sudo for the exact Docker CLI, preserved only POSTGRES_PASSWORD, and returned Docker-exported rootfs ownership to the invoking user. The wrapper is not repository content.",
+      "Pinned Alpine, Debian, and PostgreSQL image digests were added to reversible local Docker cache as verification prerequisites."
+    ],
+    "data_or_authority_recovery_required": false
+  },
+  "external_actions": {
+    "normal_push": "pending at record assembly",
+    "workflow_dispatch": false,
+    "tag_created_or_moved": false,
+    "release_created_or_mutated": false,
+    "package_published": false,
+    "deployment": false,
+    "production_migration": false,
+    "force_push": false,
+    "history_rewrite": false,
+    "published_object_mutation": false,
+    "local_reversible_actions": [
+      "created and later removed two agent-owned temporary verification worktrees to recover disk quota",
+      "created clean detached verification checkout and full release-proof clone",
+      "pulled three exact policy-pinned Docker images into local cache",
+      "created a temporary Docker privilege wrapper outside the repository"
+    ]
+  },
+  "limitations": [
+    "The source product version 0.1.10 remains unreleased; public latest remains immutable v0.1.9.",
+    "No hosted workflow was dispatched, so local exact-candidate build/admission/package verification is the authorized distribution proof.",
+    "Static-musl admission proves only the named x86_64 target, two pinned userlands, exact container/runtime observations, and maintained application oracles; it is not universal Linux compatibility or hostile-code isolation."
+  ],
+  "next_candidates": [
+    "first-party semantic data operations and maintained-consumer storage cutover",
+    "bounded context traversal with revision-bound continuation evidence",
+    "smallest remaining maintained authored-operation slice",
+    "separately authorized v0.1.10 publication after source and external preconditions are revalidated"
+  ]
+}
