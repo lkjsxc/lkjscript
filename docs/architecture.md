@@ -130,12 +130,14 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.9` closes this path at source commit
-`facebf51714b5a604434f49759e315ece0b4c218`. Its exact and latest downloads independently passed
-strict package and static inspection plus transferred distributed and stateful HTTP acceptance.
+Immutable `v0.1.10` closes this path at source commit
+`5cc8f79c55d9baa0a6ef964db502567b59c4d079`. Its exact and latest downloads independently passed
+strict package and static inspection plus transferred distributed and stateful HTTP acceptance,
+including the explicit higher-order generic authoring and single-product-version surface cutovers.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively and moved no predecessor tag, release, or asset.
+advanced additively through v0.1.9, and the v0.1.10 publication moved no predecessor tag, release,
+or asset.
 
 ## Layer ownership
 

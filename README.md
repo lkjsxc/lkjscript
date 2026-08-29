@@ -6,16 +6,16 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.9 executable provides offline command, editable HTTP, and reviewed stateful HTTP
+The supported v0.1.10 executable provides offline command, editable HTTP, and reviewed stateful HTTP
 application lifecycles through one copied binary. They create typed meaning graph projects, inspect
 and change accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute
 through the standalone deployment boundary without Cargo, a checkout, or an application helper.
 The stateful workflow uses an explicitly provisioned PostgreSQL authority.
 
-Current source is the unreleased 0.1.10 snapshot. It adds public explicit type-parameter,
+The current source and immutable v0.1.10 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
-maintained source BBS uses that fold for header admission. The immutable v0.1.9 download remains the
-latest published binary and does not contain this source-only cutover.
+maintained BBS uses that fold for header admission. Public product surfaces expose the root product
+version and opaque capabilities digest without separate subsystem generation numbers.
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
@@ -42,10 +42,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.9` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.9) owns the immutable
+[`v0.1.10` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.10) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.9/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.9/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.10/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.10/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -82,7 +82,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.9 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.10 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -131,14 +131,13 @@ Use the downloaded executable for all application-facing discovery and authoring
 ./lkjscript/lkjscript package builtin inspect owner interface decl_...
 ```
 
-The current source candidate also supports the exact standalone identity query
-`target/release/lkjscript --version`, which prints only `lkjscript 0.1.10`. The published v0.1.9
-binary remains unchanged.
+The downloaded executable also supports the exact standalone identity query
+`./lkjscript/lkjscript --version`, which prints only `lkjscript 0.1.10`.
 
-The v0.1.9 binary's compact change records can add exact component requirements, create task
+The v0.1.10 binary's compact change records can add exact component requirements, create task
 functions, update the starter handler contract, and compose structural records, lexical bindings,
 fields, lists, variants, matches, exact built-in calls, requirement-scoped capability calls, and
-lexical transactions. Current unreleased source extends those records with exactly
+lexical transactions. The public vocabulary also includes exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
 capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
@@ -256,7 +255,7 @@ Both assets are strictly decoded and cross-checked at initialization. Product ve
 regenerates their maintained owners and compares the bytes exactly. The built-in is not a general
 package registry and never performs ambient path or network resolution.
 
-The current source interface includes
+The public standard interface includes
 `list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`. The fold,
 its recursion, and its tests are typed meaning; Rust contributes only the existing generic
 compiler/runtime mechanisms.
