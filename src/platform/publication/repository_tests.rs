@@ -4013,7 +4013,10 @@ fn reviewed_change_plan_owned_body_closure_matches_complete_before_after_oracle(
         logical_plan_decode_error(&wrong_trailer),
         "change_plan_file_digest"
     );
-    let trailing = format!("{canonical}logical-plan contract=trailing version=1\n");
+    let trailing = format!(
+        "{canonical}logical-plan product=lkjscript version={}\n",
+        crate::PRODUCT_VERSION
+    );
     assert_eq!(
         logical_plan_decode_error(trailing.as_bytes()),
         "change_plan_file_trailing"

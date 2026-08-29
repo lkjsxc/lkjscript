@@ -1,15 +1,22 @@
 # Public CLI
 
-Status: normative. CLI contract 12 is the current process boundary. Exact operations, grammar,
-request/response models, limits, diagnostics, authority effects, and security nonclaims are owned
-by the executable registry and generated into
-[operations.md](../generated/operations.md), [contracts.md](../generated/contracts.md), and the
-other executable-generated catalogs in [`docs/generated/`](../generated/).
+Status: normative. The distributed `lkjscript` executable is the current process boundary. Exact
+operations, grammar, request/response models, limits, diagnostics, authority effects, and security
+nonclaims are owned by its public capability projection and generated into
+[operations.md](../generated/operations.md) and the other guides in
+[`docs/generated/`](../generated/).
 
-## Registry and dispatch
+## Product identity, capabilities, and dispatch
 
-`lkjscript capabilities` projects the complete current registry. Focused discovery uses
-`capabilities COMMAND` or `--section SECTION`; exact-known digests may request an unchanged result.
+Exact `lkjscript --version` writes `lkjscript <product-version>` plus one newline, writes no stderr,
+and exits successfully before project discovery or runtime setup. Every alias, value-bearing form,
+project-scoped form, or additional argument rejects through `cli_usage`.
+
+`lkjscript capabilities` projects complete public capabilities. Every successful default or focused
+response begins with the product name/version and an opaque capabilities digest. Focused discovery
+uses `capabilities COMMAND` or `--section SECTION`; `--known-capabilities DIGEST` may request an
+unchanged result. The predecessor registry-named cache spelling and removed contract-table section
+reject without aliases.
 `--generate-docs DIR` and `--verify-generated DIR` are the sole generated-document owner.
 
 The public operation set is closed: `capabilities`, `new`, `status`, `inspect`, `query`, `change`,
@@ -21,12 +28,13 @@ Global `--project PATH` selects a project for repository operations. Otherwise d
 ordinary ancestors without following symlinks. A predecessor `.lkjscript` marker produces the
 stable predecessor-authority diagnostic before cache, output, or mutation work.
 
-## Finite response and error contract
+## Finite responses and errors
 
 Every finite operation emits deterministic bounded compact line records. A classified finite
-outcome keeps stderr empty. Success begins with `result status=success|accepted|... command=...`;
-failure begins with `result status=failure` and includes stable diagnostic class, code, boundary,
-message, and safe identity/location fields.
+outcome keeps stderr empty. Capability success begins with its product and digest records; other
+success begins with `result status=success|accepted|... command=...`. Failure begins with
+`result status=failure` and includes stable diagnostic class, code, boundary, message, and safe
+identity/location fields.
 
 Compact output has independent byte and record limits. Growing results paginate with a logical
 continuation or write to an explicit bounded file. Output is never silently truncated. Project
@@ -35,7 +43,7 @@ path and digest rather than repeated in stdout.
 
 Exit classes distinguish source/semantic rejection, capability or cancellation, resource
 exhaustion, corruption, infrastructure, stale base, and invalid candidate according to the
-executable registry. The same typed diagnostic classes cross repository, compiler, artifact,
+public capability projection. The same typed diagnostic classes cross repository, compiler, artifact,
 runtime, and adapter boundaries.
 
 ## Project creation
@@ -47,23 +55,24 @@ new DEST [--template minimal|command|http] [--name NAME]
 The parent must be an ordinary existing directory. The destination must be absent and may not
 traverse a symlink; an existing empty directory is still a conflict. Creation validates the name
 and path before publication, constructs the
-complete Graph 5 repository in a private sibling, synchronizes canonical data, and makes it visible
-by one rename. Failed creation removes only its own stage and never changes an existing destination.
+complete typed meaning graph repository in a private sibling, synchronizes canonical data, and
+makes it visible by one rename. Failed creation removes only its own stage and never changes an
+existing destination.
 
 `minimal` creates an empty dependency-free package. `command` creates one useful pure command
 application with an exact built-in standard dependency, application module, private function,
 component, port, target `main`, and graph-owned test. The implementation calls an exact public
 standard declaration and deterministically returns text `"hello"`.
 
-`http` creates one exact-standard-dependent HTTP application. Graph meaning owns private pure
+`http` creates one exact-standard-dependent HTTP application. Typed meaning owns private pure
 `response-text` and `status-code` functions, a task handler with the normative structural HTTP
 request and response types, one byte-stream requirement, an HTTP port, target `serve`, and one
 status-code test. The handler returns status 200, no headers, and bounded bytes obtained from the
 editable response function through exact built-in standard declarations. The request is unused in
 this initial recipe.
 
-Before its one visibility rename, HTTP creation also synchronizes a strict deployment-contract-1
-descriptor at `service.deployment.json` and an empty `generated/` directory. The descriptor names
+Before its one visibility rename, HTTP creation also synchronizes a strict deployment descriptor at
+`service.deployment.json` and an empty `generated/` directory. The descriptor names
 `generated/application.lkja`, `serve`, `127.0.0.1:0`, and one byte-stream grant. It is separate
 mutable operator authority and is not part of semantic state. Creation returns its descriptor,
 recommended artifact output, target, runner, listener, and ordered next-action records. Minimal and
@@ -110,9 +119,9 @@ change apply (--input RECORDS | --input-file PATH) --plan TOKEN
 ```
 
 One direct adapter exists for exact owner rename. Its full usage and the exhaustive compact record,
-type, expression, precondition, selector, and field vocabularies are registry-owned.
+type, expression, precondition, selector, and field vocabularies are capability-owned.
 
-Compact change contract 6 supports `pure` and exact-requirement `task` function effects. Its public
+Compact change records support `pure` and exact-requirement `task` function effects. Their public
 dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
 record types, lexical bindings, structural and nominal record construction/projection, typed lists,
 variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical
@@ -185,18 +194,18 @@ foreign, selector-mismatched, or stale tokens reject. No private body, intrinsic
 name, or artifact string scan is exposed or required.
 
 `capabilities --section deployment` and
-[`deployment.md`](../generated/deployment.md) project deployment contract 1 from the same closed
+[`deployment.md`](../generated/deployment.md) project the deployment descriptor from the same closed
 descriptor inventory exercised by strict decoding. They enumerate top-level and nested fields,
 every adapter tag, required/optional status, scalar form, range, secret-name classification, and
-nested limit contract without secret values. The generated
+nested limit shape without secret values. The generated
 [`stateful-http-authoring.md`](../generated/stateful-http-authoring.md) walkthrough composes that
 schema with current built-in references and compact grammar; it is guidance, not program authority.
 
 ## Check
 
-`check` opens only Graph 5 authority, validates its supported exact dependency closure, prepares an
-exact-current or clean normalized compilation, links and strictly loads artifact 10, then runs all
-graph-owned tests through production and canonical reference execution. It reports authority,
+`check` opens only typed meaning authority, validates its supported exact dependency closure,
+prepares an exact-current or clean normalized compilation, links and strictly loads an artifact
+bundle, then runs all graph-owned tests through production and canonical reference execution. It reports authority,
 cache profile and unit work, artifact closure, aggregate test results, tier work, and differential
 equality. It never advances `HEAD`.
 
@@ -209,9 +218,9 @@ reported through `cache=clean-recovery`, rebuilt, and cannot cause wrong semanti
 build --output PATH
 ```
 
-Build uses the same preparation and exact dependency closure as check and run. It emits artifact
-contract 10 only. Equal authority, dependencies, compiler contracts, and options yield identical
-bytes.
+Build uses the same preparation and exact dependency closure as check and run. It emits only an
+artifact bundle. Equal authority, dependencies, compiler compatibility, and options yield
+identical bytes.
 
 Output publication is create-new: validate a bounded absent path and ordinary parent, write and
 synchronize an owned sibling stage, create the visible file without overwrite, synchronize the
@@ -236,7 +245,7 @@ are not duplicated. Run never advances authority.
 
 `serve --deployment DESCRIPTOR` and `worker --deployment DESCRIPTOR` are resident artifact-runtime
 operations, not current graph build commands. Their descriptors reference an explicitly isolated
-artifact-10 bundle. Loading reads descriptor, artifact, environment, and named host resources only;
+artifact bundle. Loading reads descriptor, artifact, environment, and named host resources only;
 it does not discover a repository. Preparation resolves the exact target and grants before
 readiness, and `artifact_digest` is the domain-tagged artifact bundle identity. Resident events are
 bounded and resources are released on failure, cancellation, exhaustion, and shutdown. The
@@ -246,8 +255,8 @@ plaintext HTTP and `NoTls` PostgreSQL adapters require an external trusted encry
 
 `draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor` are absent
 from discovery and dispatch. They are not compatibility aliases and have not been silently moved to
-another spelling. Graph 4 repositories and predecessor binary contracts reject.
+another spelling. Predecessor repositories and binary formats reject.
 
-The CLI does not expose storage records as authoring syntax, arbitrary Graph 4 migration, a general
+The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
 package manager, remote registry, source language, context traversal, an agent daemon, TLS,
 sandboxing, or multi-tenant isolation.

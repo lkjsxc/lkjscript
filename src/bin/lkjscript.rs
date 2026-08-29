@@ -21,9 +21,11 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio::net::TcpListener;
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    if arguments.as_slice() == ["--version"] {
+        return product_version();
+    }
     if let Some(capability_arguments) = compact_capability_arguments(&arguments) {
         return compact_capabilities(&capability_arguments);
     }
@@ -63,14 +65,37 @@ async fn main() -> ExitCode {
     ) {
         return unknown_operation(&arguments);
     }
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return write_failure(&Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "runtime_initialize",
+                format!("resident runtime could not initialize: {error}"),
+            ));
+        }
+    };
     let outcome = match operation {
-        Some(PublicOperation::Serve) => serve(&arguments[1..]).await,
-        Some(PublicOperation::Worker) => worker(&arguments[1..]).await,
+        Some(PublicOperation::Serve) => runtime.block_on(serve(&arguments[1..])),
+        Some(PublicOperation::Worker) => runtime.block_on(worker(&arguments[1..])),
         _ => return unknown_operation(&arguments),
     };
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
-        Err(error) => write_failure(&error, 1),
+        Err(error) => write_failure(&error),
+    }
+}
+
+fn product_version() -> ExitCode {
+    let line = format!("lkjscript {}\n", lkjscript::PRODUCT_VERSION);
+    match write_bytes(line.as_bytes()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::from(exit_status_for(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+        )),
     }
 }
 
@@ -303,10 +328,9 @@ fn unknown_operation(arguments: &[String]) -> ExitCode {
     )
 }
 
-fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {
+fn write_failure(error: &Diagnostic) -> ExitCode {
     let exit = exit_for(error);
     let failure = json!({
-        "contract_version": contract_version,
         "ok": false,
         "status": "failure",
         "error": error,
@@ -399,7 +423,6 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
     let application = prepared.worker_application()?;
     if let Err(mut error) = write_json(&json!({
-        "contract_version": 1,
         "ok": true,
         "event": "ready",
         "deployment": prepared.observe_redacted(),
@@ -413,7 +436,6 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
         })
         .await?;
     write_json(&json!({
-        "contract_version": 1,
         "ok": true,
         "event": "stopped",
         "receipt": receipt,
@@ -457,7 +479,6 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         }
     };
     if let Err(mut error) = write_json(&json!({
-        "contract_version": 1,
         "ok": true,
         "event": "ready",
         "local_address": local_address.to_string(),
@@ -472,7 +493,6 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         })
         .await?;
     write_json(&json!({
-        "contract_version": 1,
         "ok": true,
         "event": "stopped",
         "receipt": receipt,

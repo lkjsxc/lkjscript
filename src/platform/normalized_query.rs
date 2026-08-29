@@ -1,7 +1,7 @@
 //! Revision-pinned normalized semantic query model, continuation, execution, and compact output.
 
 use super::contract::{
-    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, registry_snapshot,
+    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, capabilities_snapshot,
 };
 use super::control::{CompactResponseLimits, CompactResponseWriter};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
@@ -120,7 +120,7 @@ pub(crate) const QUERY_RESPONSE_FIELDS: [(&str, &str); 35] = [
     ("work", "canonical-records-decoded"),
     ("work", "witness-records-decoded"),
     ("work", "rendered-output-bytes"),
-    ("schema", "registry"),
+    ("schema", "capabilities"),
 ];
 
 pub(crate) const QUERY_SELECTOR_FIELDS: [(&str, &str); 9] = [
@@ -1158,7 +1158,7 @@ struct QueryRenderContext<'a> {
     repository: RepositoryId,
     package: PackageId,
     revision: RevisionId,
-    registry_digest: &'a str,
+    capabilities_digest: &'a str,
 }
 
 pub(crate) fn execute_normalized_query(
@@ -1166,10 +1166,10 @@ pub(crate) fn execute_normalized_query(
     view: &RepositoryView,
     request: &NormalizedQueryRequest,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let snapshot = registry_snapshot().map_err(|message| {
+    let snapshot = capabilities_snapshot().map_err(|message| {
         Diagnostic::new(
             DiagnosticClass::Infrastructure,
-            "contract_registry",
+            "capabilities_projection",
             message,
         )
     })?;
@@ -1186,7 +1186,7 @@ pub(crate) fn execute_normalized_query(
         repository: binding.repository,
         package: binding.package,
         revision: binding.revision,
-        registry_digest: &snapshot.digest,
+        capabilities_digest: &snapshot.digest,
     };
     let (fixed_bytes, fixed_records) = fixed_response_reserve(
         &context,
@@ -2013,7 +2013,7 @@ fn fixed_response_reserve(
     append_fields(
         &mut writer,
         "schema",
-        &[("registry", context.registry_digest.to_owned())],
+        &[("capabilities", context.capabilities_digest.to_owned())],
     )?;
     Ok((writer.byte_count(), writer.record_count()))
 }
@@ -2088,7 +2088,7 @@ fn render_query_response_once(
     append_fields(
         &mut writer,
         "schema",
-        &[("registry", context.registry_digest.to_owned())],
+        &[("capabilities", context.capabilities_digest.to_owned())],
     )?;
     Ok(writer.finish())
 }

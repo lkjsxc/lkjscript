@@ -1,10 +1,8 @@
 {
-  "contract_version": 1,
   "artifact": "generated/lkjournal.lkja",
   "target": "work",
   "listen": null,
   "runtime": {
-    "contract_version": 1,
     "maximum_concurrent_tasks": 2,
     "maximum_queued_tasks": 0,
     "request_deadline_milliseconds": 30000,
@@ -18,7 +16,6 @@
   },
   "http": null,
   "worker": {
-    "contract_version": 1,
     "maximum_workers": 2,
     "idle_wait_milliseconds": 250
   },

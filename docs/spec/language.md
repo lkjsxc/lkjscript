@@ -1,13 +1,12 @@
 # Language meaning
 
-Status: normative for meaning graph contract 5.
+Status: normative for the typed meaning graph.
 
 ## Representation and evaluation
 
 Language constructs are typed semantic records in canonical owner objects. There is no maintained
-source grammar. Compact change contract 6, identified by the executable
-[contract registry](../generated/contracts.md), describes bounded authored intent; the request and
-logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own
+source grammar. Executable-discovered compact change records describe bounded authored intent; the
+request and logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own
 references, continuity, generic parameters, and selected expression/member sites.
 
 Evaluation is strict and left-to-right except `if` and variant `match`, which evaluate only the
@@ -99,7 +98,7 @@ conditional, lexical let, sequencing, direct call with explicit type arguments, 
 reference with explicit type arguments, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
-Compact change 6 exposes unit, bool, i64, text, and static-text literals; lexical variables and
+Compact change records expose unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
 construction and field projection; variants and exhaustive matches; typed lists; exact requirement
 capability calls; lexical transactions; named `function-value` expressions with ordered explicit
@@ -151,9 +150,9 @@ every mixed request, and every other change uses complete package reconstruction
 canonicalization, and validation. Focused tests compare local results
 with the complete oracle; inability to prove eligibility widens rather than narrowing.
 
-The generated [contract registry](../generated/contracts.md) owns the current summary, fact, and
-validator identities. The semantic-summary contract produces disposable content-addressed module
-summaries. The semantic-fact contract binds their exact inputs and digests, graph-owned test owners, and typed
+Typed source owners retain the internal summary, fact, and validator compatibility identities. The
+semantic summary produces disposable content-addressed module summaries. Semantic facts bind their
+exact inputs and digests, graph-owned test owners, and typed
 reverse dependency edges in three persistent maps. The accepted revision authenticates the map
 roots with a revision-independent semantic certificate. The four local transaction paths update
 those facts by path-local delta, but the dependency frontier does not yet select general

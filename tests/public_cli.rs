@@ -155,8 +155,9 @@ fn compact_success_output(output: Output) -> Vec<CompactRecord> {
         "compact success output is excessive"
     );
     let records = parse_records("stdout", &output.stdout).expect("compact records");
+    let result = compact_record(&records, "result");
     assert!(matches!(
-        compact_field(&records[0], "status"),
+        compact_field(result, "status"),
         Some("success" | "prepared" | "accepted" | "already-accepted")
     ));
     records
@@ -257,8 +258,42 @@ fn content_inventory(root: &Path) -> BTreeMap<String, [u8; 32]> {
 }
 
 #[test]
+fn product_version_is_exact_and_has_no_alias_or_mixed_form() {
+    let version = command(&["--version"]);
+    assert_eq!(version.status.code(), Some(0));
+    assert_eq!(
+        version.stdout,
+        format!("lkjscript {}\n", lkjscript::PRODUCT_VERSION).into_bytes()
+    );
+    assert!(version.stderr.is_empty());
+
+    for arguments in [
+        vec!["version"],
+        vec!["-V"],
+        vec!["--version=0.1.10"],
+        vec!["--version", "extra"],
+        vec!["--project", APPLICATION, "--version"],
+    ] {
+        let rejected = compact_failure_output(command(&arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("cli_usage"),
+            "{arguments:?}"
+        );
+    }
+}
+
+#[test]
 fn capabilities_discovery_is_compact_focused_and_exportable() {
     let capabilities = compact_success(&["capabilities"]);
+    assert_eq!(capabilities[0].operation, "product");
+    assert_eq!(
+        compact_record_values(&capabilities[0]),
+        vec![
+            ("name", "lkjscript"),
+            ("version", lkjscript::PRODUCT_VERSION)
+        ]
+    );
     assert_eq!(
         capabilities
             .iter()
@@ -280,24 +315,69 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "worker"
         ]
     );
-    let registry = compact_record(&capabilities, "registry");
-    let registry_digest = compact_field(registry, "digest").expect("registry digest");
-    let cached = compact_success(&["capabilities", "--known-registry", registry_digest]);
-    assert_eq!(compact_field(&cached[0], "unchanged"), Some("true"));
-    assert_eq!(cached.len(), 2);
+    assert!(
+        !capabilities
+            .iter()
+            .any(|record| record.operation == "registry")
+    );
+    let capability_record = compact_record(&capabilities, "capabilities");
+    let capabilities_digest =
+        compact_field(capability_record, "digest").expect("capabilities digest");
+    assert_eq!(capabilities_digest.len(), 64);
+    let cached = compact_success(&["capabilities", "--known-capabilities", capabilities_digest]);
+    assert_eq!(
+        compact_field(compact_record(&cached, "capabilities"), "unchanged"),
+        Some("true")
+    );
+    assert_eq!(cached.len(), 3);
+    let stale_digest = if capabilities_digest == "0".repeat(64) {
+        "1".repeat(64)
+    } else {
+        "0".repeat(64)
+    };
+    let stale = compact_success(&["capabilities", "--known-capabilities", &stale_digest]);
+    assert_eq!(
+        compact_field(compact_record(&stale, "capabilities"), "unchanged"),
+        Some("false")
+    );
+    assert!(stale.len() > cached.len());
+    let malformed = compact_failure_output(command(&[
+        "capabilities",
+        "--known-capabilities",
+        "not-a-digest",
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&malformed, "diagnostic"), "code"),
+        Some("cli_usage")
+    );
     let implicit = compact_success_output(command(&[]));
     assert_eq!(
-        compact_field(compact_record(&implicit, "registry"), "digest"),
-        Some(registry_digest)
+        compact_field(compact_record(&implicit, "capabilities"), "digest"),
+        Some(capabilities_digest)
     );
     let project_scoped = compact_success(&[
         "--project",
         APPLICATION,
         "capabilities",
-        "--known-registry",
-        registry_digest,
+        "--known-capabilities",
+        capabilities_digest,
     ]);
-    assert_eq!(compact_field(&project_scoped[0], "unchanged"), Some("true"));
+    assert_eq!(
+        compact_field(compact_record(&project_scoped, "capabilities"), "unchanged"),
+        Some("true")
+    );
+
+    for predecessor in [
+        vec!["capabilities", "--known-registry", capabilities_digest],
+        vec!["capabilities", "--section", "contracts"],
+    ] {
+        let rejected = compact_failure_output(command(&predecessor));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("cli_usage"),
+            "{predecessor:?}"
+        );
+    }
 
     let type_section = compact_success(&["capabilities", "--section", "type"]);
     assert!(type_section.iter().any(|record| {
@@ -348,11 +428,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(change_contract, "request-commitment"),
-        Some("lkjscript-authored-change-codec-6")
+        Some("opaque-digest")
     );
     assert_eq!(
         compact_field(change_contract, "prepared-plan"),
-        Some("lkjscript-logical-change-plan-1")
+        Some("opaque-commitment")
     );
     assert_eq!(
         compact_field(change_contract, "plan-output-action"),
@@ -653,7 +733,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .expect("type section digest");
     let known_type = format!("type={known_type_digest}");
     let unchanged_type = compact_success(&["capabilities", "--known-section", &known_type]);
-    assert_eq!(compact_field(&unchanged_type[0], "unchanged"), Some("true"));
+    assert_eq!(
+        compact_field(compact_record(&unchanged_type, "capabilities"), "unchanged"),
+        Some("true")
+    );
     assert_eq!(
         compact_field(compact_record(&unchanged_type, "section"), "changed"),
         Some("false")
@@ -732,18 +815,46 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }
 
     let temporary_capabilities = tempfile::TempDir::new().expect("capabilities output");
-    let registry_path = temporary_capabilities.path().join("registry.lkjc");
-    let registry_path_text = path(&registry_path);
-    let exported = compact_success(&["capabilities", "--output", registry_path_text]);
+    let capabilities_path = temporary_capabilities.path().join("capabilities.lkjc");
+    let capabilities_path_text = path(&capabilities_path);
+    let exported = compact_success(&["capabilities", "--output", capabilities_path_text]);
     let file = compact_record(&exported, "file");
-    assert_eq!(compact_field(file, "kind"), Some("registry"));
-    assert_eq!(compact_field(file, "digest"), Some(registry_digest));
-    let exported_bytes = std::fs::read(&registry_path).expect("compact registry export");
-    let exported_records = parse_records("registry.lkjc", &exported_bytes).expect("export records");
+    assert_eq!(compact_field(file, "kind"), Some("capabilities"));
+    assert_eq!(compact_field(file, "digest"), Some(capabilities_digest));
+    let exported_bytes = std::fs::read(&capabilities_path).expect("compact capabilities export");
+    let exported_records =
+        parse_records("capabilities.lkjc", &exported_bytes).expect("export records");
     assert!(exported_records.len() > capabilities.len());
     assert_ne!(exported_bytes.first(), Some(&b'{'));
+    assert_eq!(exported_records[0].operation, "product");
+    assert!(!exported_records.iter().any(|record| {
+        record.operation == "contract"
+            || record.operation == "contract.magic"
+            || record.operation == "contract.digest"
+            || record.operation == "logical-plan.contracts"
+            || record.fields.iter().any(|field| {
+                matches!(
+                    field.name.as_str(),
+                    "contract" | "contract-version" | "cli" | "graph"
+                )
+            })
+    }));
+    let exported_text = String::from_utf8(exported_bytes).expect("capabilities UTF-8");
+    for forbidden in [
+        "lkjscript-contract-registry-",
+        "lkjscript-meaning-graph-",
+        "lkjscript-cli-",
+        "lkjscript-change-records-",
+        "lkjscript-query-",
+        "lkjscript-deployment-",
+        "logical-plan.contracts",
+        "contract_version",
+        "contract=",
+    ] {
+        assert!(!exported_text.contains(forbidden), "leaked {forbidden}");
+    }
 
-    let rejected_schema = command(&["capabilities", "--known-schema", registry_digest]);
+    let rejected_schema = command(&["capabilities", "--known-schema", capabilities_digest]);
     assert_eq!(rejected_schema.status.code(), Some(2));
     assert!(serde_json::from_slice::<Value>(&rejected_schema.stdout).is_err());
     let rejected_records =
@@ -759,15 +870,16 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 }
 
 #[test]
-fn generated_contract_documents_match_executable() {
+fn generated_public_guides_match_executable() {
     let verified = compact_success(&["capabilities", "--verify-generated", "docs/generated"]);
     assert_eq!(
         verified
             .iter()
             .filter(|record| record.operation == "file")
             .count(),
-        7
+        6
     );
+    assert!(!Path::new("docs/generated/contracts.md").exists());
 }
 
 #[test]
@@ -2840,6 +2952,40 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         &std::fs::read(&replacement_output).expect("read replacement logical plan"),
     )
     .expect("parse replacement logical plan records");
+    let plan_header = compact_record(&replacement_records, "logical-plan");
+    assert_eq!(compact_field(plan_header, "product"), Some("lkjscript"));
+    assert_eq!(
+        compact_field(plan_header, "version"),
+        Some(lkjscript::PRODUCT_VERSION)
+    );
+    assert_eq!(
+        compact_field(
+            compact_record(&replacement_records, "logical-plan.capabilities"),
+            "digest"
+        )
+        .expect("logical plan capabilities digest")
+        .len(),
+        64
+    );
+    assert!(
+        !replacement_records
+            .iter()
+            .any(|record| record.operation == "logical-plan.contracts")
+    );
+    let plan_text = std::fs::read_to_string(&replacement_output).expect("logical plan UTF-8");
+    for forbidden in [
+        "lkjscript-logical-change-plan-",
+        "lkjscript-meaning-graph-",
+        "lkjscript-change-records-",
+        "lkjscript-authored-change-codec-",
+        "logical-plan.contracts",
+        " contract=",
+    ] {
+        assert!(
+            !plan_text.contains(forbidden),
+            "logical plan leaked {forbidden}"
+        );
+    }
     let old_read = planned_identities
         .iter()
         .find_map(|(symbol, identity)| (*symbol == "$read").then_some(*identity))
@@ -4203,7 +4349,7 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         compact_field(compact_record(&status, "summary"), "owners"),
         Some("0")
     );
-    assert!(compact_field(compact_record(&status, "schema"), "registry").is_some());
+    assert!(compact_field(compact_record(&status, "schema"), "capabilities").is_some());
     let explicit_status = compact_success_at(
         &copied_binary,
         temporary.path(),

@@ -14,9 +14,9 @@ workflow-only cross-application equality defect described in the campaign eviden
 ## Identity and authority
 
 The root `Cargo.toml` package version owns the human-facing release snapshot and its exact annotated
-`vMAJOR.MINOR.PATCH` tag. It is not a language, graph, CLI, registry, artifact, deployment, runtime,
-package, repository, or contributor-tool compatibility version. Those contracts and identities
-remain independently owned as described by
+`vMAJOR.MINOR.PATCH` tag. It is the only version presented by current public product metadata.
+Internal storage, compiler, artifact, deployment, runtime, adapter, repository, and contributor-tool
+compatibility identities remain independently owned as described by
 [the release and contract version decision](decisions/20260829-release-contract-version-authority.md).
 
 `lkjscript-dev release target` is the sole executable owner of the current release target triple,
@@ -112,9 +112,9 @@ target/release/lkjscript-dev release admit \
 Prepare the release with both receipts:
 
 ```sh
-package_version=$(cargo metadata --locked --no-deps --format-version 1 |
+product_version=$(cargo metadata --locked --no-deps --format-version 1 |
   jq -er '.packages[] | select(.name == "lkjscript") | .version')
-release_tag="v$package_version"
+release_tag="v$product_version"
 target/release/lkjscript-dev release prepare \
   --candidate /absolute/path/lkjscript \
   --cargo-about /absolute/path/cargo-about \
@@ -143,18 +143,19 @@ noncanonical or predecessor metadata, target/linkage contradiction, checksum cor
 conflict, and candidate mismatch. `release verify --extract-to` makes the validated directory visible
 through one create-new boundary, so workflow shell never owns archive parsing.
 
-Release manifest schema 2 represents static linkage directly and binds the product version, source,
-target policy, executable bytes and ELF facts, CLI contract, executable-registry digest, toolchain,
-locked closure, notices, and deterministic packaging. Release receipt schema 2 additionally binds the
-fresh source and target-admission evidence. These operational schemas are not language contracts.
+Current public release metadata binds the product name and version, source, target policy,
+executable bytes and ELF facts, opaque capabilities digest, toolchain, locked closure, notices, and
+deterministic packaging. It contains no separate format or subsystem version. The private release
+receipt additionally binds fresh source and target-admission evidence; that contributor evidence is
+not shipped as public product metadata.
 
 ## Hosted dry run
 
 The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout job builds the host
 verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
 deterministic package, and uploads a three-file release handoff plus a two-file application-verifier
-handoff. The latter has schema `lkjscript-application-verifier-handoff` version 2 and binds the exact
-verifier bytes, tag, source commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP roles.
+handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
+commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP roles.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
 the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,

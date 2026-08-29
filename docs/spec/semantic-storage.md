@@ -1,11 +1,11 @@
 # Semantic repository storage
 
-Status: normative for the current Graph 5 repository. Storage contracts and hostile decoder bounds
-are executable-derived in [contracts.md](../generated/contracts.md).
+Status: normative for the current typed meaning graph repository. Internal storage compatibility
+identities and hostile decoder bounds remain at their typed source owners.
 
 ## Project root
 
-A current project root is the Graph 5 repository itself. Its owned entries are:
+A current project root is the typed meaning graph repository itself. Its owned entries are:
 
 ```text
 HEAD                       atomic accepted visibility binding

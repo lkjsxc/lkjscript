@@ -49,14 +49,74 @@ fn stage_current_artifact(directory: &Path) -> PathBuf {
 fn maintained_descriptors_name_the_current_artifact_and_exact_targets() {
     let service = descriptor("service.deployment.json");
     let worker = descriptor("worker.deployment.json");
-    assert_eq!(service.contract_version, 1);
-    assert_eq!(worker.contract_version, 1);
+    for name in ["service.deployment.json", "worker.deployment.json"] {
+        let bytes = std::fs::read(repository().join(APPLICATION).join(name))
+            .expect("read maintained descriptor bytes");
+        assert!(!String::from_utf8_lossy(&bytes).contains("contract_version"));
+    }
     assert_eq!(service.artifact, "generated/lkjournal.lkja");
     assert_eq!(worker.artifact, "generated/lkjournal.lkja");
     assert_eq!(service.target, "serve");
     assert_eq!(worker.target, "work");
     assert!(service.http.is_some() && service.worker.is_none());
     assert!(worker.http.is_none() && worker.worker.is_some());
+}
+
+#[test]
+fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
+    let temporary = tempfile::tempdir().expect("isolated predecessor descriptor");
+    for (name, descriptor_name, operation, nested) in [
+        ("top", "service.deployment.json", "serve", None),
+        (
+            "runtime",
+            "service.deployment.json",
+            "serve",
+            Some("runtime"),
+        ),
+        ("http", "service.deployment.json", "serve", Some("http")),
+        ("worker", "worker.deployment.json", "worker", Some("worker")),
+    ] {
+        let mut value: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(repository().join(APPLICATION).join(descriptor_name))
+                .expect("read current descriptor"),
+        )
+        .expect("current descriptor JSON");
+        value["artifact"] = serde_json::json!("missing-artifact.lkja");
+        match nested {
+            Some(owner) => value[owner]["contract_version"] = serde_json::json!(1),
+            None => value["contract_version"] = serde_json::json!(1),
+        }
+        let descriptor_path = temporary.path().join(format!("{name}.json"));
+        std::fs::write(
+            &descriptor_path,
+            serde_json::to_vec(&value).expect("predecessor descriptor JSON"),
+        )
+        .expect("write predecessor descriptor");
+        let output = run_isolated(
+            temporary.path(),
+            &[
+                operation,
+                "--deployment",
+                descriptor_path.to_str().expect("UTF-8 descriptor path"),
+            ],
+        );
+        assert_eq!(output.status.code(), Some(2), "{name}");
+        assert!(output.stderr.is_empty(), "{name}");
+        let stdout = String::from_utf8(output.stdout).expect("diagnostic UTF-8");
+        assert!(stdout.contains("deployment_json"), "{name}: {stdout}");
+        assert!(!stdout.contains("deployment_read"), "{name}: {stdout}");
+        let failure: serde_json::Value = serde_json::from_str(&stdout).expect("failure event JSON");
+        assert!(failure.get("contract_version").is_none(), "{name}");
+        assert!(!stdout.contains("\"event\":\"ready\""), "{name}: {stdout}");
+        assert_eq!(
+            std::fs::read_dir(temporary.path())
+                .expect("read isolated directory")
+                .count(),
+            1,
+            "{name}"
+        );
+        std::fs::remove_file(&descriptor_path).expect("remove predecessor descriptor");
+    }
 }
 
 #[test]

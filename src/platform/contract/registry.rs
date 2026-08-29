@@ -86,6 +86,7 @@ pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v3";
 const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v3";
+const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
 pub(crate) const ROOT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.root-object.v2";
@@ -1023,8 +1024,8 @@ pub struct OperationDescriptor {
 pub fn operation_descriptors() -> &'static [OperationDescriptor] {
     const OPERATIONS: &[OperationDescriptor] = &[
         capabilities_operation(
-            "Discover exact executable contracts and changed registry sections.",
-            "capabilities [COMMAND] [--known-registry DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
+            "Discover product operations, grammar, limits, diagnostics, effects, and changed capability sections.",
+            "capabilities [COMMAND] [--known-capabilities DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
         ),
         new_operation(
             "Create fresh normalized semantic authority atomically at one absent safe destination.",
@@ -2165,18 +2166,18 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_plan_file_record_unknown",
             DiagnosticClass::Source,
             "A logical plan file contains an unknown or operational record.",
-            "Regenerate the file using the current closed plan contract.",
+            "Regenerate the file using the current executable.",
         ),
         diagnostic(
             "change_plan_file_fields",
             DiagnosticClass::Source,
             "A logical plan record has unknown, missing, duplicate, or misordered fields.",
-            "Regenerate the file using the current closed plan contract.",
+            "Regenerate the file using the current executable.",
         ),
         diagnostic(
             "change_plan_file_order",
             DiagnosticClass::Source,
-            "Logical plan records are not in canonical contract order.",
+            "Logical plan records are not in canonical order.",
             "Regenerate the file; reordering review facts is noncanonical.",
         ),
         diagnostic(
@@ -2192,16 +2193,16 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Regenerate the plan file rather than editing its compact bytes.",
         ),
         diagnostic(
-            "change_plan_file_contract",
+            "change_plan_file_product",
             DiagnosticClass::Source,
-            "A logical plan file uses a predecessor or foreign contract.",
+            "A logical plan file names a predecessor or foreign product.",
             "Regenerate the plan with the current executable.",
         ),
         diagnostic(
-            "change_plan_file_contracts",
+            "change_plan_file_capabilities",
             DiagnosticClass::Source,
-            "A logical plan file names foreign interpretation contracts.",
-            "Regenerate the plan against current graph and validation contracts.",
+            "A logical plan file binds a predecessor or foreign capability projection.",
+            "Regenerate the plan with the current executable.",
         ),
         diagnostic(
             "change_plan_file_counts",
@@ -2320,26 +2321,26 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         DiagnosticDescriptor {
             code: "control_response_records_newline",
             class: DiagnosticClass::Infrastructure,
-            meaning: "Executable registry records are not newline-complete.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            meaning: "Executable capability records are not newline-complete.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_response_records_blank",
             class: DiagnosticClass::Infrastructure,
-            meaning: "Executable registry material contains a blank physical record.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            meaning: "Executable capability material contains a blank physical record.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_response_records_invalid",
             class: DiagnosticClass::Infrastructure,
-            meaning: "Executable registry material contains an invalid compact record.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            meaning: "Executable capability material contains an invalid compact record.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_render_operation",
             class: DiagnosticClass::Infrastructure,
             meaning: "A compact response producer supplied an invalid operation name.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_render_fields",
@@ -2351,13 +2352,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             code: "control_render_field",
             class: DiagnosticClass::Infrastructure,
             meaning: "A compact response producer supplied an invalid field name.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_render_duplicate_field",
             class: DiagnosticClass::Infrastructure,
             meaning: "A compact response producer supplied a duplicate field name.",
-            retry: "Use a verified executable build whose registry passes conformance checks.",
+            retry: "Use a verified executable build whose capabilities pass conformance checks.",
         },
         DiagnosticDescriptor {
             code: "control_render_value_bytes",
@@ -2378,27 +2379,21 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             retry: "Request less output or retry when host memory is available.",
         },
         DiagnosticDescriptor {
-            code: "contract_registry_invalid",
+            code: "capabilities_projection_invalid",
             class: DiagnosticClass::Corrupt,
-            meaning: "Executable contract descriptors violate uniqueness or completeness.",
+            meaning: "The executable could not construct its complete public capability projection.",
             retry: "Use a verified executable build.",
         },
         DiagnosticDescriptor {
-            code: "contract_section",
-            class: DiagnosticClass::Source,
-            meaning: "A requested registry section is unknown or malformed.",
-            retry: "Select one advertised section.",
+            code: "capabilities_output_budget",
+            class: DiagnosticClass::Resource,
+            meaning: "The complete public capability projection exceeds its output bound.",
+            retry: "Request one advertised capability section.",
         },
         DiagnosticDescriptor {
-            code: "contract_generated_output",
-            class: DiagnosticClass::Infrastructure,
-            meaning: "Generated contract output could not be published.",
-            retry: "Correct the destination permissions or path.",
-        },
-        DiagnosticDescriptor {
-            code: "contract_generated_drift",
+            code: "capabilities_generated_drift",
             class: DiagnosticClass::Source,
-            meaning: "Checked-in generated contract bytes differ from executable truth.",
+            meaning: "Checked-in generated public-guide bytes differ from executable truth.",
             retry: "Regenerate with the exact command reported by the diagnostic.",
         },
         DiagnosticDescriptor {
@@ -2753,13 +2748,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "query_descriptor_action",
             DiagnosticClass::Infrastructure,
             "The executable query descriptor inventory contains an unimplemented action.",
-            "Use a matching executable and generated contract set.",
+            "Use a matching executable and generated capability guide.",
         ),
         diagnostic(
             "query_output_record_configuration",
             DiagnosticClass::Infrastructure,
             "The fixed query envelope exceeds the global compact record capacity.",
-            "Use a matching executable and registry contract.",
+            "Use a matching executable and capability projection.",
         ),
         diagnostic(
             "query_output_size_convergence",
@@ -2980,6 +2975,22 @@ impl RegistrySection {
         Self::Security,
     ];
 
+    pub const PUBLIC: [Self; 13] = [
+        Self::Operations,
+        Self::Change,
+        Self::Query,
+        Self::Type,
+        Self::Expression,
+        Self::Owners,
+        Self::Relations,
+        Self::Limits,
+        Self::Diagnostics,
+        Self::Templates,
+        Self::Runners,
+        Self::Deployment,
+        Self::Security,
+    ];
+
     pub const fn name(self) -> &'static str {
         match self {
             Self::Contracts => "contracts",
@@ -3004,6 +3015,12 @@ impl RegistrySection {
             .into_iter()
             .find(|section| section.name() == value)
     }
+
+    pub fn parse_public(value: &str) -> Option<Self> {
+        Self::PUBLIC
+            .into_iter()
+            .find(|section| section.name() == value)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -3023,6 +3040,21 @@ pub struct RegistrySnapshot {
     pub digest: String,
     pub bytes: Vec<u8>,
     pub sections: BTreeMap<RegistrySection, RegistrySectionSnapshot>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CapabilitiesSnapshot {
+    pub product_name: &'static str,
+    pub product_version: &'static str,
+    pub digest: String,
+    pub bytes: Vec<u8>,
+    pub sections: BTreeMap<RegistrySection, RegistrySectionSnapshot>,
+}
+
+impl CapabilitiesSnapshot {
+    pub fn section(&self, section: RegistrySection) -> Option<&RegistrySectionSnapshot> {
+        self.sections.get(&section)
+    }
 }
 
 impl RegistrySnapshot {
@@ -3086,6 +3118,57 @@ pub fn registry_snapshot() -> Result<RegistrySnapshot, String> {
     })
 }
 
+pub fn capabilities_snapshot() -> Result<CapabilitiesSnapshot, String> {
+    let registry = registry_snapshot()?;
+    let product_name = "lkjscript";
+    let product_version = crate::PRODUCT_VERSION;
+    let product = compact_record(
+        "product",
+        &[
+            ("name", product_name.to_owned()),
+            ("version", product_version.to_owned()),
+        ],
+    )?
+    .into_bytes();
+    let mut sections = BTreeMap::new();
+    let mut body = Vec::new();
+    for section in RegistrySection::PUBLIC {
+        let snapshot = registry
+            .section(section)
+            .ok_or_else(|| format!("public capability section '{}' is missing", section.name()))?
+            .clone();
+        body.extend_from_slice(
+            compact_record(
+                "section",
+                &[
+                    ("name", section.name().to_owned()),
+                    ("digest", snapshot.digest.clone()),
+                    ("records", snapshot.records.to_string()),
+                    ("bytes", snapshot.bytes.len().to_string()),
+                ],
+            )?
+            .as_bytes(),
+        );
+        body.extend_from_slice(&snapshot.bytes);
+        sections.insert(section, snapshot);
+    }
+    let mut canonical = product.clone();
+    canonical.extend_from_slice(&body);
+    let digest = digest(CAPABILITIES_DIGEST_DOMAIN, &canonical);
+    let mut bytes = product;
+    bytes.extend_from_slice(
+        compact_record("capabilities", &[("digest", digest.clone())])?.as_bytes(),
+    );
+    bytes.extend_from_slice(&body);
+    Ok(CapabilitiesSnapshot {
+        product_name,
+        product_version,
+        digest,
+        bytes,
+        sections,
+    })
+}
+
 fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
     let mut records = Vec::new();
     match section {
@@ -3137,7 +3220,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "change",
                 &[
-                    ("contract", COMPACT_CHANGE_CONTRACT_IDENTITY.to_owned()),
                     (
                         "request-model",
                         ControlModel::ChangeRequest.name().to_owned(),
@@ -3145,14 +3227,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("request-record", "request".to_owned()),
                     ("plan-prefix", "plan_".to_owned()),
                     ("plan-hex-characters", "128".to_owned()),
-                    (
-                        "request-commitment",
-                        AUTHORED_CHANGE_CODEC_IDENTITY.to_owned(),
-                    ),
-                    (
-                        "prepared-plan",
-                        LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY.to_owned(),
-                    ),
+                    ("request-commitment", "opaque-digest".to_owned()),
+                    ("prepared-plan", "opaque-commitment".to_owned()),
                     ("plan-output-action", "plan-only".to_owned()),
                 ],
             )?);
@@ -3296,10 +3372,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "query",
                 &[
-                    ("contract", QUERY_CONTRACT_IDENTITY.to_owned()),
-                    ("version", QUERY_CONTRACT_VERSION.to_string()),
                     ("authority", "normalized-current-revision".to_owned()),
-                    ("ordering", "canonical-logical-key-v1".to_owned()),
+                    ("ordering", "canonical-logical-key".to_owned()),
                     ("continuation", "stateless-exclusive-logical-key".to_owned()),
                 ],
             )?);
@@ -3403,8 +3477,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 )?);
             }
             for field in [
-                "contract-version",
-                "query-version",
                 "repository",
                 "package",
                 "revision",
@@ -3544,8 +3616,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "deployment.schema",
                 &[
-                    ("contract", "lkjscript-deployment-1".to_owned()),
-                    ("version", DEPLOYMENT_CONTRACT_VERSION.to_string()),
                     ("maximum-bytes", MAXIMUM_DEPLOYMENT_BYTES.to_string()),
                     ("maximum-grants", MAXIMUM_DEPLOYMENT_GRANTS.to_string()),
                     ("strict-json", "true".to_owned()),
@@ -4068,6 +4138,64 @@ mod tests {
         assert_eq!(RegistrySection::ALL.len(), first.sections.len());
         assert!(first.bytes.starts_with(b"registry "));
         assert!(!first.bytes.starts_with(b"{"));
+    }
+
+    #[test]
+    fn public_capabilities_are_canonical_and_hide_internal_compatibility() {
+        let first = capabilities_snapshot().expect("valid public capabilities");
+        let second = capabilities_snapshot().expect("repeat public capabilities");
+        assert_eq!(first, second);
+        assert_eq!(first.product_name, "lkjscript");
+        assert_eq!(first.product_version, crate::PRODUCT_VERSION);
+        assert_eq!(first.sections.len(), RegistrySection::PUBLIC.len());
+        assert!(!first.sections.contains_key(&RegistrySection::Contracts));
+        let text = std::str::from_utf8(&first.bytes).expect("capabilities UTF-8");
+        assert!(text.starts_with(&format!(
+            "product name=lkjscript version={}\ncapabilities digest=",
+            crate::PRODUCT_VERSION
+        )));
+        for forbidden in [
+            REGISTRY_CONTRACT_IDENTITY,
+            "lkjscript-meaning-graph-",
+            "lkjscript-cli-",
+            "lkjscript-change-records-",
+            "lkjscript-query-",
+            "lkjscript-deployment-",
+            "logical-plan.contracts",
+            "contract-version",
+        ] {
+            assert!(
+                !text.contains(forbidden),
+                "public capabilities leaked {forbidden}"
+            );
+        }
+        let mut canonical = compact_record(
+            "product",
+            &[
+                ("name", "lkjscript".to_owned()),
+                ("version", crate::PRODUCT_VERSION.to_owned()),
+            ],
+        )
+        .expect("product record")
+        .into_bytes();
+        for section in RegistrySection::PUBLIC {
+            let snapshot = first.section(section).expect("public section");
+            canonical.extend_from_slice(
+                compact_record(
+                    "section",
+                    &[
+                        ("name", section.name().to_owned()),
+                        ("digest", snapshot.digest.clone()),
+                        ("records", snapshot.records.to_string()),
+                        ("bytes", snapshot.bytes.len().to_string()),
+                    ],
+                )
+                .expect("section record")
+                .as_bytes(),
+            );
+            canonical.extend_from_slice(&snapshot.bytes);
+        }
+        assert_eq!(first.digest, digest(CAPABILITIES_DIGEST_DOMAIN, &canonical));
     }
 
     #[test]

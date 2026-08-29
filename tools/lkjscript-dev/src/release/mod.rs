@@ -9,10 +9,9 @@ use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
 use archive::{ARCHIVE_NAME, CHECKSUM_NAME, RECEIPT_NAME};
 use model::{
     ArtifactIdentity, EvidenceClassification, ExecutableIdentity, ExternalEvidence, HostedContext,
-    MANIFEST_SCHEMA, MANIFEST_SCHEMA_VERSION, NoticeIdentity, PackageIdentity, PackagingIdentity,
-    PayloadIdentity, PublicationMode, RECEIPT_SCHEMA, RECEIPT_SCHEMA_VERSION, ReleaseManifest,
-    ReleaseReceipt, SchemaIdentity, Sha256Digest, SourceIdentity, ToolchainIdentity,
-    VerificationClassification,
+    NoticeIdentity, PackagingIdentity, PayloadIdentity, ProductIdentity, PublicationMode,
+    RECEIPT_SCHEMA, RECEIPT_SCHEMA_VERSION, ReleaseManifest, ReleaseReceipt, SchemaIdentity,
+    Sha256Digest, SourceIdentity, ToolchainIdentity, VerificationClassification,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -74,7 +73,7 @@ struct VerifyOptions {
 
 #[derive(Debug)]
 struct SourceFacts {
-    package_version: String,
+    product_version: String,
     tag: String,
     commit_sha: String,
     commit_timestamp_unix_seconds: u64,
@@ -83,8 +82,8 @@ struct SourceFacts {
 
 #[derive(Debug)]
 struct CapabilitiesFacts {
-    cli_contract: u16,
-    registry_digest: String,
+    product_version: String,
+    capabilities_digest: String,
 }
 
 #[derive(Debug)]
@@ -159,8 +158,12 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     let (candidate_sha256, candidate_bytes) = archive::sha256_file(&release_candidate)?;
     let elf = target::inspect_static_elf(&release_candidate)?;
     let capabilities = inspect_capabilities(&release_candidate, &repository)?;
-    validate_candidate_cli_contract(capabilities.cli_contract)?;
-    validate_registry_digest(&capabilities.registry_digest)?;
+    if capabilities.product_version != source.product_version {
+        return Err(DevError::corrupt(
+            "release candidate product version disagrees with the exact source",
+        ));
+    }
+    validate_capabilities_digest(&capabilities.capabilities_digest)?;
 
     let (about_archive_digest, about_archive_bytes) =
         archive::sha256_file(&options.cargo_about_archive)?;
@@ -243,14 +246,10 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     }
 
     let manifest = ReleaseManifest {
-        schema: SchemaIdentity {
-            identity: MANIFEST_SCHEMA.to_owned(),
-            version: MANIFEST_SCHEMA_VERSION,
-        },
         publication_mode: options.publication_mode,
-        package: PackageIdentity {
+        product: ProductIdentity {
             name: PACKAGE_NAME.to_owned(),
-            version: source.package_version.clone(),
+            version: source.product_version.clone(),
         },
         source: SourceIdentity {
             repository: REPOSITORY_IDENTITY.to_owned(),
@@ -267,8 +266,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             byte_length: candidate_bytes,
             sha256: candidate_sha256,
             elf,
-            cli_contract: capabilities.cli_contract,
-            executable_registry_digest: capabilities.registry_digest,
+            capabilities_digest: capabilities.capabilities_digest,
         },
         root_license: PayloadIdentity {
             archive_mode: 0o644,
@@ -533,9 +531,8 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         archive_bytes: u64,
         archive_sha256: &'a str,
         manifest_sha256: &'a str,
-        package_version: &'a str,
-        cli_contract: u16,
-        executable_registry_digest: &'a str,
+        product_version: &'a str,
+        capabilities_digest: &'a str,
         executable_bytes: u64,
         executable_sha256: &'a str,
         extraction: Option<String>,
@@ -550,9 +547,8 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         archive_bytes: verified.archive_byte_length,
         archive_sha256: verified.archive_sha256.as_str(),
         manifest_sha256: verified.manifest_sha256.as_str(),
-        package_version: &verified.manifest.package.version,
-        cli_contract: verified.manifest.executable.cli_contract,
-        executable_registry_digest: &verified.manifest.executable.executable_registry_digest,
+        product_version: &verified.manifest.product.version,
+        capabilities_digest: &verified.manifest.executable.capabilities_digest,
         executable_bytes: verified.manifest.executable.byte_length,
         executable_sha256: verified.manifest.executable.sha256.as_str(),
         extraction: options
@@ -783,13 +779,13 @@ fn source_facts(
     tag: &str,
     publication_mode: PublicationMode,
 ) -> Result<SourceFacts, DevError> {
-    let (package_name, package_version) = package_identity(&repository.join("Cargo.toml"))?;
+    let (package_name, product_version) = package_identity(&repository.join("Cargo.toml"))?;
     if package_name != PACKAGE_NAME {
         return Err(DevError::corrupt(format!(
             "root package name is '{package_name}', expected '{PACKAGE_NAME}'"
         )));
     }
-    validate_strict_tag(tag, &package_version)?;
+    validate_strict_tag(tag, &product_version)?;
     let commit_sha = command_text("git", &["rev-parse", "HEAD"], repository, 1024)?;
     validate_git_sha(&commit_sha, "HEAD commit")?;
     let timestamp = command_text(
@@ -851,7 +847,7 @@ fn source_facts(
         }
     };
     Ok(SourceFacts {
-        package_version,
+        product_version,
         tag: tag.to_owned(),
         commit_sha,
         commit_timestamp_unix_seconds,
@@ -904,11 +900,11 @@ fn quoted_assignment(line: &str, key: &str) -> Result<Option<String>, DevError> 
     Ok(Some(value[1..value.len() - 1].to_owned()))
 }
 
-fn validate_strict_tag(tag: &str, package_version: &str) -> Result<(), DevError> {
-    let expected = format!("v{package_version}");
+fn validate_strict_tag(tag: &str, product_version: &str) -> Result<(), DevError> {
+    let expected = format!("v{product_version}");
     if tag != expected {
         return Err(DevError::corrupt(format!(
-            "release tag '{tag}' does not equal package version tag '{expected}'"
+            "release tag '{tag}' does not equal product version tag '{expected}'"
         )));
     }
     let version = tag
@@ -965,27 +961,46 @@ fn inspect_capabilities(
         .to_str()
         .ok_or_else(|| DevError::usage("candidate path must be portable UTF-8"))?;
     let output = command_text(candidate, &["capabilities"], repository, 1024 * 1024)?;
-    let line = output
+    let product_line = output
         .lines()
-        .find(|line| line.starts_with("registry "))
-        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted registry record"))?;
-    let fields = line
+        .find(|line| line.starts_with("product "))
+        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted product record"))?;
+    let product = product_line
         .split_whitespace()
         .skip(1)
         .filter_map(|field| field.split_once('='))
         .collect::<BTreeMap<_, _>>();
-    let cli_contract = fields
-        .get("cli")
-        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted CLI contract"))?
-        .parse::<u16>()
-        .map_err(|_| DevError::corrupt("candidate CLI contract is malformed"))?;
-    let registry_digest = fields
+    if product.get("name") != Some(&"lkjscript") {
+        return Err(DevError::corrupt(
+            "candidate capabilities named a foreign product",
+        ));
+    }
+    let product_version = product
+        .get("version")
+        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted product version"))?
+        .to_string();
+    let version_output = command_text(candidate, &["--version"], repository, 1024)?;
+    if version_output != format!("lkjscript {product_version}") {
+        return Err(DevError::corrupt(
+            "candidate version query disagrees with its public product record",
+        ));
+    }
+    let capability_line = output
+        .lines()
+        .find(|line| line.starts_with("capabilities "))
+        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted digest record"))?;
+    let fields = capability_line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|field| field.split_once('='))
+        .collect::<BTreeMap<_, _>>();
+    let capabilities_digest = fields
         .get("digest")
-        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted registry digest"))?
+        .ok_or_else(|| DevError::corrupt("candidate capabilities omitted capabilities digest"))?
         .to_string();
     Ok(CapabilitiesFacts {
-        cli_contract,
-        registry_digest,
+        product_version,
+        capabilities_digest,
     })
 }
 
@@ -1262,16 +1277,13 @@ fn require_json_u64(
 }
 
 fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
-    if manifest.schema.identity != MANIFEST_SCHEMA
-        || manifest.schema.version != MANIFEST_SCHEMA_VERSION
-        || manifest.package.name != PACKAGE_NAME
+    if manifest.product.name != PACKAGE_NAME
         || manifest.target_triple != TARGET_TRIPLE
         || manifest.source.repository != REPOSITORY_IDENTITY
         || manifest.toolchain.toolchain_channel != TOOLCHAIN_CHANNEL
         || manifest.executable.archive_mode != 0o755
         || manifest.root_license.archive_mode != 0o644
         || manifest.third_party_notices.archive_mode != 0o644
-        || manifest.executable.cli_contract != lkjscript::platform::CLI_CONTRACT_VERSION
         || manifest.packaging.tar_format != "posix-ustar"
         || manifest.packaging.gzip_level != 9
         || manifest.packaging.gzip_name_header
@@ -1286,15 +1298,15 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
             != manifest.source.commit_timestamp_unix_seconds
     {
         return Err(DevError::corrupt(
-            "release manifest contains a noncanonical fixed contract field",
+            "release manifest contains a noncanonical fixed product field",
         ));
     }
     validate_strict_tag(
         &manifest.source.expected_release_tag,
-        &manifest.package.version,
+        &manifest.product.version,
     )?;
     validate_git_sha(&manifest.source.tagged_commit_sha, "manifest commit SHA")?;
-    validate_registry_digest(&manifest.executable.executable_registry_digest)?;
+    validate_capabilities_digest(&manifest.executable.capabilities_digest)?;
     match (
         manifest.publication_mode,
         manifest.source.annotated_tag_object_sha.as_deref(),
@@ -1426,8 +1438,8 @@ fn classifications(
         fresh(
             "candidate_capabilities",
             format!(
-                "CLI contract {} and registry digest validated",
-                lkjscript::platform::CLI_CONTRACT_VERSION
+                "lkjscript {} product identity and capabilities digest validated",
+                lkjscript::PRODUCT_VERSION
             ),
         ),
         fresh(
@@ -1632,25 +1644,15 @@ fn validate_git_sha(value: &str, label: &str) -> Result<(), DevError> {
     Ok(())
 }
 
-fn validate_registry_digest(value: &str) -> Result<(), DevError> {
+fn validate_capabilities_digest(value: &str) -> Result<(), DevError> {
     if value.len() != 64
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
         return Err(DevError::corrupt(
-            "executable registry digest is not lowercase SHA-256",
+            "capabilities digest is not 64 lowercase hexadecimal characters",
         ));
-    }
-    Ok(())
-}
-
-fn validate_candidate_cli_contract(observed: u16) -> Result<(), DevError> {
-    let expected = lkjscript::platform::CLI_CONTRACT_VERSION;
-    if observed != expected {
-        return Err(DevError::corrupt(format!(
-            "release candidate CLI contract is {observed}, expected {expected} from the executable contract owner"
-        )));
     }
     Ok(())
 }
@@ -1697,22 +1699,99 @@ mod tests {
     }
 
     #[test]
-    fn release_registry_digest_requires_lowercase_sha256() {
-        assert!(validate_registry_digest(&"0".repeat(64)).is_ok());
-        assert!(validate_registry_digest(&"A".repeat(64)).is_err());
-        assert!(validate_registry_digest("short").is_err());
+    fn release_capabilities_digest_requires_lowercase_hex() {
+        assert!(validate_capabilities_digest(&"0".repeat(64)).is_ok());
+        assert!(validate_capabilities_digest(&"A".repeat(64)).is_err());
+        assert!(validate_capabilities_digest("short").is_err());
     }
 
     #[test]
-    fn release_cli_contract_uses_the_executable_owner_and_rejects_mismatch() {
-        let expected = lkjscript::platform::CLI_CONTRACT_VERSION;
-        assert!(validate_candidate_cli_contract(expected).is_ok());
-        let foreign = if expected == u16::MAX {
-            expected.saturating_sub(1)
-        } else {
-            expected.saturating_add(1)
-        };
-        assert!(validate_candidate_cli_contract(foreign).is_err());
+    fn public_manifest_has_product_only_version_identity_and_rejects_predecessor_fields() {
+        let digest = "0".repeat(64);
+        let mut current = serde_json::json!({
+            "publication_mode": "dry-run",
+            "product": {"name": "lkjscript", "version": lkjscript::PRODUCT_VERSION},
+            "source": {
+                "repository": REPOSITORY_IDENTITY,
+                "expected_release_tag": format!("v{}", lkjscript::PRODUCT_VERSION),
+                "tagged_commit_sha": "0".repeat(40),
+                "commit_timestamp_unix_seconds": 1,
+                "annotated_tag_object_sha": null
+            },
+            "target_triple": TARGET_TRIPLE,
+            "toolchain": {"rustc": "rustc", "cargo": "cargo", "toolchain_channel": TOOLCHAIN_CHANNEL},
+            "cargo_lock_sha256": digest,
+            "executable": {
+                "archive_mode": 493,
+                "byte_length": 1,
+                "sha256": "1".repeat(64),
+                "elf": {
+                    "class": "ELF64",
+                    "machine": "x86-64",
+                    "object_type": "shared-object",
+                    "inspector": target::ELF_INSPECTOR,
+                    "program_headers": 1,
+                    "load_headers": 1,
+                    "dynamic_entries": 0,
+                    "interpreter_headers": 0,
+                    "needed_libraries": 0,
+                    "glibc_version_requirements": 0,
+                    "position_independent": true,
+                    "runtime_linkage": target::LINKAGE_MODEL
+                },
+                "capabilities_digest": "2".repeat(64)
+            },
+            "root_license": {"archive_mode": 420, "byte_length": 1, "sha256": "3".repeat(64)},
+            "third_party_notices": {
+                "generator": "cargo-about",
+                "generator_version": CARGO_ABOUT_VERSION,
+                "downloaded_archive_sha256": "4".repeat(64),
+                "executable_sha256": "5".repeat(64),
+                "invocation": ["cargo-about"],
+                "archive_mode": 420,
+                "byte_length": 1,
+                "sha256": "6".repeat(64)
+            },
+            "packaging": {
+                "tar_format": "posix-ustar",
+                "tar_version": "tar",
+                "tar_invocation": ["tar"],
+                "gzip_version": "gzip",
+                "gzip_level": 9,
+                "gzip_name_header": false,
+                "gzip_time_header": false,
+                "gzip_invocation": ["gzip"],
+                "numeric_owner": 0,
+                "numeric_group": 0,
+                "source_timestamp_unix_seconds": 1,
+                "members": []
+            }
+        });
+        let manifest: ReleaseManifest =
+            serde_json::from_value(current.clone()).expect("current public manifest shape");
+        let encoded = serde_json::to_string(&manifest).expect("encode current public manifest");
+        for absent in [
+            "\"schema\"",
+            "\"package\"",
+            "cli_contract",
+            "executable_registry_digest",
+        ] {
+            assert!(!encoded.contains(absent), "public manifest leaked {absent}");
+        }
+        current["schema"] = serde_json::json!({"identity": "predecessor", "version": 2});
+        assert!(serde_json::from_value::<ReleaseManifest>(current.clone()).is_err());
+        current
+            .as_object_mut()
+            .expect("manifest object")
+            .remove("schema");
+        current["executable"]["cli_contract"] = serde_json::json!(12);
+        assert!(serde_json::from_value::<ReleaseManifest>(current.clone()).is_err());
+        current["executable"]
+            .as_object_mut()
+            .expect("executable object")
+            .remove("cli_contract");
+        current["executable"]["executable_registry_digest"] = serde_json::json!("7".repeat(64));
+        assert!(serde_json::from_value::<ReleaseManifest>(current).is_err());
     }
 
     #[test]
@@ -1914,8 +1993,10 @@ mod tests {
         assert!(!post_release.contains("attestations: write"));
         assert!(!post_release.contains("actions/checkout"));
         assert!(!post_release.contains("cargo "));
-        assert!(post_release.contains(".executable.cli_contract"));
-        assert!(post_release.contains(".executable.executable_registry_digest"));
+        assert!(post_release.contains(".executable.capabilities_digest"));
+        assert!(post_release.contains(".product.version"));
+        assert!(!post_release.contains(".executable.cli_contract"));
+        assert!(!post_release.contains(".executable.executable_registry_digest"));
         assert!(post_release.contains("verify_public_application exact"));
         assert!(post_release.contains("verify_public_application latest"));
         assert!(post_release.contains("release verify"));

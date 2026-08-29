@@ -1,13 +1,12 @@
 # Packages, components, targets, and artifacts
 
-Status: normative for Graph 5, package transport 1, compiler/bytecode contracts, and artifact 10.
-Exact current identities are executable-derived in the generated
-[contract table](../generated/contracts.md).
+Status: normative for the typed meaning graph, package transport, compiler/bytecode behavior, and
+artifact bundles. Internal compatibility identities remain at their typed source owners.
 
 ## Packages and exact dependencies
 
-One Graph 5 repository owns one root package. Repository ID, package ID, mutable package name,
-semantic revision/state, logical package revision, package transport, public interface, artifact
+One typed meaning graph repository owns one root package. Repository ID, package ID, mutable package
+name, semantic revision/state, logical package revision, package transport, public interface, artifact
 manifest/bundle, compiler indexes, and filesystem location are distinct domains.
 
 A package owns typed modules and other semantic owners, exact dependencies, components, ports,
@@ -30,8 +29,9 @@ ambient directory lookup, network resolution, or implicit upgrade.
 
 `packages/standard` is the sole maintained owner of two generated assets:
 
-- an exact package transport used to create and validate dependent Graph 5 repositories; and
-- an exact artifact-10 bundle used to link and execute the dependency.
+- an exact package transport used to create and validate dependent typed meaning graph repositories;
+  and
+- an exact artifact bundle used to link and execute the dependency.
 
 The executable embeds both. Initialization strictly decodes each asset and verifies agreement on
 package identity, semantic revision/state, logical package revision, public interface, compiler
@@ -67,7 +67,7 @@ manifest binds repository, exact revision/state, compiler and bytecode contracts
 optimization policy, and the complete unit map. Exact-current cache reuse requires every binding;
 cache state is disposable and never enters semantic or package identity.
 
-Artifact contract 10 links the root compilation with strictly loaded dependency artifacts. Its
+The artifact bundle links the root compilation with strictly loaded dependency artifacts. Its
 manifest binds:
 
 - root repository, package, accepted revision, and semantic state;
@@ -84,7 +84,7 @@ truncation, and trailing input.
 
 Artifacts contain semantic requirements but never deployment grants, credentials, runtime handles,
 host paths, or accepted repository visibility. An artifact is a derived executable input, not a
-writer of Graph 5 authority.
+writer of typed meaning authority.
 
 ## Preparation, execution, and deployment
 
@@ -97,7 +97,7 @@ binds requirement aliases to generic adapters and secret/configuration sources, 
 limits/topology. Application routes, SQL, authorization, representations, object keys, and queue
 transitions belong in graph meaning; Rust owns generic host mechanisms.
 
-Current `serve` and `worker` descriptors select the maintained artifact-10 bundle. Standalone
+Current `serve` and `worker` descriptors select the maintained artifact bundle. Standalone
 preparation strictly loads the bundle without project discovery, resolves the exact root-package
 target, component, runner, and complete requirement closure, then binds external grants. Live
 effects execute once through the normalized production VM; reference execution remains limited to

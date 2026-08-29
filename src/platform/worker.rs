@@ -15,9 +15,14 @@ pub const WORKER_RUNNER_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_RESIDENT_WORKERS: usize = 4_096;
 pub const MAXIMUM_IDLE_WAIT_MILLISECONDS: u64 = 60_000;
 
+const fn worker_runner_contract_version() -> u16 {
+    WORKER_RUNNER_CONTRACT_VERSION
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerLimits {
+    #[serde(skip, default = "worker_runner_contract_version")]
     pub contract_version: u16,
     pub maximum_workers: usize,
     pub idle_wait_milliseconds: u64,
@@ -72,6 +77,7 @@ impl WorkerLimits {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerReceipt {
+    #[serde(skip_serializing)]
     pub contract_version: u16,
     pub iterations: u64,
     pub productive_iterations: u64,

@@ -1,12 +1,12 @@
 # Semantic authority
 
-Status: normative. Current accepted meaning contract: `lkjscript-meaning-graph-5`. Current revision,
-receipt, and transaction contracts are versions 7, 5, and 5. The executable-generated
-[contract table](../generated/contracts.md) owns the complete current identity catalog.
+Status: normative. Accepted meaning is the typed meaning graph. Internal revision, receipt,
+transaction, storage, and graph compatibility identities remain at their typed source owners and
+are not product versions.
 
 ## Sole editable authority
 
-An accepted lkjscript program is exactly one complete validated typed Graph 5 revision selected by
+An accepted lkjscript program is exactly one complete validated typed meaning graph revision selected by
 the repository's atomic `HEAD`. The graph owns package metadata, typed semantic owners, interned
 types, exact references, namespaces, relations, dependencies, components, ports, targets, tests,
 documentation, annotations, and retirements.
@@ -55,7 +55,7 @@ acceptance evidence before retrying.
 `GraphRepository::publish` is the sole normal existing-project writer. The released accepted-write
 operations are:
 
-- `new`, which constructs initial Graph 5 authority in a private sibling and exposes it once; and
+- `new`, which constructs initial typed meaning authority in a private sibling and exposes it once; and
 - `change apply`, which publishes one exactly reviewed prepared semantic change.
 
 `change plan`, status, inspect, query, package inspection/export, check, build, run, capabilities,
@@ -95,7 +95,7 @@ in-memory prepared compiler impact. Publication is complete first. Incremental f
 as derived-state status and cannot roll back, relabel, or invalidate the accepted semantic result.
 No durable compiler-impact journal is authority.
 
-Artifact contract 10 is immutable derived runtime input. Its manifest binds exact repository,
+An artifact bundle is immutable derived runtime input. Its manifest binds exact repository,
 root package, semantic revision/state, dependency package revisions, compiler and bytecode
 contracts, and object closure. Strict artifact validation precedes output publication or execution.
 Equal authority, dependencies, compiler contracts, and options produce equal bytes.
@@ -107,16 +107,16 @@ implementation-disjoint canonical reference interpreter. Both read the same exac
 revision and artifact closure. A disagreement is failure. Live external effects are never
 duplicated to obtain a differential result.
 
-`serve` and `worker` consume an explicitly selected immutable artifact-10 bundle and external
-deployment descriptors. Standalone preparation does not open editable Graph authority or advance
+`serve` and `worker` consume an explicitly selected immutable artifact bundle and external
+deployment descriptors. Standalone preparation does not open editable graph authority or advance
 `HEAD`. The bundle remains derived execution input; descriptors, secrets, grants, and host
 resources remain external operational authority.
 
 ## Compatibility and security
 
-Graph 4 repository markers are rejected before mutation, cache work, or derived output. There is
+Predecessor repository markers are rejected before mutation, cache work, or derived output. There is
 no graph edition, migration command, compatibility flag, fallback reader, dual dispatch, or dual
-write. Arbitrary user Graph 4 conversion is not supported.
+write. Arbitrary predecessor conversion is not supported.
 
 All paths, authored files, transports, artifacts, caches, continuations, deployment descriptors,
 and runtime inputs are hostile bounded boundaries. The system does not claim hostile-code

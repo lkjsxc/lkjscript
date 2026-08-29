@@ -412,7 +412,7 @@ pub(crate) fn base_registry(
     gates.push(rust_only);
 
     gates.push(gate(
-        "contract_registry_conformance",
+        "generated_public_guides",
         vec![
             path_string(&binary),
             "capabilities".to_owned(),
@@ -421,6 +421,27 @@ pub(crate) fn base_registry(
         ],
         &["release_command_lifecycle"],
     ));
+    let mut product_surface = gate(
+        "product_surface_audit",
+        vec![
+            path_string(self_test_executable),
+            "policy".to_owned(),
+            "product-surface".to_owned(),
+            "--binary".to_owned(),
+            path_string(&binary),
+            "--machine".to_owned(),
+        ],
+        &["generated_public_guides"],
+    );
+    product_surface.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "policy".to_owned(),
+        "product-surface".to_owned(),
+        "--binary".to_owned(),
+        path_string(&binary),
+        "--machine".to_owned(),
+    ]);
+    gates.push(product_surface);
     gates.push(project_gate(
         "standard_package_test",
         &binary,
@@ -597,7 +618,8 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "release_build",
             "release_command_lifecycle",
             "distributed_http_application",
-            "contract_registry_conformance",
+            "generated_public_guides",
+            "product_surface_audit",
             "standard_package_test",
             "application_package_test",
             "standard_artifact_build",
@@ -630,7 +652,8 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "release_command_lifecycle",
             "distributed_http_application",
             "stateful_http_application",
-            "contract_registry_conformance",
+            "generated_public_guides",
+            "product_surface_audit",
             "standard_package_test",
             "application_package_test",
             "standard_artifact_build",
@@ -768,7 +791,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 25);
+        assert_eq!(first.gates.len(), 26);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
@@ -789,6 +812,10 @@ mod tests {
                     .iter()
                     .any(|name| name == "stateful_http_application"),
                 matches!(profile_name, "service" | "full")
+            );
+            assert_eq!(
+                requested.iter().any(|name| name == "product_surface_audit"),
+                matches!(profile_name, "product" | "full")
             );
             assert!(
                 !first

@@ -17,6 +17,10 @@ pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_HTTP_HEADER_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_HTTP_HEADERS: usize = 1_024;
 
+const fn http_adapter_contract_version() -> u16 {
+    HTTP_ADAPTER_CONTRACT_VERSION
+}
+
 /// One generation-neutral construction of the exact semantic HTTP boundary.
 ///
 /// Runtime admission, project creation, and focused contract tests consume these same canonical
@@ -100,6 +104,7 @@ fn semantic_type_field(
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HttpLimits {
+    #[serde(skip, default = "http_adapter_contract_version")]
     pub contract_version: u16,
     pub maximum_request_body_bytes: usize,
     pub maximum_response_body_bytes: usize,
@@ -194,6 +199,7 @@ pub struct HttpDispatchObservation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HttpServerReceipt {
+    #[serde(skip_serializing)]
     pub contract_version: u16,
     pub local_address: String,
     pub accepted_at_transport: bool,

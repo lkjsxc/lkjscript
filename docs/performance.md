@@ -573,6 +573,44 @@ PostgreSQL root was active; unavailability was not counted as a pass.
 Exact receipts, byte digests, source identities, and evidence classifications are recorded in
 [`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json).
 
+## Product identity surface contraction
+
+The 2026-08-29 comparison used the exact orientation baseline
+`d53edc7b9bc017261a589ed117c441196e6c831a` and the cutover working tree on the same Linux x86-64
+host with Rust/Cargo 1.98.0. Both capability observations used locked debug executables. The
+baseline build began with a cold worktree target directory while the cutover reused compilation
+outputs, so elapsed build time is deliberately not compared. Record and byte counts are exact;
+they are not latency or provider-cost claims.
+
+| Projection | Orientation baseline | Cutover source |
+|---|---:|---:|
+| default capabilities | 32 records / 2,316 bytes | 32 / 2,151 |
+| 13 common section focuses, summed | 1,101 records / 115,282 bytes | 1,102 / 113,572 |
+| 12 command focuses, summed | 176 records / 13,795 bytes | 186 / 13,154 |
+| executable-generated public guides | 7 files / 206,605 bytes | 6 / 201,971 |
+| maintained service descriptor | 4,542 bytes | 4,463 |
+| maintained worker descriptor | 1,758 bytes | 1,679 |
+| same reviewed rename plan | 20 records / 3,721 bytes | 20 / 3,538 |
+
+The default projection contracted by 165 bytes while adding explicit product identity. Focused
+record counts grew because each response now carries separate product and capability records; their
+aggregate bytes still contracted. Removing the obsolete generated table reduced the owned guide
+set by one file. Removing the top-level and two runner-specific descriptor discriminators reduced
+each maintained descriptor by 79 bytes.
+
+The plan comparison renamed module `mod_0510586a801c429b7a4a49a217de7fab` against exact base
+`rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf` without applying it.
+The baseline plan SHA-256 was
+`6043b83e40b5c403f72e4bbb7084a54f1000bdb33b4d762fae94ef0050f99f02`; the cutover plan SHA-256
+was `9b45eeacb0496592222001696f5b3678887d10332e923cabc262e27d83d3c14a`. Both projected the same
+base, result, semantic state, effects, budgets, and tests. The expected digest difference binds the
+new product/capability projection and the retained opaque internal compatibility commitment.
+
+Resident lifecycle, release package, copied application, and verification resource observations
+remain separate first-party measurements and are recorded with the final campaign evidence. No
+speedup, SLO, universal resource improvement, or semantic-work reduction is inferred from shorter
+metadata.
+
 ## Historical compiler, service, and verification receipts
 
 Before the current cutover, graph packages passed 6 standard and 11 `lkjournal` tests with

@@ -26,6 +26,9 @@ struct Violation {
 pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let policy = crate::next_utf8(&mut arguments, "policy")?
         .ok_or_else(|| DevError::usage("policy name is required"))?;
+    if policy == "product-surface" {
+        return super::surface::command(arguments);
+    }
     if policy != "no-python" {
         return Err(DevError::usage(format!("unknown policy '{policy}'")));
     }

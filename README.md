@@ -1,19 +1,19 @@
 # lkjscript
 
 `lkjscript` is a meaning-oriented programming language and application platform. One accepted
-revision of a typed Graph 5 repository is the sole editable authority for a program. Names are
+revision of a typed meaning graph repository is the sole editable authority for a program. Names are
 mutable locators; stable typed identities preserve continuity. Source text, compact requests,
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
 The supported v0.1.9 executable provides offline command, editable HTTP, and reviewed stateful HTTP
-application lifecycles through one copied binary. They create Graph 5 projects, inspect and change
-accepted meaning, run graph-owned tests, build deterministic artifact-10 bundles, and execute
+application lifecycles through one copied binary. They create typed meaning graph projects, inspect
+and change accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute
 through the standalone deployment boundary without Cargo, a checkout, or an application helper.
 The stateful workflow uses an explicitly provisioned PostgreSQL authority.
 
 Current source is the unreleased 0.1.10 snapshot. It adds public explicit type-parameter,
-named-function-value, and invocation records plus a Graph-owned generic `list-fold-left`; the
+named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained source BBS uses that fold for header admission. The immutable v0.1.9 download remains the
 latest published binary and does not contain this source-only cutover.
 
@@ -76,8 +76,8 @@ cd /tmp/lkjscript-demo
 
 The final command returns the typed text value `"hello"`. The command recipe owns one application
 module, a private pure implementation, a component and port, target `main`, one graph-owned test,
-and an exact dependency on the built-in standard package. It contains Graph 5 authority only and
-does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
+and an exact dependency on the built-in standard package. It contains typed meaning authority only
+and does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
 for an empty dependency-free package.
 
 ### HTTP application from the public binary
@@ -131,10 +131,14 @@ Use the downloaded executable for all application-facing discovery and authoring
 ./lkjscript/lkjscript package builtin inspect owner interface decl_...
 ```
 
-The v0.1.9 binary's compact change 5 can add exact component requirements, create task functions,
-update the starter handler contract, and compose structural records, lexical bindings, fields,
-lists, variants, matches, exact built-in calls, requirement-scoped capability calls, and lexical
-transactions. Current unreleased source advances that owner to compact change 6 and adds exactly
+The current source candidate also supports the exact standalone identity query
+`target/release/lkjscript --version`, which prints only `lkjscript 0.1.10`. The published v0.1.9
+binary remains unchanged.
+
+The v0.1.9 binary's compact change records can add exact component requirements, create task
+functions, update the starter handler contract, and compose structural records, lexical bindings,
+fields, lists, variants, matches, exact built-in calls, requirement-scoped capability calls, and
+lexical transactions. Current unreleased source extends those records with exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
 capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
@@ -237,7 +241,7 @@ Run focused discovery for exhaustive current grammar, limits, and response field
 
 ## Built-in standard package
 
-The executable embeds one exact package transport and one exact artifact-10 bundle generated from
+The executable embeds one exact package transport and one exact artifact bundle generated from
 `packages/standard`:
 
 ```sh
@@ -254,12 +258,12 @@ package registry and never performs ambient path or network resolution.
 
 The current source interface includes
 `list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`. The fold,
-its recursion, and its tests are Graph meaning; Rust contributes only the existing generic
+its recursion, and its tests are typed meaning; Rust contributes only the existing generic
 compiler/runtime mechanisms.
 
 ## Maintained consumers
 
-The standard package and `lkjournal` are Graph 5 repositories and use the same lifecycle:
+The standard package and `lkjournal` are typed meaning graph repositories and use the same lifecycle:
 
 ```sh
 ./target/release/lkjscript --project packages/standard check
@@ -273,7 +277,7 @@ The standard package and `lkjournal` are Graph 5 repositories and use the same l
 Their checked-in files under `generated/` are deterministic current outputs. The standard artifact
 and transport also own the executable's built-in bytes.
 
-`serve` and `worker` load the standalone artifact-10 bundle named by their strict deployment
+`serve` and `worker` load the standalone artifact bundle named by their strict deployment
 descriptors and prepare the selected target through the same normalized VM used by current graph
 execution. The maintained descriptors name `generated/lkjournal.lkja`; a fresh public build must
 be byte-equal to that file. Preparation reads the descriptor, its relative regular artifact,
@@ -298,12 +302,13 @@ external trusted boundary.
 
 ## Public surface and compatibility
 
-The executable registry is the exhaustive owner of current operations, request/response models,
-contracts, limits, diagnostics, and security nonclaims. See the generated
-[contract table](docs/generated/contracts.md) and [operation table](docs/generated/operations.md).
+The public capability projection is the exhaustive discovery surface for current operations,
+request/response models, grammar, limits, diagnostics, authority effects, and security nonclaims.
+It reports the product version and an opaque capabilities digest. See the generated
+[operation table](docs/generated/operations.md) and focused capability guides.
 Finite outcomes use deterministic bounded compact records and keep stderr empty.
 
-Predecessor Graph 4 repositories are rejected before mutation or cache work. Removed operations
+Predecessor graph repositories are rejected before mutation or cache work. Removed operations
 such as `draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor` are
 absent from discovery and receive the ordinary `cli_usage` failure. There is no compatibility
 flag, legacy mode, migration command, graph edition, fallback reader, or dual write.

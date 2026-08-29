@@ -241,7 +241,7 @@ struct AuthoringResult {
     plan: PlanObservation,
     idempotent_reconciliation: bool,
     discovery_commands: u64,
-    registry_digest: String,
+    capabilities_digest: String,
     builtin_package_revision: String,
     artifact: String,
     artifact_bytes: u64,
@@ -639,14 +639,15 @@ fn run_authoring(
             .success("capabilities", &["capabilities"], isolated)?
             .bytes,
     )?;
+    require_record_field(&capabilities, "product", "name", "lkjscript")?;
     require_record_field(
         &capabilities,
-        "registry",
-        "graph",
-        "lkjscript-meaning-graph-5",
+        "product",
+        "version",
+        lkjscript::PRODUCT_VERSION,
     )?;
-    let registry_digest =
-        required_field(required_record(&capabilities, "registry")?, "digest")?.to_owned();
+    let capabilities_digest =
+        required_field(required_record(&capabilities, "capabilities")?, "digest")?.to_owned();
     for section in ["change", "deployment", "expression", "type"] {
         let present = capabilities
             .iter()
@@ -904,7 +905,7 @@ fn run_authoring(
         plan,
         idempotent_reconciliation: true,
         discovery_commands,
-        registry_digest,
+        capabilities_digest,
         builtin_package_revision,
         artifact: artifact.display().to_string(),
         artifact_bytes: first.len() as u64,
@@ -1215,12 +1216,10 @@ fn write_descriptor(path: &Path, artifact: &Path) -> Result<(), DevError> {
         })?)
         .map_err(|_| DevError::infrastructure("stateful artifact escaped its project"))?;
     let descriptor = json!({
-        "contract_version": 1,
         "artifact": path_text(artifact)?,
         "target": "serve",
         "listen": "127.0.0.1:0",
         "runtime": {
-            "contract_version": 1,
             "maximum_concurrent_tasks": 8,
             "maximum_queued_tasks": 32,
             "request_deadline_milliseconds": 30000,
@@ -1233,7 +1232,6 @@ fn write_descriptor(path: &Path, artifact: &Path) -> Result<(), DevError> {
             "maximum_value_stack": 1000000
         },
         "http": {
-            "contract_version": 1,
             "maximum_request_body_bytes": 65536,
             "maximum_response_body_bytes": 1048576,
             "maximum_header_bytes": 32768,

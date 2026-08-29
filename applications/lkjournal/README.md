@@ -1,8 +1,8 @@
 # lkjournal
 
 `lkjournal` is an actor-aware resource journal whose current editable application authority is the
-Graph 5 repository in this directory. It stores named Markdown-like text without parsing it,
-retains an immutable snapshot for every accepted update, publishes named objects, and completes one
+typed meaning graph repository in this directory. It stores named Markdown-like text without
+parsing it, retains an immutable snapshot for every accepted update, publishes named objects, and completes one
 durable indexing job for each created resource.
 
 Its stable modules are:
@@ -41,7 +41,7 @@ target/release/lkjscript --project applications/lkjournal build \
 
 Check compiles and links the exact two-package closure and runs 5 application tests plus 11 standard
 tests. All 16 must agree between normalized bytecode and the canonical reference interpreter.
-`generated/lkjournal.lkja` is the deterministic maintained artifact-10 output. Check and build do
+`generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
 not change accepted `HEAD`.
 
 The normalized artifact contains target `serve`
@@ -52,12 +52,12 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 ## Current service and worker boundary
 
 Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 728,187-byte
-artifact-10 bundle above (SHA-256
+artifact bundle above (SHA-256
 `d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
-readiness only after required PostgreSQL and queue preflight. It does not discover this Graph 5
-repository or read accepted `HEAD`.
+readiness only after required PostgreSQL and queue preflight. It does not discover this typed
+meaning graph repository or read accepted `HEAD`.
 
 To exercise the service, create an empty PostgreSQL database and the configured local object host
 directory, then bind the two named secrets without committing their values:
@@ -83,7 +83,7 @@ Live effects run once through the production VM and never through differential r
 
 ## Routes
 
-| Method and path | Graph-owned behavior |
+| Method and path | Meaning-owned behavior |
 |---|---|
 | `GET /health` | readiness independent of database work |
 | `GET /` | escaped server-rendered service page |
@@ -117,8 +117,8 @@ cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 
 The acceptance tool first builds through the public command and requires byte equality with the
 checked-in bundle. It stages only the copied binary, artifact, descriptors, configuration/secrets,
-local object directory, and PostgreSQL coordinates; it snapshots canonical Graph authority before
-and after. It requires the cached Linux amd64 image
+local object directory, and PostgreSQL coordinates; it snapshots canonical typed meaning authority
+before and after. It requires the cached Linux amd64 image
 `postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`.
 It never resolves or pulls a mutable image name itself. It starts an isolated database, exercises
 live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded evidence

@@ -1,10 +1,8 @@
 {
-  "contract_version": 1,
   "artifact": "generated/lkjournal.lkja",
   "target": "serve",
   "listen": "127.0.0.1:8080",
   "runtime": {
-    "contract_version": 1,
     "maximum_concurrent_tasks": 16,
     "maximum_queued_tasks": 64,
     "request_deadline_milliseconds": 30000,
@@ -17,7 +15,6 @@
     "maximum_value_stack": 1000000
   },
   "http": {
-    "contract_version": 1,
     "maximum_request_body_bytes": 8388608,
     "maximum_response_body_bytes": 4194304,
     "maximum_header_bytes": 32768,

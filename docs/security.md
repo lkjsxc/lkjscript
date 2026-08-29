@@ -25,7 +25,7 @@ application actor identity.
 | Partial or torn publication | exact-base lock, immutable objects first, filesystem durability before one synchronized atomic HEAD rename | local filesystem honors documented operations |
 | Corrupt current authority | object-key verification, deep reconstruction independent of indexes, writes blocked on observed corruption | operator restores or repairs from trusted backup |
 | Index substitution or loss | revision/root/contract-bound manifests; content-addressed local exact shards; local/full indexes are disposable and rebuild | loss may widen the next local change or query to broad reconstruction |
-| Semantic-fact substitution | contract-2 module/validator/input summaries, contract-3 persistent fact-page digests and typed keys, a revision/root-bound manifest, and a revision-core certificate over the exact map roots | summary, page, and manifest bytes are persisted but disposable; loss or malformed bytes rebuild, while a rebuilt certificate mismatch is canonical corruption |
+| Semantic-fact substitution | typed module/validator/input summaries, persistent fact-page digests and typed keys, a revision/root-bound manifest, and a revision-core certificate over the exact map roots | summary, page, and manifest bytes are persisted but disposable; loss or malformed bytes rebuild, while a rebuilt certificate mismatch is canonical corruption |
 | Name-driven reference drift | canonical imports, exports, declaration references, and targets bind typed stable IDs; module name uniqueness uses the persistent name map; module and declaration rename have full-oracle differential locality tests | declaration move remains a complete-path operation because exact references include the owning module identity |
 | Stale concurrent write | HEAD reread under exclusive lock and exact base comparison | one local repository lock domain |
 | Replay confusion | optional bounded idempotency key binds one exact transaction digest | caller scopes keys appropriately |
@@ -46,7 +46,7 @@ filesystems and platforms not covered by retained evidence are not claimed.
 
 | Threat | Implemented control | Residual assumption |
 |---|---|---|
-| Deployment artifact substitution | strict relative regular path, symlink-component rejection, artifact-10 contract/checksum/digest validation, exact root target and requirement closure before secrets or readiness | deployment directory and descriptor author are trusted operational authority |
+| Deployment artifact substitution | strict relative regular path, symlink-component rejection, artifact bundle checksum/digest validation, exact root target and requirement closure before secrets or readiness | deployment directory and descriptor author are trusted operational authority |
 | Capability confusion | exact interface/operation/alias/limit requirement and deployment grant equality | deployment author chooses appropriate authority |
 | Secret disclosure | environment acquisition into opaque redacted values; no durable graph or artifact secret | OS environment and administrator are trusted |
 | SQL injection | graph-owned statements require `StaticText`; values use typed parameters | authored static SQL is trusted and reviewed |

@@ -1,4 +1,4 @@
-# Deployment and security capability contract 1
+# Deployment and security capabilities
 
 This specification owns deployment binding for configuration, secrets, clocks, randomness,
 identifiers, password hashing, adapters, listener/topology limits, and redacted inspection. It does
@@ -6,14 +6,15 @@ not own application authentication/authorization policy, semantic identity, or o
 
 ## Descriptor and preparation
 
-A deployment descriptor is strict JSON contract 1, at most 1 MiB and 1,024 grants. It names a
+A deployment descriptor is strict JSON, at most 1 MiB and 1,024 grants. It has no public version
+discriminator and names a
 relative component artifact, exact target, optional listener, resident/execution/HTTP/worker/stream
 limits, typed configuration map, secret environment bindings, and grants. Relative paths reject
 absolute, backslash, empty, `.` and `..` components. Artifact paths and local object roots reject
 symbolic-link components; artifacts must be regular files and local roots must be existing real
 directories. The deployment directory is a trusted operator boundary.
 
-Preparation bounds and decodes the descriptor and artifact-10 bundle, validates the bundle digest
+Preparation bounds and decodes the descriptor and artifact bundle, validates the bundle digest
 and exact root target/component/runner/requirement closure, then loads named secrets, constructs
 and preflights adapters, computes redacted descriptor digests, and only then permits readiness or
 listener/worker admission. A failure closes already-created adapters and emits no ready event or
@@ -29,7 +30,7 @@ publishes no application work.
 
 Configuration values are closed bool, i64, text, or bytes with at most 4,096 fields and 1 MiB per
 value. Applications may request only accepted-source `StaticText` names through typed exists/bool/
-i64/text operations; wrong/missing type is capability failure. Contract 1 has one descriptor source
+i64/text operations; wrong/missing type is capability failure. The current boundary has one descriptor source
 and no ambient merge, watch, or mutable precedence.
 
 Secret bindings map a canonical application-independent name to a canonical environment variable.
@@ -73,6 +74,6 @@ The trust and denial model is normative in `docs/security.md`. First-party Rust 
 but dependencies and the operator/OS are trusted. The HTTP listener is plaintext and PostgreSQL
 uses `NoTls`. TLS termination, PostgreSQL TLS, certificate management, and ACME are deliberately
 out of scope and not planned; encrypted deployments require an external trusted transport boundary
-or a different adapter. Contract 1 also does not claim credential rotation without restart, a
+or a different adapter. This boundary also does not claim credential rotation without restart, a
 hostile-code sandbox, tenant resource isolation, provenance, artifact signatures, or distributed
 atomicity.

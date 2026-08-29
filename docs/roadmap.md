@@ -1,10 +1,10 @@
 # Evidence-gated roadmap
 
-Implemented work is intentionally absent. Graph 5 authority, CLI 12, offline minimal, command, and
+Implemented work is intentionally absent. Typed meaning authority, the public CLI, offline minimal, command, and
 HTTP recipes, exact built-in interface/deployment discovery, compact task/capability and explicit
-named higher-order generic authoring, Graph-owned `list-fold-left`,
-normalized check/build/pure-run, artifact 10, maintained standard/`lkjournal` artifacts, reviewed
-authored change, normalized query, standalone artifact-10 service/worker deployment, and both
+named higher-order generic authoring, graph-owned `list-fold-left`,
+normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
+authored change, normalized query, standalone artifact bundle service/worker deployment, and both
 static and PostgreSQL-backed copied-binary HTTP acceptance are current architecture. Immutable
 `v0.1.9` is the supported public `x86_64-unknown-linux-musl` distribution; its exact and latest
 downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable

@@ -4,8 +4,8 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
-Graph 5 full reconstruction and validation is the complete semantic oracle. Sparse repository
-reads, witness-maintained changes, package interfaces, compiler selection, and query projection
+Complete typed meaning graph reconstruction and validation is the semantic oracle. Sparse
+repository reads, witness-maintained changes, package interfaces, compiler selection, and query projection
 must agree with it. Physical pack/catalog layout, persistent-map partitioning, derived cache state,
 and request spelling are normalized away only when they are not semantic.
 
@@ -16,7 +16,7 @@ before comparing the expected value. Skipped, unavailable, cancelled, exhausted,
 not a pass. Live effects are not duplicated for differential evidence.
 
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
-predecessor and Graph 5 meaning, including identity continuity, declarations/members, type and
+predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
 documentation/annotations, retirements, counts, and digest. Migration tooling is temporary and
 must be deleted after materialization. The retained projection is evidence, never authority.
@@ -58,16 +58,17 @@ fixture alone is not copied-binary or maintained-consumer completion.
 
 ## Maintained consumers and service boundary
 
-The standard package and `lkjournal` must open as Graph 5, check through normalized differential
-execution, build deterministic artifact 10, and match their checked-in generated assets. Exact
+The standard package and `lkjournal` must open as typed meaning graph repositories, check through
+normalized differential execution, build deterministic artifact bundles, and match their checked-in generated assets. Exact
 package, target, test, dependency, and public-interface inventories must be retained in migration
 or lifecycle evidence.
 
 Service verification freshly builds `lkjournal` through the public binary, requires byte equality
-with the checked-in artifact-10 bundle, and copies the bundle plus deployment descriptors to an
+with the checked-in artifact bundle, and copies the bundle plus deployment descriptors to an
 isolated run. It validates exact bundle/manifest/root/revision/state identity, launches
 `serve`/`worker`, and exercises the maintained external workflow. It must audit that no project
-marker or repository path is opened and that canonical Graph authority is unchanged before/after.
+marker or repository path is opened and that canonical typed meaning authority is unchanged
+before/after.
 
 If PostgreSQL/container/environment prerequisites are absent, service is `unavailable` with an
 exact reason. Unavailable is never rewritten as pass or silently omitted.
@@ -108,7 +109,7 @@ public verification. Passing evidence requires reviewed plan/apply, idempotent r
 clean/incremental artifact equality, the named reducer/function value/standard fold construction,
 real HTTP create/read/update/delete, missing/nonmatching/repeated/reordered header admission,
 strict malformed input, statement rollback, migration divergence failure, restart persistence,
-failed-startup behavior, graceful shutdown, unchanged accepted Graph authority, secret redaction,
+failed-startup behavior, graceful shutdown, unchanged accepted graph authority, secret redaction,
 database cleanup, and runner-root cleanup. PostgreSQL unavailability, timeout, early exit,
 migration/statement failure, shutdown failure, or cleanup failure remains a typed non-pass.
 Workflow shell cannot reclassify it.
@@ -148,9 +149,9 @@ cargo run --locked -p lkjscript-dev -- check PROFILE
 ```
 
 `focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
-widening rules. `product` builds release and verifies copied-binary workflows, maintained Graph 5
-consumers, generated docs, and built-in/generated assets. `service` owns isolated standalone
-artifact-10 service acceptance. `full` owns formatting, lints, workspace targets, all tests,
+widening rules. `product` builds release and verifies copied-binary workflows, maintained typed
+meaning graph consumers, generated docs, and built-in/generated assets. `service` owns isolated standalone
+artifact bundle service acceptance. `full` owns formatting, lints, workspace targets, all tests,
 release/product/service classification, and diff checks; final full evidence must be fresh.
 
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,

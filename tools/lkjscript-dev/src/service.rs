@@ -1850,7 +1850,8 @@ fn parse_ready_event(line: &[u8]) -> Result<RunnerReady, ServiceFailure> {
     })?;
     require(
         value.get("ok").and_then(Value::as_bool) == Some(true)
-            && value.get("event").and_then(Value::as_str) == Some("ready"),
+            && value.get("event").and_then(Value::as_str) == Some("ready")
+            && value.get("contract_version").is_none(),
         "runner_ready_event",
         "runner readiness event was rejected",
     )?;
@@ -1860,11 +1861,16 @@ fn parse_ready_event(line: &[u8]) -> Result<RunnerReady, ServiceFailure> {
             "runner readiness omitted deployment",
         )
     })?;
+    require(
+        deployment.get("contract_version").is_none(),
+        "runner_ready_predecessor",
+        "runner readiness contains a removed predecessor field",
+    )?;
     let artifact_digest = string_at(deployment, "artifact_digest")?;
     require(
         domain_identity(&artifact_digest, "artifact_bundle_", 64),
         "runner_ready_artifact_identity",
-        "runner readiness artifact digest is not an exact artifact-10 bundle identity",
+        "runner readiness artifact digest is not an exact artifact bundle identity",
     )?;
     Ok(RunnerReady {
         artifact_digest,
@@ -1887,16 +1893,27 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
         })?;
         if value.get("event").and_then(Value::as_str) == Some("stopped") {
             require(
-                value.get("ok").and_then(Value::as_bool) == Some(true),
+                value.get("ok").and_then(Value::as_bool) == Some(true)
+                    && value.get("contract_version").is_none(),
                 "runner_stop_event",
                 "runner stop receipt was unsuccessful",
             )?;
             let receipt = value.get("receipt").ok_or_else(|| {
                 ServiceFailure::failed("runner_stop_receipt", "runner stop receipt is absent")
             })?;
+            require(
+                receipt.get("contract_version").is_none(),
+                "runner_stop_predecessor",
+                "runner stop receipt contains a removed predecessor field",
+            )?;
             let shutdown = receipt.get("shutdown").ok_or_else(|| {
                 ServiceFailure::failed("runner_shutdown_receipt", "runner shutdown is absent")
             })?;
+            require(
+                shutdown.get("contract_version").is_none(),
+                "runner_shutdown_predecessor",
+                "runner shutdown contains a removed predecessor field",
+            )?;
             stopped = Some(RunnerStopped {
                 admission_stopped: boolean_at(shutdown, "admission_stopped")?,
                 remaining_tasks: u64_at(shutdown, "remaining_tasks")?,
@@ -2590,19 +2607,35 @@ mod tests {
     #[test]
     fn runner_events_are_typed_and_require_clean_shutdown() {
         let ready = parse_ready_event(
-            br#"{"contract_version":1,"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact_bundle_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token","database-url"]}}"#,
+            br#"{"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact_bundle_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token","database-url"]}}"#,
         )
         .expect("parse ready event");
         assert_eq!(ready.runner, "http");
         assert_eq!(ready.secret_names.len(), 2);
         let stopped = parse_stopped_event(
-            br#"{"contract_version":1,"ok":true,"event":"ready"}
-{"contract_version":1,"ok":true,"event":"stopped","receipt":{"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
+            br#"{"ok":true,"event":"ready"}
+{"ok":true,"event":"stopped","receipt":{"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
 "#,
         )
         .expect("parse stopped event");
         assert!(stopped.clean());
         assert_eq!(stopped.productive_iterations, Some(3));
+        assert_eq!(
+            parse_ready_event(
+                br#"{"ok":true,"event":"ready","contract_version":1,"deployment":{}}"#
+            )
+            .expect_err("predecessor ready event must reject")
+            .code,
+            "runner_ready_event"
+        );
+        assert_eq!(
+            parse_stopped_event(
+                br#"{"ok":true,"event":"stopped","receipt":{"contract_version":1,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}"#
+            )
+            .expect_err("predecessor stopped event must reject")
+            .code,
+            "runner_stop_predecessor"
+        );
     }
 
     #[test]

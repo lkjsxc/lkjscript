@@ -1,18 +1,18 @@
 # Current architecture
 
 This document maps implemented layers and dependency direction. Normative behavior belongs under
-`docs/spec/`; exact executable identities belong in the generated
-[contract table](generated/contracts.md).
+`docs/spec/`; exact internal compatibility identities remain at their typed source owners. Public
+capabilities and guides expose stable behavior, the product version, and opaque digests.
 
 ## Current development path
 
-All current finite graph and command operations converge on Graph 5 authority:
+All current finite graph and command operations converge on typed meaning authority:
 
 ```text
 argv / compact records / bounded JSON arguments / offline discovery
                      │
                      ▼
-       exhaustive executable registry and typed adapters
+      exhaustive public capabilities and typed adapters
                      │
                      ▼
  current project discovery ── rejects predecessor markers
@@ -39,14 +39,14 @@ storage-shaped request:
 closed minimal / command / HTTP recipe
             │ typed graph + complete validation
             ▼
- private sibling: canonical Graph 5 repository
+ private sibling: canonical typed meaning graph repository
             │ HTTP only: typed deployment descriptor + empty generated/
             │ synchronize complete private inventory
             ▼
        one destination visibility rename
             │
-            ├─ Graph 5 authority: editable program meaning
-            └─ deployment 1: separate operator-editable authority
+            ├─ typed meaning authority: editable program meaning
+            └─ deployment descriptor: separate operator-editable authority
 ```
 
 The executable embeds every recipe rule and exact standard package byte. HTTP creation and runtime
@@ -68,7 +68,7 @@ GraphRepository / exact accepted revision
                                              │
                     exact dependency artifacts + linker
                                              │
-                                 strict artifact-10 loader
+                                 strict artifact bundle loader
                                              │
                                   dense NormalizedProgram
                                    ┌─────────┼─────────┐
@@ -124,9 +124,10 @@ release-write authority. Post-publication verification downloads exact and lates
 anonymously and runs strict static inspection plus both oracles independently against each.
 
 The public release, transient artifacts, archive, manifest, checksum, receipts, asset digest, and
-attestation are derived distribution evidence. None can select or edit Graph 5 meaning, executable
-contracts, compilation semantics, or deployment data. The root package version and annotated tag
-bind the human-facing product snapshot while contract identities remain independently owned.
+attestation are derived distribution evidence. None can select or edit typed meaning, executable
+behavior, compilation semantics, or deployment data. The root package version and annotated tag
+bind the human-facing product snapshot while internal compatibility identities remain independently
+owned.
 Published content recovers through a new patch rather than mutation.
 
 Immutable `v0.1.9` closes this path at source commit
@@ -141,26 +142,26 @@ advanced additively and moved no predecessor tag, release, or asset.
 | Layer | Primary code | Owns | Does not own |
 |---|---|---|---|
 | Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
-| Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed Graph 5 meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
+| Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | package implementation bodies, a general registry, or ambient resolver |
-| Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact 10 | accepted semantic identity |
+| Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
-| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | one strict descriptor/schema inventory, starter HTTP defaults, artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
 The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
-backup/restore, review projection, query indexes, artifact-4 reader/runtime, and predecessor value
+backup/restore, review projection, query indexes, predecessor artifact reader/runtime, and predecessor value
 representation have no current consumer and are deleted. The source-era parser remains only as an
 implementation-disjoint language test oracle; it has no public project or deployment path.
 
 ## Authority, identity, and storage
 
-A Graph 5 snapshot owns repository and package identity, package name, typed owners, interned type
+A typed meaning graph snapshot owns repository and package identity, package name, typed owners, interned type
 objects, exact dependency bindings, namespace and relation witnesses, tests, targets, and
 retirements. Stable owner domains remain distinct; a module ID cannot be decoded as a declaration
 ID even if its payload bytes coincide. Exact semantic references do not carry mutable module or
@@ -180,7 +181,7 @@ objects, or `HEAD` bindings are corruption.
 
 Package transports stored under `PACKAGE-TRANSPORTS` are exact immutable dependency inputs selected
 by accepted dependency records. They are not a second package authoring format. The maintained
-standard and `lkjournal` roots contain only this Graph 5 layout.
+standard and `lkjournal` roots contain only this typed meaning graph layout.
 
 ## Publication and derived cache handoff
 
@@ -204,7 +205,7 @@ incremental manifests and artifacts are compared in tests.
 ## Built-in dependency and project recipes
 
 `packages/standard` owns two generated assets: a package transport for dependency installation and
-an artifact-10 bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
+an artifact bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
 and checks package, semantic revision, logical package revision, interface, and artifact identities
 for agreement. Public bounded query/detail exposes the implementation-free interface and exact
 compact references; inspection/export exposes identities and exact bytes without permitting
@@ -215,11 +216,11 @@ function through the validated built-in interface and stores an exact declaratio
 HTTP recipe likewise resolves and signature-checks `StaticText -> Text`, `Text -> Bytes`, and the
 exact ByteStream interface and operation policies without hard-coded semantic IDs. It constructs
 the application response policy, task handler, component requirement and port, HTTP target, and
-test through ordinary Graph 5 initial publication.
+test through ordinary typed meaning graph publication.
 
 The HTTP descriptor is encoded once through deployment-owned types with a fresh nonzero operational
 authority revision, loopback listener, one byte-stream grant, and independent bounded resources.
-Publishing it beside Graph authority in one complete directory does not merge their identity or
+Publishing it beside graph authority in one complete directory does not merge their identity or
 mutation rules. There is no source template, migration reader, path lookup, network fetch, hidden
 sidecar, or prebuilt application artifact.
 
@@ -235,14 +236,14 @@ copied binary discovery
   └─ strict deployment adapter schema
                      │
                      ▼
-       compact change 6 typed authored intent
+          compact typed authored intent
  requirement + task effect + explicit generic/function values
                      │
             plan / exact-base apply
                      ▼
-       one accepted Graph 5 application revision
+       one accepted typed meaning graph application revision
                      │
-          check + deterministic Artifact 10
+          check + deterministic artifact bundle
                      ▼
 HTTP client -> HTTP adapter -> graph handler/domain policy
                              -> graph persistence functions
@@ -259,24 +260,24 @@ and runtime limits. PostgreSQL rows are operational state; SQL and PostgreSQL re
 current mechanisms rather than language meaning.
 
 `SetFunctionContract` updates the starter handler's exact result/effect requirement closure while
-preserving its identity and parameter. Generic runtime call frames carry concrete Graph type
+preserving its identity and parameter. Generic runtime call frames carry concrete graph type
 substitutions for standard JSON/list declarations in both production and reference tiers. An
 idempotent apply retry reopens the accepted request's exact parent and hides only the child-added
 physical type objects, preserving logical reprepare even though immutable storage grows.
 
-The built-in standard now exports Graph-owned
+The built-in standard now exports graph-owned
 `list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`. Its
 private index helper uses ordinary direct recursion, `list-length`, `list-get`, and general
 `invoke`; there is no fold intrinsic, opcode, or host callback. The BBS passes its private
 `(Bool, Header) -> Bool` reducer as a named function value, so application header policy flows into
 the standard dependency at runtime without reversing package dependency direction. Public compact
 records lower through the same authored-intent codec, validator, compiler, VM, and reference path
-as direct Graph construction.
+as direct graph construction.
 
 ## Artifact and execution boundaries
 
-Artifact contract 10 binds the root repository/package/revision/state, every dependency package
-revision, compiler and bytecode contracts, compiler-unit maps, runtime owner metadata, public
+The artifact bundle binds the root repository/package/revision/state, every dependency package
+revision, compiler and bytecode compatibility, compiler-unit maps, runtime owner metadata, public
 interfaces, and exact immutable closure. The decoder rejects predecessor magic, noncanonical
 order, duplicates, foreign bindings, missing relocation owners, corrupt objects, trailing input,
 and configured count/byte exhaustion before execution.
@@ -291,13 +292,13 @@ Build output uses a sibling stage, file synchronization, create-new hard-link vi
 directory synchronization, and cleanup of only its owned stage. Existing files, directories,
 symlinks, invalid parents, and byte-limit exhaustion reject without a partial visible artifact.
 
-## Standalone artifact-10 deployment
+## Standalone artifact bundle deployment
 
 Resident deployment consumes immutable derived execution and external operational authority
 without entering the editable project lifecycle:
 
 ```text
-strict deployment descriptor + relative artifact-10 bundle
+strict deployment descriptor + relative artifact bundle
                          │
                          ▼
              strict loader + NormalizedProgram
@@ -326,7 +327,7 @@ stops admission, drains/cancels bounded work, and records adapter cleanup exactl
 
 The service harness freshly builds `lkjournal`, requires byte equality with the checked-in bundle,
 then stages only a copied binary, the bundle, descriptors, configuration/secrets, a local object
-directory, and PostgreSQL coordinates. It snapshots canonical Graph authority before and after the
+directory, and PostgreSQL coordinates. It snapshots canonical graph authority before and after the
 live HTTP/worker/restart workflow. No deployment path opens or advances accepted `HEAD`.
 
 The independent `distributed_http_application` product gate has no database or container
@@ -345,8 +346,8 @@ artifacts, then drives real BBS HTTP and PostgreSQL behavior through one `lkjscr
 It requires the named header reducer/function value/standard fold records, proves missing,
 nonmatching, repeated, and reordered content-type behavior, and proves malformed input and failed
 statements do not mutate rows. Migration checksum divergence fails safely, persistence survives
-restart, failed startup emits no readiness, and build/runtime work leaves accepted Graph authority
-unchanged. Its schema-2 receipt binds verifier/source/copied candidate identities, execution
+restart, failed startup emits no readiness, and build/runtime work leaves accepted graph authority
+unchanged. Its typed receipt binds verifier/source/copied candidate identities, execution
 context, optional checkout, PostgreSQL authority, redaction, and complete cleanup. Service/full
 verification and the target-admission, pre-publication, and anonymous exact/latest paths share this
 owner. The existing `lkjournal` service oracle remains a separate maintained workload, and

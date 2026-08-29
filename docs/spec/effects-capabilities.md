@@ -14,7 +14,7 @@ capability use resolves to the required interface and operation. Deployment gran
 requirements to adapter instances; omission, foreign interface, operation mismatch, or excess
 authority rejects before admission.
 
-Compact change 6 authors this boundary directly. `add.requirement` extends an existing component
+Compact change records author this boundary directly. `add.requirement` extends an existing component
 with one exact built-in interface, ordered admitted operations, and separately named resource
 limits. `create.function effect=task` and `set.function-contract effect=task` name an ordered exact
 set of local requirements; the latter changes the existing function contract without replacing its

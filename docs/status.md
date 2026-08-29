@@ -1,12 +1,12 @@
 # Current status
 
 Status date: 2026-08-29 UTC. This file describes implemented checkout reality. Executable-derived
-contract and operation catalogs live in [generated/contracts.md](generated/contracts.md) and
-[generated/operations.md](generated/operations.md); this file does not duplicate them.
+public guides live under [generated](generated), including the
+[operation guide](generated/operations.md); this file does not duplicate them.
 
 ## Current authority and maintained consumers
 
-Graph 5 is the sole current editable program authority. A project root contains a strict
+The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
 and private staging/locking state. Accepted meaning is the exact revision and immutable object
 closure selected by `HEAD`. No maintained project contains a predecessor `.lkjscript` store.
@@ -28,8 +28,8 @@ Maintained derived assets are:
 | Path | Role | SHA-256 |
 |---|---|---|
 | `packages/standard/generated/standard.lkjp` | exact built-in package transport, 77,273 bytes | `b5514baecae1276b8bfc5e551859e0ed351ff8e29a4fcddb66b76ddf5f23479c` |
-| `packages/standard/generated/standard.lkja` | current artifact-10 standard bundle, 224,984 bytes | `e30f5c00166bb4b808e5e6557d5043faba492d44818a18e7a53d5113e9366485` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current artifact-10 application bundle, 728,187 bytes | `d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 224,984 bytes | `e30f5c00166bb4b808e5e6557d5043faba492d44818a18e7a53d5113e9366485` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 728,187 bytes | `d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -66,8 +66,8 @@ redaction, and cleanup.
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
-step compared the binary against a stale pre-cutover registry digest. The workflow now reads the
-CLI contract and registry digest from the verified release manifest, and recovery used additive
+step compared the binary against a stale pre-cutover discovery digest. The workflow now reads the
+product version and capabilities digest from verified release metadata, and recovery used additive
 `v0.1.6`; neither `v0.1.5` nor an older tag or asset was changed. The independent `v0.1.7`
 publication likewise moved or replaced no predecessor. Release files remain derived distribution
 evidence rather than program authority or independent build provenance. Exact evidence is retained
@@ -84,19 +84,18 @@ release, or assets. Current structured evidence is in
 ## Current application lifecycle
 
 Current source has the unreleased product version 0.1.10; immutable public v0.1.9 remains the latest
-published binary and does not contain the source-only higher-order cutover. Both retain independent
-CLI contract 12. The source executable exposes exactly
+published binary and does not contain the source-only higher-order or product-surface cutovers. The
+source executable exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
 `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
-All finite operations use deterministic bounded compact records. The registry digest is
-`9da55649bdf2f20969c8b2633792a7e3ac7782d1198f407a84cb22832283eb41` for the current generated
-content.
+All finite operations use deterministic bounded compact records. Discovery begins with the product
+name and product version and reports an opaque capabilities digest computed by the executable.
 
 `new --template minimal` creates an empty package. `new --template command` creates an offline,
 standard-dependent pure command project with an application module, implementation, component,
 port, `main` target, and graph-owned test. Both recipes are typed executable-owned construction
-and publish through the same atomic Graph 5 creation boundary. Project-creation contract 2 adds
-`new --template http`, which creates a 20-owner Graph 5 application with one exact built-in
+and publish through the same atomic typed meaning graph creation boundary. `new --template http`
+creates a 20-owner typed meaning graph application with one exact built-in
 dependency, task HTTP handler, byte-stream requirement, HTTP port, `serve` target, and stable
 status-code test. It atomically includes `service.deployment.json` and an empty `generated/`
 directory before the one destination visibility rename; no application artifact is prebuilt.
@@ -108,11 +107,11 @@ address. The graph's editable response text is changed only through reviewed `ch
 `change apply`; build and resident execution do not open or advance project authority.
 
 The closed HTTP and predecessor stateful recipes are public `v0.1.9` behavior. This source line
-advances only compact change contract 6: it retains the task/capability slice and adds the exact
+retains the task/capability slice and adds the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
 capture, partial application, inference, maps, and arbitrary component, interface, external, port,
-or target creation remain unavailable. The built-in standard exports Graph-owned generic
+or target creation remain unavailable. The built-in standard exports graph-owned generic
 `list-fold-left<Item, State>`, and the source BBS authors its content-type predicate with a named
 header reducer and that fold. Public v0.1.9 remains unchanged.
 
@@ -122,8 +121,8 @@ in [`202608290721-public-higher-order-generic.json`](evidence/202608290721-publi
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
 effects, idempotency, visibility, and revision-bound bounded continuations. Deployment discovery is
-generated from the strict descriptor inventory and includes every adapter field and range. Seven
-executable-owned generated documents now cover contracts, operations, diagnostics, compact change
+generated from the strict descriptor inventory and includes every adapter field and range. Six
+executable-owned generated documents now cover operations, diagnostics, compact change
 grammar, built-in public interface, deployment schema, and a stateful HTTP composition walkthrough.
 
 `status`, exact owner `inspect`, and normalized owner/name/relation `query` read one accepted
@@ -137,12 +136,12 @@ storage to alter reviewed effects. A stale plan request remains stale.
 ```text
 project discovery -> exact RepositoryView -> dependency closure
                   -> exact-current cache or clean compilation
-                  -> artifact-10 link and strict load
+                  -> artifact bundle link and strict load
                   -> dense normalized program
 ```
 
 `check` runs all graph tests through the normalized VM and canonical reference interpreter.
-`build` writes artifact contract 10 to an explicit absent path through synchronized create-new
+`build` writes an artifact bundle to an explicit absent path through synchronized create-new
 publication. `run` accepts a pure command target, parses a bounded JSON argument array, executes
 both tiers once, and rejects disagreement. These operations never advance semantic authority.
 
@@ -163,7 +162,7 @@ fallback reader, graph selector, converter, or dual write.
 
 Normalized production and reference execution support pure commands and graph tests. Public `run`
 deliberately rejects non-command runners and effectful command entry points. Public `serve` and
-`worker` strictly load a standalone artifact-10 bundle, prepare `NormalizedProgram`, resolve the
+`worker` strictly load a standalone artifact bundle, prepare `NormalizedProgram`, resolve the
 selected target and exact component requirement closure, and invoke the normalized resident VM.
 Their descriptors supply configuration, named secrets, adapter selection, external coordinates,
 and topology; deployment preparation never discovers or opens a project repository. Live effects
@@ -176,7 +175,8 @@ Adapter preparation is all-or-nothing, and repeated shutdown reuses one recorded
 
 Runtime call frames carry exact generic type substitutions so the generic `json-decode-or<T>`,
 `json-encode<T>`, `list-length<T>`, `list-get<T>`, and `list-fold-left<Item, State>` standard
-declarations execute against the concrete Graph 5 runtime layout. Production and canonical-reference implementations remain
+declarations execute against the concrete typed meaning graph runtime layout. Production and
+canonical-reference implementations remain
 disjoint and agree for maintained pure behavior. The stateful BBS uses explicit database,
 identifier, wall-clock, and byte-stream requirements; its HTTP/domain layer is isolated from
 PostgreSQL coordinates and driver representation behind graph-owned persistence functions.
@@ -193,7 +193,7 @@ sandbox or multi-tenant isolation boundary.
   a maintained consumer justifies a dependency-closed capability cutover.
 - Context traversal, generic impact query, fuzzy search, and historical query are absent.
 - Removed draft/history/review/backup/restore/doctor workflows have not yet been reintroduced on
-  Graph 5 authority.
+  typed meaning authority.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
   remain private until a complete public workflow exists. Existing component requirements can be
   extended, existing function contracts changed, and pure functions given explicit type parameters,
@@ -228,7 +228,7 @@ focused, product, full, and service results. The public binary campaign record
 tag, workflow, assets, anonymous downloads, and hosted full verification. Lifecycle measurements
 remain in
 [evidence/202608270014-normalized-command-lifecycle.json](evidence/202608270014-normalized-command-lifecycle.json);
-the artifact-10 resident cutover is bound by
+the artifact bundle resident cutover is bound by
 [evidence/202608272159-artifact10-service-cutover.json](evidence/202608272159-artifact10-service-cutover.json).
 The current-main distributed HTTP closure is bound by campaign
 [202608281025](campaigns/202608281025.md) and
@@ -241,9 +241,9 @@ Campaign [202608281817](campaigns/202608281817.md) adds the distinct non-cacheab
 `stateful_http_application` gate to service and full profiles. It copies the candidate outside the
 checkout, discovers current grammar/interfaces/deployment fields through that copy, authors a
 982-record fold-based BBS only through reviewed public changes, requires deterministic clean/incremental
-Artifact 10 bytes, and exercises PostgreSQL-backed create/read/update/delete, strict-input,
+artifact bundle bytes, and exercises PostgreSQL-backed create/read/update/delete, strict-input,
 missing/nonmatching/repeated/reordered content-type, rollback, checksum-divergence, no-readiness,
-shutdown, and restart behavior while Graph authority remains byte-identical. The contributor
+shutdown, and restart behavior while graph authority remains byte-identical. The contributor
 harness may provision the already supported service and stateful gates from either the pinned
 immutable PostgreSQL image or an exact verified local PostgreSQL 16.15 tool root; neither
 provisioning path is a product dependency or application helper.

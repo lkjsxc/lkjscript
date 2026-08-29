@@ -5,6 +5,7 @@ mod policy;
 mod registry;
 mod self_test;
 mod snapshot;
+mod surface;
 
 use crate::error::DevError;
 use crate::evidence::{self, PublishedEvidence, VerificationDigest};

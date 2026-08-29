@@ -73,9 +73,9 @@ jobs:
           REQUESTED_TAG: ${{ github.event.inputs.tag || '' }}
         run: |
           set -euo pipefail
-          package_version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
-          test -n "$package_version"
-          expected_tag="v${package_version}"
+          product_version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
+          test -n "$product_version"
+          expected_tag="v${product_version}"
           publish=false
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             publish=true
@@ -608,15 +608,13 @@ jobs:
           distributed_receipt_sha256=$(sha256sum "$distributed_receipt" | cut -d' ' -f1)
           test "$distributed_receipt_sha256" = "$(jq -er '.receipt_sha256' "$distributed_summary")"
           distributed_receipt_digest=$(jq -er '.receipt_digest' "$distributed_summary")
-          manifest_cli=$(jq -er '.executable.cli_contract' "$manifest")
-          manifest_registry=$(jq -er '.executable.executable_registry_digest' "$manifest")
-          manifest_version=$(jq -er '.package.version' "$manifest")
+          manifest_capabilities=$(jq -er '.executable.capabilities_digest' "$manifest")
+          manifest_version=$(jq -er '.product.version' "$manifest")
           jq -e \
             --arg candidate_sha "$candidate_sha" \
             --arg version "$manifest_version" \
-            --arg registry "$manifest_registry" \
-            --argjson cli "$manifest_cli" \
-            '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
+            --arg capabilities "$manifest_capabilities" \
+            '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
             "$distributed_receipt" > /dev/null
 
           stateful_evidence="$root/stateful-http"
@@ -1186,18 +1184,15 @@ jobs:
             distributed_receipt_sha256=$(sha256sum "$distributed_receipt" | cut -d' ' -f1)
             test "$distributed_receipt_sha256" = "$(jq -er '.receipt_sha256' "$distributed_summary")"
             distributed_receipt_digest=$(jq -er '.receipt_digest' "$distributed_summary")
-            local manifest_cli
-            local manifest_registry
+            local manifest_capabilities
             local manifest_version
-            manifest_cli=$(jq -er '.executable.cli_contract' "$manifest")
-            manifest_registry=$(jq -er '.executable.executable_registry_digest' "$manifest")
-            manifest_version=$(jq -er '.package.version' "$manifest")
+            manifest_capabilities=$(jq -er '.executable.capabilities_digest' "$manifest")
+            manifest_version=$(jq -er '.product.version' "$manifest")
             jq -e \
               --arg candidate_sha "$candidate_sha" \
               --arg version "$manifest_version" \
-              --arg registry "$manifest_registry" \
-              --argjson cli "$manifest_cli" \
-              '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and (.result.responses | length) == 2 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
+              --arg capabilities "$manifest_capabilities" \
+              '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and (.result.responses | length) == 2 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
               "$distributed_receipt" > /dev/null
 
             env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" stateful-http \
@@ -1236,10 +1231,8 @@ jobs:
           cmp "$root/exact-extracted/RELEASE-MANIFEST.json" "$root/latest-extracted/RELEASE-MANIFEST.json"
           test "$(jq -er '.candidate.sha256' "$root/exact-distributed-http/receipt.json")" = \
             "$(jq -er '.candidate.sha256' "$root/latest-distributed-http/receipt.json")"
-          test "$(jq -er '.result.registry_digest' "$root/exact-distributed-http/receipt.json")" = \
-            "$(jq -er '.result.registry_digest' "$root/latest-distributed-http/receipt.json")"
-          test "$(jq -er '.result.cli_contract_version' "$root/exact-distributed-http/receipt.json")" = \
-            "$(jq -er '.result.cli_contract_version' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.result.capabilities_digest' "$root/exact-distributed-http/receipt.json")" = \
+            "$(jq -er '.result.capabilities_digest' "$root/latest-distributed-http/receipt.json")"
           test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-distributed-http/receipt.json")" = \
             "$(jq -er '.result.responses[0].body_sha256' "$root/latest-distributed-http/receipt.json")"
           test "$(jq -er '.candidate.sha256' "$root/exact-stateful-http/receipt.json")" = \

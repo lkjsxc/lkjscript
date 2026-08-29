@@ -1,4 +1,4 @@
-# Resident runtime, HTTP, and stream contract 1
+# Resident runtime, HTTP, and streams
 
 This specification owns generic resident admission, structured request/worker task scopes, HTTP/1
 transport adaptation, byte-stream lifetime, overload, and shutdown. It does not own routes,
@@ -45,7 +45,7 @@ faultable bounded pipes are the test oracles.
 
 ## HTTP adapter
 
-HTTP adapter contract 1 accepts a validated method, path, raw query, deterministically decoded map
+The HTTP adapter accepts a validated method, path, raw query, deterministically decoded map
 of query names to ordered values, validated bounded headers, and a `Stream Bytes` body. The
 component returns signed status, validated headers, and bounded whole bytes. Current global maxima
 are 64 MiB body, 256 KiB headers, and 1,024 headers; deployment chooses request/response limits.
@@ -66,7 +66,7 @@ database/object/queue publication. Adapter-generated failure responses contain a
 The in-memory dispatcher constructs the same `HttpRequest`, registers the same body stream, and
 invokes the same prepared port used by the live listener. Tests may replace grants but not handlers.
 Current responses are whole bounded byte values; response streaming, trailers, HTTP/2/3,
-multipart, compression, WebSocket, and outbound HTTP are not part of contract 1. The listener is
+multipart, compression, WebSocket, and outbound HTTP are not part of the current boundary. The listener is
 plaintext. TLS termination, certificate management, and ACME are deliberately out of scope and
 not planned; encrypted deployments require an external trusted transport boundary or a different
 adapter outside the current product scope.

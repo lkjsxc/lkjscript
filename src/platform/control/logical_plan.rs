@@ -1,12 +1,11 @@
 //! Canonical review-bound logical change-plan token and compact-record codec.
 
-use super::change::{
-    AUTHORED_CHANGE_CODEC_IDENTITY, COMPACT_CHANGE_CONTRACT_IDENTITY, ChangeRequestCommitment,
-};
+use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
     AuthoredAllocation, ChangeBudget, ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
 };
+use crate::platform::contract::{capabilities_snapshot, registry_snapshot};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, ExactOwnerKey,
@@ -14,23 +13,22 @@ use crate::platform::kernel::{
     RelationEdge, RelationEndpoint, RelationKind, RetirementObjectDigest, RetirementRecord,
     SemanticStateDigest, TypeObjectDigest, encode_dependency, encode_retirement,
 };
-use crate::platform::publication::contract::SEMANTIC_DIFF_CONTRACT_IDENTITY;
 use crate::platform::publication::{
     DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, PreparedAuthoredPublication,
     RetirementDiffEntry, SemanticDiffBody, SemanticDiffDigest, SummaryDimensions,
     TransactionDigest,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId, encode_hex};
-use crate::platform::semantic_summary::SEMANTIC_VALIDATOR_CONTRACT_IDENTITY;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-1";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 1;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v1";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-2";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 2;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v2";
+const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct LogicalPlanRecordDescriptor {
@@ -48,18 +46,8 @@ macro_rules! plan_record {
 }
 
 pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor] = &[
-    plan_record!("logical-plan", ["contract", "version"]),
-    plan_record!(
-        "logical-plan.contracts",
-        [
-            "graph",
-            "change",
-            "authored-request",
-            "semantic-diff",
-            "validator",
-            "plan-file"
-        ]
-    ),
+    plan_record!("logical-plan", ["product", "version"]),
+    plan_record!("logical-plan.capabilities", ["digest"]),
     plan_record!(
         "logical-plan.authority",
         ["repository", "package", "base", "result", "semantic-state"]
@@ -304,7 +292,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_551;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_368;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
 const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
@@ -633,33 +621,30 @@ where
 {
     let prepared = &plan.prepared().publication;
     let evidence = plan.evidence();
+    let capabilities = capabilities_snapshot().map_err(|message| {
+        plan_corrupt(
+            "capabilities_projection_invalid",
+            format!("public capabilities could not be prepared: {message}"),
+        )
+    })?;
+    let internal_registry = registry_snapshot().map_err(|message| {
+        plan_corrupt(
+            "capabilities_projection_invalid",
+            format!("internal plan bindings could not be prepared: {message}"),
+        )
+    })?;
     encoder.append(
         "logical-plan",
         &[
-            ("contract", LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY.to_owned()),
-            ("version", LOGICAL_CHANGE_PLAN_CONTRACT_VERSION.to_string()),
+            ("product", "lkjscript".to_owned()),
+            ("version", crate::PRODUCT_VERSION.to_owned()),
         ],
     )?;
     encoder.append(
-        "logical-plan.contracts",
-        &[
-            (
-                "graph",
-                crate::platform::kernel::contract::GRAPH_CONTRACT_IDENTITY.to_owned(),
-            ),
-            ("change", COMPACT_CHANGE_CONTRACT_IDENTITY.to_owned()),
-            (
-                "authored-request",
-                AUTHORED_CHANGE_CODEC_IDENTITY.to_owned(),
-            ),
-            ("semantic-diff", SEMANTIC_DIFF_CONTRACT_IDENTITY.to_owned()),
-            ("validator", SEMANTIC_VALIDATOR_CONTRACT_IDENTITY.to_owned()),
-            (
-                "plan-file",
-                LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY.to_owned(),
-            ),
-        ],
+        "logical-plan.capabilities",
+        &[("digest", capabilities.digest)],
     )?;
+    bind_internal_registry(&mut encoder.hasher, &internal_registry.digest);
     encoder.append(
         "logical-plan.authority",
         &[
@@ -1590,7 +1575,11 @@ impl PlanDecoder {
     ) -> Result<(), Diagnostic> {
         match descriptor_index {
             0 => validate_header(record),
-            1 => validate_contracts(record),
+            1 => {
+                let internal_registry_digest = validate_capabilities(record)?;
+                bind_internal_registry(&mut self.hasher, &internal_registry_digest);
+                Ok(())
+            }
             2 => validate_authority(record),
             3 => {
                 self.request = Some(parse_request_commitment(field(record, 0))?);
@@ -1995,38 +1984,42 @@ fn field(record: &CompactRecord, index: usize) -> &str {
         .map_or("", |field| field.value.as_str())
 }
 
+fn bind_internal_registry(hasher: &mut blake3::Hasher, digest: &str) {
+    hasher.update(INTERNAL_PLAN_BINDING_LABEL);
+    hasher.update(digest.as_bytes());
+}
+
 fn validate_header(record: &CompactRecord) -> Result<(), Diagnostic> {
-    if field(record, 0) != LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY
-        || field(record, 1) != LOGICAL_CHANGE_PLAN_CONTRACT_VERSION.to_string()
-    {
+    if field(record, 0) != "lkjscript" || field(record, 1) != crate::PRODUCT_VERSION {
         return Err(plan_source_error(
-            "change_plan_file_contract",
-            "logical plan file uses a predecessor or foreign contract",
+            "change_plan_file_product",
+            "logical plan file names a predecessor or foreign product",
         ));
     }
     Ok(())
 }
 
-fn validate_contracts(record: &CompactRecord) -> Result<(), Diagnostic> {
-    let expected = [
-        crate::platform::kernel::contract::GRAPH_CONTRACT_IDENTITY,
-        COMPACT_CHANGE_CONTRACT_IDENTITY,
-        AUTHORED_CHANGE_CODEC_IDENTITY,
-        SEMANTIC_DIFF_CONTRACT_IDENTITY,
-        SEMANTIC_VALIDATOR_CONTRACT_IDENTITY,
-        LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
-    ];
-    if expected
-        .iter()
-        .enumerate()
-        .any(|(index, expected)| field(record, index) != *expected)
-    {
+fn validate_capabilities(record: &CompactRecord) -> Result<String, Diagnostic> {
+    let expected = capabilities_snapshot().map_err(|message| {
+        plan_corrupt(
+            "capabilities_projection_invalid",
+            format!("public capabilities could not be prepared: {message}"),
+        )
+    })?;
+    if field(record, 0) != expected.digest {
         return Err(plan_source_error(
-            "change_plan_file_contracts",
-            "logical plan body names a predecessor or foreign interpreting contract",
+            "change_plan_file_capabilities",
+            "logical plan body binds a predecessor or foreign capabilities digest",
         ));
     }
-    Ok(())
+    registry_snapshot()
+        .map(|snapshot| snapshot.digest)
+        .map_err(|message| {
+            plan_corrupt(
+                "capabilities_projection_invalid",
+                format!("internal plan bindings could not be prepared: {message}"),
+            )
+        })
 }
 
 fn validate_authority(record: &CompactRecord) -> Result<(), Diagnostic> {
@@ -2826,6 +2819,15 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_change_plan_commitment_hides_but_binds_internal_registry() {
+        let mut first = blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN);
+        let mut second = first.clone();
+        bind_internal_registry(&mut first, &"a".repeat(64));
+        bind_internal_registry(&mut second, &"b".repeat(64));
+        assert_ne!(first.finalize(), second.finalize());
+    }
+
+    #[test]
     fn reviewed_change_plan_limits_cover_default_admission_and_maximum_records() {
         let budget = ChangeBudget::default();
         assert_eq!(
@@ -2869,7 +2871,7 @@ mod tests {
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
         assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 740_018);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_551);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_368);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -3024,24 +3026,11 @@ mod tests {
             add(
                 "logical-plan",
                 &[
-                    ("contract", LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY),
-                    ("version", "1"),
+                    ("product", "lkjscript"),
+                    ("version", crate::PRODUCT_VERSION),
                 ],
             );
-            add(
-                "logical-plan.contracts",
-                &[
-                    (
-                        "graph",
-                        crate::platform::kernel::contract::GRAPH_CONTRACT_IDENTITY,
-                    ),
-                    ("change", COMPACT_CHANGE_CONTRACT_IDENTITY),
-                    ("authored-request", AUTHORED_CHANGE_CODEC_IDENTITY),
-                    ("semantic-diff", SEMANTIC_DIFF_CONTRACT_IDENTITY),
-                    ("validator", SEMANTIC_VALIDATOR_CONTRACT_IDENTITY),
-                    ("plan-file", LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY),
-                ],
-            );
+            add("logical-plan.capabilities", &[("digest", &"f".repeat(64))]);
             let repository = format!("repo_{}", "f".repeat(32));
             let package = format!("pkg_{}", "f".repeat(32));
             let revision = format!("rev_{}", "f".repeat(64));

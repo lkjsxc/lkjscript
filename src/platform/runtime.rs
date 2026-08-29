@@ -14,9 +14,14 @@ pub const MAXIMUM_CONCURRENT_TASKS: usize = 4_096;
 pub const MAXIMUM_QUEUED_TASKS: usize = 65_536;
 pub const MAXIMUM_OPERATIONAL_MILLISECONDS: u64 = 3_600_000;
 
+const fn resident_runtime_contract_version() -> u16 {
+    RESIDENT_RUNTIME_CONTRACT_VERSION
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResidentLimits {
+    #[serde(skip, default = "resident_runtime_contract_version")]
     pub contract_version: u16,
     pub maximum_concurrent_tasks: usize,
     pub maximum_queued_tasks: usize,
@@ -112,6 +117,7 @@ pub struct ResidentObservation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShutdownReceipt {
+    #[serde(skip_serializing)]
     pub contract_version: u16,
     pub admission_stopped: bool,
     pub drained_before_cancellation: bool,

@@ -175,11 +175,8 @@ struct CompilerObservation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct WorkflowResult {
-    package_version: String,
-    registry_contract: String,
-    registry_digest: String,
-    cli_contract_version: u64,
-    project_creation_contract: String,
+    product_version: String,
+    capabilities_digest: String,
     project: String,
     descriptor_path: String,
     artifact_path: String,
@@ -620,10 +617,19 @@ fn run_workflow(
         isolated_root,
     )?;
     let capability_records = compact_records("capabilities", &capabilities.stdout)?;
-    let registry = required_record(&capability_records, "registry")?;
-    let registry_contract = required_field(registry, "contract")?.to_owned();
-    let registry_digest = required_field(registry, "digest")?.to_owned();
-    let cli_contract_version = parse_u64(required_field(registry, "cli")?, "CLI contract")?;
+    let product = required_record(&capability_records, "product")?;
+    if required_field(product, "name")? != "lkjscript" {
+        return Err(AcceptanceFailure::acceptance(
+            "capabilities_product",
+            "candidate capabilities named a foreign product",
+        ));
+    }
+    let product_version = required_field(product, "version")?.to_owned();
+    let capabilities_digest = required_field(
+        required_record(&capability_records, "capabilities")?,
+        "digest",
+    )?
+    .to_owned();
 
     let created = context.invoke_success(
         "new-http",
@@ -964,11 +970,8 @@ fn run_workflow(
             .map_err(|error| AcceptanceFailure::infrastructure("logical_plan_proof", error))?;
 
     Ok(WorkflowResult {
-        package_version: lkjscript::PRODUCT_VERSION.to_owned(),
-        registry_contract,
-        registry_digest,
-        cli_contract_version,
-        project_creation_contract: "lkjscript-project-creation-2".to_owned(),
+        product_version,
+        capabilities_digest,
         project: project.display().to_string(),
         descriptor_path: descriptor.display().to_string(),
         artifact_path: artifact.display().to_string(),
@@ -1612,7 +1615,15 @@ fn validate_starter_files(
     }
     let value: Value = serde_json::from_slice(&descriptor_bytes)
         .map_err(|error| AcceptanceFailure::infrastructure("descriptor_json", error))?;
-    if value.get("contract_version").and_then(Value::as_u64) != Some(1)
+    if value.get("contract_version").is_some()
+        || value
+            .get("runtime")
+            .and_then(Value::as_object)
+            .is_some_and(|runtime| runtime.contains_key("contract_version"))
+        || value
+            .get("http")
+            .and_then(Value::as_object)
+            .is_some_and(|http| http.contains_key("contract_version"))
         || value.get("artifact").and_then(Value::as_str) != Some("generated/application.lkja")
         || value.get("target").and_then(Value::as_str) != Some("serve")
         || value.get("listen").and_then(Value::as_str) != Some("127.0.0.1:0")

@@ -7,9 +7,9 @@ use super::builtin_discovery::{
 use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
 use super::contract::{
-    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, PublicOperation, RegistrySection,
-    RegistrySnapshot, diagnostic_class_name, generated_documents, operation_descriptors,
-    operation_record, registry_snapshot,
+    CapabilitiesSnapshot, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
+    PublicOperation, RegistrySection, capabilities_snapshot, diagnostic_class_name,
+    generated_documents, operation_descriptors, operation_record,
 };
 use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
@@ -586,7 +586,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     }
     let repository = open_normalized_repository(project)?;
     let current = repository.current()?;
-    let registry = registry_snapshot().map_err(contract_registry_error)?;
+    let capabilities = capabilities_snapshot().map_err(capabilities_projection_error)?;
 
     let mut output = compact_response_writer()?;
     append_compact_record(
@@ -668,7 +668,11 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ),
         ],
     )?;
-    append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
+    append_compact_record(
+        &mut output,
+        "schema",
+        &[("capabilities", capabilities.digest)],
+    )?;
     append_compact_record(
         &mut output,
         "next",
@@ -1281,7 +1285,7 @@ fn compact_change_response(
             "prepared authored change does not bind one exact accepted base",
         ));
     };
-    let registry = registry_snapshot().map_err(contract_registry_error)?;
+    let capabilities = capabilities_snapshot().map_err(capabilities_projection_error)?;
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -1426,7 +1430,11 @@ fn compact_change_response(
         }
         append_compact_record(&mut output, "derived-cache", &fields)?;
     }
-    append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
+    append_compact_record(
+        &mut output,
+        "schema",
+        &[("capabilities", capabilities.digest)],
+    )?;
     if status == "prepared" {
         let mut next = vec![
             ("kind", "apply".to_owned()),
@@ -1722,7 +1730,7 @@ fn owner_inspection_error(
 }
 
 pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
-    let snapshot = registry_snapshot().map_err(contract_registry_error)?;
+    let snapshot = capabilities_snapshot().map_err(capabilities_projection_error)?;
     let command = arguments.first().filter(|value| !value.starts_with("--"));
     if let Some(command) = command {
         exact_arguments(arguments, 1, "capabilities COMMAND")?;
@@ -1732,7 +1740,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             .iter()
             .find(|descriptor| descriptor.operation == operation)
             .ok_or_else(|| internal_error("registered public operation has no descriptor"))?;
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
             "result",
@@ -1741,8 +1749,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("command", "capabilities.command".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
-        let record = operation_record(descriptor).map_err(contract_registry_error)?;
+        let record = operation_record(descriptor).map_err(capabilities_projection_error)?;
         output.append_serialized_records(record.as_bytes())?;
         let focused_section = match operation {
             PublicOperation::New => Some(RegistrySection::Templates),
@@ -1751,7 +1758,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         };
         if let Some(section_name) = focused_section {
             let section = snapshot.section(section_name).ok_or_else(|| {
-                internal_error("registered operation has no focused registry section")
+                internal_error("registered operation has no focused capability section")
             })?;
             output.append_serialized_records(&section.bytes)?;
         }
@@ -1761,7 +1768,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
     ensure_options(
         arguments,
         &[
-            "--known-registry",
+            "--known-capabilities",
             "--known-section",
             "--section",
             "--output",
@@ -1772,13 +1779,13 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
     )?;
     let selected_section = option_value(arguments, "--section")?
         .map(|value| {
-            RegistrySection::parse(&value)
-                .ok_or_else(|| usage_error(format!("unknown registry section '{value}'")))
+            RegistrySection::parse_public(&value)
+                .ok_or_else(|| usage_error(format!("unknown capability section '{value}'")))
         })
         .transpose()?;
-    let known_registry = option_value(arguments, "--known-registry")?;
-    if let Some(digest) = &known_registry {
-        validate_capability_digest(digest, "--known-registry")?;
+    let known_capabilities = option_value(arguments, "--known-capabilities")?;
+    if let Some(digest) = &known_capabilities {
+        validate_capability_digest(digest, "--known-capabilities")?;
     }
     let known_sections = parse_known_sections(&option_values(arguments, "--known-section")?)?;
     let output_path = option_value(arguments, "--output")?;
@@ -1804,17 +1811,19 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         ));
     }
     if (generated_directory.is_some() || verify_directory.is_some())
-        && (selected_section.is_some() || !known_sections.is_empty() || known_registry.is_some())
+        && (selected_section.is_some()
+            || !known_sections.is_empty()
+            || known_capabilities.is_some())
     {
         return Err(usage_error(
-            "generated-document operations do not accept registry selection or digest options",
+            "generated-document operations do not accept capability selection or digest options",
         ));
     }
 
     if let Some(directory) = generated_directory {
-        let documents = generated_documents().map_err(contract_registry_error)?;
+        let documents = generated_documents().map_err(capabilities_projection_error)?;
         let directory = PathBuf::from(directory);
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
             "result",
@@ -1823,7 +1832,6 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("command", "capabilities.generate-docs".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         for document in documents {
             ensure_capability_export_bound(&document.bytes)?;
             let path = directory.join(document.relative_path);
@@ -1831,7 +1839,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 &path,
                 &document.bytes,
                 MAXIMUM_CLI_RESPONSE_BYTES,
-                "generated contract document",
+                "generated public guide",
             )?;
             append_file_record(
                 &mut output,
@@ -1846,9 +1854,9 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
     }
 
     if let Some(directory) = verify_directory {
-        let documents = generated_documents().map_err(contract_registry_error)?;
+        let documents = generated_documents().map_err(capabilities_projection_error)?;
         let directory = PathBuf::from(directory);
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
             "result",
@@ -1857,20 +1865,16 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("command", "capabilities.verify-generated".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         for document in &documents {
             let path = directory.join(document.relative_path);
-            let observed = read_bounded(
-                &path,
-                MAXIMUM_CLI_RESPONSE_BYTES,
-                "generated contract document",
-            )?;
+            let observed =
+                read_bounded(&path, MAXIMUM_CLI_RESPONSE_BYTES, "generated public guide")?;
             if observed != document.bytes {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Source,
-                    "contract_generated_drift",
+                    "capabilities_generated_drift",
                     format!(
-                        "generated contract document '{}' is stale; run 'lkjscript capabilities --generate-docs {}'",
+                        "generated public guide '{}' is stale; run 'lkjscript capabilities --generate-docs {}'",
                         path.display(),
                         directory.display()
                     ),
@@ -1901,7 +1905,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 )
             }
             None => (
-                "registry",
+                "capabilities",
                 snapshot.bytes.as_slice(),
                 snapshot.digest.as_str(),
             ),
@@ -1912,9 +1916,9 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             &path,
             bytes,
             MAXIMUM_CLI_RESPONSE_BYTES,
-            "compact registry output",
+            "compact capabilities output",
         )?;
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
             "result",
@@ -1923,13 +1927,12 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("command", "capabilities.output".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         append_file_record(&mut output, kind, &path, bytes, digest, status)?;
         return Ok(output.finish());
     }
 
     if let Some(section) = selected_section {
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
             "result",
@@ -1938,7 +1941,6 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("command", "capabilities.section".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         append_section(&mut output, &snapshot, section, true, None)?;
         return Ok(output.finish());
     }
@@ -1949,7 +1951,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 .section(*section)
                 .is_some_and(|current| current.digest == *known)
         });
-        let mut output = compact_response_writer()?;
+        let mut output = capabilities_response_writer(&snapshot, Some(unchanged))?;
         append_capability_record(
             &mut output,
             "result",
@@ -1959,7 +1961,6 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 ("unchanged", unchanged.to_string()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         for (section, known) in known_sections {
             let changed = snapshot
                 .section(section)
@@ -1969,41 +1970,37 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         return Ok(output.finish());
     }
 
-    if known_registry.as_deref() == Some(snapshot.digest.as_str()) {
-        let mut output = compact_response_writer()?;
+    if known_capabilities.as_deref() == Some(snapshot.digest.as_str()) {
+        let mut output = capabilities_response_writer(&snapshot, Some(true))?;
         append_capability_record(
             &mut output,
             "result",
             &[
                 ("status", "success".to_owned()),
                 ("command", "capabilities".to_owned()),
-                ("unchanged", "true".to_owned()),
             ],
         )?;
-        append_registry_summary(&mut output, &snapshot)?;
         return Ok(output.finish());
     }
 
-    let mut output = compact_response_writer()?;
+    let mut output = capabilities_response_writer(&snapshot, Some(false))?;
     append_capability_record(
         &mut output,
         "result",
         &[
             ("status", "success".to_owned()),
             ("command", "capabilities".to_owned()),
-            ("unchanged", "false".to_owned()),
         ],
     )?;
-    append_registry_summary(&mut output, &snapshot)?;
     append_capability_record(
         &mut output,
         "summary",
         &[
             ("operations", operation_descriptors().len().to_string()),
-            ("sections", RegistrySection::ALL.len().to_string()),
+            ("sections", RegistrySection::PUBLIC.len().to_string()),
         ],
     )?;
-    for section in RegistrySection::ALL {
+    for section in RegistrySection::PUBLIC {
         append_section(&mut output, &snapshot, section, false, None)?;
     }
     for descriptor in operation_descriptors() {
@@ -2027,31 +2024,35 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
     Ok(output.finish())
 }
 
-fn append_registry_summary(
-    output: &mut CompactResponseWriter,
-    snapshot: &RegistrySnapshot,
-) -> Result<(), Diagnostic> {
+fn capabilities_response_writer(
+    snapshot: &CapabilitiesSnapshot,
+    unchanged: Option<bool>,
+) -> Result<CompactResponseWriter, Diagnostic> {
+    let mut output = compact_response_writer()?;
     append_capability_record(
-        output,
-        "registry",
+        &mut output,
+        "product",
         &[
-            ("contract", snapshot.contract.to_owned()),
-            ("version", snapshot.version.to_string()),
-            ("digest", snapshot.digest.clone()),
-            ("graph", snapshot.graph_contract.to_owned()),
-            ("cli", snapshot.cli_contract_version.to_string()),
+            ("name", snapshot.product_name.to_owned()),
+            ("version", snapshot.product_version.to_owned()),
         ],
-    )
+    )?;
+    let mut fields = vec![("digest", snapshot.digest.clone())];
+    if let Some(unchanged) = unchanged {
+        fields.push(("unchanged", unchanged.to_string()));
+    }
+    append_capability_record(&mut output, "capabilities", &fields)?;
+    Ok(output)
 }
 
 fn append_section(
     output: &mut CompactResponseWriter,
-    registry: &RegistrySnapshot,
+    capabilities: &CapabilitiesSnapshot,
     section: RegistrySection,
     include_records: bool,
     changed: Option<bool>,
 ) -> Result<(), Diagnostic> {
-    let snapshot = registry
+    let snapshot = capabilities
         .section(section)
         .ok_or_else(|| internal_error("registered section is missing"))?;
     let mut fields = vec![
@@ -2230,9 +2231,9 @@ fn ensure_capability_export_bound(bytes: &[u8]) -> Result<(), Diagnostic> {
     if bytes.len() > MAXIMUM_CLI_RESPONSE_BYTES {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
-            "contract_output_budget",
+            "capabilities_output_budget",
             format!(
-                "compact registry output exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"
+                "compact capabilities output exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"
             ),
         ));
     }
@@ -2267,8 +2268,8 @@ fn parse_known_sections(
         let (name, digest) = value
             .split_once('=')
             .ok_or_else(|| usage_error("--known-section requires the exact SECTION=DIGEST form"))?;
-        let section = RegistrySection::parse(name)
-            .ok_or_else(|| usage_error(format!("unknown registry section '{name}'")))?;
+        let section = RegistrySection::parse_public(name)
+            .ok_or_else(|| usage_error(format!("unknown capability section '{name}'")))?;
         validate_capability_digest(digest, "--known-section")?;
         if output.insert(section, digest.to_owned()).is_some() {
             return Err(usage_error(format!(
@@ -2280,10 +2281,10 @@ fn parse_known_sections(
     Ok(output)
 }
 
-fn contract_registry_error(message: String) -> Diagnostic {
+fn capabilities_projection_error(message: String) -> Diagnostic {
     Diagnostic::new(
         DiagnosticClass::Corrupt,
-        "contract_registry_invalid",
+        "capabilities_projection_invalid",
         message,
     )
 }
@@ -2498,7 +2499,7 @@ mod tests {
             .map(|entry| entry.operation.name())
             .collect::<BTreeSet<_>>();
         assert_eq!(commands.len(), names.len());
-        let registry = registry_snapshot().expect("compact registry");
+        let registry = crate::platform::contract::registry_snapshot().expect("compact registry");
         assert_eq!(registry.digest.len(), 64);
         assert!(
             std::str::from_utf8(&registry.bytes)

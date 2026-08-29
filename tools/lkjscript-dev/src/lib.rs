@@ -47,7 +47,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--postgres-root PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy no-python [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|verifier|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--postgres-root PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--postgres-root PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|verifier|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--postgres-root PATH] [--machine]"
             );
             Ok(0)
         }

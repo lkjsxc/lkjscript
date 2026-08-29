@@ -88,8 +88,8 @@ struct UserlandObservation {
     candidate_mode: u32,
     network_policy: String,
     candidate_commands: u64,
-    cli_contract: u64,
-    registry_digest: String,
+    product_version: String,
+    capabilities_digest: String,
     initial_revision: String,
     accepted_revision: String,
     artifact_bytes: u64,
@@ -549,11 +549,23 @@ fn run_userland(
     )?;
     candidate_commands += 1;
     let capability_records = compact("userland capabilities", &capabilities)?;
-    let registry = required_record(&capability_records, "registry")?;
-    let cli_contract = required_field(registry, "cli")?
-        .parse::<u64>()
-        .map_err(|_| DevError::corrupt("userland CLI contract is not an integer"))?;
-    let registry_digest = required_field(registry, "digest")?.to_owned();
+    let product = required_record(&capability_records, "product")?;
+    if required_field(product, "name")? != "lkjscript" {
+        return Err(DevError::corrupt(
+            "userland capabilities named a foreign product",
+        ));
+    }
+    let product_version = required_field(product, "version")?.to_owned();
+    if product_version != lkjscript::PRODUCT_VERSION {
+        return Err(DevError::corrupt(
+            "userland candidate product version disagrees with the source admission tool",
+        ));
+    }
+    let capabilities_digest = required_field(
+        required_record(&capability_records, "capabilities")?,
+        "digest",
+    )?
+    .to_owned();
     let project = "/work/application";
     let created = candidate_command(
         context,
@@ -769,8 +781,8 @@ fn run_userland(
         candidate_mode: copied.mode,
         network_policy: "sudo-unshare-network-namespace-no-host-library-mounts".to_owned(),
         candidate_commands,
-        cli_contract,
-        registry_digest,
+        product_version,
+        capabilities_digest,
         initial_revision,
         accepted_revision,
         artifact_bytes,

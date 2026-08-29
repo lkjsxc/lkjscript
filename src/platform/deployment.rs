@@ -55,6 +55,10 @@ pub(crate) const STARTER_HTTP_ARTIFACT_DIRECTORY: &str = "generated";
 pub(crate) const STARTER_HTTP_TARGET: &str = "serve";
 pub(crate) const STARTER_HTTP_LISTENER: &str = "127.0.0.1:0";
 
+const fn deployment_contract_version() -> u16 {
+    DEPLOYMENT_CONTRACT_VERSION
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct DeploymentAuthorityRevision([u8; 32]);
 
@@ -82,6 +86,7 @@ impl DeploymentAuthorityRevision {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeploymentDescriptor {
+    #[serde(skip, default = "deployment_contract_version")]
     pub contract_version: u16,
     pub artifact: String,
     pub target: String,
@@ -218,14 +223,6 @@ const fn optional_schema_field(
 
 pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     schema_field(
-        "deployment.contract_version",
-        "u16",
-        Some(1),
-        Some(1),
-        false,
-        None,
-    ),
-    schema_field(
         "deployment.artifact",
         "relative-path",
         Some(1),
@@ -307,14 +304,6 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         Some("grant"),
     ),
     schema_field(
-        "runtime.contract_version",
-        "u16",
-        Some(1),
-        Some(1),
-        false,
-        None,
-    ),
-    schema_field(
         "runtime.maximum_concurrent_tasks",
         "usize",
         Some(1),
@@ -379,14 +368,6 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         None,
     ),
     schema_field(
-        "http.contract_version",
-        "u16",
-        Some(1),
-        Some(1),
-        false,
-        None,
-    ),
-    schema_field(
         "http.maximum_request_body_bytes",
         "usize",
         Some(1),
@@ -415,14 +396,6 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         "usize",
         Some(1),
         Some(MAXIMUM_HTTP_HEADERS as u64),
-        false,
-        None,
-    ),
-    schema_field(
-        "worker.contract_version",
-        "u16",
-        Some(1),
-        Some(1),
         false,
         None,
     ),
@@ -1109,6 +1082,7 @@ impl AdapterDescriptor {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeploymentObservation {
+    #[serde(skip_serializing)]
     pub contract_version: u16,
     pub artifact_digest: String,
     pub target: String,
@@ -2051,7 +2025,6 @@ mod tests {
 
     fn minimal() -> Vec<u8> {
         serde_json::to_vec(&serde_json::json!({
-            "contract_version": 1,
             "artifact": "application.lkja",
             "target": "serve",
             "listen": "127.0.0.1:0",
@@ -2138,12 +2111,33 @@ mod tests {
         assert!(decode_deployment(&minimal()).is_ok());
         let mut value: serde_json::Value =
             serde_json::from_slice(&minimal()).expect("deployment value");
-        value["contract_version"] = serde_json::json!(0);
-        let error =
-            decode_deployment(&serde_json::to_vec(&value).expect("predecessor deployment JSON"))
-                .expect_err("predecessor must reject");
-        assert_eq!(error.code, "deployment_contract");
-        value["contract_version"] = serde_json::json!(1);
+        for path in ["top", "runtime", "http"] {
+            let mut predecessor = value.clone();
+            match path {
+                "top" => predecessor["contract_version"] = serde_json::json!(1),
+                "runtime" => predecessor["runtime"]["contract_version"] = serde_json::json!(1),
+                "http" => predecessor["http"]["contract_version"] = serde_json::json!(1),
+                _ => unreachable!(),
+            }
+            let error = decode_deployment(
+                &serde_json::to_vec(&predecessor).expect("predecessor deployment JSON"),
+            )
+            .expect_err("removed predecessor field must reject");
+            assert_eq!(error.code, "deployment_json", "{path}");
+        }
+        let mut worker = value.clone();
+        worker["http"] = serde_json::Value::Null;
+        worker["worker"] = serde_json::json!({
+            "maximum_workers": 1,
+            "idle_wait_milliseconds": 100,
+            "contract_version": 1
+        });
+        assert_eq!(
+            decode_deployment(&serde_json::to_vec(&worker).expect("worker predecessor JSON"))
+                .expect_err("removed worker predecessor field must reject")
+                .code,
+            "deployment_json"
+        );
         value["artifact"] = serde_json::json!("../foreign.lkja");
         let error = decode_deployment(&serde_json::to_vec(&value).expect("path JSON"))
             .expect_err("traversal must reject");
@@ -2172,7 +2166,6 @@ mod tests {
     fn starter_http_descriptor_is_strict_loopback_only_and_fresh() {
         let first = starter_http_deployment().expect("first starter deployment");
         let second = starter_http_deployment().expect("second starter deployment");
-        assert_eq!(first.contract_version, DEPLOYMENT_CONTRACT_VERSION);
         assert_eq!(first.artifact, STARTER_HTTP_ARTIFACT_PATH);
         assert_eq!(first.target, STARTER_HTTP_TARGET);
         assert_eq!(first.listen.as_deref(), Some(STARTER_HTTP_LISTENER));
@@ -2209,6 +2202,7 @@ mod tests {
         );
 
         let bytes = encode_deployment(&first).expect("encode starter deployment");
+        assert!(!String::from_utf8_lossy(&bytes).contains("contract_version"));
         assert_eq!(bytes.last(), Some(&b'\n'));
         let decoded = decode_deployment(&bytes).expect("strictly decode encoded starter");
         assert_eq!(decoded.artifact, first.artifact);

@@ -1,4 +1,4 @@
-# Relational, object, and durable-queue contracts 1
+# Relational, object, and durable-queue capabilities
 
 This specification owns three generic data capability families. Application schemas, statements,
 authorization, object-key policy, payload meaning, retry policy, and cross-authority coordination
@@ -65,7 +65,7 @@ application reconciliation route.
 
 ## Durable queue
 
-Queue contract 1 provides memory and PostgreSQL stores with payload/result maxima up to 16 MiB,
+The durable queue provides memory and PostgreSQL stores with payload/result maxima up to 16 MiB,
 lease up to 24 hours, and at most 1,000,000 attempts. A job has application-supplied job identity,
 enqueue idempotency key, opaque payload, availability time, state, attempt count, optional live
 lease/attempt identity, result, and safe last-error class.
@@ -79,7 +79,7 @@ availability as application input. Cancellation makes future stale publication h
 
 PostgreSQL queue tables and atomic claim mechanics are generic adapter state under an explicit
 namespace. Job payload, priority/order beyond ready-time/identity, retry class mapping, and domain
-publication stay in lkjscript. Worker contract 1 runs a bounded number of structured tasks, waits a
+publication stay in lkjscript. The worker runner executes a bounded number of structured tasks, waits a
 bounded idle interval, stops on deployment shutdown, and reports iterations/results/failures without
 logging payload content.
 

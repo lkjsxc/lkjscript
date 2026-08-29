@@ -1,7 +1,7 @@
 # standard
 
-This directory is the maintained Graph 5 authority for the exact built-in standard package. Its
-12 modules define deterministic core operations and typed interfaces for HTTP values, JSON,
+This directory is the maintained typed meaning authority for the exact built-in standard package.
+Its 12 modules define deterministic core operations and typed interfaces for HTTP values, JSON,
 PostgreSQL, configuration, secrets, clocks, secure randomness, identifiers, password hashing,
 byte streams, named object storage, and durable queues.
 
@@ -41,7 +41,7 @@ target/release/lkjscript package builtin export --kind artifact \
 The current package includes generic strict `json-decode-or<T>`, `json-encode<T>`,
 `list-length<T>`, `list-get<T>`, and
 `list-fold-left<Item, State>(List<Item>, State, Function(State, Item) -> State) -> State`.
-The fold and its private recursive helper are ordinary Graph meaning; no fold-specific intrinsic
+The fold and its private recursive helper are ordinary typed meaning; no fold-specific intrinsic
 or runtime opcode exists. Empty, singleton, ordered multi-item, and distinct i64/bool
 instantiations are graph-owned tests, and the maintained stateful HTTP workflow passes its header
 predicate as a named function value. Exact type parameters, signatures, implementation-free
@@ -49,6 +49,6 @@ references, and the rest of the public interface are executable-generated in
 [`docs/generated/builtin-standard.md`](../../docs/generated/builtin-standard.md).
 
 `generated/standard.lkjp` and `generated/standard.lkja` are deterministic derived owners for the
-executable's embedded package transport and artifact-10 bytes. Product verification regenerates
-the Graph 5 outputs and compares both embedded exports byte for byte. These files, artifact paths,
-and package transport are not another editable program authority.
+executable's embedded package transport and artifact bundle bytes. Product verification regenerates
+these outputs from the typed meaning graph and compares both embedded exports byte for byte. These
+files, artifact paths, and package transport are not another editable program authority.

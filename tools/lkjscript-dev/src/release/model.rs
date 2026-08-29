@@ -2,8 +2,6 @@ use crate::process::ProcessObservation;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
-pub(super) const MANIFEST_SCHEMA: &str = "lkjscript-release-manifest";
-pub(super) const MANIFEST_SCHEMA_VERSION: u32 = 2;
 pub(super) const RECEIPT_SCHEMA: &str = "lkjscript-release-receipt";
 pub(super) const RECEIPT_SCHEMA_VERSION: u32 = 2;
 
@@ -63,7 +61,7 @@ pub(super) struct SchemaIdentity {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct PackageIdentity {
+pub(super) struct ProductIdentity {
     pub(super) name: String,
     pub(super) version: String,
 }
@@ -110,8 +108,7 @@ pub(super) struct ExecutableIdentity {
     pub(super) byte_length: u64,
     pub(super) sha256: Sha256Digest,
     pub(super) elf: ElfIdentity,
-    pub(super) cli_contract: u16,
-    pub(super) executable_registry_digest: String,
+    pub(super) capabilities_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -163,9 +160,8 @@ pub(super) struct PackagingIdentity {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ReleaseManifest {
-    pub(super) schema: SchemaIdentity,
     pub(super) publication_mode: PublicationMode,
-    pub(super) package: PackageIdentity,
+    pub(super) product: ProductIdentity,
     pub(super) source: SourceIdentity,
     pub(super) target_triple: String,
     pub(super) toolchain: ToolchainIdentity,
