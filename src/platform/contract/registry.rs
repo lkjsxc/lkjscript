@@ -37,11 +37,14 @@ use super::super::json::JSON_CONTRACT_VERSION;
 use super::super::kernel::contract::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION};
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::normalized_query::{
-    DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_QUERY_CONTINUATION_BYTES,
-    MAXIMUM_QUERY_ITEMS, MAXIMUM_QUERY_OUTPUT_BYTES, MINIMUM_QUERY_OUTPUT_BYTES,
-    QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT, QUERY_CONTRACT_IDENTITY,
-    QUERY_CONTRACT_VERSION, QUERY_OPERATION_DESCRIPTORS, QUERY_RESPONSE_FIELDS,
-    QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
+    ContextDirection, DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_CONTEXT_DEPTH,
+    MAXIMUM_CONTEXT_MAP_BYTES, MAXIMUM_CONTEXT_MAP_ENTRIES, MAXIMUM_CONTEXT_MAP_PAGES,
+    MAXIMUM_CONTEXT_OWNERS, MAXIMUM_CONTEXT_RELATION_WITNESSES, MAXIMUM_CONTEXT_RELATIONS,
+    MAXIMUM_CONTEXT_STORE_BYTES, MAXIMUM_CONTEXT_STORE_OBJECTS, MAXIMUM_QUERY_CONTINUATION_BYTES,
+    MAXIMUM_QUERY_ITEMS, MAXIMUM_QUERY_OUTPUT_BYTES, MINIMUM_CONTEXT_DEPTH,
+    MINIMUM_QUERY_OUTPUT_BYTES, QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT,
+    QUERY_CONTRACT_IDENTITY, QUERY_CONTRACT_VERSION, QUERY_OPERATION_DESCRIPTORS,
+    QUERY_RESPONSE_FIELDS, QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
 };
 use super::super::object::OBJECT_ADAPTER_CONTRACT_VERSION;
 use super::super::package::RunnerKind;
@@ -79,7 +82,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 12;
+pub const CLI_CONTRACT_VERSION: u16 = 13;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -343,7 +346,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-12",
+            identity: "lkjscript-cli-13",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -1040,8 +1043,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "inspect owner KIND ID [--package PACKAGE]",
         ),
         query_operation(
-            "Enumerate live owners, resolve one exact namespace, or inspect one relation prefix at the current normalized revision.",
-            "query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query find CLASS NAME [--parent OWNER] | query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]",
+            "Enumerate live owners, resolve one exact namespace, inspect one relation prefix, or traverse one bounded local context at the current normalized revision.",
+            "query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query find CLASS NAME [--parent OWNER] | query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query context OWNER --direction incoming|outgoing|both --depth N [--limit N] [--bytes N] [--continuation TOKEN]",
         ),
         operation(
             PublicOperation::Change,
@@ -1359,6 +1362,34 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             MAXIMUM_QUERY_CONTINUATION_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "query_context_depth",
+            MAXIMUM_CONTEXT_DEPTH as usize,
+            LimitClass::ExplicitRequestBudget,
+            LimitUnit::Depth,
+            OverridePolicy::RequestUpToMaximum,
+        ),
+        limit(
+            "query_context_owners",
+            MAXIMUM_CONTEXT_OWNERS as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "query_context_relations",
+            MAXIMUM_CONTEXT_RELATIONS as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "query_context_relation_witnesses",
+            MAXIMUM_CONTEXT_RELATION_WITNESSES as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Records,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -2411,7 +2442,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "query_unknown_action",
             DiagnosticClass::Source,
-            "The query action is not one of owners, find, or relations.",
+            "The query action is not one of owners, find, relations, or context.",
             "Select one action reported by capabilities query.",
         ),
         diagnostic(
@@ -2449,6 +2480,30 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A relation direction is not incoming or outgoing.",
             "Supply one exact query.direction value.",
+        ),
+        diagnostic(
+            "query_invalid_context_direction",
+            DiagnosticClass::Source,
+            "A context direction is not incoming, outgoing, or both.",
+            "Supply one exact query.context-direction value.",
+        ),
+        diagnostic(
+            "query_missing_context_direction",
+            DiagnosticClass::Source,
+            "A context query omitted its required direction.",
+            "Supply --direction incoming, outgoing, or both.",
+        ),
+        diagnostic(
+            "query_missing_context_depth",
+            DiagnosticClass::Source,
+            "A context query omitted its required traversal depth.",
+            "Supply --depth within the advertised context depth bounds.",
+        ),
+        diagnostic(
+            "query_invalid_context_depth",
+            DiagnosticClass::Source,
+            "A context depth is noncanonical or outside its fixed public range.",
+            "Supply a canonical integer within the reported context depth bounds.",
         ),
         diagnostic(
             "query_invalid_owner_identity",
@@ -2489,7 +2544,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "query_owner_not_found",
             DiagnosticClass::Semantic,
-            "The exact local relation endpoint is not live at the observed revision.",
+            "The exact local relation endpoint or context root is not live at the observed revision.",
             "Refresh owner discovery at current HEAD and retry.",
         ),
         diagnostic(
@@ -2543,7 +2598,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "query_output_item_too_large",
             DiagnosticClass::Resource,
-            "One compact owner or relation record cannot fit the selected output bound.",
+            "One compact owner, relation, or context record cannot fit the selected output bound.",
             "Increase --bytes within the reported maximum.",
         ),
         diagnostic(
@@ -2553,9 +2608,45 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Request a smaller page or preserve the repository for locality inspection.",
         ),
         diagnostic(
+            "query_context_owner_limit",
+            DiagnosticClass::Resource,
+            "A complete context traversal exceeds its unique-local-owner or expanded-owner admission.",
+            "Reduce --depth or select a root with a smaller local neighborhood.",
+        ),
+        diagnostic(
+            "query_context_relation_limit",
+            DiagnosticClass::Resource,
+            "A complete context traversal exceeds its unique selected-relation admission.",
+            "Reduce --depth or select a root with a smaller relation neighborhood.",
+        ),
+        diagnostic(
+            "query_context_witness_limit",
+            DiagnosticClass::Resource,
+            "A complete context traversal exceeds its relation-witness visit admission.",
+            "Reduce --depth or select a root with less admitted fanout.",
+        ),
+        diagnostic(
+            "query_context_depth_overflow",
+            DiagnosticClass::Resource,
+            "Internal context traversal depth accounting overflowed.",
+            "Preserve the request and executable for resource-accounting inspection.",
+        ),
+        diagnostic(
             "query_namespace_owner_disagreement",
             DiagnosticClass::Corrupt,
             "Committed namespace witness and canonical owner facts disagree.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_context_owner_missing",
+            DiagnosticClass::Corrupt,
+            "A selected local relation endpoint is absent from canonical owner authority.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_context_owner_binding",
+            DiagnosticClass::Corrupt,
+            "A context owner key disagrees with its canonical owner record.",
             "Preserve the repository and run deep authority verification.",
         ),
         diagnostic(
@@ -2741,7 +2832,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "query_admission_logical_range",
             DiagnosticClass::Resource,
-            "An internal logical range was given an empty scan or item admission.",
+            "An internal logical range was given an invalid item admission.",
             "Preserve the request and executable for query-boundary inspection.",
         ),
         diagnostic(
@@ -2797,6 +2888,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "One exact normalized query work counter overflowed.",
             "Preserve the repository and request for resource-accounting inspection.",
+        ),
+        diagnostic(
+            "query_cancelled",
+            DiagnosticClass::Cancelled,
+            "A context query was cancelled by its owning execution scope.",
+            "Retry the read-only query when the owning scope is active.",
         ),
         DiagnosticDescriptor {
             code: "owner_selector_kind",
@@ -3431,6 +3528,12 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     &[("name", direction.name().to_owned())],
                 )?);
             }
+            for direction in ContextDirection::ALL {
+                records.push(compact_record(
+                    "query.context-direction",
+                    &[("name", direction.name().to_owned())],
+                )?);
+            }
             for (name, value, unit) in [
                 ("default-items", DEFAULT_QUERY_ITEMS.to_string(), "items"),
                 ("maximum-items", MAXIMUM_QUERY_ITEMS.to_string(), "items"),
@@ -3452,6 +3555,56 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 (
                     "maximum-continuation-bytes",
                     MAXIMUM_QUERY_CONTINUATION_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "minimum-context-depth",
+                    MINIMUM_CONTEXT_DEPTH.to_string(),
+                    "depth",
+                ),
+                (
+                    "maximum-context-depth",
+                    MAXIMUM_CONTEXT_DEPTH.to_string(),
+                    "depth",
+                ),
+                (
+                    "maximum-context-owners",
+                    MAXIMUM_CONTEXT_OWNERS.to_string(),
+                    "items",
+                ),
+                (
+                    "maximum-context-relations",
+                    MAXIMUM_CONTEXT_RELATIONS.to_string(),
+                    "items",
+                ),
+                (
+                    "maximum-context-relation-witnesses",
+                    MAXIMUM_CONTEXT_RELATION_WITNESSES.to_string(),
+                    "records",
+                ),
+                (
+                    "maximum-context-map-pages",
+                    MAXIMUM_CONTEXT_MAP_PAGES.to_string(),
+                    "pages",
+                ),
+                (
+                    "maximum-context-map-bytes",
+                    MAXIMUM_CONTEXT_MAP_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-context-map-entries",
+                    MAXIMUM_CONTEXT_MAP_ENTRIES.to_string(),
+                    "entries",
+                ),
+                (
+                    "maximum-context-store-objects",
+                    MAXIMUM_CONTEXT_STORE_OBJECTS.to_string(),
+                    "objects",
+                ),
+                (
+                    "maximum-context-store-bytes",
+                    MAXIMUM_CONTEXT_STORE_BYTES.to_string(),
                     "bytes",
                 ),
             ] {

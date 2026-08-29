@@ -98,6 +98,8 @@ query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
 query find CLASS NAME [--parent OWNER]
 query relations OWNER|package --direction incoming|outgoing \
   [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
+query context OWNER --direction incoming|outgoing|both --depth N \
+  [--limit N] [--bytes N] [--continuation TOKEN]
 ```
 
 It reads canonical owners plus committed namespace and relation witnesses from one immutable
@@ -105,9 +107,37 @@ repository view. Stateless `qcont_` continuations bind repository, package, exac
 operation, normalized selector, order, and exclusive logical resume key. They do not persist a
 cursor or session. Malformed, oversized, foreign, selector-mismatched, or stale tokens reject.
 
-Query work reports map/store/canonical/witness/output dimensions separately. Context traversal,
-generic impact, fuzzy search, historical query, predecessor JSON requests, and old callers/callees
-aliases are unavailable.
+Context requires one live local owner, an explicit direction, and a canonical depth from 1 through
+8. The root has depth zero. Breadth-first traversal expands only local owners whose minimum depth is
+below the requested maximum. It selects every unique canonical incoming, outgoing, or both-direction
+relation encountered during that expansion. Package and foreign-package endpoints remain relation
+output boundaries: they receive no local owner record and are never expanded. Cycles, self-edges,
+diamonds, and equal-length paths neither duplicate owners nor change minimum distances.
+
+A complete context request admits at most 4,096 unique local owners, 16,384 unique selected
+relations, and 32,768 visited relation witnesses. Canonical record decoding has the same 4,096-owner
+bound. The executable derives and advertises the separate map and object-store admissions from
+those logical maxima and the current bounded persistent-map/object encodings. It constructs the
+complete admitted neighborhood before rendering a successful page. Exceeding any logical or
+physical dimension is an atomic resource failure, never a partial neighborhood.
+
+Context output first emits existing `owner` records with required `depth`, ordered by
+`(depth, canonical owner key)`, then existing `relation` records in canonical forward-edge order.
+Every page repeats exact total owner, relation, and expanded-owner counts plus separate map, store,
+decode, witness-visit, selected-result, and rendered-byte work. The item limit counts emitted owner
+and relation records. Byte and item page limits may change on resumption.
+
+A context continuation additionally binds root, direction, depth, the owner/relation section, and
+its exclusive canonical key. Every page recomputes the same complete neighborhood from the pinned
+view; no token carries a frontier and no query file, cursor, index, cache, session, or process-local
+state is created. Query-3 tokens and the removed repeated-seed, scalar work/fanout, `--continue`,
+relation-filter, package-root, and JSON request forms reject without an adapter. Context success,
+failure, exhaustion, corruption, stale continuation, and cancellation perform zero repository
+writes.
+
+Query work reports map/store/canonical/witness/output dimensions separately. Generic impact, fuzzy
+search, historical query, predecessor JSON requests, and old callers/callees aliases are
+unavailable.
 
 ## Reviewed change
 
@@ -258,5 +288,5 @@ from discovery and dispatch. They are not compatibility aliases and have not bee
 another spelling. Predecessor repositories and binary formats reject.
 
 The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
-package manager, remote registry, source language, context traversal, an agent daemon, TLS,
-sandboxing, or multi-tenant isolation.
+package manager, remote registry, source language, full owner-body projection, generic impact, an
+agent daemon, TLS, sandboxing, or multi-tenant isolation.

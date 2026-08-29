@@ -138,6 +138,27 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9, and the v0.1.10 publication moved no predecessor tag, release,
 or asset.
+Current source is the separate unreleased 0.1.11 product snapshot; its query-4/CLI-13 context
+cutover has no public-release claim.
+
+Bounded context remains a read projection of one exact repository view rather than a query store:
+
+```text
+exact local root + direction + depth
+                 │
+                 ▼
+ pinned RepositoryView + canonical incoming/outgoing witness ranges
+                 │ validate owners, endpoints, edges, revision, admissions
+                 ▼
+ complete bounded owner-distance map + unique canonical edge set
+                 │ owners by (depth, key), then relations by edge key
+                 ▼
+ stateless pages ── continuation binds view, selector, section, and exclusive key
+```
+
+Package and foreign endpoints stop expansion. Every resumed page reconstructs the bounded logical
+result from immutable authority; no query index, frontier file, session, cache write, or mutable
+cursor exists.
 
 ## Layer ownership
 
@@ -146,7 +167,7 @@ or asset.
 | Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
-| Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
+| Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, relation, and bounded local-context reads with logical continuations | mutable cursors, query indexes, repair, or full owner bodies |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
@@ -354,6 +375,14 @@ context, optional checkout, PostgreSQL authority, redaction, and complete cleanu
 verification and the target-admission, pre-publication, and anonymous exact/latest paths share this
 owner. The existing `lkjournal` service oracle remains a separate maintained workload, and
 distributed HTTP remains the faster no-database oracle.
+
+The release command lifecycle also copies the exact candidate into a fresh private root, creates a
+command project through that binary, and isolates a complete `lkjournal` authority copy. Candidate
+queries resolve `module service`, traverse incoming, outgoing, and both-direction contexts at
+multiple depths, resume multiple pages while changing item and byte limits, and compare complete
+owner-distance maps and relation sets with independently orchestrated one-hop public reads. Full
+in-process reconstruction plus the canonical relation extractor remains the implementation-disjoint
+semantic oracle. Complete inventories before and after success and selected failures must agree.
 
 ## Security and replaceability
 

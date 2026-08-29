@@ -17,6 +17,10 @@ named-function-value, and invocation records plus a graph-owned generic `list-fo
 maintained BBS uses that fold for header admission. Public product surfaces expose the root product
 version and opaque capabilities digest without separate subsystem generation numbers.
 
+The checkout is now unreleased product version 0.1.11. It additionally provides bounded,
+revision-pinned `query context` traversal described below. The immutable latest download remains
+v0.1.10 and does not claim that source-only operation.
+
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
@@ -193,6 +197,21 @@ ordinary parent directories without following symbolic links:
 Queries read canonical owner bindings and committed namespace/relation witnesses at one revision.
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
+
+An executable built from current 0.1.11 source can obtain one complete admitted local neighborhood
+without coordinating repeated one-hop reads:
+
+```sh
+./lkjscript --project ./hello query context mod_... \
+  --direction both --depth 2 --limit 20 --bytes 65536
+```
+
+Context owners carry minimum `depth` and precede canonical relation records. Traversal expands only
+local owners, while retaining selected package and foreign endpoints as relation boundaries. The
+complete neighborhood is admitted before paging; continuations are stateless and bind the exact
+repository, package, revision, root, direction, depth, ordering, and resume section/key. Page item
+and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
+depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
 Changes are typed semantic intent. For a direct rename, use the exact revision and owner returned
 by `status` and `query`:

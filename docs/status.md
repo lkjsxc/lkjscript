@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-29 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-08-30 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -88,8 +88,11 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source and immutable public latest both own product version 0.1.10 and contain the
-higher-order and product-surface cutovers. The source and distributed executable expose exactly
+Current source owns unreleased product version 0.1.11; immutable public latest remains v0.1.10.
+Both contain the higher-order and product-surface cutovers. Current source advances only the public
+CLI contract from 12 to 13 and normalized query contract from 3 to 4 for bounded context traversal;
+meaning graph, storage, change, compiler, artifact, deployment, runtime, standard-package, and
+application identities remain unchanged. The source executable exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
 `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
@@ -131,8 +134,16 @@ generated from the strict descriptor inventory and includes every adapter field 
 executable-owned generated documents now cover operations, diagnostics, compact change
 grammar, built-in public interface, deployment schema, and a stateful HTTP composition walkthrough.
 
-`status`, exact owner `inspect`, and normalized owner/name/relation `query` read one accepted
-revision. `change plan` and `change apply` share typed lowering and a reviewed logical-plan
+`status`, exact owner `inspect`, and normalized owner/name/relation/context `query` read one accepted
+revision. Context takes one live local owner, mandatory incoming/outgoing/both direction, and depth
+1 through 8. It materializes the complete admitted breadth-first neighborhood, emits owners by
+minimum depth and canonical key before canonical relation edges, and pages with a stateless
+revision/selector/section/key-bound continuation. Fixed maxima are 4,096 selected local owners,
+16,384 unique relations, and 32,768 relation-witness visits; map, store, decode, output, and
+continuation bounds remain separate and executable-discovered. Package and foreign endpoints are
+reported but not expanded. Success and every failure perform no repository write.
+
+`change plan` and `change apply` share typed lowering and a reviewed logical-plan
 commitment; apply is the only normal existing-project semantic writer. Exact idempotent apply
 reconciliation reprepares the historical logical base without allowing append-only type-object
 storage to alter reviewed effects. A stale plan request remains stale.
@@ -197,7 +208,8 @@ sandbox or multi-tenant isolation boundary.
   resolver.
 - Public `run` is pure-command-only. Outbound HTTP and additional effect families are absent until
   a maintained consumer justifies a dependency-closed capability cutover.
-- Context traversal, generic impact query, fuzzy search, and historical query are absent.
+- Full owner-body projection, generic impact query, fuzzy search, multiple-root context, and
+  historical query are absent.
 - Removed draft/history/review/backup/restore/doctor workflows have not yet been reintroduced on
   typed meaning authority.
 - Public authored change covers the executable-discovered subset; additional typed engine forms

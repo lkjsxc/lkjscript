@@ -256,6 +256,35 @@ as a pass. The measured initial candidate-relation path also rescanned the compl
 per endpoint; the final implementation replaces it with one bounded, once-charged deterministic
 index, with a focused exact-fit/exhaustion regression test.
 
+## Current bounded semantic context locality
+
+Unreleased query contract 4 campaign `202608300506` measured the same small connected component
+beside 100 and 10,000 unrelated local owners. The release-mode test
+`context_logical_work_is_local_beside_one_hundred_and_ten_thousand_unrelated_owners` used the
+canonical first-party fixture and an optimized, warm build on Linux x86-64 with Rust/Cargo 1.98.0.
+It requested both-direction depth-three context and compared the complete result with independent
+full snapshot reconstruction plus the canonical relation extractor.
+
+| Unrelated owners | Selected owners / relations | Expanded / witnesses | Map pages / bytes / entries | Store objects / bytes | Canonical / witness decode | Traversal wall | Process peak RSS |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 29 / 44 | 20 / 74 | 69 / 386,455 / 6,667 | 98 / 390,060 | 29 / 74 | 323.469 ms | 13,888 KiB |
+| 10,000 | 29 / 44 | 20 / 74 | 99 / 232,729 / 2,903 | 128 / 236,334 | 29 / 74 | 166.546 ms | 72,180 KiB |
+
+Logical result, expanded-owner count, selected-edge count, witness visits, and decode counts are
+equal. Persistent-map locator pages and their encoded bytes/entries differ with physical topology
+and are retained rather than normalized away. The complete warm test process, including construction
+of both temporary repositories and both traversals, took 1.24 seconds real, 0.90 seconds user CPU,
+and 0.17 seconds system CPU; the test harness reported 1.10 seconds. Per-traversal CPU was not
+available, and Linux `VmHWM` is a process-wide high-water mark rather than an isolated allocation.
+
+The fixed request maxima are 4,096 unique local owners, 16,384 unique selected relations, and
+32,768 relation-witness visits at depth 1 through 8. Separate tests admit exact logical maxima,
+reject one-over owner/relation attempts atomically, admit exact observed map/store/decode work, and
+reject every physical dimension at one less. These are bounded point observations, not an SLO,
+speedup, global-graph scale, cost, cache, token, or million-owner claim. The retained warm log is
+`.artifacts/campaign/202608300506/verification/context-locality-release-warm.log`; the structured
+campaign record owns its digest and exact source/candidate bindings.
+
 ## Current normalized semantic query locality
 
 At implementation commit `8ea897f7307d9726e57710c833a1596a9dd74127`, the release test

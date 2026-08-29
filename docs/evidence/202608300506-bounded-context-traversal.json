@@ -1,0 +1,498 @@
+{
+  "schema": {
+    "identity": "lkjscript-bounded-context-traversal-evidence",
+    "version": 1
+  },
+  "campaign": "202608300506",
+  "status": "implementation assembled; authoritative full profile not run",
+  "assembled_at_utc": "2026-08-29T21:45:57Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "orientation_baseline": "9c873c68f3820dcaf19e1b3a207ce9eec4037ffd",
+    "starting_head": "9c873c68f3820dcaf19e1b3a207ce9eec4037ffd",
+    "starting_tree": "bc56e57fe60c4e17da60e59ab87a61cc81b258e5",
+    "starting_origin_main": "9c873c68f3820dcaf19e1b3a207ce9eec4037ffd",
+    "starting_divergence": {
+      "ahead": 0,
+      "behind": 0
+    },
+    "starting_worktree": [
+      {
+        "path": "docs/campaigns/202608300415.md",
+        "state": "untracked supplied work",
+        "disposition": "terminated without rewriting its mandate because the explicitly selected 202608300506 campaign superseded its incompatible query-neighborhood grammar"
+      },
+      {
+        "path": "docs/campaigns/202608300506.md",
+        "state": "untracked supplied work",
+        "disposition": "incorporated as the active campaign; only lifecycle status and terminal record change at closure"
+      }
+    ],
+    "applicable_instructions": [
+      "AGENTS.md at repository root"
+    ],
+    "implementation_commit": "reported after creation because evidence cannot name its containing commit",
+    "completion_commit": "reported after creation because evidence cannot name its containing commit"
+  },
+  "entry_reconciliation": {
+    "rust_toolchain": "rustc 1.98.0 / cargo 1.98.0",
+    "root_product_version": "0.1.10",
+    "active_campaign": "202608300506",
+    "compatible_later_work": false,
+    "open_pull_requests": 0,
+    "open_issues": 0,
+    "queued_or_running_workflows": 0,
+    "v0_1_11_tag_present": false,
+    "latest_public_release": {
+      "tag": "v0.1.10",
+      "release_id": 379029576,
+      "tag_object": "866f1cc4fa85e5f6ecdec97cd9666912c020b14c",
+      "source_commit": "5cc8f79c55d9baa0a6ef964db502567b59c4d079",
+      "immutable": true,
+      "latest": true
+    },
+    "predecessor_baseline": {
+      "query_actions": [
+        "owners",
+        "find",
+        "relations"
+      ],
+      "context": "predecessor_contract",
+      "query_index": "absent from the normalized public path",
+      "normal_query_writes": 0
+    }
+  },
+  "contract_cutover": {
+    "product": {
+      "before": "0.1.10",
+      "after": "0.1.11",
+      "after_publication": "unreleased source only; immutable latest remains v0.1.10"
+    },
+    "cli": {
+      "before": "lkjscript-cli-12",
+      "after": "lkjscript-cli-13"
+    },
+    "query": {
+      "before": "lkjscript-query-3",
+      "after": "lkjscript-query-4",
+      "continuation_magic_before": "LKJQCT03",
+      "continuation_magic_after": "LKJQCT04",
+      "selector_domain_before": "lkjscript.normalized-query.selector.v3",
+      "selector_domain_after": "lkjscript.normalized-query.selector.v4"
+    },
+    "capabilities_digest": {
+      "before": "8d7be5f936571c83f03c3d4ac683bb5f3c7c2512fde19e99eea6ddc0e050ec0a",
+      "after": "d0f2794a8bef497c825f3f8f1ef495d46854fbf31aeae9a0dfdf22cfa9d95823"
+    },
+    "unchanged_contracts": [
+      "lkjscript-contract-registry-3",
+      "lkjscript-meaning-graph-5",
+      "lkjscript-persistent-root-3",
+      "lkjscript-change-records-6",
+      "lkjscript-authored-change-codec-6",
+      "lkjscript-logical-change-plan-2",
+      "lkjscript-compilation-manifest-3",
+      "lkjscript-compiler-unit-1",
+      "lkjscript-bytecode-1",
+      "lkjscript-artifact-manifest-10",
+      "lkjscript-artifact-bundle-10",
+      "deployment contract 1",
+      "resident runtime contract 1",
+      "package interface owner contract 3",
+      "package revision/transport contracts 1"
+    ]
+  },
+  "public_contract": {
+    "grammar": "query context OWNER --direction incoming|outgoing|both --depth N [--limit N] [--bytes N] [--continuation TOKEN]",
+    "root": "one exact live owner in the selected local package at the observed revision; depth zero",
+    "directions": [
+      "incoming",
+      "outgoing",
+      "both"
+    ],
+    "depth": {
+      "minimum": 1,
+      "maximum": 8,
+      "required": true,
+      "canonical_integer": true
+    },
+    "semantics": {
+      "traversal": "breadth first over canonical relation witnesses for local owners below maximum depth",
+      "owner_distance": "minimum semantic distance",
+      "package_and_foreign_endpoints": "selected relation boundaries only; no owner projection and no expansion",
+      "deduplication": "typed owner identity and canonical forward relation key",
+      "materialization": "complete admitted logical neighborhood before page success"
+    },
+    "projection": {
+      "owner": "existing owner projection plus required depth",
+      "relation": "existing relation projection",
+      "order": "owners by (depth, canonical owner key), then relations by canonical forward edge key",
+      "summary": [
+        "returned",
+        "truncated",
+        "total-owners",
+        "total-relations",
+        "expanded-owners"
+      ],
+      "context_work": [
+        "relation-witnesses-visited",
+        "expanded-owners",
+        "selected-owners",
+        "selected-relations"
+      ]
+    },
+    "excluded": [
+      "multiple or repeated roots",
+      "package root",
+      "relation-kind filter",
+      "default direction or depth",
+      "JSON request",
+      "persistent or process-local cursor",
+      "token-carried frontier",
+      "full owner body",
+      "generic impact",
+      "historical revision traversal"
+    ]
+  },
+  "admissions": {
+    "logical": {
+      "unique_local_owners": 4096,
+      "unique_selected_relations": 16384,
+      "relation_witness_entries": 32768,
+      "canonical_records_decoded": 4096,
+      "witness_records_decoded": 32768
+    },
+    "derived_physical": {
+      "owner_map_key_bytes": 17,
+      "relation_map_key_bytes": 69,
+      "maximum_map_page_bytes": 65536,
+      "maximum_map_leaf_records": 10922,
+      "map_pages": 2940928,
+      "map_bytes": 192736657408,
+      "map_entries": 32120815616,
+      "catalog_lookups": 2945024,
+      "store_objects": 2945024,
+      "store_bytes": 209916526592,
+      "derivation": "4096 owner point ranges at at most 18 pages plus at most 8192 relation ranges and 32768 visited witnesses at at most 70 pages; page/object bytes use existing encoding maxima"
+    },
+    "page": {
+      "default_items": 50,
+      "maximum_items": 10000,
+      "minimum_output_bytes": 1536,
+      "default_output_bytes": 65536,
+      "maximum_output_bytes": 4194304,
+      "maximum_continuation_bytes": 320,
+      "item_unit": "emitted owner plus relation records"
+    }
+  },
+  "continuation": {
+    "prefix": "qcont_",
+    "stateless": true,
+    "binds": [
+      "query contract",
+      "repository",
+      "package",
+      "revision",
+      "context operation",
+      "root",
+      "direction",
+      "depth",
+      "ordering",
+      "owner or relation section",
+      "exclusive canonical key",
+      "integrity digest"
+    ],
+    "does_not_bind": [
+      "page item limit",
+      "page output-byte limit"
+    ],
+    "rejections": [
+      "query-3 token bytes",
+      "mutated",
+      "padded",
+      "oversized",
+      "truncated",
+      "noncanonical",
+      "stale revision",
+      "foreign repository or package",
+      "selector mismatch",
+      "operation mismatch",
+      "unknown section",
+      "terminal or logically absent resume key"
+    ]
+  },
+  "maintained_authority": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_b7e85425b4d2a15c6e7cbdc2c9128addeaebf24b9cb3dd626f2570ba47da23ee",
+      "semantic_state": "semantic_state_7590ee186644db29e411c9f919dbbde32daee9382a68f39d7270ff791632c93f",
+      "changed": false
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf",
+      "semantic_state": "semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479",
+      "root_owners": 1313,
+      "service_owner": "mod_50e2d3318b93f572dad082bd4f42c526",
+      "changed": false
+    }
+  },
+  "proof": {
+    "baseline_normalized_query": {
+      "classification": "fresh passed",
+      "command": "cargo test --locked --lib normalized_query",
+      "tests": 6,
+      "log": ".artifacts/campaign/202608300506/baseline/normalized-query-lib.log"
+    },
+    "baseline_copied_query": {
+      "classification": "fresh passed",
+      "command": "cargo test --locked --test public_cli copied_binary_rediscovers_normalized_names_and_relations_without_query_writes -- --exact",
+      "tests": 1,
+      "log": ".artifacts/campaign/202608300506/baseline/copied-query.log"
+    },
+    "normalized_query_final_source": {
+      "classification": "fresh passed",
+      "command": "cargo test --locked --lib normalized_query -- --nocapture",
+      "tests": 14,
+      "failed": 0,
+      "log": ".artifacts/campaign/202608300506/verification/normalized-query-lib-final-source.log",
+      "log_sha256": "13df3c2382653f418236c5c4fb6bdc0377e0f44e0dc3ec983c06a99308d1d35c"
+    },
+    "public_cli_final_source": {
+      "classification": "fresh passed",
+      "command": "cargo test --locked --test public_cli",
+      "passed": 23,
+      "failed": 0,
+      "ignored_release_scale_case": {
+        "classification": "skipped",
+        "count": 1,
+        "reason": "pre-existing explicitly ignored release-scale authored-change fixture; not a context gate"
+      },
+      "log": ".artifacts/campaign/202608300506/verification/public-cli-final-source.log",
+      "log_sha256": "88728d3cd7f7136adc4d315b22be139adc0440bfb255cb772dc556f165004682"
+    },
+    "clippy": {
+      "classification": "fresh passed",
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+    },
+    "generated_guides": {
+      "classification": "fresh passed",
+      "command": "target/debug/lkjscript capabilities --verify-generated docs/generated",
+      "capabilities_digest": "d0f2794a8bef497c825f3f8f1ef495d46854fbf31aeae9a0dfdf22cfa9d95823",
+      "files": 6
+    },
+    "release_locality": {
+      "classification": "fresh passed",
+      "command": "cargo test --release --locked --lib platform::normalized_query::tests::context_logical_work_is_local_beside_one_hundred_and_ten_thousand_unrelated_owners -- --exact --nocapture",
+      "log": ".artifacts/campaign/202608300506/verification/context-locality-release-warm.log",
+      "log_sha256": "16446436ac04f3b85bceed21c90372de803f9cc0e640733c321aaebee3c1a0e5"
+    },
+    "copied_release_candidate": {
+      "classification": "fresh passed",
+      "command": "LKJSCRIPT_RELEASE_CANDIDATE=/tmp/lkjscript-context-202608300506.a587AH/lkjscript cargo test --locked --release --test public_cli copied_binary_completes_normalized_standard_dependent_command_lifecycle -- --exact --nocapture",
+      "candidate": {
+        "path": "/tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+        "bytes": 15906120,
+        "mode": "0755",
+        "sha256": "c3e4a84aaf3eb8234859c04efef426f01b77ba87a25798085fbb219230cef933",
+        "product_version": "0.1.11"
+      },
+      "fresh_command": {
+        "root": "mod_88ecb0958f0eefa13ab8dfdc495ed78c",
+        "direction": "both",
+        "depth": 2,
+        "owners": 9,
+        "relations": 13,
+        "pages": 4,
+        "inventory_blake3": "b6b60ea436d957438296da984bbafae0714c9ad4792059f1d21867c8e0d91ab2"
+      },
+      "isolated_lkjournal": [
+        {
+          "direction": "incoming",
+          "depth": 1,
+          "owners": 43,
+          "relations": 42,
+          "pages": 13
+        },
+        {
+          "direction": "outgoing",
+          "depth": 2,
+          "owners": 1,
+          "relations": 0,
+          "pages": 1
+        },
+        {
+          "direction": "both",
+          "depth": 2,
+          "owners": 294,
+          "relations": 304,
+          "pages": 87
+        }
+      ],
+      "lkjournal_inventory_blake3": "8b61027ddaef249db4d1e7673481698796280c701a611fc94344b1a392c12178",
+      "page_limits_changed": true,
+      "oracle": "complete owner-distance maps and selected edge sets equal independent orchestration through existing one-hop public relation pages; in-process pages also equal full reconstruction plus canonical relation extraction",
+      "minimal_child_environment": "LANG=C only; no Cargo, helper, source parser, network, database, or deployment",
+      "inventory_equal_after_success_and_selected_failures": true,
+      "log": ".artifacts/campaign/202608300506/verification/copied-release-context.log",
+      "log_sha256": "c1582bdc56d834c65b85bccee1545a49411779aade1ee505307b46ad7b028610"
+    },
+    "authoritative_full": {
+      "classification": "not run",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine --details",
+      "receipt_alias": ".artifacts/campaign/202608300506/final-full-receipt.json"
+    }
+  },
+  "semantic_oracle_and_adversarial_results": {
+    "production_oracle_separation": "production uses only pinned owner reads and canonical witness ranges; full reconstruction/extract_relations helpers occur only under cfg(test)",
+    "compared": [
+      "complete owner-distance maps",
+      "unique canonical relation sets",
+      "canonical owner-then-relation streams",
+      "concatenated pages with changing limits",
+      "expanded-owner and witness counts"
+    ],
+    "cases": [
+      "isolated root at depth 8",
+      "chain depth cutoffs",
+      "incoming, outgoing, and both",
+      "cycles, self-edge deduplication, diamonds, and equal-length paths",
+      "duplicate observation of an edge from both endpoints",
+      "local, package, and foreign boundaries",
+      "insertion-independent canonical ordering",
+      "item and byte splits with changed page limits",
+      "terminal continuation rejection",
+      "all generic token mutation/canonicality/binding classes and query-3 magic",
+      "missing root and missing selected local endpoint",
+      "injected mid-traversal cancellation",
+      "corrupt owner objects and owner/relation map pages",
+      "relation key/value/prefix/direction strict decoder regressions",
+      "revision binding mismatch",
+      "exact 4096-owner fit and 4097th-owner rejection",
+      "exact 4096-owner/16384-relation/32768-witness fit and 16385th-relation rejection",
+      "exact observed physical admissions and one-less failure for every map/store/decode dimension",
+      "complete repository inventory equality"
+    ],
+    "repository_writes": 0
+  },
+  "locality": {
+    "classification": "fresh passed",
+    "direction": "both",
+    "depth": 3,
+    "logical_equal": {
+      "selected_owners": 29,
+      "selected_relations": 44,
+      "expanded_owners": 20,
+      "relation_witnesses": 74,
+      "canonical_records_decoded": 29,
+      "witness_records_decoded": 74
+    },
+    "observations": [
+      {
+        "unrelated_owners": 100,
+        "map_pages": 69,
+        "map_bytes": 386455,
+        "map_entries": 6667,
+        "store_objects": 98,
+        "store_bytes": 390060,
+        "wall_microseconds": 323469,
+        "process_peak_rss_kib": 13888
+      },
+      {
+        "unrelated_owners": 10000,
+        "map_pages": 99,
+        "map_bytes": 232729,
+        "map_entries": 2903,
+        "store_objects": 128,
+        "store_bytes": 236334,
+        "wall_microseconds": 166546,
+        "process_peak_rss_kib": 72180
+      }
+    ],
+    "complete_test_process": {
+      "real_seconds": 1.24,
+      "user_cpu_seconds": 0.90,
+      "system_cpu_seconds": 0.17,
+      "harness_seconds": 1.10
+    },
+    "claims": "bounded point observations only; physical locator differences retained; no SLO, speedup, global-scale, cost, or token claim"
+  },
+  "generated_and_documentation": {
+    "generated_owner_command": "target/debug/lkjscript capabilities --generate-docs docs/generated",
+    "generated_files_sha256": {
+      "docs/generated/operations.md": "f0f77e1d9db6f5c33c83029a5b7b74f3672d576c722dd6f15df236b0519df2ac",
+      "docs/generated/diagnostics.md": "1e1d6e54236ec80383306879a7cc7666897c564880bb6b6a6202bbf548ab06e6",
+      "docs/generated/change-grammar.md": "379396b65f4a217ee5319fff4c654e19f1d420949f1d4f1221e5efca8e989f92",
+      "docs/generated/deployment.md": "9f7591623f279e59ed2edfa03ea052fb7f8e6d15b1a7a210e0e61c8cb2b79869",
+      "docs/generated/builtin-standard.md": "b007e0fc7ee35de67f85af84aed10788b5c40c8b1b9d400c1693c490b90e698f",
+      "docs/generated/stateful-http-authoring.md": "b11ebf56a47f653400ea0f50ea7e678df91e46a8dd53a4fcc2054620b2f5d959"
+    },
+    "current_and_normative": [
+      "README.md",
+      "docs/spec/semantic-cli.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/performance.md",
+      "docs/decisions/20260830-bounded-context-traversal.md"
+    ],
+    "roadmap_release_drift": "corrected current public release from v0.1.9 to immutable v0.1.10",
+    "source_release_wording": "0.1.11 is unreleased source; v0.1.10 remains immutable latest"
+  },
+  "predecessor_disposition": {
+    "removed_or_rejected": [
+      "query-3 continuation magic",
+      "cont_ predecessor token prefix",
+      "callers",
+      "callees",
+      "types",
+      "query capabilities",
+      "impact",
+      "request and JSON request/file forms",
+      "--seed",
+      "--work",
+      "--fanout",
+      "--continue",
+      "context relation --kind",
+      "package context root"
+    ],
+    "semantic_query_index_adapter_added": false,
+    "dual_decoder_added": false,
+    "mutable_cursor_added": false
+  },
+  "external_actions": {
+    "read_only": [
+      "git fetch origin --prune",
+      "GitHub pull request, issue, workflow, tag, and release inspection"
+    ],
+    "local_ephemeral": [
+      "temporary GraphRepository fixtures",
+      "copied candidate at /tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+      "fresh command projects and isolated lkjournal copies cleaned by their test owners"
+    ],
+    "remote_mutations": [],
+    "tags_or_releases": [],
+    "workflow_dispatches": [],
+    "deployments_or_migrations": [],
+    "issues_or_pull_requests": []
+  },
+  "limitations_and_deviations": [
+    "The 32768-witness exact fixture is also the 16384-relation exact fixture. In a canonical graph each selected edge can be observed at most once per direction, so a real 32769th witness implies a 16385th unique relation and is rejected first by the stricter relation admission; the witness counter helper separately proves exact and one-over behavior.",
+    "Derived physical admissions are conservative worst-case encoding bounds, not measured memory, latency, or supported global graph size.",
+    "Per-traversal CPU was unavailable because /usr/bin/time is absent; Bash supplied aggregate warm test-process user/system CPU.",
+    "The copied candidate is a host release-mode binary, not a new distributed target admission or public release.",
+    "Full owner-body projection, generic impact, fuzzy/history query, multiple roots, relation filters, and package-root context remain out of scope.",
+    "No provider token, request, cache, or monetary telemetry exists and none is inferred."
+  ],
+  "raw_artifacts": {
+    "root": ".artifacts/campaign/202608300506/",
+    "baseline": ".artifacts/campaign/202608300506/baseline/",
+    "verification": ".artifacts/campaign/202608300506/verification/",
+    "checker": ".artifacts/lkjscript-dev/check/",
+    "final_full_receipt_alias": ".artifacts/campaign/202608300506/final-full-receipt.json"
+  }
+}

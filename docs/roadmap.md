@@ -5,8 +5,9 @@ HTTP recipes, exact built-in interface/deployment discovery, compact task/capabi
 named higher-order generic authoring, graph-owned `list-fold-left`,
 normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact bundle service/worker deployment, and both
-static and PostgreSQL-backed copied-binary HTTP acceptance are current architecture. Immutable
-`v0.1.9` is the supported public `x86_64-unknown-linux-musl` distribution; its exact and latest
+bounded revision-pinned context traversal and static and PostgreSQL-backed copied-binary HTTP
+acceptance are current architecture. Immutable `v0.1.10` is the supported public
+`x86_64-unknown-linux-musl` distribution; its exact and latest
 downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable
 v0.1.8 remains an unclosed historical recovery point.
 
@@ -20,10 +21,11 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    reversal conditions before selecting storage representation. Cut over all maintained consumers,
    reject predecessor configuration, delete SQL-specific application meaning and permanent dual
    production paths, and retain PostgreSQL only as evidence where explicitly required.
-2. **Bounded context traversal.** Select an explicit traversal contract and independently justify
-   a stateless continuation or bounded external output. Prove canonical ordering,
-   revision/selector binding, cancellation, locality, and full-oracle equality without adapting a
-   predecessor cursor or query index.
+2. **Bounded owner-detail projection from maintained authoring evidence.** Add semantic body detail
+   only when a real public editing workflow shows that owner summaries plus bounded context are
+   insufficient. Define exact disclosed fields, ordering, byte/resource bounds, continuation or
+   external-output behavior, and redaction before widening inspection. Keep it a read projection of
+   accepted graph meaning rather than source text, storage bytes, or a second editable form.
 3. **Dependency-closed remaining HTTP topology authoring.** Expose component, requirement, port,
    and target creation only when another maintained workflow needs topology beyond the closed
    recipe. Move every maintained consumer in one cutover and retain exact review, validation,

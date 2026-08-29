@@ -501,14 +501,14 @@ mod tests {
 
     #[test]
     fn patterns_reject_numbered_subsystems_without_false_positives() {
-        let allowed = "lkjscript 0.1.10 revision=rev_123 digest=abc target=x86_64-unknown-linux-musl HTTP status 200 Rust 1.98.0 PostgreSQL 18.0 2026-08-29 1024 bytes";
+        let allowed = "lkjscript 0.1.11 revision=rev_123 digest=abc target=x86_64-unknown-linux-musl HTTP status 200 Rust 1.98.0 PostgreSQL 18.0 2026-08-30 1024 bytes";
         let mut violations = Vec::new();
         append_text_violations("allowed", allowed, &mut violations);
         assert!(violations.is_empty());
         for forbidden in [
             "Graph 5",
-            "CLI contract 12",
-            "lkjscript-cli-12",
+            "CLI contract 13",
+            "lkjscript-cli-13",
             "artifact-10",
             "lkjscript-deployment-1",
             "lkjscript-change-records-6",

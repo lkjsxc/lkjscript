@@ -257,6 +257,290 @@ fn content_inventory(root: &Path) -> BTreeMap<String, [u8; 32]> {
     output
 }
 
+fn content_inventory_digest(inventory: &BTreeMap<String, [u8; 32]>) -> String {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.test.content-inventory.v1");
+    for (path, digest) in inventory {
+        hasher.update(&(path.len() as u64).to_le_bytes());
+        hasher.update(path.as_bytes());
+        hasher.update(digest);
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
+fn copy_regular_tree(source: &Path, destination: &Path) {
+    let source_metadata = std::fs::symlink_metadata(source).expect("inspect copied tree source");
+    assert!(
+        source_metadata.is_dir() && !source_metadata.file_type().is_symlink(),
+        "copied tree source must be a regular directory"
+    );
+    std::fs::create_dir(destination).expect("create copied tree destination");
+    let mut entries = std::fs::read_dir(source)
+        .expect("read copied tree source")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read copied tree entries");
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let metadata = std::fs::symlink_metadata(&source_path).expect("inspect copied tree entry");
+        assert!(
+            !metadata.file_type().is_symlink(),
+            "copied maintained authority must not contain symbolic links"
+        );
+        if metadata.is_dir() {
+            copy_regular_tree(&source_path, &destination_path);
+        } else {
+            assert!(metadata.is_file(), "copied tree entry must be regular");
+            std::fs::copy(&source_path, &destination_path).expect("copy regular tree entry");
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PublicRelation {
+    kind: String,
+    source_package: String,
+    source_owner: Option<String>,
+    target_package: String,
+    target_owner: Option<String>,
+}
+
+fn public_relation(record: &CompactRecord) -> PublicRelation {
+    PublicRelation {
+        kind: compact_field(record, "kind")
+            .expect("public relation kind")
+            .to_owned(),
+        source_package: compact_field(record, "source-package")
+            .expect("public relation source package")
+            .to_owned(),
+        source_owner: compact_field(record, "source-owner").map(str::to_owned),
+        target_package: compact_field(record, "target-package")
+            .expect("public relation target package")
+            .to_owned(),
+        target_owner: compact_field(record, "target-owner").map(str::to_owned),
+    }
+}
+
+fn all_public_relations(
+    executable: &Path,
+    directory: &Path,
+    project: &Path,
+    owner: &str,
+    direction: &str,
+) -> BTreeSet<PublicRelation> {
+    let mut result = BTreeSet::new();
+    let mut continuation: Option<String> = None;
+    let mut pages = 0_u64;
+    loop {
+        let mut arguments = vec![
+            "--project".to_owned(),
+            path(project).to_owned(),
+            "query".to_owned(),
+            "relations".to_owned(),
+            owner.to_owned(),
+            "--direction".to_owned(),
+            direction.to_owned(),
+            "--limit".to_owned(),
+            "256".to_owned(),
+            "--bytes".to_owned(),
+            "65536".to_owned(),
+        ];
+        if let Some(token) = continuation.as_ref() {
+            arguments.push("--continuation".to_owned());
+            arguments.push(token.clone());
+        }
+        let borrowed = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+        let page = compact_success_at(executable, directory, &borrowed);
+        for record in page.iter().filter(|record| record.operation == "relation") {
+            assert!(
+                result.insert(public_relation(record)),
+                "one-hop relation pagination duplicated a canonical edge"
+            );
+        }
+        continuation = page
+            .iter()
+            .find(|record| record.operation == "continuation")
+            .and_then(|record| compact_field(record, "token"))
+            .map(str::to_owned);
+        pages += 1;
+        assert!(pages < 1_000, "one-hop relation pagination must terminate");
+        if continuation.is_none() {
+            break;
+        }
+    }
+    result
+}
+
+fn public_context_oracle(
+    executable: &Path,
+    directory: &Path,
+    project: &Path,
+    package: &str,
+    root: &str,
+    direction: &str,
+    maximum_depth: u8,
+) -> (BTreeMap<String, u8>, BTreeSet<PublicRelation>) {
+    let mut distances = BTreeMap::from([(root.to_owned(), 0_u8)]);
+    let mut relations = BTreeSet::new();
+    let mut frontier = BTreeSet::from([root.to_owned()]);
+    for depth in 0..maximum_depth {
+        let mut next = BTreeSet::new();
+        for owner in &frontier {
+            assert!(matches!(direction, "incoming" | "outgoing" | "both"));
+            let directions: &[&str] = match direction {
+                "incoming" => &["incoming"],
+                "outgoing" => &["outgoing"],
+                "both" => &["incoming", "outgoing"],
+                _ => &[],
+            };
+            for selected_direction in directions {
+                for relation in
+                    all_public_relations(executable, directory, project, owner, selected_direction)
+                {
+                    let neighbor = match *selected_direction {
+                        "incoming"
+                            if relation.source_package == package
+                                && relation.source_owner.is_some() =>
+                        {
+                            relation.source_owner.as_ref()
+                        }
+                        "outgoing"
+                            if relation.target_package == package
+                                && relation.target_owner.is_some() =>
+                        {
+                            relation.target_owner.as_ref()
+                        }
+                        _ => None,
+                    };
+                    if let Some(neighbor) = neighbor
+                        && !distances.contains_key(neighbor)
+                    {
+                        let distance = depth + 1;
+                        distances.insert(neighbor.clone(), distance);
+                        next.insert(neighbor.clone());
+                    }
+                    relations.insert(relation);
+                }
+            }
+        }
+        frontier = next;
+    }
+    (distances, relations)
+}
+
+struct PublicContextResult {
+    owners: BTreeMap<String, u8>,
+    relations: BTreeSet<PublicRelation>,
+    pages: u64,
+}
+
+fn all_public_context(
+    executable: &Path,
+    directory: &Path,
+    project: &Path,
+    root: &str,
+    direction: &str,
+    depth: u8,
+) -> PublicContextResult {
+    let mut owners = BTreeMap::new();
+    let mut relations = BTreeSet::new();
+    let mut continuation: Option<String> = None;
+    let mut pages = 0_u64;
+    let mut totals = None;
+    let mut relation_section = false;
+    loop {
+        let (limit, bytes) = match pages % 3 {
+            0 => ("1", "2048"),
+            1 => ("7", "4096"),
+            _ => ("13", "8192"),
+        };
+        let mut arguments = vec![
+            "--project".to_owned(),
+            path(project).to_owned(),
+            "query".to_owned(),
+            "context".to_owned(),
+            root.to_owned(),
+            "--direction".to_owned(),
+            direction.to_owned(),
+            "--depth".to_owned(),
+            depth.to_string(),
+            "--limit".to_owned(),
+            limit.to_owned(),
+            "--bytes".to_owned(),
+            bytes.to_owned(),
+        ];
+        if let Some(token) = continuation.as_ref() {
+            arguments.push("--continuation".to_owned());
+            arguments.push(token.clone());
+        }
+        let borrowed = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+        let page = compact_success_at(executable, directory, &borrowed);
+        let summary = compact_record(&page, "summary");
+        let page_totals = (
+            compact_field(summary, "total-owners")
+                .expect("context total owners")
+                .parse::<usize>()
+                .expect("context numeric owner total"),
+            compact_field(summary, "total-relations")
+                .expect("context total relations")
+                .parse::<usize>()
+                .expect("context numeric relation total"),
+            compact_field(summary, "expanded-owners")
+                .expect("context expanded owners")
+                .parse::<usize>()
+                .expect("context numeric expanded owner total"),
+        );
+        assert_eq!(*totals.get_or_insert(page_totals), page_totals);
+        for record in &page {
+            match record.operation.as_str() {
+                "owner" => {
+                    assert!(
+                        !relation_section,
+                        "context owner must not follow the canonical relation section"
+                    );
+                    let id = compact_field(record, "id")
+                        .expect("context owner id")
+                        .to_owned();
+                    let owner_depth = compact_field(record, "depth")
+                        .expect("context owner depth")
+                        .parse::<u8>()
+                        .expect("numeric context owner depth");
+                    assert!(
+                        owners.insert(id, owner_depth).is_none(),
+                        "context pagination duplicated an owner"
+                    );
+                }
+                "relation" => {
+                    relation_section = true;
+                    assert!(
+                        relations.insert(public_relation(record)),
+                        "context pagination duplicated a relation"
+                    );
+                }
+                _ => {}
+            }
+        }
+        continuation = page
+            .iter()
+            .find(|record| record.operation == "continuation")
+            .and_then(|record| compact_field(record, "token"))
+            .map(str::to_owned);
+        pages += 1;
+        assert!(pages < 1_000, "context pagination must terminate");
+        if continuation.is_none() {
+            break;
+        }
+    }
+    let totals = totals.expect("at least one context page");
+    assert_eq!((owners.len(), relations.len()), (totals.0, totals.1));
+    assert!(totals.2 <= totals.0);
+    PublicContextResult {
+        owners,
+        relations,
+        pages,
+    }
+}
+
 #[test]
 fn product_version_is_exact_and_has_no_alias_or_mixed_form() {
     let version = command(&["--version"]);
@@ -270,7 +554,7 @@ fn product_version_is_exact_and_has_no_alias_or_mixed_form() {
     for arguments in [
         vec!["version"],
         vec!["-V"],
-        vec!["--version=0.1.10"],
+        vec!["--version=0.1.11"],
         vec!["--version", "extra"],
         vec!["--project", APPLICATION, "--version"],
     ] {
@@ -528,7 +812,20 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "query.operation")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["owners", "find", "relations"]
+        vec!["owners", "find", "relations", "context"]
+    );
+    let context_operation = query
+        .iter()
+        .find(|record| {
+            record.operation == "query.operation"
+                && compact_field(record, "name") == Some("context")
+        })
+        .expect("context query operation");
+    assert_eq!(
+        compact_field(context_operation, "usage"),
+        Some(
+            "query context OWNER --direction incoming|outgoing|both --depth N [--limit N] [--bytes N] [--continuation TOKEN]"
+        )
     );
     assert!(query.iter().any(|record| {
         record.operation == "query.owner-kind"
@@ -573,16 +870,24 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         query
             .iter()
+            .filter(|record| record.operation == "query.context-direction")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["incoming", "outgoing", "both"]
+    );
+    assert_eq!(
+        query
+            .iter()
             .filter(|record| record.operation == "query.response-field")
             .count(),
-        35
+        43
     );
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.selector-field")
             .count(),
-        9
+        11
     );
     for (name, value) in [
         ("default-items", "50"),
@@ -591,6 +896,16 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("default-output-bytes", "65536"),
         ("maximum-output-bytes", "4194304"),
         ("maximum-continuation-bytes", "320"),
+        ("minimum-context-depth", "1"),
+        ("maximum-context-depth", "8"),
+        ("maximum-context-owners", "4096"),
+        ("maximum-context-relations", "16384"),
+        ("maximum-context-relation-witnesses", "32768"),
+        ("maximum-context-map-pages", "2940928"),
+        ("maximum-context-map-bytes", "192736657408"),
+        ("maximum-context-map-entries", "32120815616"),
+        ("maximum-context-store-objects", "2945024"),
+        ("maximum-context-store-bytes", "209916526592"),
     ] {
         assert!(query.iter().any(|record| {
             record.operation == "query.limit"
@@ -601,7 +916,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert!(!query.iter().any(|record| {
         matches!(
             compact_field(record, "name"),
-            Some("callers" | "callees" | "context" | "impact" | "request")
+            Some("callers" | "callees" | "impact" | "request")
         )
     }));
     for field in change_section.iter().filter(|record| {
@@ -1372,6 +1687,146 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
             Some("0")
         );
     }
+    let first_context = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--limit",
+            "1",
+            "--bytes",
+            "1536",
+        ],
+    );
+    let first_context_owner = compact_record(&first_context, "owner");
+    assert_eq!(
+        compact_field(first_context_owner, "id"),
+        Some(callee_id.as_str())
+    );
+    assert_eq!(compact_field(first_context_owner, "depth"), Some("0"));
+    let context_token = compact_field(compact_record(&first_context, "continuation"), "token")
+        .expect("context continuation")
+        .to_owned();
+    let expected_context_totals = (
+        compact_field(compact_record(&first_context, "summary"), "total-owners")
+            .expect("context owner total")
+            .to_owned(),
+        compact_field(compact_record(&first_context, "summary"), "total-relations")
+            .expect("context relation total")
+            .to_owned(),
+    );
+    let mut context_items = BTreeSet::from([format!("owner:{callee_id}:0")]);
+    let mut context_continuation = Some(context_token.clone());
+    let mut context_pages = 1_u64;
+    while let Some(token) = context_continuation {
+        let page = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "context",
+                &callee_id,
+                "--direction",
+                "incoming",
+                "--depth",
+                "2",
+                "--limit",
+                if context_pages.is_multiple_of(2) {
+                    "2"
+                } else {
+                    "5"
+                },
+                "--bytes",
+                "4096",
+                "--continuation",
+                &token,
+            ],
+        );
+        assert_eq!(
+            (
+                compact_field(compact_record(&page, "summary"), "total-owners"),
+                compact_field(compact_record(&page, "summary"), "total-relations"),
+            ),
+            (
+                Some(expected_context_totals.0.as_str()),
+                Some(expected_context_totals.1.as_str()),
+            )
+        );
+        for record in &page {
+            let key = match record.operation.as_str() {
+                "owner" => Some(format!(
+                    "owner:{}:{}",
+                    compact_field(record, "id").expect("context owner id"),
+                    compact_field(record, "depth").expect("context owner depth")
+                )),
+                "relation" => Some(format!(
+                    "relation:{}:{}:{}:{}:{}",
+                    compact_field(record, "kind").expect("context relation kind"),
+                    compact_field(record, "source-package").expect("context source package"),
+                    compact_field(record, "source-owner").unwrap_or("package"),
+                    compact_field(record, "target-package").expect("context target package"),
+                    compact_field(record, "target-owner").unwrap_or("package"),
+                )),
+                _ => None,
+            };
+            if let Some(key) = key {
+                assert!(
+                    context_items.insert(key),
+                    "context item duplicated across pages"
+                );
+            }
+        }
+        context_continuation = page
+            .iter()
+            .find(|record| record.operation == "continuation")
+            .and_then(|record| compact_field(record, "token"))
+            .map(str::to_owned);
+        context_pages += 1;
+        assert!(context_pages < 100, "context pagination must terminate");
+    }
+    assert!(context_pages > 1);
+    assert_eq!(
+        context_items.len(),
+        expected_context_totals
+            .0
+            .parse::<usize>()
+            .expect("context owner total number")
+            + expected_context_totals
+                .1
+                .parse::<usize>()
+                .expect("context relation total number")
+    );
+    let context_mismatch = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "1",
+            "--continuation",
+            &context_token,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&context_mismatch, "diagnostic"), "code"),
+        Some("query_continuation_mismatch")
+    );
     let mismatched = compact_failure_output(command_at(
         &copied_binary,
         temporary.path(),
@@ -1609,6 +2064,27 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
         compact_field(compact_record(&stale, "diagnostic"), "code"),
         Some("query_continuation_stale")
     );
+    let stale_context = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--continuation",
+            &context_token,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&stale_context, "diagnostic"), "code"),
+        Some("query_continuation_stale")
+    );
     assert_eq!(content_inventory(&project), after_rename);
     assert_eq!(
         current_revision_at(&copied_binary, temporary.path(), &project),
@@ -1620,7 +2096,6 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
         "callees",
         "types",
         "capabilities",
-        "context",
         "impact",
         "request",
     ] {
@@ -1634,6 +2109,97 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
             Some("predecessor_contract")
         );
     }
+    for arguments in [
+        vec![
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--seed",
+            &callee_id,
+        ],
+        vec![
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--work",
+            "1",
+        ],
+        vec![
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--fanout",
+            "1",
+        ],
+        vec![
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--continue",
+            &context_token,
+        ],
+        vec![
+            "--project",
+            path(&project),
+            "query",
+            "context",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--depth",
+            "2",
+            "--kind",
+            "function_call",
+        ],
+    ] {
+        let rejected =
+            compact_failure_output(command_at(&copied_binary, temporary.path(), &arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("query_unknown_option")
+        );
+    }
+    let relation_both = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "relations",
+            &callee_id,
+            "--direction",
+            "both",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&relation_both, "diagnostic"), "code"),
+        Some("query_invalid_direction")
+    );
     for request_option in ["--request", "--request-file", "--file"] {
         let rejected = compact_failure_output(command_at(
             &copied_binary,
@@ -1850,6 +2416,38 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         compact_field(compact_record(&inspected, "owner"), "name"),
         Some("application")
     );
+    let command_package = compact_field(compact_record(&application, "project"), "package")
+        .expect("command project package")
+        .to_owned();
+    let command_before_context = content_inventory(&project);
+    let command_oracle = public_context_oracle(
+        &copied_binary,
+        temporary.path(),
+        &project,
+        &command_package,
+        &application_owner,
+        "both",
+        2,
+    );
+    let command_context = all_public_context(
+        &copied_binary,
+        temporary.path(),
+        &project,
+        &application_owner,
+        "both",
+        2,
+    );
+    println!(
+        "copied-context project=command root={application_owner} direction=both depth=2 owners={} relations={} pages={} inventory-blake3={}",
+        command_context.owners.len(),
+        command_context.relations.len(),
+        command_context.pages,
+        content_inventory_digest(&command_before_context),
+    );
+    assert_eq!(command_context.owners, command_oracle.0);
+    assert_eq!(command_context.relations, command_oracle.1);
+    assert!(command_context.pages > 1);
+    assert_eq!(content_inventory(&project), command_before_context);
 
     let head_before_check = std::fs::read(project.join("HEAD")).expect("initial HEAD");
     let checked = compact_success_at(
@@ -1998,6 +2596,133 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     assert_eq!(
         std::fs::read(project.join("HEAD")).expect("HEAD after run"),
         head_before_run
+    );
+
+    let maintained_source = Path::new(env!("CARGO_MANIFEST_DIR")).join(APPLICATION);
+    let maintained = temporary.path().join("isolated-lkjournal");
+    copy_regular_tree(&maintained_source, &maintained);
+    let maintained_before = content_inventory(&maintained);
+    let maintained_revision = current_revision_at(&copied_binary, temporary.path(), &maintained);
+    let service = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&maintained),
+            "query",
+            "find",
+            "module",
+            "service",
+        ],
+    );
+    let maintained_package = compact_field(compact_record(&service, "project"), "package")
+        .expect("maintained project package")
+        .to_owned();
+    let service_owner = compact_field(compact_record(&service, "owner"), "id")
+        .expect("maintained service module")
+        .to_owned();
+    for (direction, depth) in [("incoming", 1_u8), ("outgoing", 2_u8), ("both", 2_u8)] {
+        let oracle = public_context_oracle(
+            &copied_binary,
+            temporary.path(),
+            &maintained,
+            &maintained_package,
+            &service_owner,
+            direction,
+            depth,
+        );
+        let context = all_public_context(
+            &copied_binary,
+            temporary.path(),
+            &maintained,
+            &service_owner,
+            direction,
+            depth,
+        );
+        println!(
+            "copied-context project=lkjournal root={service_owner} direction={direction} depth={depth} owners={} relations={} pages={} inventory-blake3={}",
+            context.owners.len(),
+            context.relations.len(),
+            context.pages,
+            content_inventory_digest(&maintained_before),
+        );
+        assert_eq!(context.owners, oracle.0, "{direction} owner-distance map");
+        assert_eq!(context.relations, oracle.1, "{direction} relation set");
+        if direction == "both" {
+            assert!(context.pages > 1, "maintained context must span pages");
+        }
+    }
+    for (arguments, expected_code) in [
+        (
+            vec![
+                "--project",
+                path(&maintained),
+                "query",
+                "context",
+                &service_owner,
+                "--direction",
+                "sideways",
+                "--depth",
+                "2",
+            ],
+            "query_invalid_context_direction",
+        ),
+        (
+            vec![
+                "--project",
+                path(&maintained),
+                "query",
+                "context",
+                &service_owner,
+                "--direction",
+                "both",
+                "--depth",
+                "9",
+            ],
+            "query_invalid_context_depth",
+        ),
+        (
+            vec![
+                "--project",
+                path(&maintained),
+                "query",
+                "context",
+                "mod_00000000000000000000000000000001",
+                "--direction",
+                "both",
+                "--depth",
+                "2",
+            ],
+            "query_owner_not_found",
+        ),
+        (
+            vec![
+                "--project",
+                path(&maintained),
+                "query",
+                "context",
+                &service_owner,
+                "--direction",
+                "both",
+                "--depth",
+                "2",
+                "--seed",
+                &service_owner,
+            ],
+            "query_unknown_option",
+        ),
+    ] {
+        let rejected =
+            compact_failure_output(command_at(&copied_binary, temporary.path(), &arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(expected_code)
+        );
+    }
+    assert_eq!(content_inventory(&maintained), maintained_before);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &maintained),
+        maintained_revision
     );
 }
 

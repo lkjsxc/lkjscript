@@ -1992,11 +1992,11 @@ impl RepositoryView {
             maximum_scan,
             maximum_items,
         } = query;
-        if maximum_scan == 0 || maximum_items == 0 {
+        if maximum_items == 0 {
             return Err(read_error(
                 DiagnosticClass::Resource,
                 "query_admission_logical_range",
-                "query relation scan and item admission must both be positive",
+                "query relation item admission must be positive",
             ));
         }
         let mut admission = RepositoryReadAdmission::query(query_admission);
