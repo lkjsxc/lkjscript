@@ -585,9 +585,9 @@ they are not latency or provider-cost claims.
 | Projection | Orientation baseline | Cutover source |
 |---|---:|---:|
 | default capabilities | 32 records / 2,316 bytes | 32 / 2,151 |
-| 13 common section focuses, summed | 1,101 records / 115,282 bytes | 1,102 / 113,572 |
+| 13 common section focuses, summed | 1,101 records / 115,282 bytes | 1,102 / 113,576 |
 | 12 command focuses, summed | 176 records / 13,795 bytes | 186 / 13,154 |
-| executable-generated public guides | 7 files / 206,605 bytes | 6 / 201,971 |
+| executable-generated public guides | 7 files / 206,605 bytes | 6 / 201,975 |
 | maintained service descriptor | 4,542 bytes | 4,463 |
 | maintained worker descriptor | 1,758 bytes | 1,679 |
 | same reviewed rename plan | 20 records / 3,721 bytes | 20 / 3,538 |
@@ -602,7 +602,7 @@ The plan comparison renamed module `mod_0510586a801c429b7a4a49a217de7fab` agains
 `rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf` without applying it.
 The baseline plan SHA-256 was
 `6043b83e40b5c403f72e4bbb7084a54f1000bdb33b4d762fae94ef0050f99f02`; the cutover plan SHA-256
-was `9b45eeacb0496592222001696f5b3678887d10332e923cabc262e27d83d3c14a`. Both projected the same
+was `e9bb7fa61361b929924d35423da3b9c4ef55b5415d34edc1fe01404970548f84`. Both projected the same
 base, result, semantic state, effects, budgets, and tests. The expected digest difference binds the
 new product/capability projection and the retained opaque internal compatibility commitment.
 

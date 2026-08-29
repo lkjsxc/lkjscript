@@ -1356,7 +1356,7 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
         require_named_record(&deployment, "deployment.adapter-field", "path", path)?;
     }
 
-    let generated = cwd.join("discovered-contracts");
+    let generated = cwd.join("discovered-guides");
     let result = records(
         &context
             .success(
@@ -1370,10 +1370,10 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
         .iter()
         .filter(|record| record.operation == "file")
         .count()
-        != 7
+        != 6
     {
         return Err(DevError::corrupt(
-            "generated contract discovery did not publish seven owned documents",
+            "generated guide discovery did not publish six owned documents",
         ));
     }
     let walkthrough = fs::read(generated.join("stateful-http-authoring.md"))?;

@@ -2772,7 +2772,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "query_response_field_inventory",
             DiagnosticClass::Infrastructure,
             "The query renderer attempted a field absent from its executable inventory.",
-            "Use matching executable and generated contracts.",
+            "Use a matching executable and capability projection.",
         ),
         diagnostic(
             "query_scan_quantum",
