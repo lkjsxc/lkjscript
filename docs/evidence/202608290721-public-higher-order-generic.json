@@ -4,8 +4,8 @@
     "version": 1
   },
   "campaign": "202608290721",
-  "status": "implementation-stable-final-verification-pending",
-  "recorded_utc": "2026-08-29T08:53:59Z",
+  "status": "complete",
+  "recorded_utc": "2026-08-29T09:11:07Z",
   "repository": {
     "identity": "lkjsxc/lkjscript",
     "remote": "https://github.com/lkjsxc/lkjscript",
@@ -34,7 +34,7 @@
     ],
     "active_campaign_at_entry": "202608290721",
     "later_commits_at_entry": [],
-    "implementation_commit": "reported after creation because tracked evidence cannot name its containing commit",
+    "implementation_commit": "6d6ab22f7a8d4be1feb43b68fa9ed5aca54f2083",
     "completion_commit": "reported after creation because tracked evidence cannot name its containing commit"
   },
   "entry_reconciliation": {
@@ -246,7 +246,7 @@
     "Q4_graph_owners": "the standard collection module mod_1424cf669aac85e52e56b57899fe2c7c owns list-length/list-get and now decl_07dace... list-fold-left; tools/lkjscript-dev/src/stateful_http_program.rs owned the predecessor traversal and now authors the application reducer and fold call.",
     "Q5_resources": "aggregate exact package counters are retained above. A copied 4,096-item public fold reached the existing normalized_call_depth admission at 4,096 frames with typed exit class 4, no abort, and unchanged accepted HEAD. No fold-specific limit or SLO was added.",
     "Q6_service_prerequisite": "the pinned postgres@sha256:075f... container image was cached locally. A campaign-scoped Docker daemon made the supported pinned-container path available; the pre-edit service profile correctly classified both PostgreSQL gates unavailable before that daemon existed.",
-    "Q7_version_and_push": "v0.1.10 was unused and origin/main equaled the starting HEAD. Final fetch, fast-forward safety, push, and remote equality remain final-handoff checks."
+    "Q7_version_and_push": "v0.1.10 was unused. A post-verification fetch found origin/main still at c116ef62 with the implementation commit exactly one ahead and zero behind; the normal push and resulting remote equality are reported in the external final handoff."
   },
   "verification": {
     "baseline_product": {
@@ -271,15 +271,16 @@
     },
     "copied_stateful_http": {
       "classification": "fresh passed",
-      "receipt": ".artifacts/lkjscript-dev/stateful-http/1787992393165113007-3935486-0/receipt.json",
-      "receipt_sha256": "ff9c60fb19e5bc6f52bb32583a8da3b15428bffa636297d82a0439163ba0ca69",
-      "candidate_sha256": "58f5263bdeb8c917dc72b7c17e96ede882e84f0099bd5545e75d46db2cc9807b",
+      "receipt": ".artifacts/lkjscript-dev/stateful-http/1787994299951455455-3981776-0/receipt.json",
+      "receipt_digest": "verification_299b4c6e256ff8c54aacb2c07fc3c4cff0cd3f8939177e4573ef3cd562581883",
+      "receipt_sha256": "d26484c4f274c0fcc87f8eab557ea41cf2095386efcef36b10e90b7dfd2c63c3",
+      "candidate_sha256": "46d6646aacd95bbca6ac5f7f4a100bda42991bd185873be5139eea7911ad4887",
       "candidate_bytes": 15808424,
       "outside_checkout": true,
-      "commands": 68,
-      "elapsed_nanoseconds": 10288071048,
-      "artifact_bytes": 495865,
-      "artifact_sha256": "b99e62191916e571ceb0b843cd703941308fc7844ee38fb94463e765295dff4b",
+      "commands": 64,
+      "elapsed_nanoseconds": 11062313047,
+      "artifact_bytes": 493065,
+      "artifact_sha256": "cae4d6e469c7a2c565ba949ecbbf03802c6eabea240f846d3875bf5dd912ae9b",
       "clean_incremental_equal": true,
       "http_routes": 27,
       "authority_unchanged": true,
@@ -287,12 +288,13 @@
     },
     "lkjournal_service": {
       "classification": "fresh passed",
-      "receipt": ".artifacts/lkjscript-dev/service/1787992419116279040-3937326-0/receipt.json",
-      "receipt_sha256": "17d369b70abf5b60eb7c23ba3d63d002789d711c21b9d41a206ef3e2d7268388",
-      "commands": 15,
+      "receipt": ".artifacts/lkjscript-dev/service/1787994298067561986-3982129-0/receipt.json",
+      "receipt_digest": "verification_4e89160bb303780484cf2e30337dd8bec4ac9206be9371558f7b18c612cc6de5",
+      "receipt_sha256": "36b987b8f19538d0d968af614feda26a29b154be1cd59e5c4693d5b080e7f7fc",
+      "commands": 20,
       "requests": 14,
       "runners": 3,
-      "elapsed_nanoseconds": 4045205832,
+      "elapsed_nanoseconds": 5778923264,
       "fresh_artifact_equal": true,
       "backup_restore_equal": true,
       "authority_unchanged": true,
@@ -312,20 +314,82 @@
         "correction": "advance new-project checks from 8 to 12 and lkjournal from 12 to 16"
       }
     ],
+    "release_mode_higher_order_command": {
+      "classification": "fresh passed",
+      "command": "cargo test --locked --release --test public_cli copied_binary_authors_and_runs_a_generic_named_function_value",
+      "candidate_sha256": "46d6646aacd95bbca6ac5f7f4a100bda42991bd185873be5139eea7911ad4887",
+      "observation": ".artifacts/campaigns/202608290721/release-higher-order-command-2/observation.json",
+      "observation_sha256": "3ddae610cef69ffaef1fee6e8d3a5664700c10eade3b8ab4ab3db5d655f85d47",
+      "stdout": ".artifacts/campaigns/202608290721/release-higher-order-command-2/stdout.log",
+      "stdout_sha256": "fae2e74bbce6301688d51d9814c37484b2ecffe1eef6e4f143d261a409607f70",
+      "stdout_digest": "verification_6b8e3843e0889ce598b5df5297039d8100f0ce168bb65dd3dad98d9a9a730556",
+      "stderr": ".artifacts/campaigns/202608290721/release-higher-order-command-2/stderr.log",
+      "stderr_sha256": "b88bafc085cf073764373d9c25297d990ec321dbbd2c1d62c2b9b58392ec25f7",
+      "elapsed_nanoseconds": 969284513,
+      "sampled_child_cpu_nanoseconds": 110000000,
+      "peak_child_rss_kib": 64564,
+      "first_measurement_attempt": {
+        "classification": "unavailable",
+        "reason": "the measurement environment inherited a PATH without the repository Cargo toolchain, so no product test executed",
+        "observation": ".artifacts/campaigns/202608290721/release-higher-order-command/observation.json",
+        "observation_sha256": "9e24c336c941c1000ab3f961f496d090c90b5bfd23c62809e86154de065641a1"
+      }
+    },
     "final": {
-      "classification": "not run",
-      "commands": [],
-      "implementation_commit": "pending",
-      "worktree_digest": "pending",
-      "receipt": "pending",
-      "receipt_sha256": "pending",
-      "verification_digest": "pending",
-      "fresh_passed": 0,
+      "classification": "fresh passed",
+      "commands": [
+        {
+          "command": "cargo build --workspace --release --locked",
+          "classification": "fresh passed"
+        },
+        {
+          "command": "cargo run --locked -p lkjscript-dev -- check focused --fresh",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/lkjscript-dev/check/1787994026291309561-3968138-0/receipt.json",
+          "receipt_sha256": "afea40f00e1b943fed39477c5de42f77d44b86ddbbbb0547134f81bc732d2221",
+          "verification_digest": "verification_5718aafd9e055e5b2f8c869075527bed9420f9b355c81d21a7cfaf252ef72b4f",
+          "fresh_gates": 6
+        },
+        {
+          "command": "cargo run --locked -p lkjscript-dev -- check product --fresh",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/lkjscript-dev/check/1787994136188538915-3976021-0/receipt.json",
+          "receipt_sha256": "03cf29aec014f6a8b085bf7bbd8f07127c40ce57e0ad40b2c247edd463bcb7ed",
+          "verification_digest": "verification_fade28de5133113b321fe65be750a20050fa25acfcc4a3bae41090b9c99c2e57",
+          "fresh_gates": 17
+        },
+        {
+          "command": "cargo run --locked -p lkjscript-dev -- check service --fresh",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/lkjscript-dev/check/1787994266435251778-3978180-0/receipt.json",
+          "receipt_sha256": "e620cff05e48d887d505b580f450a18beb46246d3e832aeadb87affde6a08e08",
+          "verification_digest": "verification_a33c09a465381e67268eb5c07dcdc7f583692deba3ac549022f146391011f990",
+          "fresh_gates": 8
+        },
+        {
+          "command": "cargo run --locked -p lkjscript-dev -- check full",
+          "classification": "fresh passed",
+          "fresh_gates": 22
+        }
+      ],
+      "implementation_commit": "6d6ab22f7a8d4be1feb43b68fa9ed5aca54f2083",
+      "worktree_digest": "verification_19019e45b550e9151db10a1ff0bb4f6765bb15f4751a295854901c0bab03866c",
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1787994294393502201-3981569-0/receipt.json",
+      "receipt_bytes": 52015,
+      "receipt_sha256": "068137ad4fa53c6b7cf40b0420bd5ab9eca574429f3b6ed5bb1e72ff8e3c99d2",
+      "verification_digest": "verification_f4485c2ef1b90fe8c394ee5edfe05d00876fe64078bba9a8cd6be8e367c59283",
+      "elapsed_nanoseconds": 166856104005,
+      "candidate_sha256": "46d6646aacd95bbca6ac5f7f4a100bda42991bd185873be5139eea7911ad4887",
+      "candidate_bytes": 15808424,
+      "higher_order_public_cli_log": ".artifacts/lkjscript-dev/check/1787994294393502201-3981569-0/workspace_tests.stdout.log",
+      "higher_order_public_cli_log_sha256": "205655196cd7ac1fe2f09940b59844c03aa1804215ddaa25b4d3d60d82184d83",
+      "fresh_passed": 22,
       "reused_passed": 0,
       "skipped": 0,
       "unavailable": 0,
       "failed": 0,
-      "not_run": 1
+      "not_run": 0
     }
   },
   "resource_observations": {
@@ -349,12 +413,12 @@
       "relations_added": 1017,
       "selected_tests": 11,
       "impact_reasons": 983,
-      "sampled_child_cpu_nanoseconds": 5450000000,
-      "peak_child_rss_kib": 21648
+      "sampled_child_cpu_nanoseconds": 5460000000,
+      "peak_child_rss_kib": 21668
     },
     "lkjournal_service": {
-      "sampled_child_cpu_nanoseconds": 440000000,
-      "peak_child_rss_kib": 21548
+      "sampled_child_cpu_nanoseconds": 420000000,
+      "peak_child_rss_kib": 21804
     },
     "interpretation": "point observations only; no SLO, provider cost, asymptotic improvement, tail-call property, or universal list scale is claimed"
   },
@@ -385,7 +449,7 @@
     }
   ],
   "external_actions": {
-    "normal_push": "pending final fast-forward reconciliation",
+    "normal_push": "post-verification fetch proved one-ahead/zero-behind; execution and resulting remote equality are reported in the external final handoff",
     "tag_created_or_moved": false,
     "release_created_or_changed": false,
     "workflow_dispatched": false,
