@@ -1953,7 +1953,7 @@ mod tests {
         assert!(pre_publication.contains("--extract-to"));
         assert!(pre_publication.contains("distributed-http"));
         assert!(pre_publication.contains("stateful-http"));
-        assert!(pre_publication.contains("request_records == 1010"));
+        assert!(!pre_publication.contains("request_records =="));
         assert!(pre_publication.contains("--evidence-root"));
         assert!(pre_publication.contains("env -i LANG=C"));
         assert!(!pre_publication.contains("tar -"));
@@ -2003,7 +2003,7 @@ mod tests {
         assert!(post_release.contains("release verifier verify"));
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("stateful-http"));
-        assert!(post_release.contains("request_records == 1010"));
+        assert!(!post_release.contains("request_records =="));
         assert_eq!(
             post_release.matches(".result.incremental_sha256").count(),
             1,
