@@ -4,8 +4,9 @@
     "version": 1
   },
   "campaign": "202608300506",
-  "status": "implementation assembled; authoritative full profile not run",
+  "status": "complete",
   "assembled_at_utc": "2026-08-29T21:45:57Z",
+  "completed_at_utc": "2026-08-29T22:04:44Z",
   "repository": {
     "name": "lkjsxc/lkjscript",
     "branch": "main",
@@ -33,7 +34,12 @@
     "applicable_instructions": [
       "AGENTS.md at repository root"
     ],
-    "implementation_commit": "reported after creation because evidence cannot name its containing commit",
+    "implementation_commits": [
+      "9ab77d1878c035da88c25e3895b731ac559799ed",
+      "6483030baf6086a64f418ff2b18b80412920e5fc"
+    ],
+    "verified_head": "6483030baf6086a64f418ff2b18b80412920e5fc",
+    "verified_tree": "6b5f18d1e1b81603eed742fd0c1ae9cbe5c442e8",
     "completion_commit": "reported after creation because evidence cannot name its containing commit"
   },
   "entry_reconciliation": {
@@ -293,22 +299,22 @@
     },
     "copied_release_candidate": {
       "classification": "fresh passed",
-      "command": "LKJSCRIPT_RELEASE_CANDIDATE=/tmp/lkjscript-context-202608300506.a587AH/lkjscript cargo test --locked --release --test public_cli copied_binary_completes_normalized_standard_dependent_command_lifecycle -- --exact --nocapture",
+      "command": "target/debug/lkjscript-dev measure --cwd /home/coder/workspace/lkjscript --output /home/coder/workspace/lkjscript/.artifacts/campaign/202608300506/verification/copied-release-context-final -- env LKJSCRIPT_RELEASE_CANDIDATE=/tmp/lkjscript-context-202608300506-final.ZEnPwy/lkjscript cargo test --locked --release --test public_cli copied_binary_completes_normalized_standard_dependent_command_lifecycle -- --exact --nocapture",
       "candidate": {
-        "path": "/tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+        "path": "/tmp/lkjscript-context-202608300506-final.ZEnPwy/lkjscript",
         "bytes": 15906120,
-        "mode": "0755",
-        "sha256": "c3e4a84aaf3eb8234859c04efef426f01b77ba87a25798085fbb219230cef933",
+        "mode": "0750",
+        "sha256": "3f4ace3519d0ce71985971b7887843c189f7127f3e93b767d450cda3ac7d2d55",
         "product_version": "0.1.11"
       },
       "fresh_command": {
-        "root": "mod_88ecb0958f0eefa13ab8dfdc495ed78c",
+        "root": "mod_33613470fbf00e1421f41c7e003ebffe",
         "direction": "both",
         "depth": 2,
         "owners": 9,
         "relations": 13,
         "pages": 4,
-        "inventory_blake3": "b6b60ea436d957438296da984bbafae0714c9ad4792059f1d21867c8e0d91ab2"
+        "inventory_blake3": "2f0c0e57e274fdc32021c313280fa61c3e9a3f22fedc89f99045a718e812c5f1"
       },
       "isolated_lkjournal": [
         {
@@ -338,13 +344,89 @@
       "oracle": "complete owner-distance maps and selected edge sets equal independent orchestration through existing one-hop public relation pages; in-process pages also equal full reconstruction plus canonical relation extraction",
       "minimal_child_environment": "LANG=C only; no Cargo, helper, source parser, network, database, or deployment",
       "inventory_equal_after_success_and_selected_failures": true,
+      "observation": ".artifacts/campaign/202608300506/verification/copied-release-context-final/observation.json",
+      "observation_sha256": "82f6357532feb72aa356e84aae9e30723c8262834703a77bfb33e231ceb5b35b",
+      "stdout": ".artifacts/campaign/202608300506/verification/copied-release-context-final/stdout.log",
+      "stdout_sha256": "07edc425b1a53eacdef81cd04d112a4481b30636696bdeca18d1ac63540d1fbc",
+      "stderr": ".artifacts/campaign/202608300506/verification/copied-release-context-final/stderr.log",
+      "stderr_sha256": "0f98608d4f0de854bfcf82a416624940533b93de7e26d1d9b21123591fac9108"
+    },
+    "superseded_preproof_candidate": {
+      "classification": "fresh passed",
+      "disposition": "superseded by the authoritative full-profile rebuild at verified HEAD; it is not final-candidate proof",
+      "path": "/tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+      "sha256": "c3e4a84aaf3eb8234859c04efef426f01b77ba87a25798085fbb219230cef933",
       "log": ".artifacts/campaign/202608300506/verification/copied-release-context.log",
       "log_sha256": "c1582bdc56d834c65b85bccee1545a49411779aade1ee505307b46ad7b028610"
     },
-    "authoritative_full": {
+    "authoritative_full_invalid_invocation": {
       "classification": "not run",
       "command": "cargo run --locked -p lkjscript-dev -- check full --machine --details",
-      "receipt_alias": ".artifacts/campaign/202608300506/final-full-receipt.json"
+      "reason": "the verifier rejected mutually exclusive --machine and --details options before selecting or running a gate"
+    },
+    "authoritative_full_failed_attempt": {
+      "classification": "failed",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine --fresh",
+      "verified_head": "9ab77d1878c035da88c25e3895b731ac559799ed",
+      "fresh_passed": 22,
+      "selected": 23,
+      "failure": "product_surface_audit rejected one duplicate numbered-contract phrase in docs/status.md",
+      "receipt": ".artifacts/lkjscript-dev/check/1788040424516690083-159621-0/receipt.json",
+      "receipt_sha256": "4a54cbaaaa0f4c4ca9954f591048147f391ec955ce1ae25f9365964972b0097d",
+      "receipt_digest": "verification_057f00a655fa74b17b4a6185cdf46014396a960ffdeaca948e27d8b6dbe5531e"
+    },
+    "corrected_product_surface": {
+      "classification": "fresh passed",
+      "command": "target/debug/lkjscript-dev policy product-surface --binary target/release/lkjscript --machine",
+      "violations": 0,
+      "corrective_commit": "6483030baf6086a64f418ff2b18b80412920e5fc"
+    },
+    "authoritative_full": {
+      "classification": "fresh passed",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine --fresh",
+      "verified_head": "6483030baf6086a64f418ff2b18b80412920e5fc",
+      "worktree_input_digest": "verification_45d68db993a86815fd51555d831d1941fc3b5761b1b52d888042ffea031e8fce",
+      "final_worktree_input_digest": "verification_45d68db993a86815fd51555d831d1941fc3b5761b1b52d888042ffea031e8fce",
+      "input_stable": true,
+      "selected": 23,
+      "passed": 23,
+      "fresh": 23,
+      "reused": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 0,
+      "elapsed_nanoseconds": 130867717153,
+      "gate_classifications": {
+        "fmt": "fresh passed",
+        "clippy": "fresh passed",
+        "workspace_tests": "fresh passed",
+        "release_build": "fresh passed",
+        "release_command_lifecycle": "fresh passed",
+        "distributed_http_application": "fresh passed",
+        "stateful_http_application": "fresh passed",
+        "checker_self_test": "fresh passed",
+        "rust_only_tooling": "fresh passed",
+        "generated_public_guides": "fresh passed",
+        "product_surface_audit": "fresh passed",
+        "standard_package_test": "fresh passed",
+        "application_package_test": "fresh passed",
+        "standard_artifact_build": "fresh passed",
+        "standard_artifact_compare": "fresh passed",
+        "builtin_package_export": "fresh passed",
+        "builtin_package_compare": "fresh passed",
+        "builtin_transport_export": "fresh passed",
+        "builtin_transport_compare": "fresh passed",
+        "application_artifact_build": "fresh passed",
+        "application_artifact_compare": "fresh passed",
+        "service_acceptance": "fresh passed",
+        "diff_check": "fresh passed"
+      },
+      "receipt": ".artifacts/lkjscript-dev/check/1788040780007345206-168857-0/receipt.json",
+      "receipt_alias": ".artifacts/campaign/202608300506/final-full-receipt.json",
+      "receipt_bytes": 54226,
+      "receipt_sha256": "722588747a38cd3b0c952035af7c0a8aae5b5c00d5a8d8c18c66166fa268a113",
+      "receipt_digest": "verification_80e53fd1d2acfd6d1122d4f183c2e56a6d5b4638d26e6958e223cd3de3ca1c77"
     }
   },
   "semantic_oracle_and_adversarial_results": {
@@ -471,7 +553,8 @@
     ],
     "local_ephemeral": [
       "temporary GraphRepository fixtures",
-      "copied candidate at /tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+      "superseded pre-proof candidate at /tmp/lkjscript-context-202608300506.a587AH/lkjscript",
+      "final verified candidate at /tmp/lkjscript-context-202608300506-final.ZEnPwy/lkjscript",
       "fresh command projects and isolated lkjournal copies cleaned by their test owners"
     ],
     "remote_mutations": [],
@@ -484,6 +567,7 @@
     "The 32768-witness exact fixture is also the 16384-relation exact fixture. In a canonical graph each selected edge can be observed at most once per direction, so a real 32769th witness implies a 16385th unique relation and is rejected first by the stricter relation admission; the witness counter helper separately proves exact and one-over behavior.",
     "Derived physical admissions are conservative worst-case encoding bounds, not measured memory, latency, or supported global graph size.",
     "Per-traversal CPU was unavailable because /usr/bin/time is absent; Bash supplied aggregate warm test-process user/system CPU.",
+    "The first correctly formed fresh full profile passed 22 of 23 gates and exposed a docs/status.md product-surface wording violation; corrective commit 6483030b removed that duplicate catalog phrase and the final fresh profile passed 23 of 23.",
     "The copied candidate is a host release-mode binary, not a new distributed target admission or public release.",
     "Full owner-body projection, generic impact, fuzzy/history query, multiple roots, relation filters, and package-root context remain out of scope.",
     "No provider token, request, cache, or monetary telemetry exists and none is inferred."
@@ -492,6 +576,7 @@
     "root": ".artifacts/campaign/202608300506/",
     "baseline": ".artifacts/campaign/202608300506/baseline/",
     "verification": ".artifacts/campaign/202608300506/verification/",
+    "final_copied_candidate_measurement": ".artifacts/campaign/202608300506/verification/copied-release-context-final/",
     "checker": ".artifacts/lkjscript-dev/check/",
     "final_full_receipt_alias": ".artifacts/campaign/202608300506/final-full-receipt.json"
   }
