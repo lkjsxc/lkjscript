@@ -1,0 +1,663 @@
+{
+  "schema": {
+    "identity": "lkjscript-first-party-data-engine-evidence",
+    "version": 1
+  },
+  "campaign": "202608300840",
+  "status": "complete",
+  "assembled_at_utc": "2026-08-30T04:29:02Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "orientation_baseline": "608fe0da93a02ed6d793f5ef287771c1cb1809e6",
+    "starting_head": "608fe0da93a02ed6d793f5ef287771c1cb1809e6",
+    "starting_tree": "10a25e3b270d16bd784c177a8474ca55bc840ed1",
+    "starting_origin_main": "608fe0da93a02ed6d793f5ef287771c1cb1809e6",
+    "implementation_commits": [
+      "a09156dbc6199f6e127e5183ab1294b7d82c35fc",
+      "440dbc35ced76e9e22941075047ffdb470434920"
+    ],
+    "verified_head": "440dbc35ced76e9e22941075047ffdb470434920",
+    "verified_tree": "0a3e41e0494cddb784510c3c33f4bf74791f629c",
+    "completion_commit": "reported after creation because evidence cannot name its containing commit",
+    "origin_main_at_evidence_assembly": "608fe0da93a02ed6d793f5ef287771c1cb1809e6",
+    "divergence_at_evidence_assembly": {
+      "ahead": 2,
+      "behind": 0
+    },
+    "starting_worktree": [
+      {
+        "path": "AGENTS.md",
+        "state": "pre-existing modified tracked file",
+        "disposition": "preserved byte-exact and excluded from campaign commits"
+      },
+      {
+        "path": "docs/campaigns/202608300840.md",
+        "state": "untracked supplied mandate",
+        "disposition": "incorporated without rewriting its initial body; only lifecycle status and terminal record change at closure"
+      }
+    ],
+    "preserved_work": {
+      "path": "AGENTS.md",
+      "state": "pre-existing modified tracked file",
+      "sha256": "1f7903444347224337b4391404c300f90b45b292e97505b483da308f6ee8c3b3",
+      "disposition": "temporarily stashed only for clean-source final verification and restored byte-exact; never staged or committed",
+      "patch": ".artifacts/campaign/202608300840/target-final/AGENTS-preserved.patch",
+      "patch_sha256": "7131136339c2d1bbc3abf5494682741200a5bb2b831eba4bb3f11c706d37cd63"
+    }
+  },
+  "external_reconciliation": {
+    "refreshed_at_utc": "2026-08-30T04:29:02Z",
+    "open_pull_requests": 0,
+    "open_issues": 0,
+    "queued_or_running_workflows": 0,
+    "latest_public_release": {
+      "tag": "v0.1.10",
+      "release_id": 379029576,
+      "tag_object": "866f1cc4fa85e5f6ecdec97cd9666912c020b14c",
+      "source_commit": "5cc8f79c55d9baa0a6ef964db502567b59c4d079",
+      "immutable": true,
+      "latest": true,
+      "archive_bytes": 7225282,
+      "archive_sha256": "bb44681f93f5a65105f8897c9876abcbc0901a42e71b5b0129eccd4b38f3f3b8",
+      "checksums_sha256": "39cff48f52c775bdfdf55ef32fd6f13c6a3a01c23674d35d93e9a659ee4b15e0"
+    },
+    "historical_recovery_tag": {
+      "tag": "v0.1.8",
+      "tag_object": "4df74a29df965d104e95f0fc3803d8fe1dd61c4e",
+      "source_commit": "912ad5012ffb564275d4bd33565cf7d8c87b78d7"
+    }
+  },
+  "authority_boundaries": {
+    "program_meaning": "GraphRepository remains the sole editable program-meaning authority",
+    "application_data": "one deployment-selected lkjscript-data-store-1 root is operational data and durable-queue authority",
+    "artifacts": "derived and strictly validated",
+    "deployment": "separate operator policy selecting roots, namespaces, grants, and limits",
+    "objects": "object bytes remain in the object capability; only metadata and reconciliation facts are in data",
+    "postgresql": "contributor-only migration, differential, and resource evidence"
+  },
+  "identity_cutover": {
+    "product": {
+      "before": "0.1.11",
+      "after": "0.1.12",
+      "publication": "unreleased source only; immutable public latest remains v0.1.10"
+    },
+    "cli": {
+      "before": "lkjscript-cli-13",
+      "after": "lkjscript-cli-14"
+    },
+    "deployment": {
+      "before": 1,
+      "after": 2
+    },
+    "compact_change": {
+      "before": 6,
+      "after": 7
+    },
+    "data_store": "lkjscript-data-store-1",
+    "logical_backup": "lkjscript-data-backup-1",
+    "capabilities_digest": "6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81"
+  },
+  "maintained_authority": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_5cb5d4c5a285cc4b71d1be86a616194ad51c2408d640ae0ca99bac4ba1bc2df5",
+      "semantic_state": "semantic_state_88a45f181829503c93ecf98d08d83670ce49376c7c0790e17d7061dd619d63a4",
+      "package_revision": "package_revision_f053de4a920d44c877ee1754c8dea56ecd957ea2d83abb6f476aedc3572846aa",
+      "package_transport": "package_transport_daf5729ccacd430c56b5f9750795448976d980947e7974b2ad09c2c46f086f96",
+      "artifact_manifest": "artifact_manifest_dd043a03c87749cd758829a52ab668a7b6ac5c61bf35262cb40e99b77d318d54",
+      "artifact_bundle": "artifact_bundle_6871446723930f366efb438b46570efc4cbdda6a664ed07d80e7decb45f4ab8d",
+      "live_owners": 409,
+      "compiler_units": 77,
+      "closure_objects": 780,
+      "graph_tests": 11,
+      "transport": {
+        "bytes": 86697,
+        "sha256": "d46939d6ec91b3b403ce2bf54a5fd3ca768bf2ff4259628a03d2ca133b0c7c3f"
+      },
+      "artifact": {
+        "bytes": 244125,
+        "sha256": "7f47ce86a6d33d39f1f354f515dafd66fcf4cd734f9f36fb6ef83c504d1edf04"
+      }
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f",
+      "semantic_state": "semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f",
+      "compilation_manifest": "compilation_manifest_f32f1d0988737e8eb15d3396356618e440038afca7c69afebbc4248f0893b3d0",
+      "artifact_manifest": "artifact_manifest_2087386a0c1ff708b04db2221a5a20ac3d3f66ac3443e4dc2a25f032f38398d1",
+      "artifact_bundle": "artifact_bundle_b5a2f01d952416c5f9b61b36d1335ded8698acc653ae677974b43dc57c8acb6c",
+      "live_owners": 1559,
+      "compiler_units": 137,
+      "closure_objects": 2736,
+      "closure_graph_tests": 16,
+      "artifact": {
+        "bytes": 813625,
+        "sha256": "9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28"
+      }
+    }
+  },
+  "public_contract": {
+    "lifecycle_grammar": "data initialize --root PATH | data verify --root PATH | data backup --root PATH --output PATH | data restore --backup PATH --root PATH",
+    "lifecycle": {
+      "initialize": "validates one root and atomically creates only absent state; matching valid state is unchanged",
+      "verify": "reconstructs and validates the complete retained accepted closure without mutation",
+      "backup": "pins one head and publishes one create-new canonical logical backup with schema and sorted facts",
+      "restore": "accepts a strict backup and absent destination, creates a new physical identity, verifies it, and publishes once"
+    },
+    "standard_interface": "DataStore",
+    "standard_types": [
+      "DataKeyPart",
+      "DataEntry",
+      "DataExpectation",
+      "DataScanDirection",
+      "DataScanItem",
+      "DataScanPage",
+      "DataSchema",
+      "DataSchemaExpectation"
+    ],
+    "pure_codec_functions": [
+      "data-encode<T>",
+      "data-decode-or<T>"
+    ],
+    "key_parts": {
+      "tags": [
+        "Bool",
+        "I64",
+        "Text",
+        "Bytes"
+      ],
+      "order": "lexicographic sequence order; tag order Bool, I64, Text, Bytes; false before true; signed numeric order; UTF-8 byte order; unsigned byte order; strict prefix before extension"
+    },
+    "operations": [
+      "schema-read",
+      "schema-set",
+      "get",
+      "scan",
+      "transaction",
+      "put",
+      "delete"
+    ],
+    "deployment_adapters": [
+      "data",
+      "durable_queue_data"
+    ],
+    "continuation": "opaque and stateless; binds store, revision, namespace/space/prefix selector, direction, limits, and exclusive resume key",
+    "entry_revision": "opaque identity prevents ABA; delete and recreate do not satisfy an old expectation"
+  },
+  "physical_store": {
+    "format": "immutable complete revision objects plus one atomic durable HEAD",
+    "identity_domain": "separate random physical store identity; never graph, package, artifact, or semantic revision identity",
+    "publication": "private staging, create-new immutable object, file and directory synchronization, cross-process writer lock, exact-base recheck, one HEAD visibility change",
+    "readers": "pin immutable revisions",
+    "history": "all reachable history retained; no compaction, garbage collection, destructive repair, or accepted-file rewrite",
+    "catalog": "derived; missing, stale, or corrupt catalog is ignored and rebuilt from verified immutable authority",
+    "corruption": "canonical damage, foreign domains, missing reachable objects, malformed links, symlinks, nonregular files, traversal, duplicates, trailing bytes, and exhaustion fail closed",
+    "recovery": "backup, restore to an absent new root, verify, then explicit descriptor switch"
+  },
+  "limits": {
+    "namespace_bytes": 128,
+    "space_name_bytes": 128,
+    "key_parts": 16,
+    "key_bytes": 4096,
+    "value_bytes": 4194304,
+    "transaction_mutations": 4096,
+    "transaction_bytes": 16777216,
+    "scan_items": 10000,
+    "scan_bytes": 16777216,
+    "scan_work": 1000000,
+    "live_transactions": 1024,
+    "revision_bytes": 1073741824,
+    "backup_bytes": 1073741824,
+    "history_revisions": 1000000,
+    "store_objects": 1000000
+  },
+  "consumer_cutover": {
+    "bbs": "one primary post space plus (created-at,id) index keys, atomically maintained; create expects missing, update exact revision, delete primary and index together, list scans the index and resolves primary records in one snapshot",
+    "lkjournal": "actor, session, resource, immutable snapshot, object metadata, lookup, and reconciliation facts moved to explicit graph-owned spaces and indexes; service and worker share one root through distinct namespaces",
+    "durable_queue": "separate internal namespace in the same engine with idempotent enqueue, ready order, exact lease/attempt, heartbeat, stale completion rejection, retry, cancellation, inspect, restart, and independent bounds",
+    "objects": "200000-byte acceptance object remained in object storage while metadata and reconciliation facts used data"
+  },
+  "predecessor_disposition": {
+    "deleted_product_paths": [
+      "src/platform/database.rs",
+      "src/platform/execution/normalized/database.rs"
+    ],
+    "deleted_product_dependencies": [
+      "postgres",
+      "fallible-iterator"
+    ],
+    "retained_contributor_only": [
+      "tools/lkjscript-dev/src/postgres.rs",
+      "tools/lkjscript-dev/src/data_oracle.rs",
+      "postgres dependency in tools/lkjscript-dev/Cargo.toml"
+    ],
+    "absent_current_graph_meaning": [
+      "Database",
+      "SqlValue",
+      "SqlType",
+      "SQL statements",
+      "SQL row codecs",
+      "migration checksums"
+    ],
+    "rejected_inputs": [
+      "postgres adapter",
+      "durable_queue_postgres adapter",
+      "connection_secret and PostgreSQL connection fields",
+      "predecessor deployment contract",
+      "database command and SQL standard references",
+      "predecessor application artifacts"
+    ],
+    "dependency_audit": "cargo tree -p lkjscript --locked has no PostgreSQL, tokio-postgres, fallible-iterator, or SQL production dependency; the only product-source PostgreSQL strings are a strict-decoder rejection test"
+  },
+  "proof": {
+    "workspace_tests": {
+      "classification": "fresh passed",
+      "command": "cargo test --workspace --locked --no-fail-fast",
+      "library": {
+        "passed": 414,
+        "failed": 0,
+        "ignored": 2
+      },
+      "general_service": {
+        "passed": 9,
+        "failed": 0
+      },
+      "public_cli": {
+        "passed": 24,
+        "failed": 0,
+        "ignored_release_scale": 1
+      },
+      "developer_tool": {
+        "passed": 74,
+        "failed": 0
+      },
+      "store_cases": [
+        "randomized transactions equal an implementation-disjoint ordered-map model",
+        "canonical mixed-key and strict-prefix order",
+        "forward/reverse revision-bound scans and continuations",
+        "expectations, ABA, read-your-writes, and exact-base conflict",
+        "concurrent pinned readers and separately controlled processes",
+        "schema transitions and independent resource bounds",
+        "interruption reopens exactly old or new state",
+        "derived catalog rebuild and canonical corruption failure",
+        "symlink and foreign-root rejection",
+        "backup/restore changes physical identity and preserves facts"
+      ],
+      "queue_cases": [
+        "idempotent enqueue and conflicting-input rejection",
+        "lease loss and stale completion cannot publish twice",
+        "heartbeat, cancellation, and limits",
+        "explicit retry and terminal attempt bound",
+        "reopen and stale attempt rejection",
+        "strict canonical job codec"
+      ],
+      "log": ".artifacts/lkjscript-dev/check/1788063434252469559-469421-0/workspace_tests.stdout.log",
+      "log_digest": "verification_c5afe815a4a099c02eb8bdc581f96a9d52ae67c347e525bd138b41b53aae114b"
+    },
+    "public_lifecycle": {
+      "classification": "fresh passed",
+      "test": "public_data_lifecycle_is_create_new_strict_and_semantically_disjoint",
+      "cases": [
+        "initialize create and exact no-op",
+        "verify",
+        "backup and absent-output enforcement",
+        "restore and absent-destination enforcement",
+        "corrupt backup",
+        "foreign root",
+        "symlink",
+        "absent root",
+        "unknown data option",
+        "predecessor database command",
+        "semantic HEAD unchanged"
+      ]
+    },
+    "copied_bbs": {
+      "classification": "fresh passed",
+      "candidate_sha256": "9c6ca78e5ce85adabc6f2849e3777f7327346cb56d9e105d7ba7137a63576c9a",
+      "receipt": ".artifacts/lkjscript-dev/stateful-http/1788062451287440451-433719-0/receipt.json",
+      "receipt_bytes": 107571,
+      "receipt_sha256": "7291a80a69e42f5b5fad0e15d37652b11f6772f8475bf7e98b1c0f3593df01ea",
+      "receipt_digest": "verification_883d6498c5174ae0682b5bf231a7d1aaf57bcd0e61c31ab9f284b7cd28ee8850",
+      "routes_checked": 25,
+      "persistence_after_restart": true,
+      "backup_restore_equivalent": true,
+      "absent_root_no_readiness": true,
+      "corrupt_root_no_readiness": true,
+      "malformed_request_contained": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "lkjournal_service_worker": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1788062464027569349-434126-0/receipt.json",
+      "receipt_bytes": 29161,
+      "receipt_sha256": "a6d1b432f96f098cf509fa377ef81409f9961e046aada2a97ef11988936d5556",
+      "receipt_digest": "verification_352f6ae113893b30b0660a36c9d7d0eb6a3481c421ff876305c7c3372d0621d6",
+      "fresh_artifact_equal": true,
+      "routes_checked": 15,
+      "actor_isolation_and_login": true,
+      "resource_revision": 1,
+      "history_entries": 2,
+      "object_bytes": 200000,
+      "worker_productive_iterations": 1,
+      "restart_read_equal": true,
+      "restored_read_equal": true,
+      "corrupt_backup_rejected": true,
+      "authority_unchanged": true,
+      "raw_secret_values_retained": false,
+      "cleanup_complete": true
+    },
+    "postgresql_differential": {
+      "classification": "fresh passed",
+      "oracle_contract": 1,
+      "data_contract": "lkjscript-data-store-1",
+      "postgres_version": "16.15",
+      "postgres_image": "postgres@sha256:485935f94cc7165afa896978809c37b592dc07f0a37d2c8f645f12412d0212c8",
+      "postgres_image_config": "sha256:80f4c7a5e91618546dce5b4fe60cf03b14c0f9efa7e40157278d122772ced8d2",
+      "fixture_facts": 416,
+      "fixture_bytes": 55243,
+      "fixture_digest": "verification_8691e9f624906aaef0220155d4f64e6225442edd98ae19100a7e3ba3f50da6e8",
+      "postgres_export_equal": true,
+      "first_party_import_equal": true,
+      "backup_restore_equal": true,
+      "public_outcomes_equal": true,
+      "bbs": {
+        "facts": 192,
+        "first_party_median": {
+          "wall_nanoseconds": 54660149,
+          "cpu_nanoseconds": 0,
+          "peak_rss_kib": 3632,
+          "durable_bytes": 59581,
+          "fsync_publications": 12,
+          "operations": 388
+        },
+        "postgres_median": {
+          "wall_nanoseconds": 24786942,
+          "cpu_nanoseconds": 0,
+          "peak_rss_kib": 91526,
+          "durable_bytes": 90112,
+          "fsync_publications": 0,
+          "operations": 388
+        },
+        "ratios": {
+          "wall": 2.205199,
+          "peak_rss": 0.039682,
+          "durable_bytes": 0.661188
+        },
+        "thresholds_passed": true
+      },
+      "lkjournal": {
+        "facts": 224,
+        "first_party_median": {
+          "wall_nanoseconds": 66649024,
+          "cpu_nanoseconds": 0,
+          "peak_rss_kib": 3792,
+          "durable_bytes": 111831,
+          "fsync_publications": 12,
+          "operations": 452
+        },
+        "postgres_median": {
+          "wall_nanoseconds": 26884276,
+          "cpu_nanoseconds": 0,
+          "peak_rss_kib": 91666,
+          "durable_bytes": 122880,
+          "fsync_publications": 0,
+          "operations": 452
+        },
+        "ratios": {
+          "wall": 2.479108,
+          "peak_rss": 0.041367,
+          "durable_bytes": 0.910083
+        },
+        "thresholds_passed": true
+      },
+      "receipt": ".artifacts/lkjscript-dev/data-oracle/1788062478709261589-434357/receipt.json",
+      "receipt_bytes": 32880,
+      "receipt_sha256": "92b5f92e43e6bf4fe2cfeef8a681c8d4cb08191b8d6ad4d317d2453491a6a605",
+      "receipt_digest": "verification_e278659472e2a557ce48eea2e2d781eac0b9d159b375213bc86c29cd3a3d757e",
+      "cleanup_complete": true
+    },
+    "authoritative_full": {
+      "classification": "fresh passed",
+      "command": "target/release/lkjscript-dev check full --machine --fresh",
+      "verified_head": "440dbc35ced76e9e22941075047ffdb470434920",
+      "worktree_input_digest": "verification_d3556cc5de3aa2fb840889ac19015df16aab8cb48bfbf797bfc41aa34c842eed",
+      "final_worktree_input_digest": "verification_d3556cc5de3aa2fb840889ac19015df16aab8cb48bfbf797bfc41aa34c842eed",
+      "input_stable": true,
+      "selected": 23,
+      "passed": 23,
+      "fresh": 23,
+      "reused": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 0,
+      "elapsed_nanoseconds": 121578365238,
+      "gate_classifications": {
+        "fmt": "fresh passed",
+        "clippy": "fresh passed",
+        "workspace_tests": "fresh passed",
+        "release_build": "fresh passed",
+        "release_command_lifecycle": "fresh passed",
+        "distributed_http_application": "fresh passed",
+        "stateful_http_application": "fresh passed",
+        "checker_self_test": "fresh passed",
+        "rust_only_tooling": "fresh passed",
+        "generated_public_guides": "fresh passed",
+        "product_surface_audit": "fresh passed",
+        "standard_package_test": "fresh passed",
+        "application_package_test": "fresh passed",
+        "standard_artifact_build": "fresh passed",
+        "standard_artifact_compare": "fresh passed",
+        "builtin_package_export": "fresh passed",
+        "builtin_package_compare": "fresh passed",
+        "builtin_transport_export": "fresh passed",
+        "builtin_transport_compare": "fresh passed",
+        "application_artifact_build": "fresh passed",
+        "application_artifact_compare": "fresh passed",
+        "service_acceptance": "fresh passed",
+        "diff_check": "fresh passed"
+      },
+      "receipt": ".artifacts/lkjscript-dev/check/1788063434252469559-469421-0/receipt.json",
+      "receipt_bytes": 54160,
+      "receipt_sha256": "f3d010118a76dcca04de8d2b7d76199f5aa148dc2ad83f750d47d60b40ea9e43",
+      "receipt_digest": "verification_b796a5b806a66781031099e1cf9bbdcabebaa928c51656172b737c33fe8b02c4"
+    },
+    "exact_static_target": {
+      "classification": "fresh passed",
+      "target": "x86_64-unknown-linux-musl",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "rust_toolchain": "1.98.0",
+      "musl_packages": "1.2.4-2",
+      "candidate": ".artifacts/campaign/202608300840/target-final/lkjscript",
+      "candidate_bytes": 15763680,
+      "candidate_sha256": "eb82def5e1eba1b59af6ac67551d54547c664e7909a2e824c8f3b974a015a83e",
+      "runtime_linkage": "static-musl",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0,
+      "build_receipt": ".artifacts/campaign/202608300840/target-final/build-receipt.json",
+      "build_receipt_sha256": "62a08002794c3394b050f67b0e235c7dbafd0bf207359911f4770798d9b31a4c"
+    },
+    "target_admission": {
+      "classification": "fresh passed",
+      "candidate_sha256": "eb82def5e1eba1b59af6ac67551d54547c664e7909a2e824c8f3b974a015a83e",
+      "userlands": [
+        "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+      ],
+      "oracles": [
+        "distributed_http",
+        "stateful_http",
+        "service_acceptance"
+      ],
+      "receipt": ".artifacts/campaign/202608300840/target-final/target-admission/receipt.json",
+      "receipt_bytes": 68104,
+      "receipt_sha256": "6fa26b9595909d55f99b49b2a85f312d9d52c38d5fb345b3f3e9fa97cdf4f34d",
+      "receipt_digest": "verification_ab3041ee8138d2e77f6e7217d2cb567f8ffebad45a53835a563b24ce32689593",
+      "cleanup_complete": true
+    },
+    "release_candidate": {
+      "classification": "fresh passed",
+      "publication_mode": "dry-run",
+      "tag": "v0.1.12",
+      "archive": ".artifacts/campaign/202608300840/target-final/release-output/lkjscript-x86_64-unknown-linux-musl.tar.gz",
+      "archive_bytes": 7112249,
+      "archive_sha256": "1f0a8707ebf4c030ad2a73df66694ecb6be4099befdc2943a77189513ac8b2e3",
+      "manifest_sha256": "5a0589e9072bf2785306a53859ee22732591acb38f7057f530f4835558ecb5a3",
+      "receipt": ".artifacts/campaign/202608300840/target-final/release-output/release-receipt.json",
+      "receipt_sha256": "4e76e49e2a0bdbd1131eb5eb116fa72296775445865ad57a76ab950b251a73f6",
+      "classifications": 11,
+      "all_classifications": "fresh passed",
+      "deterministic_archives_equal": true,
+      "strict_five_member_archive_verified": true,
+      "checksum_integrity": true,
+      "published": false
+    },
+    "transferred_prepublication": {
+      "classification": "fresh passed",
+      "environment": "LANG=C and PATH=/usr/bin:/bin through copied verifier handoff",
+      "verifier_sha256": "eba2107288835c462f490831ea481baf56301db372fe204fa5655a1d6c363f3f",
+      "verifier_identity_sha256": "3d24a62f98fa309e1d5b01accd4d268ea13dce816db9fe3dc3e06ac0cd21adde",
+      "extracted_candidate_sha256": "eb82def5e1eba1b59af6ac67551d54547c664e7909a2e824c8f3b974a015a83e",
+      "release_verify": ".artifacts/campaign/202608300840/target-final/prepublication-release-verify-summary.json",
+      "distributed_http": {
+        "receipt": ".artifacts/campaign/202608300840/target-final/prepublication-distributed/receipt.json",
+        "receipt_sha256": "c46c8530f9c5619f89f55e715b989a5f11c032f66d2f0e906bab80888d309dbc",
+        "receipt_digest": "verification_dae20e5b5b6c5bc9037e03900d9a47c7a882e4aa467b52bce64a43ef0d367813",
+        "status": "passed",
+        "authority_unchanged": true,
+        "cleanup_complete": true
+      },
+      "stateful_http": {
+        "receipt": ".artifacts/campaign/202608300840/target-final/prepublication-stateful/receipt.json",
+        "receipt_sha256": "8b709c2059014612739af02da2c5d1a1cdea3ce6bd4736de236d1c30e6fcda4f",
+        "receipt_digest": "verification_232642a4aa24f384ccd52ad552d622c151931b12a5f5e437eba594b6b96763f7",
+        "status": "passed",
+        "persistence_after_restart": true,
+        "backup_restore_equivalent": true,
+        "authority_unchanged": true,
+        "cleanup_complete": true
+      }
+    },
+    "dependency_and_deletion_audit": {
+      "classification": "fresh passed",
+      "product_dependency_absence": true,
+      "deleted_product_files_absent": true,
+      "maintained_descriptors_use_first_party_data": true,
+      "predecessor_adapter_rejection_test": "fresh passed",
+      "generated_guides_match": "fresh passed",
+      "product_surface_violations": 0
+    }
+  },
+  "required_gate_classifications": {
+    "postgresql_differential": "fresh passed",
+    "copied_bbs": "fresh passed",
+    "copied_lkjournal_service_worker": "fresh passed",
+    "crash_recovery": "fresh passed",
+    "backup_restore": "fresh passed",
+    "final_full": "fresh passed",
+    "exact_static_target": "fresh passed",
+    "transferred_candidate": "fresh passed",
+    "release_candidate": "fresh passed"
+  },
+  "generated_and_documentation": {
+    "generated_files": 6,
+    "generated_verification": "fresh passed",
+    "owners": [
+      "README.md",
+      "applications/lkjournal/README.md",
+      "packages/standard/README.md",
+      "docs/spec/data-capabilities.md",
+      "docs/spec/effects-capabilities.md",
+      "docs/spec/semantic-cli.md",
+      "docs/spec/semantic-storage.md",
+      "docs/spec/deployment-security.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/security.md",
+      "docs/performance.md",
+      "docs/release.md",
+      "docs/decisions/20260830-first-party-ordered-data.md",
+      "docs/generated/"
+    ]
+  },
+  "deviations_and_limitations": {
+    "superseded_full_attempts": [
+      {
+        "classification": "failed",
+        "path": ".artifacts/campaign/202608300840/target-final/full-quota-failed-1788063018842936626/",
+        "reason": "clean detached-worktree verification exhausted the root /tmp quota while publishing the receipt after gates had run; no final receipt was exposed",
+        "disposition": "retained as raw diagnostic evidence; authoritative final full reran fresh and passed"
+      },
+      {
+        "classification": "failed",
+        "path": ".artifacts/campaign/202608300840/target-final/full-external-target-failed-1788063228635421737/receipt.json",
+        "receipt_sha256": "aca9ce32b44a4a881ae03256d30ec02be9de899a569d58734daccb36e2db9326",
+        "reason": "an external Cargo target directory is incompatible with the verifier's declared in-checkout release-build output",
+        "disposition": "retained as raw diagnostic evidence; authoritative final full used the owned target path and passed 23/23 fresh"
+      }
+    ],
+    "cpu_sampling": "both engines completed each oracle sample inside the host's 10 ms CPU accounting tick, so median CPU is reported exactly as zero and is not used for a speed claim",
+    "support_boundary": "one trusted-host local root and the admitted x86_64-unknown-linux-musl executable",
+    "nonclaims": [
+      "encryption",
+      "replication",
+      "consensus",
+      "remote service",
+      "multi-tenant isolation",
+      "online compaction or garbage collection",
+      "million-key scale",
+      "lock-free operation",
+      "exactly-once delivery",
+      "cross-capability atomicity",
+      "universal Linux portability"
+    ]
+  },
+  "cleanup": {
+    "isolated_postgresql_container_removed": true,
+    "target_admission_containers_removed": true,
+    "temporary_data_roots_removed": true,
+    "temporary_clean_worktree_removed": true,
+    "external_cargo_target_cleaned": true,
+    "raw_logs_and_fixtures": "retained only under ignored .artifacts roots",
+    "ambient_or_user_data_touched": false
+  },
+  "external_actions": {
+    "read_only_fetch_and_github_reconciliation": true,
+    "local_isolated_postgresql_oracle": true,
+    "tag_created_or_changed": false,
+    "release_created_or_changed": false,
+    "workflow_dispatched": false,
+    "publication": false,
+    "deployment": false,
+    "hosted_or_user_migration": false,
+    "issue_or_pull_request_mutation": false,
+    "settings_credentials_or_secrets_mutation": false,
+    "push_at_evidence_assembly": "not attempted; final report records the authorized fast-forward result"
+  },
+  "raw_artifacts": {
+    "campaign_root": ".artifacts/campaign/202608300840/",
+    "bounded_engine_summaries": ".artifacts/campaign/202608300840/final-engine/",
+    "final_target_root": ".artifacts/campaign/202608300840/target-final/",
+    "full_receipt": ".artifacts/lkjscript-dev/check/1788063434252469559-469421-0/receipt.json",
+    "bbs_receipt": ".artifacts/lkjscript-dev/stateful-http/1788062451287440451-433719-0/receipt.json",
+    "service_receipt": ".artifacts/lkjscript-dev/service/1788062464027569349-434126-0/receipt.json",
+    "oracle_receipt": ".artifacts/lkjscript-dev/data-oracle/1788062478709261589-434357/receipt.json",
+    "target_build_receipt": ".artifacts/campaign/202608300840/target-final/build-receipt.json",
+    "target_admission_receipt": ".artifacts/campaign/202608300840/target-final/target-admission/receipt.json",
+    "release_receipt": ".artifacts/campaign/202608300840/target-final/release-output/release-receipt.json",
+    "prepublication_distributed_receipt": ".artifacts/campaign/202608300840/target-final/prepublication-distributed/receipt.json",
+    "prepublication_stateful_receipt": ".artifacts/campaign/202608300840/target-final/prepublication-stateful/receipt.json"
+  },
+  "smallest_deferred_candidates": [
+    "measure larger retained-history and key-count workloads before changing admitted scale",
+    "add compaction or garbage collection only with a separately proved backup/recovery design",
+    "authorize publication of 0.1.12 only in a separate release campaign"
+  ]
+}
