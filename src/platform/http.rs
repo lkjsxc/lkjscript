@@ -732,7 +732,7 @@ mod tests {
     fn transport_failures_publish_bounded_classification_without_messages() {
         let error = ExecutionError::new(
             ExecutionFailureClass::Infrastructure,
-            "database_connection",
+            "adapter_connection",
             "sensitive provider detail",
         );
         let response = safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR);
@@ -742,7 +742,7 @@ mod tests {
         );
         assert_eq!(
             response.headers()["x-lkjscript-failure-code"],
-            "database_connection"
+            "adapter_connection"
         );
     }
 

@@ -219,7 +219,7 @@ mod tests {
         let value = SecretValue(Arc::from(b"private-value".as_slice()));
         assert_eq!(format!("{value:?}"), "SecretValue(<redacted>)");
         assert!(validate_environment_name("DATABASE_SECRET").is_ok());
-        assert!(validate_environment_name("database-secret").is_err());
+        assert!(validate_environment_name("data-secret").is_err());
         assert!(constant_time_equal(b"same", b"same"));
         assert!(!constant_time_equal(b"same", b"other"));
         assert!(!constant_time_equal(b"same", b"same-longer"));

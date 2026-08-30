@@ -8,7 +8,7 @@ use super::capability::{
     NormalizedSharingDomain,
 };
 use super::configuration::NormalizedConfigurationAdapter;
-use super::database::NormalizedPostgresAdapter;
+use super::data::NormalizedDataAdapter;
 use super::object::NormalizedObjectStorageAdapter;
 use super::password::{NormalizedPasswordHashAdapter, NormalizedPasswordHashOperation};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
@@ -19,7 +19,7 @@ use super::security::NormalizedSecurityAdapter;
 use super::value::NormalizedValue;
 use crate::platform::compiler::ArtifactManifestDigest;
 use crate::platform::configuration::{ConfigurationOperation, ConfigurationValue};
-use crate::platform::database::{PostgresPool, PostgresPoolConfig, PostgresSecret};
+use crate::platform::data::{DataLimits, DataStore};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
@@ -67,11 +67,10 @@ pub(crate) enum NormalizedAdapterDescriptor {
         maximum_candidate_bytes: usize,
     },
     ByteStream,
-    Postgres {
-        connection_secret: String,
-        maximum_connections: usize,
-        maximum_wait_milliseconds: u64,
-        statement_timeout_milliseconds: u64,
+    Data {
+        root: String,
+        namespace: String,
+        limits: DataLimits,
     },
     ObjectMemory {
         prefix: String,
@@ -93,15 +92,10 @@ pub(crate) enum NormalizedAdapterDescriptor {
         secret_key_secret: String,
         limits: ObjectLimits,
     },
-    DurableQueueMemory {
-        limits: QueueLimits,
-    },
-    DurableQueuePostgres {
-        connection_secret: String,
+    DurableQueueData {
+        root: String,
         namespace: String,
-        maximum_connections: usize,
-        maximum_wait_milliseconds: u64,
-        statement_timeout_milliseconds: u64,
+        data_limits: DataLimits,
         limits: QueueLimits,
     },
 }
@@ -116,12 +110,11 @@ impl NormalizedAdapterDescriptor {
             Self::PasswordHash { .. } => NormalizedAdapterKind::PasswordHash,
             Self::SecretVerifier { .. } => NormalizedAdapterKind::SecretVerifier,
             Self::ByteStream => NormalizedAdapterKind::ByteStream,
-            Self::Postgres { .. } => NormalizedAdapterKind::Postgres,
+            Self::Data { .. } => NormalizedAdapterKind::Data,
             Self::ObjectMemory { .. } => NormalizedAdapterKind::ObjectMemory,
             Self::ObjectLocal { .. } => NormalizedAdapterKind::ObjectLocal,
             Self::ObjectS3 { .. } => NormalizedAdapterKind::ObjectS3,
-            Self::DurableQueueMemory { .. } => NormalizedAdapterKind::DurableQueueMemory,
-            Self::DurableQueuePostgres { .. } => NormalizedAdapterKind::DurableQueuePostgres,
+            Self::DurableQueueData { .. } => NormalizedAdapterKind::DurableQueueData,
         }
     }
 }
@@ -722,20 +715,14 @@ fn prepare_adapter(
                 selected,
             )?))
         }
-        NormalizedAdapterDescriptor::Postgres {
-            connection_secret,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+        NormalizedAdapterDescriptor::Data {
+            root,
+            namespace,
+            limits,
         } => {
-            let pool = postgres_pool(
-                secrets,
-                connection_secret,
-                *maximum_connections,
-                *maximum_wait_milliseconds,
-                *statement_timeout_milliseconds,
-            )?;
-            let adapter = NormalizedPostgresAdapter::prepare(program, requirement, pool)?;
+            let root = resolve_relative_directory(deployment_directory, root, "data root")?;
+            let store = DataStore::open(&root, namespace.clone(), limits.clone())?;
+            let adapter = NormalizedDataAdapter::prepare(program, requirement, store)?;
             finish_preflight(&adapter, adapter.preflight())?;
             Ok(Arc::new(adapter))
         }
@@ -799,37 +786,19 @@ fn prepare_adapter(
                 engine,
             )?))
         }
-        NormalizedAdapterDescriptor::DurableQueueMemory { limits } => {
-            let engine = DurableQueueEngine::in_memory(limits.clone())?;
-            let adapter = NormalizedDurableQueueAdapter::prepare(
-                program,
-                requirement,
-                NormalizedAdapterKind::DurableQueueMemory,
-                engine,
-            )?;
-            finish_preflight(&adapter, adapter.preflight())?;
-            Ok(Arc::new(adapter))
-        }
-        NormalizedAdapterDescriptor::DurableQueuePostgres {
-            connection_secret,
+        NormalizedAdapterDescriptor::DurableQueueData {
+            root,
             namespace,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+            data_limits,
             limits,
         } => {
-            let pool = postgres_pool(
-                secrets,
-                connection_secret,
-                *maximum_connections,
-                *maximum_wait_milliseconds,
-                *statement_timeout_milliseconds,
-            )?;
-            let engine = DurableQueueEngine::postgres(pool, namespace.clone(), limits.clone())?;
+            let root = resolve_relative_directory(deployment_directory, root, "queue data root")?;
+            let store = DataStore::open(&root, namespace.clone(), data_limits.clone())?;
+            let engine = DurableQueueEngine::data(store, limits.clone())?;
             let adapter = NormalizedDurableQueueAdapter::prepare(
                 program,
                 requirement,
-                NormalizedAdapterKind::DurableQueuePostgres,
+                NormalizedAdapterKind::DurableQueueData,
                 engine,
             )?;
             finish_preflight(&adapter, adapter.preflight())?;
@@ -897,13 +866,11 @@ fn require_standard_interface(
         NormalizedAdapterKind::PasswordHash => "decl_375bc0a9f5214e8a27ede17a14e79f67",
         NormalizedAdapterKind::SecretVerifier => "decl_172ae7f44000b32243d75a92e6733e50",
         NormalizedAdapterKind::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
-        NormalizedAdapterKind::Postgres => "decl_4c1cf20949507973e07ece4ec002c2d7",
+        NormalizedAdapterKind::Data => "decl_640e96fa57dee1c09557eb4bc7b53398",
         NormalizedAdapterKind::ObjectMemory
         | NormalizedAdapterKind::ObjectLocal
         | NormalizedAdapterKind::ObjectS3 => "decl_ac421d578f44958595e92fa9f5fb1d43",
-        NormalizedAdapterKind::DurableQueueMemory | NormalizedAdapterKind::DurableQueuePostgres => {
-            "decl_20a0ef729beda0abf0e743cd7e1126de"
-        }
+        NormalizedAdapterKind::DurableQueueData => "decl_20a0ef729beda0abf0e743cd7e1126de",
     };
     if interface.package.to_string() != STANDARD_PACKAGE
         || interface.declaration.to_string() != declaration
@@ -918,22 +885,6 @@ fn require_standard_interface(
         ));
     }
     Ok(())
-}
-
-fn postgres_pool(
-    secrets: &SecretCatalog,
-    secret_name: &str,
-    maximum_connections: usize,
-    maximum_wait_milliseconds: u64,
-    statement_timeout_milliseconds: u64,
-) -> Result<PostgresPool, Diagnostic> {
-    let connection = secrets.require(secret_name)?.text()?.to_owned();
-    PostgresPool::new(PostgresPoolConfig {
-        connection: PostgresSecret::new(connection)?,
-        maximum_connections,
-        maximum_wait_milliseconds,
-        statement_timeout_milliseconds,
-    })
 }
 
 fn resolve_relative_directory(
@@ -1200,17 +1151,15 @@ fn encode_adapter(
             encode_u64(bytes, resources.streams.maximum_total_bytes);
             encode_u64(bytes, resources.streams.maximum_live_streams as u64);
         }
-        NormalizedAdapterDescriptor::Postgres {
-            connection_secret,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+        NormalizedAdapterDescriptor::Data {
+            root,
+            namespace,
+            limits,
         } => {
             bytes.push(8);
-            encode_bytes(bytes, connection_secret.as_bytes());
-            encode_u64(bytes, *maximum_connections as u64);
-            encode_u64(bytes, *maximum_wait_milliseconds);
-            encode_u64(bytes, *statement_timeout_milliseconds);
+            encode_bytes(bytes, root.as_bytes());
+            encode_bytes(bytes, namespace.as_bytes());
+            encode_data_limits(bytes, limits);
         }
         NormalizedAdapterDescriptor::ObjectMemory { prefix, limits } => {
             bytes.push(9);
@@ -1253,24 +1202,16 @@ fn encode_adapter(
             bytes.push(u8::from(*path_style));
             encode_object_limits(bytes, limits);
         }
-        NormalizedAdapterDescriptor::DurableQueueMemory { limits } => {
-            bytes.push(12);
-            encode_queue_limits(bytes, limits);
-        }
-        NormalizedAdapterDescriptor::DurableQueuePostgres {
-            connection_secret,
+        NormalizedAdapterDescriptor::DurableQueueData {
+            root,
             namespace,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+            data_limits,
             limits,
         } => {
             bytes.push(13);
-            encode_bytes(bytes, connection_secret.as_bytes());
+            encode_bytes(bytes, root.as_bytes());
             encode_bytes(bytes, namespace.as_bytes());
-            encode_u64(bytes, *maximum_connections as u64);
-            encode_u64(bytes, *maximum_wait_milliseconds);
-            encode_u64(bytes, *statement_timeout_milliseconds);
+            encode_data_limits(bytes, data_limits);
             encode_queue_limits(bytes, limits);
         }
     }
@@ -1286,6 +1227,23 @@ fn encode_queue_limits(bytes: &mut Vec<u8>, limits: &QueueLimits) {
     encode_u64(bytes, limits.maximum_result_bytes as u64);
     bytes.extend_from_slice(&limits.maximum_lease_milliseconds.to_be_bytes());
     bytes.extend_from_slice(&limits.maximum_attempts.to_be_bytes());
+}
+
+fn encode_data_limits(bytes: &mut Vec<u8>, limits: &DataLimits) {
+    for value in [
+        limits.maximum_space_name_bytes,
+        limits.maximum_key_parts,
+        limits.maximum_key_bytes,
+        limits.maximum_value_bytes,
+        limits.maximum_transaction_mutations,
+        limits.maximum_transaction_bytes,
+        limits.maximum_scan_items,
+        limits.maximum_scan_bytes,
+        limits.maximum_scan_work,
+        limits.maximum_live_transactions,
+    ] {
+        encode_u64(bytes, value as u64);
+    }
 }
 
 fn encode_requirement(bytes: &mut Vec<u8>, reference: RequirementReference) {

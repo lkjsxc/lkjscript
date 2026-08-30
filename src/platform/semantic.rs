@@ -5397,12 +5397,12 @@ mod tests {
                 source(
                     "src/relational.lkj",
                     "(module relational
-                       (export Command Row Database)
-                       (record Command (statement Text) (parameters (List Text)))
-                       (record Row (values (Map Text Text)))
-                       (interface Database
+                       (export Mutation Entry Ledger)
+                       (record Mutation (name Text) (parameters (List Text)))
+                       (record Entry (values (Map Text Text)))
+                       (interface Ledger
                          (operation transaction () Unit idempotent no-visibility)
-                         (operation execute ((command Command)) Row idempotent-with-key possible-visibility)))",
+                         (operation append ((mutation Mutation)) Entry idempotent-with-key possible-visibility)))",
                 ),
                 source(
                     "src/http.lkj",
@@ -5422,7 +5422,7 @@ mod tests {
 
     fn service_descriptor(
         standard: &ValidatedPackage,
-        database_operations: &str,
+        ledger_operations: &str,
     ) -> PackageDescriptor {
         let json = format!(
             "{{\"contract_version\":1,\"package_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"name\":\"resource-service\",\"modules\":[{{\"name\":\"service\",\"path\":\"src/service.lkj\"}}],\"dependencies\":[{{\"alias\":\"std\",\"package_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"revision_digest\":\"{}\",\"artifact_digest\":\"{}\",\"artifact\":\"dependencies/standard.lkpackage\"}}],\"targets\":[{{\"name\":\"serve\",\"component\":\"service.Web\",\"port\":\"service\",\"runner\":\"http\"}}]}}",
@@ -5430,14 +5430,14 @@ mod tests {
             "c".repeat(64)
         );
         let mut descriptor = decode_package(json.as_bytes()).expect("service descriptor");
-        if database_operations != "transaction execute" {
+        if ledger_operations != "transaction append" {
             // The argument is consumed by the source helper; retain a single exact descriptor.
             descriptor.name = "resource-service".to_owned();
         }
         descriptor
     }
 
-    fn service_source(database_operations: &str) -> String {
+    fn service_source(ledger_operations: &str) -> String {
         format!(
             "(module service
                (import core std.core)
@@ -5447,17 +5447,17 @@ mod tests {
                (import http std.http)
                (export Web create)
                (task create ((request http.Request)) http.Response
-                 (requires (database db.Database) (clock clock.Clock) (random random.SecureRandom))
+                 (requires (ledger db.Ledger) (clock clock.Clock) (random random.SecureRandom))
                  (let ((now (perform clock utc-now))
                        (nonce (perform random bytes 16)))
-                   (transaction database tx
-                     (let ((row (perform tx execute
-                       (record db.Command
-                         (statement \"insert resource\")
+                   (transaction ledger tx
+                     (let ((row (perform tx append
+                       (record db.Mutation
+                         (name \"resource-create\")
                          (parameters (list Text (field request body)))))))
                        (record http.Response (status 201) (body (field request body)))))))
                (component Web
-                 (require database db.Database (operations {database_operations})
+                 (require ledger db.Ledger (operations {ledger_operations})
                    (limit maximum-rows 1000))
                  (require clock clock.Clock (operations utc-now))
                  (require random random.SecureRandom (operations bytes)
@@ -5686,7 +5686,7 @@ mod tests {
     #[test]
     fn service_component_resolves_exact_types_effects_and_operations() {
         let standard = standard_package();
-        let descriptor = service_descriptor(&standard, "transaction execute");
+        let descriptor = service_descriptor(&standard, "transaction append");
         let dependency = ExactDependency {
             alias: "std",
             package: &standard,
@@ -5696,7 +5696,7 @@ mod tests {
             descriptor,
             vec![source(
                 "src/service.lkj",
-                &service_source("transaction execute"),
+                &service_source("transaction append"),
             )],
             &[dependency],
         )
@@ -5706,8 +5706,8 @@ mod tests {
             .expect("owner identity");
         let facts = package.function_facts.get(&owner).expect("task facts");
         assert_eq!(
-            facts.capabilities["database"].operations,
-            BTreeSet::from(["execute".to_owned(), "transaction".to_owned()])
+            facts.capabilities["ledger"].operations,
+            BTreeSet::from(["append".to_owned(), "transaction".to_owned()])
         );
         assert_eq!(
             facts.capabilities["clock"].operations,
@@ -5739,11 +5739,11 @@ mod tests {
         assert_eq!(error.code, "semantic_pure_perform");
 
         let standard = standard_package();
-        let descriptor = service_descriptor(&standard, "execute");
+        let descriptor = service_descriptor(&standard, "append");
         let digest = "c".repeat(64);
         let error = validate_package_documents(
             descriptor,
-            vec![source("src/service.lkj", &service_source("execute"))],
+            vec![source("src/service.lkj", &service_source("append"))],
             &[ExactDependency {
                 alias: "std",
                 package: &standard,

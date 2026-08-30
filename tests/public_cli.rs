@@ -586,6 +586,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .collect::<Vec<_>>(),
         vec![
             "capabilities",
+            "data",
             "new",
             "status",
             "inspect",
@@ -745,15 +746,20 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "create.module",
             "create.record",
             "create.variant",
+            "create.interface",
+            "create.external",
             "create.function",
             "create.constant",
             "create.test",
             "add.field",
             "add.case",
+            "add.operation",
             "add.type-parameter",
             "add.parameter",
             "add.requirement",
+            "replace.dependency",
             "set.function-contract",
+            "set.requirement-contract",
             "delete.owner",
             "rename.owner",
             "move.declaration",
@@ -764,7 +770,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 60);
+    assert_eq!(operation_fields.len(), 83);
     assert_eq!(
         operation_fields
             .iter()
@@ -776,14 +782,18 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
                 )
             })
             .collect::<Vec<_>>(),
-        vec![("add.case", "payload")]
+        vec![
+            ("add.case", "payload"),
+            ("add.parameter", "function"),
+            ("add.parameter", "operation"),
+        ]
     );
     let field_forms = change_section
         .iter()
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 18);
+    assert_eq!(field_forms.len(), 22);
     let name_form = change_section
         .iter()
         .find(|record| {
@@ -976,21 +986,75 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
 
     let deployment_section = compact_success(&["capabilities", "--section", "deployment"]);
-    assert!(deployment_section.iter().any(|record| {
-        record.operation == "deployment.adapter"
-            && compact_field(record, "kind") == Some("postgres")
-    }));
-    for field in [
-        "connection_secret",
-        "maximum_connections",
-        "maximum_wait_milliseconds",
-        "statement_timeout_milliseconds",
-    ] {
+    for kind in ["data", "durable_queue_data"] {
         assert!(deployment_section.iter().any(|record| {
-            record.operation == "deployment.adapter-field"
-                && compact_field(record, "adapter") == Some("postgres")
-                && compact_field(record, "path")
-                    == Some(format!("adapter.postgres.{field}").as_str())
+            record.operation == "deployment.adapter" && compact_field(record, "kind") == Some(kind)
+        }));
+    }
+    for (adapter, fields) in [
+        ("data", ["kind", "root", "namespace", "limits"].as_slice()),
+        (
+            "durable_queue_data",
+            ["kind", "root", "namespace", "data_limits", "limits"].as_slice(),
+        ),
+    ] {
+        for field in fields {
+            let path = format!("adapter.{adapter}.{field}");
+            assert!(deployment_section.iter().any(|record| {
+                record.operation == "deployment.adapter-field"
+                    && compact_field(record, "adapter") == Some(adapter)
+                    && compact_field(record, "path") == Some(path.as_str())
+            }));
+        }
+    }
+    assert!(!deployment_section.iter().any(|record| {
+        compact_field(record, "kind").is_some_and(|kind| {
+            matches!(
+                kind,
+                "postgres" | "durable_queue_postgres" | "durable_queue_memory"
+            )
+        })
+    }));
+    let limits_section = compact_success(&["capabilities", "--section", "limits"]);
+    for (name, value) in [
+        ("data_namespace_bytes", "128"),
+        ("data_space_name_bytes", "128"),
+        ("data_key_parts", "16"),
+        ("data_key_bytes", "4096"),
+        ("data_value_bytes", "4194304"),
+        ("data_transaction_mutations", "4096"),
+        ("data_transaction_bytes", "16777216"),
+        ("data_scan_items", "10000"),
+        ("data_scan_bytes", "16777216"),
+        ("data_scan_work", "1000000"),
+        ("data_live_transactions", "1024"),
+        ("data_revision_bytes", "1073741824"),
+        ("data_backup_bytes", "1073741824"),
+        ("data_history_revisions", "1000000"),
+        ("data_store_objects", "1000000"),
+    ] {
+        assert!(limits_section.iter().any(|record| {
+            record.operation == "limit"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "value") == Some(value)
+        }));
+    }
+    let diagnostics_section = compact_success(&["capabilities", "--section", "diagnostics"]);
+    for (code, class) in [
+        ("data_root_absent", "source"),
+        ("data_path_symlink", "source"),
+        ("data_root_inventory", "corrupt"),
+        ("data_backup_checksum", "corrupt"),
+        ("data_restore_destination_exists", "source"),
+        ("data_output_exists", "source"),
+        ("data_verify_bytes", "resource"),
+        ("data_head_visibility_unknown", "infrastructure"),
+        ("data_head_durability_unknown", "infrastructure"),
+    ] {
+        assert!(diagnostics_section.iter().any(|record| {
+            record.operation == "diagnostic"
+                && compact_field(record, "code") == Some(code)
+                && compact_field(record, "class") == Some(class)
         }));
     }
     let direct = change_section
@@ -1199,7 +1263,7 @@ fn generated_public_guides_match_executable() {
 
 #[test]
 fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
-    let database = compact_success(&[
+    let data_store = compact_success(&[
         "package",
         "builtin",
         "query",
@@ -1207,23 +1271,24 @@ fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
         "--kind",
         "interface",
         "--name",
-        "Database",
+        "DataStore",
         "--limit",
         "1",
         "--bytes",
         "65536",
     ]);
-    let package_revision = compact_field(compact_record(&database, "package"), "package-revision")
-        .expect("built-in package revision");
+    let package_revision =
+        compact_field(compact_record(&data_store, "package"), "package-revision")
+            .expect("built-in package revision");
     assert_eq!(
-        compact_field(compact_record(&database, "query"), "package-revision"),
+        compact_field(compact_record(&data_store, "query"), "package-revision"),
         Some(package_revision)
     );
-    let owner = compact_record(&database, "owner");
+    let owner = compact_record(&data_store, "owner");
     assert_eq!(compact_field(owner, "kind"), Some("interface"));
-    assert_eq!(compact_field(owner, "name"), Some("Database"));
-    let identity = compact_field(owner, "id").expect("database interface identity");
-    let reference = compact_field(owner, "reference").expect("database interface reference");
+    assert_eq!(compact_field(owner, "name"), Some("DataStore"));
+    let identity = compact_field(owner, "id").expect("data interface identity");
+    let reference = compact_field(owner, "reference").expect("data interface reference");
     assert!(reference.ends_with(identity));
 
     let detail = compact_success(&[
@@ -1235,10 +1300,13 @@ fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
         identity,
     ]);
     for (name, idempotency, visibility) in [
-        ("execute", "idempotent-with-key", "possible"),
-        ("migration", "idempotent-with-key", "possible"),
         ("transaction", "idempotent-with-key", "possible"),
-        ("query", "idempotent", "none"),
+        ("schema-read", "idempotent", "none"),
+        ("put", "idempotent-with-key", "possible"),
+        ("get", "idempotent", "none"),
+        ("delete", "idempotent-with-key", "possible"),
+        ("schema-set", "idempotent-with-key", "possible"),
+        ("scan", "idempotent", "none"),
     ] {
         assert!(detail.iter().any(|record| {
             record.operation == "operation"
@@ -1249,7 +1317,7 @@ fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
     }
     assert!(detail.iter().any(|record| {
         record.operation == "type"
-            && compact_field(record, "path") == Some("parameter.statement")
+            && compact_field(record, "path") == Some("parameter.space")
             && compact_field(record, "form") == Some("static-text")
     }));
 
@@ -1302,7 +1370,7 @@ fn builtin_owner_discovery_is_exact_bounded_and_revision_bound() {
         "--kind",
         "interface",
         "--name",
-        "Database",
+        "DataStore",
         "--limit",
         "1",
         "--bytes",
@@ -6084,6 +6152,173 @@ fn predecessor_json_change_is_rejected_without_advancing_normalized_authority() 
     assert_eq!(
         compact_field(compact_record(&status, "revision"), "id"),
         Some(revision)
+    );
+}
+
+#[test]
+fn public_data_lifecycle_is_create_new_strict_and_semantically_disjoint() {
+    let temporary = tempfile::TempDir::new().expect("temporary data lifecycle");
+    let root = temporary.path().join("data");
+    let backup = temporary.path().join("backup.lkjd");
+    let restored = temporary.path().join("restored");
+    let application_head = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(APPLICATION)
+        .join("HEAD");
+    let semantic_before = std::fs::read(&application_head).expect("read semantic authority");
+
+    let initialized = compact_success(&["data", "initialize", "--root", path(&root)]);
+    assert_eq!(
+        compact_field(compact_record(&initialized, "result"), "outcome"),
+        Some("created")
+    );
+    let original_store = compact_field(compact_record(&initialized, "data"), "store")
+        .expect("initialized store")
+        .to_owned();
+    let unchanged = compact_success(&["data", "initialize", "--root", path(&root)]);
+    assert_eq!(
+        compact_field(compact_record(&unchanged, "result"), "outcome"),
+        Some("unchanged")
+    );
+    assert_eq!(
+        compact_field(compact_record(&unchanged, "data"), "store"),
+        Some(original_store.as_str())
+    );
+
+    let verified = compact_success(&["data", "verify", "--root", path(&root)]);
+    assert_eq!(
+        compact_field(compact_record(&verified, "data"), "records"),
+        Some("0")
+    );
+    let backed_up = compact_success(&[
+        "data",
+        "backup",
+        "--root",
+        path(&root),
+        "--output",
+        path(&backup),
+    ]);
+    assert!(
+        compact_field(compact_record(&backed_up, "backup"), "digest")
+            .expect("backup digest")
+            .starts_with("data_backup_")
+    );
+    let output_exists = compact_failure_output(command(&[
+        "data",
+        "backup",
+        "--root",
+        path(&root),
+        "--output",
+        path(&backup),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&output_exists, "diagnostic"), "code"),
+        Some("data_output_exists")
+    );
+
+    let restored_result = compact_success(&[
+        "data",
+        "restore",
+        "--backup",
+        path(&backup),
+        "--root",
+        path(&restored),
+    ]);
+    let restored_store =
+        compact_field(compact_record(&restored_result, "data"), "store").expect("restored store");
+    assert_ne!(restored_store, original_store);
+    let restored_verified = compact_success(&["data", "verify", "--root", path(&restored)]);
+    assert_eq!(
+        compact_field(compact_record(&restored_verified, "data"), "records"),
+        Some("0")
+    );
+    let destination_exists = compact_failure_output(command(&[
+        "data",
+        "restore",
+        "--backup",
+        path(&backup),
+        "--root",
+        path(&restored),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&destination_exists, "diagnostic"), "code"),
+        Some("data_restore_destination_exists")
+    );
+
+    let corrupt_backup = temporary.path().join("corrupt.lkjd");
+    let mut corrupt_bytes = std::fs::read(&backup).expect("read backup for corruption");
+    let last = corrupt_bytes.last_mut().expect("nonempty backup");
+    *last ^= 1;
+    std::fs::write(&corrupt_backup, corrupt_bytes).expect("write corrupt backup");
+    let corrupt_root = temporary.path().join("corrupt-restored");
+    let corrupt = compact_failure_output_with_status(
+        command(&[
+            "data",
+            "restore",
+            "--backup",
+            path(&corrupt_backup),
+            "--root",
+            path(&corrupt_root),
+        ]),
+        5,
+    );
+    assert_eq!(
+        compact_field(compact_record(&corrupt, "diagnostic"), "code"),
+        Some("data_backup_checksum")
+    );
+    assert!(!corrupt_root.exists());
+
+    let absent = compact_failure_output(command(&[
+        "data",
+        "verify",
+        "--root",
+        path(&temporary.path().join("absent")),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&absent, "diagnostic"), "code"),
+        Some("data_root_absent")
+    );
+    let foreign = temporary.path().join("foreign");
+    std::fs::create_dir(&foreign).expect("create foreign root");
+    let marker = foreign.join("marker");
+    std::fs::write(&marker, b"preserve").expect("write foreign marker");
+    let rejected_foreign = compact_failure_output_with_status(
+        command(&["data", "initialize", "--root", path(&foreign)]),
+        5,
+    );
+    assert_eq!(
+        compact_field(compact_record(&rejected_foreign, "diagnostic"), "code"),
+        Some("data_root_inventory")
+    );
+    assert_eq!(
+        std::fs::read(&marker).expect("preserved foreign marker"),
+        b"preserve"
+    );
+
+    #[cfg(unix)]
+    {
+        let linked = temporary.path().join("linked");
+        std::os::unix::fs::symlink(&root, &linked).expect("create data-root symlink");
+        let symlink = compact_failure_output(command(&["data", "verify", "--root", path(&linked)]));
+        assert_eq!(
+            compact_field(compact_record(&symlink, "diagnostic"), "code"),
+            Some("data_path_symlink")
+        );
+    }
+
+    for arguments in [
+        vec!["data", "unknown"],
+        vec!["data", "verify", "--root", path(&root), "--host", "db"],
+        vec!["database", "verify", "--root", path(&root)],
+    ] {
+        let rejected = compact_failure_output(command(&arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("cli_usage")
+        );
+    }
+    assert_eq!(
+        std::fs::read(application_head).expect("reread semantic authority"),
+        semantic_before
     );
 }
 

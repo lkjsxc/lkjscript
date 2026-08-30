@@ -26,9 +26,7 @@
     "maximum_live_streams": 64
   },
   "configuration": {},
-  "secrets": [
-    { "name": "database-url", "variable": "LKJOURNAL_DATABASE_URL" }
-  ],
+  "secrets": [],
   "grants": [
     {
       "requirement": "clock",
@@ -38,15 +36,24 @@
     },
     {
       "requirement": "jobs",
-      "sharing_domain": "journal-database",
+      "sharing_domain": "journal-data",
       "authority_revision": "5555555555555555555555555555555555555555555555555555555555555555",
       "adapter": {
-        "kind": "durable_queue_postgres",
-        "connection_secret": "database-url",
-        "namespace": "lkjournal",
-        "maximum_connections": 4,
-        "maximum_wait_milliseconds": 5000,
-        "statement_timeout_milliseconds": 15000,
+        "kind": "durable_queue_data",
+        "root": "state/data",
+        "namespace": "lkjournal-queue",
+        "data_limits": {
+          "maximum_space_name_bytes": 128,
+          "maximum_key_parts": 16,
+          "maximum_key_bytes": 4096,
+          "maximum_value_bytes": 4194304,
+          "maximum_transaction_mutations": 4096,
+          "maximum_transaction_bytes": 16777216,
+          "maximum_scan_items": 10000,
+          "maximum_scan_bytes": 16777216,
+          "maximum_scan_work": 1000000,
+          "maximum_live_transactions": 1024
+        },
         "limits": {
           "maximum_payload_bytes": 1048576,
           "maximum_result_bytes": 1048576,

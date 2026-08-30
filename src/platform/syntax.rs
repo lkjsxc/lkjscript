@@ -522,7 +522,7 @@ mod tests {
   (export create-resource)
   (record CreateInput (title Text) (base (Option I64)))
   (task create-resource ((request HttpRequest)) HttpResponse
-    (requires database clock)
+    (requires state clock)
     (let ((now (perform clock utc-now)))
       (call json.response 201 (record (created-at now))))))
 "#;

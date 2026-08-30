@@ -24,12 +24,11 @@ pub enum NormalizedAdapterKind {
     PasswordHash,
     SecretVerifier,
     ByteStream,
-    Postgres,
+    Data,
     ObjectMemory,
     ObjectLocal,
     ObjectS3,
-    DurableQueueMemory,
-    DurableQueuePostgres,
+    DurableQueueData,
 }
 
 impl NormalizedAdapterKind {
@@ -42,12 +41,11 @@ impl NormalizedAdapterKind {
             Self::PasswordHash => "password-hash",
             Self::SecretVerifier => "secret-verifier",
             Self::ByteStream => "byte-stream",
-            Self::Postgres => "postgres",
+            Self::Data => "data",
             Self::ObjectMemory => "object-memory",
             Self::ObjectLocal => "object-local",
             Self::ObjectS3 => "object-s3",
-            Self::DurableQueueMemory => "durable-queue-memory",
-            Self::DurableQueuePostgres => "durable-queue-postgres",
+            Self::DurableQueueData => "durable-queue-data",
         }
     }
 }

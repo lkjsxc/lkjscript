@@ -17,10 +17,14 @@ use super::control::{
     MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
     decode_compact_change, encode_logical_change_plan, normalize_change_request,
 };
+use super::data::{DataLimits, DataStore};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
 use super::execution::normalized::NormalizedCommandPolicy;
-use super::kernel::{Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
+use super::kernel::{
+    Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId,
+    PackageTransportDigest,
+};
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
 use super::owned_output::publish_create_new;
@@ -31,9 +35,136 @@ use super::publication::{
     PublicationOutcome as GraphPublicationOutcome,
 };
 use super::semantic_id::{RepositoryId, RevisionId};
+use super::storage::contract::MAXIMUM_PACK_BYTES;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+pub fn execute_data(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
+    let action = arguments
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| usage_error("data requires initialize, verify, backup, or restore"))?;
+    let options = &arguments[1..];
+    let mut output = compact_response_writer()?;
+    match action {
+        "initialize" => {
+            ensure_options(options, &["--root"], &[])?;
+            let root = required_option(options, "--root")?;
+            let receipt = DataStore::initialize(Path::new(&root))?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "data.initialize".to_owned()),
+                    (
+                        "outcome",
+                        format!("{:?}", receipt.outcome).to_ascii_lowercase(),
+                    ),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "data",
+                &[
+                    ("root", root),
+                    ("store", receipt.store),
+                    ("revision", receipt.revision),
+                ],
+            )?;
+        }
+        "verify" => {
+            ensure_options(options, &["--root"], &[])?;
+            let root = required_option(options, "--root")?;
+            let store = DataStore::open(Path::new(&root), "lifecycle", DataLimits::default())?;
+            let receipt = store.verify()?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "data.verify".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "data",
+                &[
+                    ("root", root),
+                    ("store", receipt.store),
+                    ("revision", receipt.revision),
+                    ("revisions", receipt.revisions.to_string()),
+                    ("objects", receipt.objects.to_string()),
+                    ("schemas", receipt.schemas.to_string()),
+                    ("records", receipt.records.to_string()),
+                    ("staging-leftovers", receipt.staging_leftovers.to_string()),
+                    ("bytes-read", receipt.bytes_read.to_string()),
+                ],
+            )?;
+        }
+        "backup" => {
+            ensure_options(options, &["--root", "--output"], &[])?;
+            let root = required_option(options, "--root")?;
+            let destination = required_option(options, "--output")?;
+            let store = DataStore::open(Path::new(&root), "lifecycle", DataLimits::default())?;
+            let receipt = store.backup(Path::new(&destination))?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "data.backup".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "backup",
+                &[
+                    ("root", root),
+                    ("output", destination),
+                    ("store", receipt.store),
+                    ("revision", receipt.revision),
+                    ("digest", receipt.digest),
+                    ("schemas", receipt.schemas.to_string()),
+                    ("records", receipt.records.to_string()),
+                    ("bytes", receipt.bytes.to_string()),
+                ],
+            )?;
+        }
+        "restore" => {
+            ensure_options(options, &["--backup", "--root"], &[])?;
+            let backup = required_option(options, "--backup")?;
+            let root = required_option(options, "--root")?;
+            let receipt = DataStore::restore(Path::new(&backup), Path::new(&root))?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "data.restore".to_owned()),
+                    ("outcome", "created".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "data",
+                &[
+                    ("backup", backup),
+                    ("root", root),
+                    ("store", receipt.store),
+                    ("revision", receipt.revision),
+                ],
+            )?;
+        }
+        _ => {
+            return Err(usage_error(format!(
+                "unknown data action '{action}'; expected initialize, verify, backup, or restore"
+            )));
+        }
+    }
+    Ok(output.finish())
+}
 
 pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
     let destination = arguments
@@ -367,13 +498,156 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
 
 pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.first().map(String::as_str) != Some("package") {
+        return Err(usage_error(
+            "package requires builtin, current, or dependency",
+        ));
+    }
+    match arguments.get(1).map(String::as_str) {
+        Some("current") => {
+            if arguments.get(2).map(String::as_str) != Some("export") {
+                return Err(usage_error(
+                    "package current requires the exact export action",
+                ));
+            }
+            ensure_options(&arguments[3..], &["--kind", "--output"], &[])?;
+            if required_option(&arguments[3..], "--kind")? != "transport" {
+                return Err(usage_error(
+                    "package current export --kind requires transport",
+                ));
+            }
+            let path = required_option(&arguments[3..], "--output")?;
+            let repository = open_normalized_repository(project)?;
+            let exported = repository.export_package_transport()?;
+            let [pack] = exported.packs.as_slice() else {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "package_transport_pack_count",
+                    "current public package export requires one bounded interface pack",
+                ));
+            };
+            let publication = publish_create_new(
+                Path::new(&path),
+                pack,
+                MAXIMUM_PACK_BYTES,
+                "current package transport",
+            )?;
+            let mut output = compact_response_writer()?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "package.current.export".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "package",
+                &[
+                    ("id", exported.revision.package.to_string()),
+                    (
+                        "revision",
+                        exported.revision.revision.revision_id()?.to_string(),
+                    ),
+                    ("package-revision", exported.revision_digest.to_string()),
+                    ("transport", exported.transport_digest.to_string()),
+                    ("owners", exported.interface_owner_count.to_string()),
+                    ("types", exported.interface_type_count.to_string()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "output",
+                &[
+                    ("kind", "transport".to_owned()),
+                    ("path", publication.path.display().to_string()),
+                    ("bytes", publication.bytes.to_string()),
+                    ("digest", exported.transport_digest.to_string()),
+                    ("visibility", publication.visibility.to_owned()),
+                    ("durability", publication.durability.to_owned()),
+                    ("stage-cleanup", publication.stage_cleanup.to_owned()),
+                ],
+            )?;
+            return Ok(output.finish());
+        }
+        Some("dependency") => {
+            if arguments.get(2).map(String::as_str) != Some("stage") {
+                return Err(usage_error(
+                    "package dependency requires the exact stage action",
+                ));
+            }
+            ensure_options(&arguments[3..], &["--transport", "--input-file"], &[])?;
+            let digest = required_option(&arguments[3..], "--transport")?
+                .parse::<PackageTransportDigest>()
+                .map_err(|error| direct_option_error("--transport", error))?;
+            let path = required_option(&arguments[3..], "--input-file")?;
+            let pack = read_bounded(
+                Path::new(&path),
+                MAXIMUM_PACK_BYTES,
+                "package transport pack",
+            )?;
+            let repository = open_normalized_repository(project)?;
+            let receipt = repository.stage_package_transport(digest, &[pack])?;
+            let mut output = compact_response_writer()?;
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", "package.dependency.stage".to_owned()),
+                    (
+                        "outcome",
+                        format!("{:?}", receipt.outcome).to_ascii_lowercase(),
+                    ),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "package",
+                &[
+                    ("id", receipt.package.to_string()),
+                    ("revision", receipt.semantic_revision.to_string()),
+                    ("package-revision", receipt.package_revision.to_string()),
+                    ("transport", receipt.package_transport.to_string()),
+                    (
+                        "previous-transport",
+                        receipt
+                            .previous_transport
+                            .map(|value| value.to_string())
+                            .unwrap_or_else(|| "none".to_owned()),
+                    ),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "authority",
+                &[
+                    ("current-revision", receipt.current_revision.to_string()),
+                    ("semantic-head-changed", "false".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "work",
+                &[
+                    ("objects-staged", receipt.work.objects_staged.to_string()),
+                    ("objects-reused", receipt.work.objects_reused.to_string()),
+                    ("bytes-staged", receipt.work.bytes_staged.to_string()),
+                    ("packs-sealed", receipt.work.packs_sealed.to_string()),
+                ],
+            )?;
+            return Ok(output.finish());
+        }
+        Some("builtin") => {}
+        _ => {
+            return Err(usage_error(
+                "package requires builtin, current, or dependency",
+            ));
+        }
+    }
     if project.is_some() {
         return Err(usage_error("package builtin does not accept --project"));
-    }
-    if arguments.first().map(String::as_str) != Some("package")
-        || arguments.get(1).map(String::as_str) != Some("builtin")
-    {
-        return Err(usage_error("package requires the exact builtin action"));
     }
     let action = arguments.get(2).map(String::as_str).unwrap_or("inspect");
     let standard = super::builtin_standard::BuiltinStandard::load()?;

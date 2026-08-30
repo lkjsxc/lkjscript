@@ -71,10 +71,7 @@ impl NormalizedDurableQueueAdapter {
         kind: NormalizedAdapterKind,
         engine: DurableQueueEngine,
     ) -> Result<Self, Diagnostic> {
-        if !matches!(
-            kind,
-            NormalizedAdapterKind::DurableQueueMemory | NormalizedAdapterKind::DurableQueuePostgres
-        ) {
+        if kind != NormalizedAdapterKind::DurableQueueData {
             return Err(queue_diagnostic(
                 "normalized_queue_adapter_kind",
                 "queue codec received a foreign adapter kind",

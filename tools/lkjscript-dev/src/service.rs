@@ -2,7 +2,6 @@ use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
-use crate::postgres::{self, LocalPostgresTools};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,19 +12,18 @@ use std::fs::{self, File};
 use std::io::Read;
 #[cfg(test)]
 use std::io::Write;
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 3;
-pub(crate) const POSTGRES_IMAGE: &str =
-    "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571";
+const SERVICE_CONTRACT_VERSION: u32 = 4;
+pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf";
+    "9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -38,7 +36,6 @@ const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const RUNNER_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const RUNNER_STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const RUNNER_KILL_TIMEOUT: Duration = Duration::from_secs(5);
-const POSTGRES_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const WORKER_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
@@ -46,7 +43,6 @@ static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Debug)]
 struct Options {
     binary: PathBuf,
-    postgres_root: Option<PathBuf>,
     machine: bool,
 }
 
@@ -63,8 +59,7 @@ enum ServiceStatus {
 struct ServiceReceipt {
     contract_version: u32,
     status: ServiceStatus,
-    postgres_image: String,
-    postgres_backend: String,
+    data_contract: String,
     platform: PlatformObservation,
     started_unix_nanoseconds: u128,
     completed_unix_nanoseconds: u128,
@@ -79,7 +74,7 @@ struct ServiceReceipt {
     commands: Vec<CommandEvidence>,
     runners: Vec<RunnerEvidence>,
     requests: Vec<HttpObservation>,
-    cleanup: ContainerCleanup,
+    cleanup: CleanupObservation,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<ServiceResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,8 +160,8 @@ struct HttpObservation {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ContainerCleanup {
-    exact_name: String,
+struct CleanupObservation {
+    scope: String,
     attempted: bool,
     completed: bool,
 }
@@ -174,6 +169,7 @@ struct ContainerCleanup {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ServiceResult {
+    data_contract: String,
     artifact_digest: String,
     artifact_identity: ArtifactIdentity,
     authority_before: AuthorityObservation,
@@ -184,8 +180,10 @@ struct ServiceResult {
     history_entries: u64,
     object_bytes: u64,
     worker_productive_iterations: u64,
-    database_backup: FileProof,
+    data_backup: FileProof,
+    restart_read_equal: bool,
     restored_read_equal: bool,
+    corrupt_backup_rejected: bool,
     shutdown_cleanup_failures: u64,
     initialization_transport: InitializationTransport,
     initialization_observation: InitializationObservation,
@@ -306,8 +304,6 @@ struct CommandRequest<'a> {
     timeout: Duration,
     maximum_stdout_bytes: u64,
     maximum_stderr_bytes: u64,
-    stdin: Option<(&'a Path, u64)>,
-    unavailable_on_failure: bool,
 }
 
 impl<'a> CommandRequest<'a> {
@@ -319,8 +315,6 @@ impl<'a> CommandRequest<'a> {
             timeout: COMMAND_TIMEOUT,
             maximum_stdout_bytes: MAXIMUM_COMMAND_STDOUT_BYTES,
             maximum_stderr_bytes: MAXIMUM_COMMAND_STDERR_BYTES,
-            stdin: None,
-            unavailable_on_failure: false,
         }
     }
 
@@ -331,22 +325,6 @@ impl<'a> CommandRequest<'a> {
 
     fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    fn output_limits(mut self, stdout: u64, stderr: u64) -> Self {
-        self.maximum_stdout_bytes = stdout;
-        self.maximum_stderr_bytes = stderr;
-        self
-    }
-
-    fn stdin(mut self, path: &'a Path, maximum: u64) -> Self {
-        self.stdin = Some((path, maximum));
-        self
-    }
-
-    fn unavailable_on_failure(mut self) -> Self {
-        self.unavailable_on_failure = true;
         self
     }
 }
@@ -361,21 +339,7 @@ struct ServiceContext {
     requests: Vec<HttpObservation>,
     retained_files: Vec<FileProof>,
     secret_values: Vec<Vec<u8>>,
-    container_name: String,
-    container_started: bool,
-    docker_postgres_port: Option<u16>,
-    postgres_root: Option<PathBuf>,
-    local_postgres: Option<LocalPostgresState>,
-    cleanup: ContainerCleanup,
-}
-
-struct LocalPostgresState {
-    tools: LocalPostgresTools,
-    data: PathBuf,
-    socket: PathBuf,
-    log: PathBuf,
-    port: u16,
-    start_attempted: bool,
+    cleanup: CleanupObservation,
 }
 
 struct ActiveRunner {
@@ -461,21 +425,15 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
     let cleanup_complete = receipt.cleanup.attempted && receipt.cleanup.completed;
     if receipt.contract_version != SERVICE_CONTRACT_VERSION
         || receipt.status != ServiceStatus::Passed
-        || receipt.postgres_image != POSTGRES_IMAGE
-        || receipt.postgres_backend != "docker-pinned-image"
+        || receipt.data_contract != DATA_CONTRACT
         || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
         || receipt.binary.as_ref() != Some(&candidate_proof)
         || receipt.artifact.as_ref() != Some(&artifact_proof)
-        || receipt.secret_environment_names
-            != [
-                "LKJOURNAL_BOOTSTRAP_TOKEN",
-                "LKJOURNAL_DATABASE_URL",
-                "POSTGRES_PASSWORD",
-            ]
+        || receipt.secret_environment_names != ["LKJOURNAL_BOOTSTRAP_TOKEN"]
         || receipt.raw_secret_values_retained
         || receipt.failure.is_some()
         || !cleanup_complete
-        || !receipt.cleanup.exact_name.starts_with("lkjscript-service-")
+        || !receipt.cleanup.scope.starts_with("lkjscript-service-")
         || receipt.commands.is_empty()
         || receipt.runners.is_empty()
         || receipt.requests.is_empty()
@@ -486,14 +444,17 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
                 .is_none_or(|stopped| !stopped.clean())
         })
         || !result.artifact_identity.fresh_build_equal
+        || result.data_contract != DATA_CONTRACT
         || !result.authority_unchanged
         || result.authority_before != result.authority_after
-        || result.routes_checked.saturating_add(1) != receipt.requests.len() as u64
+        || result.routes_checked != receipt.requests.len() as u64
         || result.resource_revision == 0
         || result.history_entries == 0
         || result.object_bytes == 0
         || result.worker_productive_iterations == 0
+        || !result.restart_read_equal
         || !result.restored_read_equal
+        || !result.corrupt_backup_rejected
         || result.shutdown_cleanup_failures != 0
         || result.initialization_transport.status == 0
         || result.initialization_observation.status == 0
@@ -522,13 +483,8 @@ fn execute(
     let receipt_path = run_directory.join("receipt.json");
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let container_name = unique_container_name()?;
-    let mut context = ServiceContext::new(
-        repository,
-        &run_directory,
-        container_name,
-        options.postgres_root.clone(),
-    );
+    let cleanup_scope = unique_cleanup_scope()?;
+    let mut context = ServiceContext::new(repository, &run_directory, cleanup_scope);
     let mut binary_proof = None;
     let mut artifact_proof = None;
 
@@ -549,8 +505,8 @@ fn execute(
     })();
 
     let runner_cleanup = context.cleanup_runners();
-    let container_cleanup = context.cleanup_container();
-    let final_result = match (workflow, runner_cleanup, container_cleanup) {
+    let data_cleanup = context.cleanup_data();
+    let final_result = match (workflow, runner_cleanup, data_cleanup) {
         (Ok(result), Ok(()), Ok(())) => Ok(result),
         (Err(error), _, _) => Err(error),
         (Ok(_), Err(error), _) => Err(error),
@@ -563,12 +519,7 @@ fn execute(
     let receipt = ServiceReceipt {
         contract_version: SERVICE_CONTRACT_VERSION,
         status,
-        postgres_image: POSTGRES_IMAGE.to_owned(),
-        postgres_backend: if options.postgres_root.is_some() {
-            "local-pinned-tools".to_owned()
-        } else {
-            "docker-pinned-image".to_owned()
-        },
+        data_contract: DATA_CONTRACT.to_owned(),
         platform: PlatformObservation {
             operating_system: std::env::consts::OS.to_owned(),
             architecture: std::env::consts::ARCH.to_owned(),
@@ -580,11 +531,7 @@ fn execute(
         binary: binary_proof,
         artifact: artifact_proof,
         retained_files: context.retained_files,
-        secret_environment_names: vec![
-            "LKJOURNAL_BOOTSTRAP_TOKEN".to_owned(),
-            "LKJOURNAL_DATABASE_URL".to_owned(),
-            "POSTGRES_PASSWORD".to_owned(),
-        ],
+        secret_environment_names: vec!["LKJOURNAL_BOOTSTRAP_TOKEN".to_owned()],
         raw_secret_values_retained: false,
         commands: context.commands,
         runners: context.runner_evidence,
@@ -598,12 +545,7 @@ fn execute(
 }
 
 impl ServiceContext {
-    fn new(
-        repository: &Path,
-        run_directory: &Path,
-        container_name: String,
-        postgres_root: Option<PathBuf>,
-    ) -> Self {
+    fn new(repository: &Path, run_directory: &Path, cleanup_scope: String) -> Self {
         Self {
             repository: repository.to_path_buf(),
             run_directory: run_directory.to_path_buf(),
@@ -614,16 +556,11 @@ impl ServiceContext {
             requests: Vec::new(),
             retained_files: Vec::new(),
             secret_values: Vec::new(),
-            cleanup: ContainerCleanup {
-                exact_name: container_name.clone(),
+            cleanup: CleanupObservation {
+                scope: cleanup_scope,
                 attempted: false,
                 completed: false,
             },
-            container_name,
-            container_started: false,
-            docker_postgres_port: None,
-            postgres_root,
-            local_postgres: None,
         }
     }
 
@@ -650,12 +587,7 @@ impl ServiceContext {
             stderr_path: stderr_path.clone(),
             unavailable_exit_code: None,
         };
-        let mut observation = match request.stdin {
-            Some((path, maximum)) => {
-                process::run_with_stdin_file(&specification, &self.repository, path, maximum)
-            }
-            None => process::run(&specification, &self.repository),
-        };
+        let mut observation = process::run(&specification, &self.repository);
         redact_process_logs(
             &self.repository,
             &stdout_path,
@@ -677,7 +609,6 @@ impl ServiceContext {
     }
 
     fn invoke(&mut self, request: CommandRequest<'_>) -> Result<Vec<u8>, ServiceFailure> {
-        let unavailable_on_failure = request.unavailable_on_failure;
         let name = request.name.to_owned();
         let output = self.observe_command(request)?;
         if output.observation.status == ProcessStatus::Passed {
@@ -688,7 +619,7 @@ impl ServiceContext {
             .reason
             .as_deref()
             .unwrap_or("child_failed");
-        if output.observation.status == ProcessStatus::Unavailable || unavailable_on_failure {
+        if output.observation.status == ProcessStatus::Unavailable {
             return Err(ServiceFailure::unavailable(
                 "required_command_unavailable",
                 format!("{name} is unavailable ({reason})"),
@@ -850,136 +781,10 @@ impl ServiceContext {
         first_error.map_or(Ok(()), Err)
     }
 
-    fn cleanup_container(&mut self) -> Result<(), ServiceFailure> {
-        if let Some(local) = self.local_postgres.take() {
-            self.cleanup.attempted = true;
-            let stop_result = if local.start_attempted {
-                self.observe_command(
-                    CommandRequest::standard(
-                        "postgres-local-stop",
-                        local.tools.stop_command(&local.data),
-                    )
-                    .environment(local.tools.environment())
-                    .timeout(Duration::from_secs(15)),
-                )
-                .and_then(|output| {
-                    if output.observation.status == ProcessStatus::Passed {
-                        Ok(output)
-                    } else {
-                        Err(ServiceFailure::failed(
-                            "postgres_cleanup_failed",
-                            "owned local PostgreSQL process did not stop cleanly",
-                        ))
-                    }
-                })
-                .map(|_| ())
-            } else {
-                Ok(())
-            };
-            let remove_file = |path: &Path| match fs::remove_file(path) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(ServiceFailure::infrastructure(
-                    "postgres_cleanup_file",
-                    error,
-                )),
-            };
-            let remove_directory = |path: &Path| match fs::remove_dir_all(path) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(ServiceFailure::infrastructure(
-                    "postgres_cleanup_directory",
-                    error,
-                )),
-            };
-            let log_result = remove_file(&local.log);
-            let data_result = remove_directory(&local.data);
-            let socket_result = remove_directory(&local.socket);
-            stop_result?;
-            log_result?;
-            data_result?;
-            socket_result?;
-            self.cleanup.completed = true;
-            return Ok(());
-        }
-        if !self.container_started {
-            self.cleanup.completed = true;
-            return Ok(());
-        }
+    fn cleanup_data(&mut self) -> Result<(), ServiceFailure> {
         self.cleanup.attempted = true;
-        let name = self.container_name.clone();
-        let output = self.observe_command(
-            CommandRequest::standard("postgres-stop", container_stop_command(&name))
-                .timeout(Duration::from_secs(15)),
-        )?;
-        if output.observation.status != ProcessStatus::Passed {
-            return Err(ServiceFailure::failed(
-                "postgres_cleanup_failed",
-                "owned PostgreSQL container did not stop cleanly",
-            ));
-        }
         self.cleanup.completed = true;
-        self.container_started = false;
-        self.docker_postgres_port = None;
         Ok(())
-    }
-
-    fn postgres_command(
-        &self,
-        tool: &str,
-        arguments: &[String],
-    ) -> Result<Vec<String>, ServiceFailure> {
-        if let Some(local) = &self.local_postgres {
-            return Ok(local.tools.client_command(tool, local.port, arguments));
-        }
-        let mut command = vec![
-            "docker".to_owned(),
-            "exec".to_owned(),
-            self.container_name.clone(),
-            tool.to_owned(),
-        ];
-        let port = self.docker_postgres_port.ok_or_else(|| {
-            ServiceFailure::infrastructure(
-                "postgres_port_unbound",
-                "Docker PostgreSQL port was not bound",
-            )
-        })?;
-        command.extend(["-p".to_owned(), port.to_string()]);
-        command.extend(arguments.iter().cloned());
-        Ok(command)
-    }
-
-    fn postgres_environment(&self) -> BTreeMap<String, String> {
-        self.local_postgres
-            .as_ref()
-            .map(|local| local.tools.environment())
-            .unwrap_or_else(process::environment)
-    }
-
-    fn postgres_stdin_command(
-        &self,
-        tool: &str,
-        arguments: &[String],
-    ) -> Result<Vec<String>, ServiceFailure> {
-        if self.local_postgres.is_some() {
-            return self.postgres_command(tool, arguments);
-        }
-        let mut command = vec![
-            "docker".to_owned(),
-            "exec".to_owned(),
-            "-i".to_owned(),
-            self.container_name.clone(),
-            tool.to_owned(),
-        ];
-        let port = self.docker_postgres_port.ok_or_else(|| {
-            ServiceFailure::infrastructure(
-                "postgres_port_unbound",
-                "Docker PostgreSQL port was not bound",
-            )
-        })?;
-        command.extend(["-p".to_owned(), port.to_string()]);
-        command.extend(arguments.iter().cloned());
-        Ok(command)
     }
 
     fn request(
@@ -1011,16 +816,6 @@ impl ServiceContext {
         self.retained_files.push(proof.clone());
         Ok(proof)
     }
-}
-
-fn container_stop_command(name: &str) -> Vec<String> {
-    vec![
-        "docker".to_owned(),
-        "stop".to_owned(),
-        "--time".to_owned(),
-        "5".to_owned(),
-        name.to_owned(),
-    ]
 }
 
 impl ActiveRunner {
@@ -1131,23 +926,24 @@ fn run_acceptance(
     fs::create_dir_all(context.run_directory.join("state/objects"))
         .map_err(|error| ServiceFailure::infrastructure("object_host_directory", error))?;
 
-    let database_password = random_hex(16)?;
     let bootstrap_token = random_hex(16)?;
     let application_password = random_hex(16)?;
     context.secret_values.extend([
-        database_password.as_bytes().to_vec(),
         bootstrap_token.as_bytes().to_vec(),
         application_password.as_bytes().to_vec(),
     ]);
-    let (postgres_port, database_url) = start_postgres(context, &database_password)?;
-    context.secret_values.push(database_url.as_bytes().to_vec());
 
     let service_port = free_port()?;
     let service_path = context.run_directory.join("service.json");
-    write_descriptor(&service_source, &service_path, Some(service_port))?;
+    write_descriptor(
+        &service_source,
+        &service_path,
+        Some(service_port),
+        "state/data",
+    )?;
     context.retain(&service_path)?;
     let worker_path = context.run_directory.join("worker.json");
-    write_descriptor(&worker_source, &worker_path, None)?;
+    write_descriptor(&worker_source, &worker_path, None, "state/data")?;
     context.retain(&worker_path)?;
 
     let mut runner_environment = process::environment();
@@ -1155,7 +951,39 @@ fn run_acceptance(
         "LKJOURNAL_BOOTSTRAP_TOKEN".to_owned(),
         bootstrap_token.clone(),
     );
-    runner_environment.insert("LKJOURNAL_DATABASE_URL".to_owned(), database_url.clone());
+    let absent = context.observe_command(
+        CommandRequest::standard(
+            "service-absent-data-root",
+            vec![
+                binary.to_string_lossy().into_owned(),
+                "serve".to_owned(),
+                "--deployment".to_owned(),
+                "service.json".to_owned(),
+            ],
+        )
+        .environment(runner_environment.clone())
+        .timeout(Duration::from_secs(15)),
+    )?;
+    require(
+        absent.observation.status == ProcessStatus::Failed
+            && !absent
+                .stdout
+                .windows(b"\"event\":\"ready\"".len())
+                .any(|window| window == b"\"event\":\"ready\""),
+        "absent_data_readiness",
+        "service admitted readiness without an initialized data root",
+    )?;
+    let data_root = context.run_directory.join("state/data");
+    context.invoke(CommandRequest::standard(
+        "data-initialize",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "initialize".to_owned(),
+            "--root".to_owned(),
+            data_root.to_string_lossy().into_owned(),
+        ],
+    ))?;
     let service_index = context.start_runner(
         "service-first",
         vec![
@@ -1176,7 +1004,7 @@ fn run_acceptance(
         "service readiness disagrees with the exact fresh artifact-10 build",
     )?;
     require(
-        ready.secret_names == ["bootstrap-token", "database-url"],
+        ready.secret_names == ["bootstrap-token"],
         "service_secret_names",
         "service readiness secret names changed",
     )?;
@@ -1468,24 +1296,7 @@ fn run_acceptance(
         "worker_artifact_identity",
         "worker readiness disagrees with the exact fresh artifact-10 build",
     )?;
-    let worker_started = Instant::now();
-    let mut job_state = String::new();
-    while worker_started.elapsed() < WORKER_READY_TIMEOUT {
-        job_state = postgres_scalar(
-            context,
-            "lkjournal",
-            &format!("SELECT state FROM lkjscript_durable_jobs WHERE job_id = '{resource_id}';"),
-        )?;
-        if job_state == "completed" {
-            break;
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-    require(
-        job_state == "completed",
-        "worker_completion",
-        "worker did not complete the durable job",
-    )?;
+    thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(1)));
     let worker_stopped = context.stop_runner(worker_index)?;
     let productive_iterations = worker_stopped.productive_iterations.unwrap_or(0);
     require(
@@ -1495,75 +1306,131 @@ fn run_acceptance(
     )?;
     context.stop_runner(service_index)?;
 
-    let backup_output = invoke_postgres(
-        context,
-        "postgres-backup",
-        "pg_dump",
-        &[
-            "-U".to_owned(),
-            "postgres".to_owned(),
-            "-d".to_owned(),
-            "lkjournal".to_owned(),
-            "--format=custom".to_owned(),
+    let restart_index = context.start_runner(
+        "service-restart",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "serve".to_owned(),
+            "--deployment".to_owned(),
+            "service.json".to_owned(),
         ],
-        MAXIMUM_BACKUP_BYTES,
-        MAXIMUM_COMMAND_STDERR_BYTES,
+        &context.run_directory.clone(),
+        runner_environment.clone(),
     )?;
+    let restart_ready = context.runner_ready(restart_index)?;
     require(
-        !backup_output.is_empty() && backup_output.len() as u64 <= MAXIMUM_BACKUP_BYTES,
-        "database_backup_size",
-        "database backup size is invalid",
+        restart_ready.artifact_digest == artifact_identity.artifact_bundle,
+        "restart_artifact_identity",
+        "restarted service changed the exact artifact bundle identity",
     )?;
-    let backup_path = context.run_directory.join("lkjournal.pgcustom");
-    evidence::publish(&backup_path, &backup_output)
-        .map_err(|error| ServiceFailure::infrastructure("database_backup_publish", error))?;
+    let restarted = context.request(
+        "restart-read",
+        service_port,
+        "GET",
+        &resource_path,
+        b"",
+        &[("Authorization", &authorization)],
+    )?;
+    timings.insert("restart_read".to_owned(), restarted.elapsed_nanoseconds);
+    require(
+        restarted.status == 200 && u64_at(&parse_json_body(&restarted.body)?, "revision")? == 1,
+        "restart_read",
+        "restarted service disagrees with accepted data",
+    )?;
+    context.stop_runner(restart_index)?;
+
+    context.invoke(CommandRequest::standard(
+        "data-verify",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "verify".to_owned(),
+            "--root".to_owned(),
+            data_root.to_string_lossy().into_owned(),
+        ],
+    ))?;
+    let backup_path = context.run_directory.join("lkjournal-data.lkjb");
+    context.invoke(CommandRequest::standard(
+        "data-backup",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "backup".to_owned(),
+            "--root".to_owned(),
+            data_root.to_string_lossy().into_owned(),
+            "--output".to_owned(),
+            backup_path.to_string_lossy().into_owned(),
+        ],
+    ))?;
+    let backup_bytes = process::read_bounded(&backup_path, MAXIMUM_BACKUP_BYTES)
+        .map_err(|error| ServiceFailure::infrastructure("data_backup_read", error))?;
+    require(
+        !backup_bytes.is_empty(),
+        "data_backup_size",
+        "logical data backup is empty",
+    )?;
     let backup_proof = context.retain(&backup_path)?;
 
-    invoke_postgres(
-        context,
-        "postgres-create-restore-database",
-        "createdb",
-        &[
-            "-U".to_owned(),
-            "postgres".to_owned(),
-            "lkjournal_restore".to_owned(),
+    let mut corrupt_bytes = backup_bytes;
+    let corrupt_byte = corrupt_bytes.last_mut().ok_or_else(|| {
+        ServiceFailure::failed("data_backup_empty", "logical data backup is empty")
+    })?;
+    *corrupt_byte ^= 0x01;
+    let corrupt_backup = context.run_directory.join("lkjournal-data-corrupt.lkjb");
+    evidence::publish(&corrupt_backup, &corrupt_bytes)
+        .map_err(|error| ServiceFailure::infrastructure("corrupt_backup_publish", error))?;
+    let rejected_root = context.run_directory.join("state/rejected-data");
+    let rejected = context.observe_command(CommandRequest::standard(
+        "data-restore-corrupt",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "restore".to_owned(),
+            "--backup".to_owned(),
+            corrupt_backup.to_string_lossy().into_owned(),
+            "--root".to_owned(),
+            rejected_root.to_string_lossy().into_owned(),
         ],
-        64 * 1024,
-        MAXIMUM_COMMAND_STDERR_BYTES,
+    ))?;
+    require(
+        rejected.observation.status == ProcessStatus::Failed && !rejected_root.exists(),
+        "corrupt_backup_rejection",
+        "corrupt logical backup made a destination visible",
     )?;
-    let restore_command = context.postgres_stdin_command(
-        "pg_restore",
-        &[
-            "-U".to_owned(),
-            "postgres".to_owned(),
-            "-d".to_owned(),
-            "lkjournal_restore".to_owned(),
-            "--exit-on-error".to_owned(),
+
+    let restored_root = context.run_directory.join("state/restored-data");
+    context.invoke(CommandRequest::standard(
+        "data-restore",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "restore".to_owned(),
+            "--backup".to_owned(),
+            backup_path.to_string_lossy().into_owned(),
+            "--root".to_owned(),
+            restored_root.to_string_lossy().into_owned(),
         ],
-    )?;
-    let restore_environment = context.postgres_environment();
-    context.invoke(
-        CommandRequest::standard("postgres-restore", restore_command)
-            .environment(restore_environment)
-            .stdin(&backup_path, MAXIMUM_BACKUP_BYTES),
-    )?;
+    ))?;
+    context.invoke(CommandRequest::standard(
+        "data-verify-restored",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "data".to_owned(),
+            "verify".to_owned(),
+            "--root".to_owned(),
+            restored_root.to_string_lossy().into_owned(),
+        ],
+    ))?;
 
     let restored_port = free_port()?;
     let restored_descriptor = context.run_directory.join("service-restored.json");
-    write_descriptor(&service_source, &restored_descriptor, Some(restored_port))?;
+    write_descriptor(
+        &service_source,
+        &restored_descriptor,
+        Some(restored_port),
+        "state/restored-data",
+    )?;
     context.retain(&restored_descriptor)?;
-    let restored_database_url = if context.local_postgres.is_some() {
-        format!("postgresql://postgres@127.0.0.1:{postgres_port}/lkjournal_restore")
-    } else {
-        format!(
-            "postgresql://postgres:{database_password}@127.0.0.1:{postgres_port}/lkjournal_restore"
-        )
-    };
-    context
-        .secret_values
-        .push(restored_database_url.as_bytes().to_vec());
-    let mut restored_environment = runner_environment;
-    restored_environment.insert("LKJOURNAL_DATABASE_URL".to_owned(), restored_database_url);
     let restored_index = context.start_runner(
         "service-restored",
         vec![
@@ -1573,7 +1440,7 @@ fn run_acceptance(
             "service-restored.json".to_owned(),
         ],
         &context.run_directory.clone(),
-        restored_environment,
+        runner_environment,
     )?;
     let restored_ready = context.runner_ready(restored_index)?;
     require(
@@ -1605,232 +1472,26 @@ fn run_acceptance(
     )?;
 
     Ok(ServiceResult {
+        data_contract: DATA_CONTRACT.to_owned(),
         artifact_digest: ready.artifact_digest,
         artifact_identity,
         authority_before,
         authority_after,
         authority_unchanged: true,
-        routes_checked: 13,
+        routes_checked: context.requests.len() as u64,
         resource_revision: 1,
         history_entries: 2,
         object_bytes: object_payload.len() as u64,
         worker_productive_iterations: productive_iterations,
-        database_backup: backup_proof,
+        data_backup: backup_proof,
+        restart_read_equal: true,
         restored_read_equal: true,
+        corrupt_backup_rejected: true,
         shutdown_cleanup_failures: 0,
         initialization_transport,
         initialization_observation,
         request_elapsed_nanoseconds: timings,
     })
-}
-
-fn start_postgres(
-    context: &mut ServiceContext,
-    database_password: &str,
-) -> Result<(u16, String), ServiceFailure> {
-    if let Some(requested_root) = context.postgres_root.clone() {
-        let tools = LocalPostgresTools::resolve(&requested_root).map_err(|error| {
-            ServiceFailure::unavailable("local_postgres_layout", error.to_string())
-        })?;
-        let version = context.invoke(
-            CommandRequest::standard("postgres-local-version", tools.version_command())
-                .environment(tools.environment())
-                .output_limits(64 * 1024, 64 * 1024)
-                .unavailable_on_failure(),
-        )?;
-        tools.validate_version(&version).map_err(|error| {
-            ServiceFailure::unavailable("local_postgres_version", error.to_string())
-        })?;
-        let data = context.run_directory.join("postgres-data");
-        let port = free_port()?;
-        let socket = std::env::temp_dir().join(format!(
-            "lkjscript-service-pg-{}-{port}",
-            std::process::id()
-        ));
-        let log = context.run_directory.join("postgres.log");
-        fs::create_dir(&socket)
-            .map_err(|error| ServiceFailure::infrastructure("postgres_socket", error))?;
-        context.invoke(
-            CommandRequest::standard("postgres-local-init", tools.initdb_command(&data))
-                .environment(tools.environment())
-                .timeout(Duration::from_secs(60)),
-        )?;
-        context.cleanup.exact_name = format!("local-postgres-{port}");
-        context.cleanup.attempted = true;
-        context.local_postgres = Some(LocalPostgresState {
-            tools: tools.clone(),
-            data: data.clone(),
-            socket: socket.clone(),
-            log: log.clone(),
-            port,
-            start_attempted: true,
-        });
-        context.invoke(
-            CommandRequest::standard(
-                "postgres-local-start",
-                tools.start_command(&data, &log, &socket, port, 32),
-            )
-            .environment(tools.environment())
-            .timeout(Duration::from_secs(60)),
-        )?;
-        wait_for_postgres(context, port)?;
-        invoke_postgres(
-            context,
-            "postgres-create-application-database",
-            "createdb",
-            &[
-                "-U".to_owned(),
-                "postgres".to_owned(),
-                "lkjournal".to_owned(),
-            ],
-            64 * 1024,
-            64 * 1024,
-        )?;
-        return Ok((
-            port,
-            format!("postgresql://postgres@127.0.0.1:{port}/lkjournal"),
-        ));
-    }
-
-    context.invoke(
-        CommandRequest::standard(
-            "docker-image-inspect",
-            vec![
-                "docker".to_owned(),
-                "image".to_owned(),
-                "inspect".to_owned(),
-                POSTGRES_IMAGE.to_owned(),
-            ],
-        )
-        .unavailable_on_failure(),
-    )?;
-    let mut docker_environment = process::environment();
-    docker_environment.insert("POSTGRES_PASSWORD".to_owned(), database_password.to_owned());
-    let port = free_port()?;
-    context.docker_postgres_port = Some(port);
-    context.cleanup.attempted = true;
-    // Once creation is attempted, cleanup targets the exact generated name even if the client
-    // fails after the daemon accepts the container.
-    context.container_started = true;
-    context.invoke(
-        CommandRequest::standard(
-            "postgres-start",
-            vec![
-                "docker".to_owned(),
-                "run".to_owned(),
-                "--rm".to_owned(),
-                "--network".to_owned(),
-                "host".to_owned(),
-                "--name".to_owned(),
-                context.container_name.clone(),
-                "-e".to_owned(),
-                "POSTGRES_PASSWORD".to_owned(),
-                "-e".to_owned(),
-                "POSTGRES_DB=lkjournal".to_owned(),
-                "-d".to_owned(),
-                POSTGRES_IMAGE.to_owned(),
-                "-p".to_owned(),
-                port.to_string(),
-                "-h".to_owned(),
-                "127.0.0.1".to_owned(),
-            ],
-        )
-        .environment(docker_environment),
-    )?;
-    wait_for_postgres(context, port)?;
-    Ok((
-        port,
-        format!("postgresql://postgres:{database_password}@127.0.0.1:{port}/lkjournal"),
-    ))
-}
-
-fn invoke_postgres(
-    context: &mut ServiceContext,
-    name: &str,
-    tool: &str,
-    arguments: &[String],
-    maximum_stdout_bytes: u64,
-    maximum_stderr_bytes: u64,
-) -> Result<Vec<u8>, ServiceFailure> {
-    let command = context.postgres_command(tool, arguments)?;
-    let environment = context.postgres_environment();
-    context.invoke(
-        CommandRequest::standard(name, command)
-            .environment(environment)
-            .output_limits(maximum_stdout_bytes, maximum_stderr_bytes),
-    )
-}
-
-fn wait_for_postgres(context: &mut ServiceContext, host_port: u16) -> Result<(), ServiceFailure> {
-    let started = Instant::now();
-    let mut attempt = 0_u64;
-    while started.elapsed() < POSTGRES_READY_TIMEOUT {
-        let name = format!("postgres-ready-{attempt:03}");
-        let command = context.postgres_command(
-            "pg_isready",
-            &[
-                "-U".to_owned(),
-                "postgres".to_owned(),
-                "-d".to_owned(),
-                if context.local_postgres.is_some() {
-                    "postgres".to_owned()
-                } else {
-                    "lkjournal".to_owned()
-                },
-            ],
-        )?;
-        let environment = context.postgres_environment();
-        let output = context.observe_command(
-            CommandRequest::standard(&name, command)
-                .environment(environment)
-                .timeout(Duration::from_secs(5))
-                .output_limits(64 * 1024, 64 * 1024),
-        )?;
-        if output.observation.status == ProcessStatus::Passed
-            && TcpStream::connect_timeout(
-                &format!("127.0.0.1:{host_port}")
-                    .parse()
-                    .map_err(|error| ServiceFailure::infrastructure("postgres_address", error))?,
-                Duration::from_millis(250),
-            )
-            .is_ok()
-        {
-            return Ok(());
-        }
-        attempt = attempt.saturating_add(1);
-        thread::sleep(Duration::from_millis(250));
-    }
-    Err(ServiceFailure::failed(
-        "postgres_readiness_timeout",
-        "PostgreSQL did not become ready",
-    ))
-}
-
-fn postgres_scalar(
-    context: &mut ServiceContext,
-    database: &str,
-    statement: &str,
-) -> Result<String, ServiceFailure> {
-    let output = invoke_postgres(
-        context,
-        "postgres-scalar",
-        "psql",
-        &[
-            "-U".to_owned(),
-            "postgres".to_owned(),
-            "-d".to_owned(),
-            database.to_owned(),
-            "-Atc".to_owned(),
-            statement.to_owned(),
-        ],
-        64 * 1024,
-        64 * 1024,
-    )?;
-    String::from_utf8(output)
-        .map(|value| value.trim().to_owned())
-        .map_err(|_| {
-            ServiceFailure::failed("postgres_output_utf8", "PostgreSQL output was not UTF-8")
-        })
 }
 
 fn http_request(
@@ -2046,6 +1707,7 @@ fn write_descriptor(
     source: &Path,
     destination: &Path,
     port: Option<u16>,
+    data_root: &str,
 ) -> Result<(), ServiceFailure> {
     let bytes = process::read_bounded(source, MAXIMUM_DESCRIPTOR_BYTES)
         .map_err(|error| ServiceFailure::infrastructure("descriptor_read", error))?;
@@ -2069,6 +1731,33 @@ fn write_descriptor(
             "listen".to_owned(),
             Value::String(format!("127.0.0.1:{port}")),
         );
+    }
+    let grants = object
+        .get_mut("grants")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| {
+            ServiceFailure::failed(
+                "descriptor_grants",
+                "maintained deployment descriptor omitted grants",
+            )
+        })?;
+    for grant in grants {
+        let Some(adapter) = grant
+            .as_object_mut()
+            .and_then(|grant| grant.get_mut("adapter"))
+            .and_then(Value::as_object_mut)
+        else {
+            return Err(ServiceFailure::failed(
+                "descriptor_grant_shape",
+                "maintained deployment grant is malformed",
+            ));
+        };
+        if matches!(
+            adapter.get("kind").and_then(Value::as_str),
+            Some("data" | "durable_queue_data")
+        ) {
+            adapter.insert("root".to_owned(), Value::String(data_root.to_owned()));
+        }
     }
     let encoded = evidence::encode_json(&descriptor)
         .map_err(|error| ServiceFailure::infrastructure("descriptor_encode", error))?;
@@ -2353,7 +2042,6 @@ fn safe_file_component(value: &str) -> Result<String, ServiceFailure> {
 
 fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
     let mut binary = PathBuf::from("target/release/lkjscript");
-    let mut postgres_root = None;
     let mut machine = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "service option")? {
@@ -2363,13 +2051,6 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
                     .ok_or_else(|| DevError::usage("--binary requires a path"))?;
                 binary = PathBuf::from(value);
             }
-            "--postgres-root" => {
-                let value = crate::next_utf8(&mut arguments, "--postgres-root")?
-                    .ok_or_else(|| DevError::usage("--postgres-root requires a path"))?;
-                if postgres_root.replace(PathBuf::from(value)).is_some() {
-                    return Err(DevError::usage("duplicate --postgres-root option"));
-                }
-            }
             "--machine" if !machine => machine = true,
             value => {
                 return Err(DevError::usage(format!(
@@ -2378,11 +2059,7 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
             }
         }
     }
-    Ok(Options {
-        binary,
-        postgres_root: postgres_root.or_else(postgres::configured_root),
-        machine,
-    })
+    Ok(Options { binary, machine })
 }
 
 fn resolve_input_file(
@@ -2478,7 +2155,7 @@ fn new_run_directory(repository: &Path) -> Result<PathBuf, DevError> {
     Ok(path)
 }
 
-fn unique_container_name() -> Result<String, DevError> {
+fn unique_cleanup_scope() -> Result<String, DevError> {
     let now = unix_nanoseconds()?;
     let ordinal = RUN_ORDINAL.fetch_add(1, Ordering::Relaxed);
     Ok(format!(
@@ -2561,16 +2238,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn postgres_acceptance_image_is_immutable() {
-        let digest = POSTGRES_IMAGE
-            .strip_prefix("postgres@sha256:")
-            .expect("PostgreSQL image uses a digest reference");
-        assert_eq!(digest.len(), 64);
-        assert!(
-            digest
-                .bytes()
-                .all(|byte| { byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte) })
-        );
+    fn data_contract_is_exact_and_versioned() {
+        assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
+        assert_eq!(SERVICE_CONTRACT_VERSION, 4);
     }
 
     #[test]
@@ -2578,7 +2248,6 @@ mod tests {
         let repository = tempfile::tempdir().expect("temporary service repository");
         let options = Options {
             binary: repository.path().join("absent-lkjscript"),
-            postgres_root: None,
             machine: true,
         };
         let (receipt, published) =
@@ -2607,11 +2276,11 @@ mod tests {
     #[test]
     fn runner_events_are_typed_and_require_clean_shutdown() {
         let ready = parse_ready_event(
-            br#"{"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact_bundle_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token","database-url"]}}"#,
+            br#"{"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact_bundle_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token"]}}"#,
         )
         .expect("parse ready event");
         assert_eq!(ready.runner, "http");
-        assert_eq!(ready.secret_names.len(), 2);
+        assert_eq!(ready.secret_names, ["bootstrap-token"]);
         let stopped = parse_stopped_event(
             br#"{"ok":true,"event":"ready"}
 {"ok":true,"event":"stopped","receipt":{"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
@@ -2640,25 +2309,14 @@ mod tests {
 
     #[test]
     fn secret_values_are_removed_from_commands_and_logs() {
-        let secret = b"database-password".to_vec();
+        let secret = b"bootstrap-secret".to_vec();
         let bytes = redact_bytes(
-            b"before database-password after",
+            b"before bootstrap-secret after",
             std::slice::from_ref(&secret),
         );
         assert_eq!(bytes, b"before <redacted> after");
-        let command = redact_command(
-            &["--url=postgresql://database-password@host".to_owned()],
-            &[secret],
-        );
-        assert_eq!(command, ["--url=postgresql://<redacted>@host"]);
-    }
-
-    #[test]
-    fn container_cleanup_targets_only_the_exact_owned_name() {
-        assert_eq!(
-            container_stop_command("lkjscript-service-123"),
-            ["docker", "stop", "--time", "5", "lkjscript-service-123"]
-        );
+        let command = redact_command(&["--token=bootstrap-secret".to_owned()], &[secret]);
+        assert_eq!(command, ["--token=<redacted>"]);
     }
 
     #[test]

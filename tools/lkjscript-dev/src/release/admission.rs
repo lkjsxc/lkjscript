@@ -221,7 +221,7 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         ),
         fresh(
             "stateful_http",
-            "transferred PostgreSQL-backed BBS oracle passed",
+            "transferred first-party-data BBS oracle passed",
         ),
         fresh(
             "service_acceptance",
@@ -933,7 +933,7 @@ fn run_oracles(
             runners: 3,
             requests: stateful.requests,
             cleanup_complete: stateful.cleanup_complete,
-            prerequisite: stateful.postgres_identity,
+            prerequisite: stateful.data_contract,
         },
         OracleObservation {
             name: "service_acceptance".to_owned(),
@@ -946,7 +946,7 @@ fn run_oracles(
             runners: service.runners,
             requests: service.requests,
             cleanup_complete: service.cleanup_complete,
-            prerequisite: service::POSTGRES_IMAGE.to_owned(),
+            prerequisite: service::DATA_CONTRACT.to_owned(),
         },
     ])
 }

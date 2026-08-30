@@ -4,9 +4,7 @@ use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, VerificationDigest};
 use crate::http_probe;
-use crate::postgres::{self, LocalPostgresTools};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
-use crate::service::POSTGRES_IMAGE;
 use crate::stateful_http_program::{ProjectReferences, StandardReferences, build_program_request};
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde::{Deserialize, Serialize};
@@ -15,7 +13,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
@@ -34,14 +32,13 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
-const STATEFUL_SCHEMA_VERSION: u32 = 2;
+const STATEFUL_SCHEMA_VERSION: u32 = 3;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
 struct Options {
     binary: PathBuf,
-    postgres_root: Option<PathBuf>,
     evidence_root: Option<PathBuf>,
     machine: bool,
 }
@@ -93,7 +90,7 @@ struct PlatformObservation {
     architecture: String,
     process_control: String,
     client: String,
-    database: String,
+    data_engine: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -146,85 +143,24 @@ struct HttpObservation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct LiveObservation {
-    postgres_image: String,
-    postgres_port: u16,
+    data_contract: String,
+    data_root: String,
     routes_checked: u64,
     created_identity: String,
     persistence_after_restart: bool,
+    backup_restore_equivalent: bool,
+    backup_digest: String,
     startup_failures_without_ready: u64,
-    invalid_secret_no_ready: bool,
-    migration_divergence_safe_failure: bool,
-    statement_failure_rolled_back: bool,
-    runner_restarts: u64,
+    absent_root_no_ready: bool,
+    corrupt_root_no_ready: bool,
+    malformed_request_contained: bool,
+    runner_starts: u64,
     shutdown_cleanup_failures: u64,
-    container_cleanup_complete: bool,
+    temporary_data_cleanup_complete: bool,
     authority_before: AuthorityObservation,
     authority_after: AuthorityObservation,
     authority_unchanged: bool,
     requests: Vec<HttpObservation>,
-}
-
-#[derive(Clone, Debug)]
-enum PostgresVerifier {
-    Docker {
-        container: String,
-        port: u16,
-    },
-    Local {
-        tools: LocalPostgresTools,
-        port: u16,
-    },
-}
-
-impl PostgresVerifier {
-    fn execute(
-        &self,
-        context: &mut Context,
-        cwd: &Path,
-        database: &str,
-        name: &str,
-        statement: &str,
-    ) -> Result<(), DevError> {
-        let arguments = vec![
-            "-U".to_owned(),
-            "postgres".to_owned(),
-            "-d".to_owned(),
-            database.to_owned(),
-            "-v".to_owned(),
-            "ON_ERROR_STOP=1".to_owned(),
-            "-Atc".to_owned(),
-            statement.to_owned(),
-        ];
-        let (command, environment) = match self {
-            Self::Docker { container, port } => {
-                let mut command = vec![
-                    "docker".to_owned(),
-                    "exec".to_owned(),
-                    container.clone(),
-                    "psql".to_owned(),
-                    "-p".to_owned(),
-                    port.to_string(),
-                ];
-                command.extend(arguments);
-                (command, process::environment())
-            }
-            Self::Local { tools, port } => (
-                tools.client_command("psql", *port, &arguments),
-                tools.environment(),
-            ),
-        };
-        let recorded_command = redact_sql_command(&command);
-        context.success_external_recorded(name, &command, recorded_command, cwd, environment)?;
-        Ok(())
-    }
-}
-
-fn redact_sql_command(command: &[String]) -> Vec<String> {
-    let mut recorded = command.to_vec();
-    if let Some(statement) = recorded.last_mut() {
-        *statement = "<redacted-sql>".to_owned();
-    }
-    recorded
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -236,7 +172,6 @@ struct AuthoringResult {
     accepted_revision: String,
     request_records: usize,
     request_bytes: usize,
-    migration_checksum: String,
     plan_token: String,
     plan: PlanObservation,
     idempotent_reconciliation: bool,
@@ -284,7 +219,7 @@ struct StatefulReceipt {
 #[serde(deny_unknown_fields)]
 struct CleanupObservation {
     temporary_root_removed: bool,
-    database_cleanup_complete: bool,
+    data_cleanup_complete: bool,
     runner_cleanup_complete: bool,
     raw_secret_values_retained: bool,
 }
@@ -299,7 +234,7 @@ pub(crate) struct TransferredReceiptBinding {
     pub(crate) elapsed_nanoseconds: u64,
     pub(crate) commands: u64,
     pub(crate) requests: u64,
-    pub(crate) postgres_identity: String,
+    pub(crate) data_contract: String,
     pub(crate) cleanup_complete: bool,
 }
 
@@ -311,7 +246,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         "stateful HTTP verifier",
         MAXIMUM_VERIFIER_BINARY_BYTES,
     )?;
-    let (execution_context, checkout_root, binary, evidence_path, observation_root, postgres_root) =
+    let (execution_context, checkout_root, binary, evidence_path, observation_root) =
         if let Some(requested_evidence_root) = &options.evidence_root {
             let binary = resolve_binary(None, &options.binary)?;
             let evidence = create_explicit_evidence_root(requested_evidence_root)?;
@@ -321,7 +256,6 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
                 binary,
                 evidence.clone(),
                 evidence,
-                options.postgres_root.clone(),
             )
         } else {
             let repository = repository_root()?;
@@ -333,10 +267,6 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
                 binary,
                 evidence,
                 repository,
-                options
-                    .postgres_root
-                    .clone()
-                    .or_else(postgres::configured_root),
             )
         };
     let started_wall = unix_nanoseconds()?;
@@ -378,7 +308,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         commands: Vec::new(),
     };
     let workflow = if outside_checkout {
-        run_authoring(&mut context, &isolated, postgres_root.as_deref())
+        run_authoring(&mut context, &isolated)
     } else {
         Err(DevError::corrupt(
             "stateful HTTP isolated root is inside the checkout",
@@ -405,9 +335,9 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         }
     };
     let elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
-    let database_cleanup_complete = result
+    let data_cleanup_complete = result
         .as_ref()
-        .is_some_and(|result| result.live.container_cleanup_complete);
+        .is_some_and(|result| result.live.temporary_data_cleanup_complete);
     let runner_cleanup_complete = result
         .as_ref()
         .is_some_and(|result| result.live.shutdown_cleanup_failures == 0);
@@ -424,7 +354,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             architecture: std::env::consts::ARCH.to_owned(),
             process_control: "linux-process-group-sigint-sigkill".to_owned(),
             client: "first-party-bounded-raw-http1".to_owned(),
-            database: "isolated-postgresql".to_owned(),
+            data_engine: "first-party-ordered-data".to_owned(),
         },
         started_unix_nanoseconds: started_wall,
         completed_unix_nanoseconds: unix_nanoseconds()?,
@@ -437,17 +367,13 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         verifier,
         candidate,
         copied_candidate,
-        environment_names: vec![
-            "LANG".to_owned(),
-            "BBS_DATABASE_URL".to_owned(),
-            "POSTGRES_PASSWORD".to_owned(),
-        ],
+        environment_names: vec!["LANG".to_owned()],
         commands: context.commands,
         result,
         failure,
         cleanup: CleanupObservation {
             temporary_root_removed: cleanup_complete && !isolated.exists(),
-            database_cleanup_complete,
+            data_cleanup_complete,
             runner_cleanup_complete,
             raw_secret_values_retained: false,
         },
@@ -470,7 +396,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
                 "candidate_sha256": receipt_value.candidate.sha256,
                 "execution_context": receipt_value.execution_context,
                 "cleanup_complete": receipt_value.cleanup.temporary_root_removed
-                    && receipt_value.cleanup.database_cleanup_complete
+                    && receipt_value.cleanup.data_cleanup_complete
                     && receipt_value.cleanup.runner_cleanup_complete,
             }))?
         );
@@ -548,7 +474,7 @@ pub(crate) fn read_transferred_receipt(
         .as_ref()
         .ok_or_else(|| DevError::corrupt("passed stateful receipt omitted its result"))?;
     let cleanup_complete = receipt.cleanup.temporary_root_removed
-        && receipt.cleanup.database_cleanup_complete
+        && receipt.cleanup.data_cleanup_complete
         && receipt.cleanup.runner_cleanup_complete
         && !receipt.cleanup.raw_secret_values_retained;
     let copied_path = Path::new(&receipt.copied_candidate.file.path);
@@ -563,7 +489,7 @@ pub(crate) fn read_transferred_receipt(
         || !receipt.isolated_root_outside_checkout
         || Path::new(&receipt.isolated_root).exists()
         || !copied_path.starts_with(Path::new(&receipt.isolated_root))
-        || receipt.environment_names != ["LANG", "BBS_DATABASE_URL", "POSTGRES_PASSWORD"]
+        || receipt.environment_names != ["LANG"]
         || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
         || receipt.verifier.sha256 != verifier.sha256
         || receipt.verifier.byte_length != verifier.byte_length
@@ -580,21 +506,22 @@ pub(crate) fn read_transferred_receipt(
         || receipt.failure.is_some()
         || !cleanup_complete
         || result.workflow != STATEFUL_WORKFLOW
-        || result.request_records != 982
+        || result.request_records == 0
         || !result.idempotent_reconciliation
         || result.discovery_commands == 0
         || !result.deterministic
         || result.incremental_sha256 != result.clean_sha256
         || result.evidence != evidence_root.display().to_string()
-        || result.live.postgres_image != POSTGRES_IMAGE
+        || result.live.data_contract != "lkjscript-data-store-1"
         || !result.live.persistence_after_restart
         || result.live.startup_failures_without_ready != 2
-        || !result.live.invalid_secret_no_ready
-        || !result.live.migration_divergence_safe_failure
-        || !result.live.statement_failure_rolled_back
-        || result.live.runner_restarts != 2
+        || !result.live.backup_restore_equivalent
+        || !result.live.absent_root_no_ready
+        || !result.live.corrupt_root_no_ready
+        || !result.live.malformed_request_contained
+        || result.live.runner_starts != 3
         || result.live.shutdown_cleanup_failures != 0
-        || !result.live.container_cleanup_complete
+        || !result.live.temporary_data_cleanup_complete
         || !result.live.authority_unchanged
         || result.live.authority_before != result.live.authority_after
         || result.live.routes_checked != result.live.requests.len() as u64
@@ -624,16 +551,12 @@ pub(crate) fn read_transferred_receipt(
         elapsed_nanoseconds: receipt.elapsed_nanoseconds,
         commands: receipt.commands.len() as u64,
         requests: result.live.requests.len() as u64,
-        postgres_identity: result.live.postgres_image.clone(),
+        data_contract: result.live.data_contract.clone(),
         cleanup_complete,
     })
 }
 
-fn run_authoring(
-    context: &mut Context,
-    isolated: &Path,
-    postgres_root: Option<&Path>,
-) -> Result<AuthoringResult, DevError> {
+fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResult, DevError> {
     let capabilities = records(
         &context
             .success("capabilities", &["capabilities"], isolated)?
@@ -885,14 +808,7 @@ fn run_authoring(
             "clean and incremental stateful HTTP artifacts differ",
         ));
     }
-    let live = run_live(
-        context,
-        isolated,
-        &project,
-        &artifact,
-        postgres_root,
-        &request.migration_checksum,
-    )?;
+    let live = run_live(context, isolated, &project, &artifact)?;
     Ok(AuthoringResult {
         workflow: STATEFUL_WORKFLOW.to_owned(),
         project: project.display().to_string(),
@@ -900,7 +816,6 @@ fn run_authoring(
         accepted_revision,
         request_records: request.records,
         request_bytes: request.bytes.len(),
-        migration_checksum: request.migration_checksum,
         plan_token,
         plan,
         idempotent_reconciliation: true,
@@ -922,196 +837,36 @@ fn run_live(
     isolated: &Path,
     project: &Path,
     artifact: &Path,
-    postgres_root: Option<&Path>,
-    migration_checksum: &str,
 ) -> Result<LiveObservation, DevError> {
-    if let Some(postgres_root) = postgres_root {
-        return run_live_local(
-            context,
-            isolated,
-            project,
-            artifact,
-            postgres_root,
-            migration_checksum,
-        );
-    }
     let authority_before = authority::observe_graph_authority(project)?;
-    context.required_external(
-        "docker-image-inspect",
-        &["docker", "image", "inspect", POSTGRES_IMAGE],
-        isolated,
-        process::environment(),
-    )?;
-    let password = random_hex(24)?;
-    let container = format!(
-        "lkjscript-stateful-http-{}-{}",
-        std::process::id(),
-        unix_nanoseconds()?
-    );
-    let mut docker_environment = process::environment();
-    docker_environment.insert("POSTGRES_PASSWORD".to_owned(), password.clone());
-    let postgres_port = free_port()?;
-    let postgres_port_text = postgres_port.to_string();
-    let started = context.required_external(
-        "postgres-start",
-        &[
-            "docker",
-            "run",
-            "--rm",
-            "--network",
-            "host",
-            "--name",
-            &container,
-            "-e",
-            "POSTGRES_PASSWORD",
-            "-e",
-            "POSTGRES_DB=bbs",
-            "-d",
-            POSTGRES_IMAGE,
-            "-p",
-            &postgres_port_text,
-            "-h",
-            "127.0.0.1",
-        ],
-        isolated,
-        docker_environment,
-    );
-    started?;
-    let workflow = (|| {
-        wait_for_postgres(context, isolated, &container, postgres_port)?;
-        let database_url =
-            format!("postgresql://postgres:{password}@127.0.0.1:{postgres_port}/bbs");
-        exercise_live_service(
-            context,
-            isolated,
-            project,
-            artifact,
-            authority_before.clone(),
-            database_url,
-            postgres_port,
-            POSTGRES_IMAGE,
-            &PostgresVerifier::Docker {
-                container: container.clone(),
-                port: postgres_port,
-            },
-            "bbs",
-            migration_checksum,
-        )
-    })();
-    let cleanup = context.success_external(
-        "postgres-stop",
-        &["docker", "stop", "--time", "5", &container],
-        isolated,
-        process::environment(),
-    );
-    match (workflow, cleanup) {
-        (Ok(result), Ok(_)) => Ok(result),
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
-    }
-}
-
-fn run_live_local(
-    context: &mut Context,
-    isolated: &Path,
-    project: &Path,
-    artifact: &Path,
-    requested_root: &Path,
-    migration_checksum: &str,
-) -> Result<LiveObservation, DevError> {
-    let tools = LocalPostgresTools::resolve(requested_root)?;
-    let environment = tools.environment();
-    let version = context.success_external(
-        "postgres-local-version",
-        &tools.version_command(),
-        isolated,
-        environment.clone(),
-    )?;
-    let version_text = tools.validate_version(&version.bytes)?;
-    let authority_before = authority::observe_graph_authority(project)?;
-    let data = isolated.join("postgres-data");
-    let socket = isolated.join("postgres-socket");
-    fs::create_dir(&socket)?;
-    context.success_external(
-        "postgres-local-init",
-        &tools.initdb_command(&data),
-        isolated,
-        environment.clone(),
-    )?;
-    let postgres_port = free_port()?;
-    let log = isolated.join("postgres.log");
-    context.success_external(
-        "postgres-local-start",
-        &tools.start_command(&data, &log, &socket, postgres_port, 16),
-        isolated,
-        environment.clone(),
-    )?;
-    let workflow = exercise_live_service(
-        context,
-        isolated,
-        project,
-        artifact,
-        authority_before,
-        format!("postgresql://postgres@127.0.0.1:{postgres_port}/postgres"),
-        postgres_port,
-        &version_text,
-        &PostgresVerifier::Local {
-            tools: tools.clone(),
-            port: postgres_port,
-        },
-        "postgres",
-        migration_checksum,
-    );
-    let cleanup = context.success_external(
-        "postgres-local-stop",
-        &tools.stop_command(&data),
-        isolated,
-        environment,
-    );
-    match (workflow, cleanup) {
-        (Ok(result), Ok(_)) => Ok(result),
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn exercise_live_service(
-    context: &mut Context,
-    isolated: &Path,
-    project: &Path,
-    artifact: &Path,
-    authority_before: AuthorityObservation,
-    database_url: String,
-    postgres_port: u16,
-    postgres_identity: &str,
-    verifier: &PostgresVerifier,
-    verifier_database: &str,
-    migration_checksum: &str,
-) -> Result<LiveObservation, DevError> {
     let descriptor = project.join("bbs.deployment.json");
-    write_descriptor(&descriptor, artifact)?;
+    write_descriptor(&descriptor, artifact, "state/data")?;
     context.failure(
-        "serve-missing-database-secret",
+        "serve-absent-data-root",
         &["serve", "--deployment", path_text(&descriptor)?],
         isolated,
         BTreeMap::from([("LANG".to_owned(), "C".to_owned())]),
     )?;
+
+    let corrupt_root = project.join("state/corrupt-data");
+    fs::create_dir_all(&corrupt_root)?;
+    evidence::publish(&corrupt_root.join("FORMAT"), b"foreign-data-format\n")?;
+    let corrupt_descriptor = project.join("bbs-corrupt.deployment.json");
+    write_descriptor(&corrupt_descriptor, artifact, "state/corrupt-data")?;
     context.failure(
-        "serve-invalid-database-secret",
-        &["serve", "--deployment", path_text(&descriptor)?],
+        "serve-corrupt-data-root",
+        &["serve", "--deployment", path_text(&corrupt_descriptor)?],
         isolated,
-        BTreeMap::from([
-            ("LANG".to_owned(), "C".to_owned()),
-            (
-                "BBS_DATABASE_URL".to_owned(),
-                "not-a-database-url".to_owned(),
-            ),
-        ]),
+        BTreeMap::from([("LANG".to_owned(), "C".to_owned())]),
     )?;
 
-    let mut runner_environment = BTreeMap::from([("LANG".to_owned(), "C".to_owned())]);
-    runner_environment.insert("BBS_DATABASE_URL".to_owned(), database_url);
+    let data_root = project.join("state/data");
+    context.success(
+        "data-initialize",
+        &["data", "initialize", "--root", path_text(&data_root)?],
+        isolated,
+    )?;
+    let runner_environment = BTreeMap::from([("LANG".to_owned(), "C".to_owned())]);
     let (mut runner, address) = ActiveRunner::start(
         context,
         "service-first",
@@ -1121,66 +876,98 @@ fn exercise_live_service(
     )?;
     let mut requests = Vec::new();
     let first_result = exercise_before_restart(address, &mut requests);
-    let statement_failure = exercise_statement_failure(
-        context,
-        isolated,
-        verifier,
-        verifier_database,
-        address,
-        &mut requests,
-    );
     let first_stop = runner.stop();
     let created_identity = first_result?;
-    statement_failure?;
     first_stop?;
 
-    verifier.execute(
-        context,
+    context.success(
+        "data-verify-after-first-service",
+        &["data", "verify", "--root", path_text(&data_root)?],
         isolated,
-        verifier_database,
-        "postgres-diverge-migration-checksum",
-        "UPDATE lkjscript_schema_migrations SET checksum = '0000000000000000000000000000000000000000000000000000000000000000' WHERE migration_id = 1",
     )?;
-    let (mut divergent_runner, divergent_address) = ActiveRunner::start(
-        context,
-        "service-migration-divergence",
-        &descriptor,
+    let backup = isolated.join("bbs-data.backup");
+    let backup_output = context.success(
+        "data-backup",
+        &[
+            "data",
+            "backup",
+            "--root",
+            path_text(&data_root)?,
+            "--output",
+            path_text(&backup)?,
+        ],
         isolated,
-        runner_environment.clone(),
     )?;
-    let divergent = request(
-        &mut requests,
-        divergent_address,
-        "migration-checksum-divergence",
-        "GET",
-        "/api/posts",
-        b"",
-        &[],
-    )?;
-    require_http(&divergent, 500, None)?;
-    divergent_runner.stop()?;
-    verifier.execute(
-        context,
-        isolated,
-        verifier_database,
-        "postgres-restore-migration-checksum",
-        &format!(
-            "UPDATE lkjscript_schema_migrations SET checksum = '{migration_checksum}' WHERE migration_id = 1"
-        ),
-    )?;
+    let backup_records = records(&backup_output.bytes)?;
+    let backup_digest =
+        required_field(required_record(&backup_records, "backup")?, "digest")?.to_owned();
 
-    let (mut runner, restarted_address) = ActiveRunner::start(
+    let mut corrupt_backup_bytes = fs::read(&backup)?;
+    let corrupt_byte = corrupt_backup_bytes
+        .last_mut()
+        .ok_or_else(|| DevError::corrupt("data backup is unexpectedly empty"))?;
+    *corrupt_byte ^= 0x01;
+    let corrupt_backup = isolated.join("bbs-data-corrupt.backup");
+    evidence::publish(&corrupt_backup, &corrupt_backup_bytes)?;
+    let rejected_root = project.join("state/rejected-data");
+    context.failure(
+        "data-restore-corrupt-backup",
+        &[
+            "data",
+            "restore",
+            "--backup",
+            path_text(&corrupt_backup)?,
+            "--root",
+            path_text(&rejected_root)?,
+        ],
+        isolated,
+        BTreeMap::from([("LANG".to_owned(), "C".to_owned())]),
+    )?;
+    if rejected_root.exists() {
+        return Err(DevError::corrupt(
+            "corrupt data backup made a destination visible",
+        ));
+    }
+
+    let (mut restarted, restarted_address) = ActiveRunner::start(
         context,
         "service-restart",
         &descriptor,
         isolated,
+        runner_environment.clone(),
+    )?;
+    exercise_persisted(restarted_address, &created_identity, &mut requests)?;
+    restarted.stop()?;
+
+    let restored_root = project.join("state/restored-data");
+    context.success(
+        "data-restore",
+        &[
+            "data",
+            "restore",
+            "--backup",
+            path_text(&backup)?,
+            "--root",
+            path_text(&restored_root)?,
+        ],
+        isolated,
+    )?;
+    context.success(
+        "data-verify-restored",
+        &["data", "verify", "--root", path_text(&restored_root)?],
+        isolated,
+    )?;
+    let restored_descriptor = project.join("bbs-restored.deployment.json");
+    write_descriptor(&restored_descriptor, artifact, "state/restored-data")?;
+    let (mut restored_runner, restored_address) = ActiveRunner::start(
+        context,
+        "service-restored",
+        &restored_descriptor,
+        isolated,
         runner_environment,
     )?;
-    let restarted_result =
-        exercise_after_restart(restarted_address, &created_identity, &mut requests);
-    let restarted_stop = runner.stop();
-    restarted_result?;
-    restarted_stop?;
+    exercise_after_restart(restored_address, &created_identity, &mut requests)?;
+    restored_runner.stop()?;
 
     let authority_after = authority::observe_graph_authority(project)?;
     let authority_unchanged = authority_before == authority_after;
@@ -1190,18 +977,20 @@ fn exercise_live_service(
         ));
     }
     Ok(LiveObservation {
-        postgres_image: postgres_identity.to_owned(),
-        postgres_port,
+        data_contract: "lkjscript-data-store-1".to_owned(),
+        data_root: data_root.display().to_string(),
         routes_checked: requests.len() as u64,
         created_identity,
         persistence_after_restart: true,
+        backup_restore_equivalent: true,
+        backup_digest,
         startup_failures_without_ready: 2,
-        invalid_secret_no_ready: true,
-        migration_divergence_safe_failure: true,
-        statement_failure_rolled_back: true,
-        runner_restarts: 2,
+        absent_root_no_ready: true,
+        corrupt_root_no_ready: true,
+        malformed_request_contained: true,
+        runner_starts: 3,
         shutdown_cleanup_failures: 0,
-        container_cleanup_complete: true,
+        temporary_data_cleanup_complete: true,
         authority_before,
         authority_after,
         authority_unchanged,
@@ -1209,7 +998,7 @@ fn exercise_live_service(
     })
 }
 
-fn write_descriptor(path: &Path, artifact: &Path) -> Result<(), DevError> {
+fn write_descriptor(path: &Path, artifact: &Path, data_root: &str) -> Result<(), DevError> {
     let artifact = artifact
         .strip_prefix(path.parent().ok_or_else(|| {
             DevError::infrastructure("stateful descriptor has no parent directory")
@@ -1245,9 +1034,7 @@ fn write_descriptor(path: &Path, artifact: &Path) -> Result<(), DevError> {
             "maximum_live_streams": 64
         },
         "configuration": {},
-        "secrets": [
-            {"name": "database-url", "variable": "BBS_DATABASE_URL"}
-        ],
+        "secrets": [],
         "grants": [
             {
                 "requirement": "streams",
@@ -1256,15 +1043,25 @@ fn write_descriptor(path: &Path, artifact: &Path) -> Result<(), DevError> {
                 "adapter": {"kind": "byte_stream"}
             },
             {
-                "requirement": "database",
-                "sharing_domain": "bbs-database",
+                "requirement": "data",
+                "sharing_domain": "bbs-data",
                 "authority_revision": "2222222222222222222222222222222222222222222222222222222222222222",
                 "adapter": {
-                    "kind": "postgres",
-                    "connection_secret": "database-url",
-                    "maximum_connections": 4,
-                    "maximum_wait_milliseconds": 5000,
-                    "statement_timeout_milliseconds": 15000
+                    "kind": "data",
+                    "root": data_root,
+                    "namespace": "bbs",
+                    "limits": {
+                        "maximum_space_name_bytes": 128,
+                        "maximum_key_parts": 16,
+                        "maximum_key_bytes": 4096,
+                        "maximum_value_bytes": 4194304,
+                        "maximum_transaction_mutations": 4096,
+                        "maximum_transaction_bytes": 16777216,
+                        "maximum_scan_items": 10000,
+                        "maximum_scan_bytes": 16777216,
+                        "maximum_scan_work": 1000000,
+                        "maximum_live_transactions": 1024
+                    }
                 }
             },
             {
@@ -1346,14 +1143,21 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
             )?
             .bytes,
     )?;
-    require_named_record(&deployment, "deployment.adapter", "kind", "postgres")?;
+    require_named_record(&deployment, "deployment.adapter", "kind", "data")?;
     for path in [
-        "adapter.postgres.connection_secret",
-        "adapter.postgres.maximum_connections",
-        "adapter.postgres.maximum_wait_milliseconds",
-        "adapter.postgres.statement_timeout_milliseconds",
+        "adapter.data.root",
+        "adapter.data.namespace",
+        "adapter.data.limits",
     ] {
         require_named_record(&deployment, "deployment.adapter-field", "path", path)?;
+    }
+    if deployment.iter().any(|record| {
+        field(record, "kind") == Some("postgres")
+            || field(record, "path").is_some_and(|path| path.contains("postgres"))
+    }) {
+        return Err(DevError::corrupt(
+            "deployment discovery retained a PostgreSQL production adapter",
+        ));
     }
 
     let generated = cwd.join("discovered-guides");
@@ -1381,7 +1185,7 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
         b"walkthrough.request".as_slice(),
         b"walkthrough.body".as_slice(),
         b"walkthrough.json".as_slice(),
-        b"walkthrough.database".as_slice(),
+        b"walkthrough.data".as_slice(),
         b"walkthrough.response".as_slice(),
         b"walkthrough.grant".as_slice(),
     ] {
@@ -1421,16 +1225,27 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
         interfaces: BTreeMap::new(),
         operations: BTreeMap::new(),
         cases: BTreeMap::new(),
+        fields: BTreeMap::new(),
     };
     for name in [
-        "SqlType",
-        "SqlValue",
+        "DataEntry",
+        "DataExpectation",
+        "DataKeyPart",
+        "DataScanDirection",
+        "DataScanItem",
+        "DataScanPage",
+        "DataSchema",
+        "DataSchemaExpectation",
         "add",
         "bool-and",
         "bool-not",
         "bool-or",
+        "bytes-concat",
         "bytes-equal",
         "bytes-from-text",
+        "bytes-length",
+        "data-decode-or",
+        "data-encode",
         "i64-equal",
         "json-decode-or",
         "json-encode",
@@ -1440,9 +1255,6 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
         "list-get",
         "list-length",
         "query-get-or",
-        "sql-row-get",
-        "sql-rows-get",
-        "sql-rows-length",
         "text-empty",
         "text-equal",
         "text-length",
@@ -1450,7 +1262,34 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
         let owner = builtin_owner(context, cwd, None, name)?;
         references.declarations.insert(name.to_owned(), owner);
     }
-    for name in ["ByteStream", "Database", "Identifier", "WallClock"] {
+    for name in ["DataEntry", "DataScanItem", "DataScanPage", "DataSchema"] {
+        let owner = references
+            .declarations
+            .get(name)
+            .ok_or_else(|| DevError::corrupt("discovered standard record vanished"))?
+            .split('/')
+            .next_back()
+            .ok_or_else(|| DevError::corrupt("standard record reference is invalid"))?
+            .to_owned();
+        let detail = records(
+            &context
+                .success(
+                    &format!("builtin-inspect-{name}"),
+                    &["package", "builtin", "inspect", "owner", "record", &owner],
+                    cwd,
+                )?
+                .bytes,
+        )?;
+        for record in detail.iter().filter(|record| record.operation == "owner") {
+            if field(record, "kind") == Some("field") {
+                references.fields.insert(
+                    format!("{name}.{}", required_field(record, "name")?),
+                    required_field(record, "reference")?.to_owned(),
+                );
+            }
+        }
+    }
+    for name in ["ByteStream", "DataStore", "Identifier", "WallClock"] {
         let owner = builtin_owner(context, cwd, Some("interface"), name)?;
         references.interfaces.insert(name.to_owned(), owner.clone());
         let identity = owner
@@ -1483,7 +1322,12 @@ fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardRefere
             }
         }
     }
-    for name in ["SqlType", "SqlValue"] {
+    for name in [
+        "DataExpectation",
+        "DataKeyPart",
+        "DataScanDirection",
+        "DataSchemaExpectation",
+    ] {
         let owner = references
             .declarations
             .get(name)
@@ -1976,57 +1820,7 @@ fn exercise_before_restart(
     Ok(identity)
 }
 
-fn exercise_statement_failure(
-    context: &mut Context,
-    isolated: &Path,
-    verifier: &PostgresVerifier,
-    database: &str,
-    address: SocketAddr,
-    observations: &mut Vec<HttpObservation>,
-) -> Result<(), DevError> {
-    verifier.execute(
-        context,
-        isolated,
-        database,
-        "postgres-add-failure-constraint",
-        "ALTER TABLE bbs_posts ADD CONSTRAINT bbs_statement_failure CHECK (false) NOT VALID",
-    )?;
-    let failed = request(
-        observations,
-        address,
-        "statement-failure",
-        "POST",
-        "/api/posts",
-        br#"{"author":"agent","body":"statement-failure"}"#,
-        &[("Content-Type", "application/json")],
-    )?;
-    let failure_result = require_http(&failed, 500, None).and_then(|()| {
-        let list = request(
-            observations,
-            address,
-            "list-after-statement-failure",
-            "GET",
-            "/api/posts",
-            b"",
-            &[],
-        )?;
-        require_json_array_len(&list.body, 1)
-    });
-    let cleanup = verifier.execute(
-        context,
-        isolated,
-        database,
-        "postgres-remove-failure-constraint",
-        "ALTER TABLE bbs_posts DROP CONSTRAINT bbs_statement_failure",
-    );
-    match (failure_result, cleanup) {
-        (Ok(()), Ok(())) => Ok(()),
-        (Err(error), _) => Err(error),
-        (Ok(()), Err(error)) => Err(error),
-    }
-}
-
-fn exercise_after_restart(
+fn exercise_persisted(
     address: SocketAddr,
     identity: &str,
     observations: &mut Vec<HttpObservation>,
@@ -2053,6 +1847,15 @@ fn exercise_after_restart(
             "BBS persisted value disagrees after restart",
         ));
     }
+    Ok(())
+}
+
+fn exercise_after_restart(
+    address: SocketAddr,
+    identity: &str,
+    observations: &mut Vec<HttpObservation>,
+) -> Result<(), DevError> {
+    exercise_persisted(address, identity, observations)?;
     let unsupported = request(
         observations,
         address,
@@ -2176,61 +1979,6 @@ fn first_line(path: &Path) -> Result<Option<Vec<u8>>, DevError> {
     }
 }
 
-fn free_port() -> Result<u16, DevError> {
-    TcpListener::bind(("127.0.0.1", 0))
-        .and_then(|listener| listener.local_addr())
-        .map(|address| address.port())
-        .map_err(DevError::from)
-}
-
-fn wait_for_postgres(
-    context: &mut Context,
-    cwd: &Path,
-    container: &str,
-    port: u16,
-) -> Result<(), DevError> {
-    let address: SocketAddr = format!("127.0.0.1:{port}")
-        .parse()
-        .map_err(|error| DevError::infrastructure(format!("PostgreSQL address: {error}")))?;
-    let port_text = port.to_string();
-    let started = Instant::now();
-    let mut attempt = 0_u64;
-    while started.elapsed() < READY_TIMEOUT {
-        let name = format!("postgres-ready-{attempt:03}");
-        let result = context.observe_external(
-            &name,
-            &[
-                "docker",
-                "exec",
-                container,
-                "pg_isready",
-                "-U",
-                "postgres",
-                "-d",
-                "bbs",
-                "-p",
-                &port_text,
-            ],
-            cwd,
-            process::environment(),
-        )?;
-        if result.0.status == ProcessStatus::Passed
-            && TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok()
-        {
-            return Ok(());
-        }
-        attempt = attempt.saturating_add(1);
-        thread::sleep(Duration::from_millis(250));
-    }
-    Err(DevError::corrupt("PostgreSQL did not become ready"))
-}
-
-fn random_hex(bytes: usize) -> Result<String, DevError> {
-    let mut value = vec![0_u8; bytes];
-    File::open("/dev/urandom")?.read_exact(&mut value)?;
-    Ok(value.iter().map(|byte| format!("{byte:02x}")).collect())
-}
-
 impl Context {
     fn success<S: AsRef<str>>(
         &mut self,
@@ -2275,76 +2023,6 @@ impl Context {
             )));
         }
         Ok(output)
-    }
-
-    fn success_external<S: AsRef<str>>(
-        &mut self,
-        name: &str,
-        command: &[S],
-        cwd: &Path,
-        environment: BTreeMap<String, String>,
-    ) -> Result<Output, DevError> {
-        let (observation, output) = self.observe_external(name, command, cwd, environment)?;
-        self.require_status(name, observation, ProcessStatus::Passed)?;
-        Ok(output)
-    }
-
-    fn success_external_recorded<S: AsRef<str>>(
-        &mut self,
-        name: &str,
-        command: &[S],
-        recorded_command: Vec<String>,
-        cwd: &Path,
-        environment: BTreeMap<String, String>,
-    ) -> Result<Output, DevError> {
-        let execution_command = command
-            .iter()
-            .map(|value| value.as_ref().to_owned())
-            .collect();
-        let (observation, output) = self.observe_command_with_record(
-            name,
-            execution_command,
-            recorded_command,
-            cwd,
-            environment,
-        )?;
-        self.require_status(name, observation, ProcessStatus::Passed)?;
-        Ok(output)
-    }
-
-    fn required_external<S: AsRef<str>>(
-        &mut self,
-        name: &str,
-        command: &[S],
-        cwd: &Path,
-        environment: BTreeMap<String, String>,
-    ) -> Result<Output, DevError> {
-        let (observation, output) = self.observe_external(name, command, cwd, environment)?;
-        if observation.status != ProcessStatus::Passed {
-            return Err(DevError::unavailable(format!(
-                "required stateful HTTP prerequisite '{name}' is unavailable ({:?})",
-                observation.status
-            )));
-        }
-        Ok(output)
-    }
-
-    fn observe_external<S: AsRef<str>>(
-        &mut self,
-        name: &str,
-        command: &[S],
-        cwd: &Path,
-        environment: BTreeMap<String, String>,
-    ) -> Result<(ProcessObservation, Output), DevError> {
-        self.observe_command(
-            name,
-            command
-                .iter()
-                .map(|value| value.as_ref().to_owned())
-                .collect(),
-            cwd,
-            environment,
-        )
     }
 
     fn observe_command(
@@ -2493,7 +2171,6 @@ fn path_text(path: &Path) -> Result<&str, DevError> {
 
 fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
     let mut binary = None;
-    let mut postgres_root = None;
     let mut evidence_root = None;
     let mut machine = false;
     let mut arguments = arguments;
@@ -2504,13 +2181,6 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
                     .ok_or_else(|| DevError::usage("--binary requires a path"))?;
                 if binary.replace(PathBuf::from(value)).is_some() {
                     return Err(DevError::usage("duplicate --binary option"));
-                }
-            }
-            "--postgres-root" => {
-                let value = crate::next_utf8(&mut arguments, "stateful HTTP PostgreSQL root")?
-                    .ok_or_else(|| DevError::usage("--postgres-root requires a path"))?;
-                if postgres_root.replace(PathBuf::from(value)).is_some() {
-                    return Err(DevError::usage("duplicate --postgres-root option"));
                 }
             }
             "--evidence-root" => {
@@ -2527,7 +2197,6 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
     }
     Ok(Options {
         binary: binary.unwrap_or_else(|| PathBuf::from("target/release/lkjscript")),
-        postgres_root,
         evidence_root,
         machine,
     })
@@ -2833,7 +2502,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode stateful schema"),
-            r#"{"identity":"lkjscript-stateful-http-acceptance","version":2}"#
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":3}"#
         );
         assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
     }
@@ -2843,14 +2512,13 @@ mod tests {
         let parsed =
             parse_options([OsString::from("--machine")].into_iter()).expect("stateful options");
         assert!(parsed.machine);
-        assert!(parsed.postgres_root.is_none());
         assert!(parsed.evidence_root.is_none());
         assert!(parse_options([OsString::from("--unknown")].into_iter()).is_err());
         assert!(options(&["--binary"]).is_err());
         assert!(options(&["--postgres-root"]).is_err());
         assert!(options(&["--evidence-root"]).is_err());
         assert!(options(&["--binary", "one", "--binary", "two"]).is_err());
-        assert!(options(&["--postgres-root", "one", "--postgres-root", "two"]).is_err());
+        assert!(options(&["--postgres-root", "one"]).is_err());
         assert!(options(&["--evidence-root", "/tmp/one", "--evidence-root", "/tmp/two"]).is_err());
         assert!(options(&["--machine", "--machine"]).is_err());
         assert!(resolve_binary(None, Path::new("relative-candidate")).is_err());
@@ -2883,20 +2551,6 @@ mod tests {
         let file = temporary.path().join("file");
         fs::write(&file, b"retained").expect("write existing file");
         assert!(create_explicit_evidence_root(&file).is_err());
-    }
-
-    #[test]
-    fn postgres_oracle_statements_are_redacted_from_evidence() {
-        let command = vec![
-            "psql".to_owned(),
-            "-Atc".to_owned(),
-            "SELECT sensitive_control_value".to_owned(),
-        ];
-        assert_eq!(
-            redact_sql_command(&command),
-            ["psql", "-Atc", "<redacted-sql>"]
-        );
-        assert_eq!(command[2], "SELECT sensitive_control_value");
     }
 
     #[cfg(unix)]

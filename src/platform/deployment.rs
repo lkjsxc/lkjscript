@@ -5,7 +5,12 @@ use super::configuration::{
     ConfigurationObservation, ConfigurationStore, ConfigurationValue, MAXIMUM_CONFIGURATION_FIELDS,
     MAXIMUM_CONFIGURATION_VALUE_BYTES,
 };
-use super::database::{MAXIMUM_DATABASE_CONNECTIONS, MAXIMUM_DATABASE_WAIT_MILLISECONDS};
+use super::data::{
+    DataLimits, MAXIMUM_DATA_KEY_BYTES, MAXIMUM_DATA_KEY_PARTS, MAXIMUM_DATA_LIVE_TRANSACTIONS,
+    MAXIMUM_DATA_SCAN_BYTES, MAXIMUM_DATA_SCAN_ITEMS, MAXIMUM_DATA_SCAN_WORK,
+    MAXIMUM_DATA_SPACE_NAME_BYTES, MAXIMUM_DATA_TRANSACTION_BYTES,
+    MAXIMUM_DATA_TRANSACTION_MUTATIONS, MAXIMUM_DATA_VALUE_BYTES,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::RunPolicy;
 use super::execution::normalized::{
@@ -46,7 +51,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 1;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
@@ -125,11 +130,10 @@ pub enum AdapterDescriptor {
         maximum_candidate_bytes: usize,
     },
     ByteStream,
-    Postgres {
-        connection_secret: String,
-        maximum_connections: usize,
-        maximum_wait_milliseconds: u64,
-        statement_timeout_milliseconds: u64,
+    Data {
+        root: String,
+        namespace: String,
+        limits: DataLimits,
     },
     ObjectMemory {
         prefix: String,
@@ -151,15 +155,10 @@ pub enum AdapterDescriptor {
         secret_key_secret: String,
         limits: ObjectLimits,
     },
-    DurableQueueMemory {
-        limits: QueueLimits,
-    },
-    DurableQueuePostgres {
-        connection_secret: String,
+    DurableQueueData {
+        root: String,
         namespace: String,
-        maximum_connections: usize,
-        maximum_wait_milliseconds: u64,
-        statement_timeout_milliseconds: u64,
+        data_limits: DataLimits,
         limits: QueueLimits,
     },
 }
@@ -592,6 +591,86 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         None,
     ),
+    schema_field(
+        "data-limits.maximum_space_name_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_SPACE_NAME_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_key_parts",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_KEY_PARTS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_key_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_KEY_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_value_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_VALUE_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_transaction_mutations",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_TRANSACTION_MUTATIONS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_transaction_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_TRANSACTION_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_scan_items",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_SCAN_ITEMS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_scan_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_SCAN_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_scan_work",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_SCAN_WORK as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "data-limits.maximum_live_transactions",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_DATA_LIVE_TRANSACTIONS as u64),
+        false,
+        None,
+    ),
 ];
 
 const ADAPTER_CONFIGURATION_FIELDS: &[DeploymentSchemaField] = &[schema_field(
@@ -678,46 +757,31 @@ const ADAPTER_BYTE_STREAM_FIELDS: &[DeploymentSchemaField] = &[schema_field(
     false,
     None,
 )];
-const ADAPTER_POSTGRES_FIELDS: &[DeploymentSchemaField] = &[
+const ADAPTER_DATA_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field("adapter.data.kind", "literal:data", None, None, false, None),
     schema_field(
-        "adapter.postgres.kind",
-        "literal:postgres",
-        None,
-        None,
+        "adapter.data.root",
+        "relative-path",
+        Some(1),
+        Some(4096),
         false,
         None,
     ),
     schema_field(
-        "adapter.postgres.connection_secret",
-        "name",
+        "adapter.data.namespace",
+        "deployment-token",
         Some(1),
         Some(128),
-        true,
-        None,
-    ),
-    schema_field(
-        "adapter.postgres.maximum_connections",
-        "usize",
-        Some(1),
-        Some(MAXIMUM_DATABASE_CONNECTIONS as u64),
         false,
         None,
     ),
     schema_field(
-        "adapter.postgres.maximum_wait_milliseconds",
-        "u64",
-        Some(1),
-        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
-        false,
+        "adapter.data.limits",
+        "object",
         None,
-    ),
-    schema_field(
-        "adapter.postgres.statement_timeout_milliseconds",
-        "u64",
-        Some(1),
-        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
-        false,
         None,
+        false,
+        Some("data-limits"),
     ),
 ];
 const ADAPTER_OBJECT_MEMORY_FIELDS: &[DeploymentSchemaField] = &[
@@ -862,75 +926,41 @@ const ADAPTER_OBJECT_S3_FIELDS: &[DeploymentSchemaField] = &[
         Some("object-limits"),
     ),
 ];
-const ADAPTER_QUEUE_MEMORY_FIELDS: &[DeploymentSchemaField] = &[
+const ADAPTER_QUEUE_DATA_FIELDS: &[DeploymentSchemaField] = &[
     schema_field(
-        "adapter.durable_queue_memory.kind",
-        "literal:durable_queue_memory",
+        "adapter.durable_queue_data.kind",
+        "literal:durable_queue_data",
         None,
         None,
         false,
         None,
     ),
     schema_field(
-        "adapter.durable_queue_memory.limits",
+        "adapter.durable_queue_data.root",
+        "relative-path",
+        Some(1),
+        Some(4096),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_data.namespace",
+        "deployment-token",
+        Some(1),
+        Some(128),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.durable_queue_data.data_limits",
         "object",
         None,
         None,
         false,
-        Some("queue-limits"),
-    ),
-];
-const ADAPTER_QUEUE_POSTGRES_FIELDS: &[DeploymentSchemaField] = &[
-    schema_field(
-        "adapter.durable_queue_postgres.kind",
-        "literal:durable_queue_postgres",
-        None,
-        None,
-        false,
-        None,
+        Some("data-limits"),
     ),
     schema_field(
-        "adapter.durable_queue_postgres.connection_secret",
-        "name",
-        Some(1),
-        Some(128),
-        true,
-        None,
-    ),
-    schema_field(
-        "adapter.durable_queue_postgres.namespace",
-        "deployment-token",
-        Some(1),
-        Some(MAXIMUM_DEPLOYMENT_BYTES as u64),
-        false,
-        None,
-    ),
-    schema_field(
-        "adapter.durable_queue_postgres.maximum_connections",
-        "usize",
-        Some(1),
-        Some(MAXIMUM_DATABASE_CONNECTIONS as u64),
-        false,
-        None,
-    ),
-    schema_field(
-        "adapter.durable_queue_postgres.maximum_wait_milliseconds",
-        "u64",
-        Some(1),
-        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
-        false,
-        None,
-    ),
-    schema_field(
-        "adapter.durable_queue_postgres.statement_timeout_milliseconds",
-        "u64",
-        Some(1),
-        Some(MAXIMUM_DATABASE_WAIT_MILLISECONDS),
-        false,
-        None,
-    ),
-    schema_field(
-        "adapter.durable_queue_postgres.limits",
+        "adapter.durable_queue_data.limits",
         "object",
         None,
         None,
@@ -969,8 +999,8 @@ pub(crate) const DEPLOYMENT_ADAPTER_SCHEMAS: &[DeploymentAdapterSchema] = &[
         fields: ADAPTER_BYTE_STREAM_FIELDS,
     },
     DeploymentAdapterSchema {
-        kind: "postgres",
-        fields: ADAPTER_POSTGRES_FIELDS,
+        kind: "data",
+        fields: ADAPTER_DATA_FIELDS,
     },
     DeploymentAdapterSchema {
         kind: "object_memory",
@@ -985,12 +1015,8 @@ pub(crate) const DEPLOYMENT_ADAPTER_SCHEMAS: &[DeploymentAdapterSchema] = &[
         fields: ADAPTER_OBJECT_S3_FIELDS,
     },
     DeploymentAdapterSchema {
-        kind: "durable_queue_memory",
-        fields: ADAPTER_QUEUE_MEMORY_FIELDS,
-    },
-    DeploymentAdapterSchema {
-        kind: "durable_queue_postgres",
-        fields: ADAPTER_QUEUE_POSTGRES_FIELDS,
+        kind: "durable_queue_data",
+        fields: ADAPTER_QUEUE_DATA_FIELDS,
     },
 ];
 
@@ -1069,12 +1095,11 @@ impl AdapterDescriptor {
             Self::PasswordHash { .. } => "password-hash",
             Self::SecretVerifier { .. } => "secret-verifier",
             Self::ByteStream => "byte-stream",
-            Self::Postgres { .. } => "postgres",
+            Self::Data { .. } => "data",
             Self::ObjectMemory { .. } => "object-memory",
             Self::ObjectLocal { .. } => "object-local",
             Self::ObjectS3 { .. } => "object-s3",
-            Self::DurableQueueMemory { .. } => "durable-queue-memory",
-            Self::DurableQueuePostgres { .. } => "durable-queue-postgres",
+            Self::DurableQueueData { .. } => "durable-queue-data",
         }
     }
 }
@@ -1510,18 +1535,14 @@ fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagno
                 ));
             }
         }
-        AdapterDescriptor::Postgres {
-            connection_secret,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+        AdapterDescriptor::Data {
+            root,
+            namespace,
+            limits,
         } => {
-            validate_name(connection_secret, "secret name")?;
-            validate_database_limits(
-                *maximum_connections,
-                *maximum_wait_milliseconds,
-                *statement_timeout_milliseconds,
-            )?;
+            validate_relative(root, "data root")?;
+            validate_deployment_token(namespace, "data namespace", 128)?;
+            limits.validate()?;
         }
         AdapterDescriptor::ObjectMemory { prefix, limits } => {
             validate_object_prefix(prefix)?;
@@ -1559,22 +1580,15 @@ fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagno
             validate_name(secret_key_secret, "secret-key secret name")?;
             limits.validate()?;
         }
-        AdapterDescriptor::DurableQueueMemory { limits } => limits.validate()?,
-        AdapterDescriptor::DurableQueuePostgres {
-            connection_secret,
+        AdapterDescriptor::DurableQueueData {
+            root,
             namespace,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+            data_limits,
             limits,
         } => {
-            validate_name(connection_secret, "secret name")?;
-            validate_deployment_token(namespace, "queue namespace", MAXIMUM_DEPLOYMENT_BYTES)?;
-            validate_database_limits(
-                *maximum_connections,
-                *maximum_wait_milliseconds,
-                *statement_timeout_milliseconds,
-            )?;
+            validate_relative(root, "queue data root")?;
+            validate_deployment_token(namespace, "queue namespace", 128)?;
+            data_limits.validate()?;
             limits.validate()?;
         }
         AdapterDescriptor::Configuration
@@ -1582,34 +1596,6 @@ fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagno
         | AdapterDescriptor::SecureRandom
         | AdapterDescriptor::Identifier
         | AdapterDescriptor::ByteStream => {}
-    }
-    Ok(())
-}
-
-fn validate_database_limits(
-    maximum_connections: usize,
-    maximum_wait_milliseconds: u64,
-    statement_timeout_milliseconds: u64,
-) -> Result<(), Diagnostic> {
-    if maximum_connections == 0 || maximum_connections > MAXIMUM_DATABASE_CONNECTIONS {
-        return Err(deployment_error(
-            "deployment_database_connections",
-            format!(
-                "database maximum_connections must be 1 through {MAXIMUM_DATABASE_CONNECTIONS}"
-            ),
-        ));
-    }
-    if maximum_wait_milliseconds == 0
-        || maximum_wait_milliseconds > MAXIMUM_DATABASE_WAIT_MILLISECONDS
-        || statement_timeout_milliseconds == 0
-        || statement_timeout_milliseconds > MAXIMUM_DATABASE_WAIT_MILLISECONDS
-    {
-        return Err(deployment_error(
-            "deployment_database_time",
-            format!(
-                "database wait and statement limits must be 1 through {MAXIMUM_DATABASE_WAIT_MILLISECONDS} milliseconds"
-            ),
-        ));
     }
     Ok(())
 }
@@ -1729,12 +1715,11 @@ fn validate_exact_adapter_interface(
         AdapterDescriptor::PasswordHash { .. } => "decl_375bc0a9f5214e8a27ede17a14e79f67",
         AdapterDescriptor::SecretVerifier { .. } => "decl_172ae7f44000b32243d75a92e6733e50",
         AdapterDescriptor::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
-        AdapterDescriptor::Postgres { .. } => "decl_4c1cf20949507973e07ece4ec002c2d7",
+        AdapterDescriptor::Data { .. } => "decl_640e96fa57dee1c09557eb4bc7b53398",
         AdapterDescriptor::ObjectMemory { .. }
         | AdapterDescriptor::ObjectLocal { .. }
         | AdapterDescriptor::ObjectS3 { .. } => "decl_ac421d578f44958595e92fa9f5fb1d43",
-        AdapterDescriptor::DurableQueueMemory { .. }
-        | AdapterDescriptor::DurableQueuePostgres { .. } => "decl_20a0ef729beda0abf0e743cd7e1126de",
+        AdapterDescriptor::DurableQueueData { .. } => "decl_20a0ef729beda0abf0e743cd7e1126de",
     };
     if interface.package.to_string() != STANDARD_PACKAGE
         || interface.declaration.to_string() != declaration
@@ -1820,16 +1805,14 @@ fn normalized_adapter(
             maximum_candidate_bytes: *maximum_candidate_bytes,
         },
         AdapterDescriptor::ByteStream => NormalizedAdapterDescriptor::ByteStream,
-        AdapterDescriptor::Postgres {
-            connection_secret,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
-        } => NormalizedAdapterDescriptor::Postgres {
-            connection_secret: connection_secret.clone(),
-            maximum_connections: *maximum_connections,
-            maximum_wait_milliseconds: *maximum_wait_milliseconds,
-            statement_timeout_milliseconds: *statement_timeout_milliseconds,
+        AdapterDescriptor::Data {
+            root,
+            namespace,
+            limits,
+        } => NormalizedAdapterDescriptor::Data {
+            root: root.clone(),
+            namespace: namespace.clone(),
+            limits: limits.clone(),
         },
         AdapterDescriptor::ObjectMemory { prefix, limits } => {
             NormalizedAdapterDescriptor::ObjectMemory {
@@ -1867,24 +1850,15 @@ fn normalized_adapter(
             secret_key_secret: secret_key_secret.clone(),
             limits: limits.clone(),
         },
-        AdapterDescriptor::DurableQueueMemory { limits } => {
-            NormalizedAdapterDescriptor::DurableQueueMemory {
-                limits: limits.clone(),
-            }
-        }
-        AdapterDescriptor::DurableQueuePostgres {
-            connection_secret,
+        AdapterDescriptor::DurableQueueData {
+            root,
             namespace,
-            maximum_connections,
-            maximum_wait_milliseconds,
-            statement_timeout_milliseconds,
+            data_limits,
             limits,
-        } => NormalizedAdapterDescriptor::DurableQueuePostgres {
-            connection_secret: connection_secret.clone(),
+        } => NormalizedAdapterDescriptor::DurableQueueData {
+            root: root.clone(),
             namespace: namespace.clone(),
-            maximum_connections: *maximum_connections,
-            maximum_wait_milliseconds: *maximum_wait_milliseconds,
-            statement_timeout_milliseconds: *statement_timeout_milliseconds,
+            data_limits: data_limits.clone(),
             limits: limits.clone(),
         },
     }
@@ -2054,11 +2028,10 @@ mod tests {
                 maximum_candidate_bytes: 1024,
             },
             AdapterDescriptor::ByteStream,
-            AdapterDescriptor::Postgres {
-                connection_secret: "database-url".to_owned(),
-                maximum_connections: 4,
-                maximum_wait_milliseconds: 5_000,
-                statement_timeout_milliseconds: 10_000,
+            AdapterDescriptor::Data {
+                root: "state/data".to_owned(),
+                namespace: "test-data".to_owned(),
+                limits: DataLimits::default(),
             },
             AdapterDescriptor::ObjectMemory {
                 prefix: "bbs".to_owned(),
@@ -2080,15 +2053,10 @@ mod tests {
                 secret_key_secret: "object-secret".to_owned(),
                 limits: ObjectLimits::default(),
             },
-            AdapterDescriptor::DurableQueueMemory {
-                limits: QueueLimits::default(),
-            },
-            AdapterDescriptor::DurableQueuePostgres {
-                connection_secret: "database-url".to_owned(),
+            AdapterDescriptor::DurableQueueData {
+                root: "state/data".to_owned(),
                 namespace: "test:queue".to_owned(),
-                maximum_connections: 4,
-                maximum_wait_milliseconds: 5_000,
-                statement_timeout_milliseconds: 10_000,
+                data_limits: DataLimits::default(),
                 limits: QueueLimits::default(),
             },
         ]
@@ -2273,61 +2241,23 @@ mod tests {
     }
 
     #[test]
-    fn postgres_schema_required_names_and_ranges_match_decoder() {
-        let postgres = adapter_samples()
-            .into_iter()
-            .find(|adapter| matches!(adapter, AdapterDescriptor::Postgres { .. }))
-            .expect("PostgreSQL sample");
-        let valid = deployment_with_adapter(&postgres);
-        for (field, invalid_values, code) in [
-            (
-                "maximum_connections",
-                vec![
-                    serde_json::json!(0),
-                    serde_json::json!(MAXIMUM_DATABASE_CONNECTIONS + 1),
-                ],
-                "deployment_database_connections",
-            ),
-            (
-                "maximum_wait_milliseconds",
-                vec![
-                    serde_json::json!(0),
-                    serde_json::json!(MAXIMUM_DATABASE_WAIT_MILLISECONDS + 1),
-                ],
-                "deployment_database_time",
-            ),
-            (
-                "statement_timeout_milliseconds",
-                vec![
-                    serde_json::json!(0),
-                    serde_json::json!(MAXIMUM_DATABASE_WAIT_MILLISECONDS + 1),
-                ],
-                "deployment_database_time",
-            ),
-        ] {
-            for invalid in invalid_values {
-                let mut value = valid.clone();
-                value["grants"][0]["adapter"][field] = invalid;
-                assert_eq!(
-                    decode_deployment(&serde_json::to_vec(&value).expect("invalid bound JSON"))
-                        .expect_err("invalid PostgreSQL bound")
-                        .code,
-                    code,
-                    "{field}"
-                );
-            }
+    fn predecessor_postgres_adapters_reject_at_strict_decode() {
+        for kind in ["postgres", "durable_queue_postgres"] {
+            let mut value: serde_json::Value =
+                serde_json::from_slice(&minimal()).expect("minimal deployment");
+            value["grants"] = serde_json::json!([{
+                "requirement": "adapter",
+                "sharing_domain": "isolated",
+                "authority_revision": "11".repeat(32),
+                "adapter": {"kind": kind, "connection_secret": "must-not-be-read"}
+            }]);
+            assert_eq!(
+                decode_deployment(&serde_json::to_vec(&value).expect("predecessor JSON"))
+                    .expect_err("predecessor adapter must reject")
+                    .code,
+                "deployment_json"
+            );
         }
-        let mut invalid_secret = valid;
-        invalid_secret["grants"][0]["adapter"]["connection_secret"] =
-            serde_json::json!("DATABASE_URL");
-        assert_eq!(
-            decode_deployment(
-                &serde_json::to_vec(&invalid_secret).expect("invalid secret name JSON")
-            )
-            .expect_err("invalid secret name")
-            .code,
-            "deployment_name"
-        );
     }
 
     #[cfg(unix)]

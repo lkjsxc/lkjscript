@@ -1715,6 +1715,59 @@ fn reference_intrinsic(
                 ("valid", NormalizedValue::Bool(valid)),
             ])
         }
+        "core.data.encode" => {
+            let [value] = arguments.as_slice() else {
+                return Err(reference_type_error(
+                    "typed data encoding received a foreign arity",
+                ));
+            };
+            let Some(parameter) = function.parameters.first() else {
+                return Err(reference_error(
+                    "reference_data_signature",
+                    "typed data encoder has no exact parameter type",
+                ));
+            };
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => parameter.ty,
+                _ => {
+                    return Err(reference_error(
+                        "reference_data_signature",
+                        "typed data encoder has no exact runtime type",
+                    ));
+                }
+            };
+            super::data_codec_reference::encode_typed(program, value, ty)
+                .map(NormalizedValue::bytes)
+                .map_err(reference_json_error)
+        }
+        "core.data.decode-or" => {
+            let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
+                return Err(reference_type_error(
+                    "typed data decoding received foreign values",
+                ));
+            };
+            let Some(fallback_type) = function.parameters.get(1) else {
+                return Err(reference_error(
+                    "reference_data_signature",
+                    "typed data decoder has no exact fallback type",
+                ));
+            };
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => fallback_type.ty,
+                _ => {
+                    return Err(reference_error(
+                        "reference_data_signature",
+                        "typed data decoder has no exact runtime type",
+                    ));
+                }
+            };
+            match super::data_codec_reference::decode_typed(program, bytes, ty) {
+                Ok(value) => Ok(value),
+                Err(_) => Ok(fallback.clone()),
+            }
+        }
         "core.http.bearer-token" => reference_bearer_token(program, arguments.as_slice()),
         "core.bytes.from-text" => match arguments.as_slice() {
             [NormalizedValue::Text(value)] => Ok(NormalizedValue::bytes(value.as_bytes())),

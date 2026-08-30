@@ -20,7 +20,7 @@ pub(crate) mod compiler;
 pub mod configuration;
 pub mod contract;
 pub mod control;
-pub mod database;
+pub mod data;
 pub mod deployment;
 pub mod diagnostic;
 pub mod execution;
@@ -84,17 +84,19 @@ pub(crate) mod witness;
 pub mod worker;
 
 pub use cli::{
-    execute_build, execute_capabilities, execute_change, execute_check, execute_inspect,
-    execute_inspect_owner, execute_new, execute_package_builtin, execute_query, execute_run,
-    execute_status,
+    execute_build, execute_capabilities, execute_change, execute_check, execute_data,
+    execute_inspect, execute_inspect_owner, execute_new, execute_package_builtin, execute_query,
+    execute_run, execute_status,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationObservation, ConfigurationValue,
 };
 pub use contract::{CLI_CONTRACT_VERSION, PublicOperation};
-pub use database::{
-    POSTGRES_ADAPTER_CONTRACT_VERSION, PostgresPool, PostgresPoolConfig, PostgresPoolObservation,
-    PostgresSecret,
+pub use data::{
+    DATA_BACKUP_CONTRACT_VERSION, DATA_STORE_CONTRACT_VERSION, DataBackupReceipt,
+    DataCommitOutcome, DataEntry, DataEntryRevision, DataExpectation, DataInitializeOutcome,
+    DataInitializeReceipt, DataKey, DataKeyPart, DataLimits, DataScanDirection, DataScanItem,
+    DataScanPage, DataSchema, DataSchemaExpectation, DataStore, DataTransaction, DataVerifyReceipt,
 };
 pub use deployment::{
     AdapterDescriptor, DEPLOYMENT_CONTRACT_VERSION, DeploymentDescriptor, DeploymentGrant,

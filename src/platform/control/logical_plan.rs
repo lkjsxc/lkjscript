@@ -292,7 +292,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_368;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_387;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
 const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
@@ -2871,7 +2871,7 @@ mod tests {
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
         assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 740_018);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_368);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_387);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));

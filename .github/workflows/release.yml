@@ -56,7 +56,6 @@ jobs:
       release_archive: ${{ steps.target.outputs.archive_name }}
       target_triple: ${{ steps.target.outputs.target_triple }}
       target_policy_sha256: ${{ steps.target.outputs.policy_sha256 }}
-      postgres_image: ${{ steps.target.outputs.postgres_image }}
     steps:
       - name: Check out the exact source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -179,12 +178,11 @@ jobs:
           target/release/lkjscript-dev release target | tee "$summary"
           test "$(wc -l < "$summary")" -eq 1
           jq -e \
-            '.status == "passed" and .policy.schema == {identity:"lkjscript-release-target-policy",version:1} and .policy.target_triple == "x86_64-unknown-linux-musl" and .policy.runtime_linkage == "static-musl" and (.policy.userlands | length) == 2 and (.policy.musl_packages | length) == 3' \
+            '.status == "passed" and .policy.schema == {identity:"lkjscript-release-target-policy",version:2} and .policy.target_triple == "x86_64-unknown-linux-musl" and .policy.runtime_linkage == "static-musl" and (.policy.userlands | length) == 2 and (.policy.musl_packages | length) == 3' \
             "$summary" > /dev/null
           target_triple=$(jq -er '.policy.target_triple' "$summary")
           archive_name=$(jq -er '.policy.archive_name' "$summary")
           policy_sha256=$(jq -er '.policy_sha256' "$summary")
-          postgres_image=$(jq -er '.policy.postgres_image' "$summary")
           [[ "$policy_sha256" =~ ^[0-9a-f]{64}$ ]]
           rustup target add --toolchain 1.98.0 "$target_triple"
           package_root="$RUNNER_TEMP/musl-packages"
@@ -204,13 +202,11 @@ jobs:
           {
             echo "RELEASE_ARCHIVE=$archive_name"
             echo "RELEASE_TARGET=$target_triple"
-            echo "POSTGRES_IMAGE=$postgres_image"
           } >> "$GITHUB_ENV"
           {
             echo "archive_name=$archive_name"
             echo "target_triple=$target_triple"
             echo "policy_sha256=$policy_sha256"
-            echo "postgres_image=$postgres_image"
             echo "summary=$summary"
           } >> "$GITHUB_OUTPUT"
 
@@ -230,7 +226,7 @@ jobs:
             [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
             [[ "$image_bytes" =~ ^[1-9][0-9]*$ ]]
             echo "target_prerequisite=$image platform=$platform image_id=$image_id image_bytes=$image_bytes"
-          done < <(jq -r '.policy.userlands[].image, .policy.postgres_image' "${{ steps.target.outputs.summary }}")
+          done < <(jq -r '.policy.userlands[].image' "${{ steps.target.outputs.summary }}")
           completed=$(date +%s%N)
           echo "target_prerequisite_pull_elapsed_nanoseconds=$((completed - started))"
 
@@ -440,7 +436,6 @@ jobs:
       contents: read
     env:
       RELEASE_ARCHIVE: ${{ needs.build-verify-package.outputs.release_archive }}
-      POSTGRES_IMAGE: ${{ needs.build-verify-package.outputs.postgres_image }}
     outputs:
       evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
       evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
@@ -546,15 +541,6 @@ jobs:
             echo "verifier_artifact_bytes=$verifier_artifact_bytes"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Provision the exact transferred PostgreSQL prerequisite
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
-          timeout 10m docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
-          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$POSTGRES_IMAGE")" = linux/amd64
-          [[ "$(docker image inspect --format '{{.Id}}' "$POSTGRES_IMAGE")" =~ ^sha256:[0-9a-f]{64}$ ]]
-
       - name: First-party verify, extract, and run packaged application acceptance
         id: acceptance
         shell: bash
@@ -632,8 +618,7 @@ jobs:
           stateful_receipt_digest=$(jq -er '.receipt_digest' "$stateful_summary")
           jq -e \
             --arg candidate_sha "$candidate_sha" \
-            --arg postgres "$POSTGRES_IMAGE" \
-            '.schema == {identity:"lkjscript-stateful-http-acceptance",version:2} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.postgres_image == $postgres and .result.live.persistence_after_restart == true and .result.live.invalid_secret_no_ready == true and .result.live.migration_divergence_safe_failure == true and .result.live.statement_failure_rolled_back == true and .result.live.authority_unchanged == true and .result.live.container_cleanup_complete == true and .cleanup.temporary_root_removed == true and .cleanup.database_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
+            '.schema == {identity:"lkjscript-stateful-http-acceptance",version:3} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.data_contract == "lkjscript-data-store-1" and .result.live.persistence_after_restart == true and .result.live.backup_restore_equivalent == true and .result.live.absent_root_no_ready == true and .result.live.corrupt_root_no_ready == true and .result.live.malformed_request_contained == true and .result.live.startup_failures_without_ready == 2 and .result.live.runner_starts == 3 and .result.live.shutdown_cleanup_failures == 0 and .result.live.temporary_data_cleanup_complete == true and .result.live.authority_unchanged == true and .cleanup.temporary_root_removed == true and .cleanup.data_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
             "$stateful_receipt" > /dev/null
           {
             echo "distributed_receipt=$distributed_receipt"
@@ -922,7 +907,6 @@ jobs:
       contents: read
     env:
       RELEASE_ARCHIVE: ${{ needs.build-verify-package.outputs.release_archive }}
-      POSTGRES_IMAGE: ${{ needs.build-verify-package.outputs.postgres_image }}
     outputs:
       evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
       evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
@@ -997,15 +981,6 @@ jobs:
             echo "path=$verifier"
             echo "transport_mode=$transport_mode"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Provision the exact public PostgreSQL prerequisite
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
-          timeout 10m docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
-          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$POSTGRES_IMAGE")" = linux/amd64
-          [[ "$(docker image inspect --format '{{.Id}}' "$POSTGRES_IMAGE")" =~ ^sha256:[0-9a-f]{64}$ ]]
 
       - name: Download exact and latest assets anonymously
         id: download
@@ -1210,8 +1185,7 @@ jobs:
             stateful_receipt_digest=$(jq -er '.receipt_digest' "$stateful_summary")
             jq -e \
               --arg candidate_sha "$candidate_sha" \
-              --arg postgres "$POSTGRES_IMAGE" \
-              '.schema == {identity:"lkjscript-stateful-http-acceptance",version:2} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.postgres_image == $postgres and .result.live.persistence_after_restart == true and .result.live.invalid_secret_no_ready == true and .result.live.migration_divergence_safe_failure == true and .result.live.statement_failure_rolled_back == true and .result.live.authority_unchanged == true and .result.live.container_cleanup_complete == true and .cleanup.temporary_root_removed == true and .cleanup.database_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
+              '.schema == {identity:"lkjscript-stateful-http-acceptance",version:3} and .workflow == "stateful-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.workflow == "stateful-http-application" and .result.idempotent_reconciliation == true and .result.deterministic == true and .result.incremental_sha256 == .result.clean_sha256 and .result.live.data_contract == "lkjscript-data-store-1" and .result.live.persistence_after_restart == true and .result.live.backup_restore_equivalent == true and .result.live.absent_root_no_ready == true and .result.live.corrupt_root_no_ready == true and .result.live.malformed_request_contained == true and .result.live.startup_failures_without_ready == 2 and .result.live.runner_starts == 3 and .result.live.shutdown_cleanup_failures == 0 and .result.live.temporary_data_cleanup_complete == true and .result.live.authority_unchanged == true and .cleanup.temporary_root_removed == true and .cleanup.data_cleanup_complete == true and .cleanup.runner_cleanup_complete == true and .cleanup.raw_secret_values_retained == false' \
               "$stateful_receipt" > /dev/null
             {
               echo "${label}_distributed_receipt=$distributed_receipt"

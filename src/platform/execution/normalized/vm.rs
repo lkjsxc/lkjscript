@@ -1510,6 +1510,53 @@ fn call_core_intrinsic(
                 ("value", value),
             ])
         }
+        "core.data.encode" => {
+            let [value] = arguments.as_slice() else {
+                return Err(type_error("typed data encoding received a foreign arity"));
+            };
+            let parameter = function.parameters.first().ok_or_else(|| {
+                runtime_error(
+                    "normalized_data_signature",
+                    "typed data encoder has no exact parameter type",
+                )
+            })?;
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => parameter.ty,
+                _ => {
+                    return Err(type_error(
+                        "typed data encoder requires one exact runtime type",
+                    ));
+                }
+            };
+            super::data_codec::encode_typed(program, value, ty)
+                .map(NormalizedValue::bytes)
+                .map_err(normalized_json_error)
+        }
+        "core.data.decode-or" => {
+            let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
+                return Err(type_error("typed data decoding received foreign values"));
+            };
+            let fallback_type = function.parameters.get(1).ok_or_else(|| {
+                runtime_error(
+                    "normalized_data_signature",
+                    "typed data decoder has no exact fallback type",
+                )
+            })?;
+            let ty = match type_arguments {
+                [ty] => *ty,
+                [] if function.type_parameters.is_empty() => fallback_type.ty,
+                _ => {
+                    return Err(type_error(
+                        "typed data decoder requires one exact runtime type",
+                    ));
+                }
+            };
+            match super::data_codec::decode_typed(program, bytes, ty) {
+                Ok(value) => Ok(value),
+                Err(_) => Ok(fallback.clone()),
+            }
+        }
         "core.http.bearer-token" => normalized_bearer_token(program, &arguments),
         "core.bytes.from-text" => {
             let [NormalizedValue::Text(value)] = arguments.as_slice() else {

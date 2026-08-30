@@ -192,8 +192,8 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
     };
     let byte_stream_owner = exact(OwnerKind::Interface, "ByteStream", None)?;
     let byte_stream_id = parse_reference_owner(&byte_stream_owner)?;
-    let database_owner = exact(OwnerKind::Interface, "Database", None)?;
-    let database_id = parse_reference_owner(&database_owner)?;
+    let data_owner = exact(OwnerKind::Interface, "DataStore", None)?;
+    let data_id = parse_reference_owner(&data_owner)?;
     let mut output = generated_header(snapshot);
     output.push_str("# Stateful HTTP authoring walkthrough\n\n");
     output.push_str(
@@ -221,17 +221,17 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
         (
             "walkthrough.interface",
             vec![
-                ("name", "database".to_owned()),
-                ("reference", database_owner.clone()),
+                ("name", "data".to_owned()),
+                ("reference", data_owner.clone()),
             ],
         ),
         (
             "walkthrough.operation",
             vec![
-                ("name", "migration".to_owned()),
+                ("name", "schema-read".to_owned()),
                 (
                     "reference",
-                    exact(OwnerKind::Operation, "migration", Some(database_id))?,
+                    exact(OwnerKind::Operation, "schema-read", Some(data_id))?,
                 ),
             ],
         ),
@@ -241,27 +241,57 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
                 ("name", "transaction".to_owned()),
                 (
                     "reference",
-                    exact(OwnerKind::Operation, "transaction", Some(database_id))?,
+                    exact(OwnerKind::Operation, "transaction", Some(data_id))?,
                 ),
             ],
         ),
         (
             "walkthrough.operation",
             vec![
-                ("name", "execute".to_owned()),
+                ("name", "schema-set".to_owned()),
                 (
                     "reference",
-                    exact(OwnerKind::Operation, "execute", Some(database_id))?,
+                    exact(OwnerKind::Operation, "schema-set", Some(data_id))?,
                 ),
             ],
         ),
         (
             "walkthrough.operation",
             vec![
-                ("name", "query".to_owned()),
+                ("name", "get".to_owned()),
                 (
                     "reference",
-                    exact(OwnerKind::Operation, "query", Some(database_id))?,
+                    exact(OwnerKind::Operation, "get", Some(data_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "scan".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "scan", Some(data_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "put".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "put", Some(data_id))?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.operation",
+            vec![
+                ("name", "delete".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::Operation, "delete", Some(data_id))?,
                 ),
             ],
         ),
@@ -305,15 +335,35 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
         (
             "walkthrough.declaration",
             vec![
-                ("name", "sql-value".to_owned()),
-                ("reference", exact(OwnerKind::Variant, "SqlValue", None)?),
+                ("name", "data-key-part".to_owned()),
+                ("reference", exact(OwnerKind::Variant, "DataKeyPart", None)?),
             ],
         ),
         (
             "walkthrough.declaration",
             vec![
-                ("name", "sql-type".to_owned()),
-                ("reference", exact(OwnerKind::Variant, "SqlType", None)?),
+                ("name", "data-entry".to_owned()),
+                ("reference", exact(OwnerKind::Record, "DataEntry", None)?),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "data-encode".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::External, "data-encode", None)?,
+                ),
+            ],
+        ),
+        (
+            "walkthrough.declaration",
+            vec![
+                ("name", "data-decode-or".to_owned()),
+                (
+                    "reference",
+                    exact(OwnerKind::External, "data-decode-or", None)?,
+                ),
             ],
         ),
     ];
@@ -352,12 +402,12 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
             ],
         ),
         (
-            "walkthrough.database",
+            "walkthrough.data",
             vec![
                 ("form", "transaction+capability-call"),
-                ("operations", "migration,execute,query"),
-                ("statements", "source-origin-static-text"),
-                ("parameters", "typed-sql-values"),
+                ("operations", "schema-read,schema-set,get,scan,put,delete"),
+                ("keys", "static-space+typed-key-parts"),
+                ("values", "canonical-typed-data-bytes"),
             ],
         ),
         (
@@ -374,11 +424,11 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
         (
             "walkthrough.grant",
             vec![
-                ("requirement", "database"),
-                ("adapter", "postgres"),
-                ("connection-secret", "BBS_DATABASE_URL"),
-                ("secret-value", "excluded"),
-                ("limits", "pool,wait,statement"),
+                ("requirement", "data"),
+                ("adapter", "data"),
+                ("root", "deployment-relative-local-directory"),
+                ("secret-value", "none"),
+                ("limits", "keys,values,transactions,scans,live-resources"),
             ],
         ),
     ] {

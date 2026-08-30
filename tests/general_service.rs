@@ -29,10 +29,6 @@ fn run_isolated(directory: &Path, arguments: &[&str]) -> Output {
         .env_clear()
         .env("LANG", "C")
         .env("LKJOURNAL_BOOTSTRAP_TOKEN", "test-bootstrap-token")
-        .env(
-            "LKJOURNAL_DATABASE_URL",
-            "postgresql://127.0.0.1:1/lkjournal",
-        )
         .output()
         .expect("run isolated service command")
 }
@@ -133,7 +129,7 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
             "bootstrap",
             "clock",
             "config",
-            "db",
+            "data",
             "identifiers",
             "jobs",
             "objects",
@@ -218,10 +214,13 @@ fn isolated_current_deployment_reaches_adapter_preflight_without_project_authori
             path.to_str().expect("UTF-8 descriptor path"),
         ],
     );
-    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.status.code(), Some(2));
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).expect("diagnostic UTF-8");
-    assert!(stdout.contains("database_connection"), "{stdout}");
+    assert!(
+        stdout.contains("normalized_deployment_directory_missing"),
+        "{stdout}"
+    );
     assert!(!stdout.contains("\"event\":\"ready\""), "{stdout}");
     assert!(!temporary.path().join(".lkjscript-project.json").exists());
     assert_eq!(

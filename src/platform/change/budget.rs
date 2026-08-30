@@ -129,13 +129,13 @@ pub struct CanonicalReadAdmission {
 impl Default for CanonicalReadAdmission {
     fn default() -> Self {
         Self {
-            maximum_point_reads: 100_000,
-            maximum_map_pages: 1_000_000,
-            maximum_map_entries: 1_000_000,
-            maximum_catalog_lookups: 100_000,
-            maximum_objects: 100_000,
-            maximum_bytes: 256 * 1_048_576,
-            maximum_decoded_records: 100_000,
+            maximum_point_reads: MAXIMUM_CHANGE_CANONICAL_POINT_READS,
+            maximum_map_pages: MAXIMUM_CHANGE_CANONICAL_MAP_PAGES,
+            maximum_map_entries: MAXIMUM_CHANGE_CANONICAL_MAP_ENTRIES,
+            maximum_catalog_lookups: MAXIMUM_CHANGE_CANONICAL_CATALOG_LOOKUPS,
+            maximum_objects: MAXIMUM_CHANGE_CANONICAL_OBJECTS,
+            maximum_bytes: MAXIMUM_CHANGE_CANONICAL_BYTES,
+            maximum_decoded_records: MAXIMUM_CHANGE_CANONICAL_RECORDS,
         }
     }
 }
@@ -249,13 +249,13 @@ pub struct WitnessReadAdmission {
 impl Default for WitnessReadAdmission {
     fn default() -> Self {
         Self {
-            maximum_point_reads: 100_000,
-            maximum_map_pages: 1_000_000,
-            maximum_map_entries: 1_000_000,
-            maximum_catalog_lookups: 100_000,
-            maximum_objects: 100_000,
-            maximum_bytes: 256 * 1_048_576,
-            maximum_decoded_records: 1_000_000,
+            maximum_point_reads: MAXIMUM_CHANGE_WITNESS_POINT_READS,
+            maximum_map_pages: MAXIMUM_CHANGE_WITNESS_MAP_PAGES,
+            maximum_map_entries: MAXIMUM_CHANGE_WITNESS_MAP_ENTRIES,
+            maximum_catalog_lookups: MAXIMUM_CHANGE_WITNESS_CATALOG_LOOKUPS,
+            maximum_objects: MAXIMUM_CHANGE_WITNESS_OBJECTS,
+            maximum_bytes: MAXIMUM_CHANGE_WITNESS_BYTES,
+            maximum_decoded_records: MAXIMUM_CHANGE_WITNESS_RECORDS,
         }
     }
 }

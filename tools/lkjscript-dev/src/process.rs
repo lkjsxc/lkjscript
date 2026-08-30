@@ -37,7 +37,6 @@ const APPROVED_ENVIRONMENT: &[&str] = &[
     "DOCKER_HOST",
     "HOME",
     "LANG",
-    "LKJSCRIPT_POSTGRES_ROOT",
     "LC_ALL",
     "PATH",
     "PKG_CONFIG_PATH",
@@ -154,6 +153,7 @@ pub(crate) fn run_controlled(
     run_configured(specification, repository, Some(control), None)
 }
 
+#[cfg(test)]
 pub(crate) fn run_with_stdin_file(
     specification: &ProcessSpec,
     repository: &Path,

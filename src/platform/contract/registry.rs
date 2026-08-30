@@ -25,7 +25,15 @@ use super::super::control::{
     MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
     PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
-use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
+use super::super::data::{
+    DATA_BACKUP_CONTRACT_IDENTITY, DATA_BACKUP_CONTRACT_VERSION, DATA_STORE_CONTRACT_IDENTITY,
+    DATA_STORE_CONTRACT_VERSION, MAXIMUM_DATA_BACKUP_BYTES, MAXIMUM_DATA_HISTORY_REVISIONS,
+    MAXIMUM_DATA_KEY_BYTES, MAXIMUM_DATA_KEY_PARTS, MAXIMUM_DATA_LIVE_TRANSACTIONS,
+    MAXIMUM_DATA_NAMESPACE_BYTES, MAXIMUM_DATA_REVISION_BYTES, MAXIMUM_DATA_SCAN_BYTES,
+    MAXIMUM_DATA_SCAN_ITEMS, MAXIMUM_DATA_SCAN_WORK, MAXIMUM_DATA_SPACE_NAME_BYTES,
+    MAXIMUM_DATA_STORE_OBJECTS, MAXIMUM_DATA_TRANSACTION_BYTES, MAXIMUM_DATA_TRANSACTION_MUTATIONS,
+    MAXIMUM_DATA_VALUE_BYTES,
+};
 use super::super::deployment::{
     DEPLOYMENT_ADAPTER_SCHEMAS, DEPLOYMENT_CONTRACT_VERSION, DEPLOYMENT_SCHEMA_FIELDS,
     MAXIMUM_DEPLOYMENT_BYTES, MAXIMUM_DEPLOYMENT_GRANTS,
@@ -82,7 +90,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 13;
+pub const CLI_CONTRACT_VERSION: u16 = 14;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -190,8 +198,9 @@ pub enum ContractKey {
     CompilerUnit,
     Bytecode,
     Deployment,
+    DataStore,
+    DataBackup,
     ConfigurationAdapter,
-    PostgresAdapter,
     CapabilityGrant,
     HttpAdapter,
     Json,
@@ -236,8 +245,9 @@ impl ContractKey {
             Self::CompilerUnit => "compiler_unit",
             Self::Bytecode => "bytecode",
             Self::Deployment => "deployment",
+            Self::DataStore => "data_store",
+            Self::DataBackup => "data_backup",
             Self::ConfigurationAdapter => "configuration_adapter",
-            Self::PostgresAdapter => "postgres_adapter",
             Self::CapabilityGrant => "capability_grant",
             Self::HttpAdapter => "http_adapter",
             Self::Json => "json",
@@ -713,18 +723,38 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             DEPLOYMENT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
+        ContractDescriptor {
+            key: ContractKey::DataStore,
+            name: "first-party ordered application-data store",
+            identity: DATA_STORE_CONTRACT_IDENTITY,
+            version: DATA_STORE_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::Operational,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJDATA1", "LKJDREV1", "LKJDHEAD"],
+            digest_domains: &[
+                "lkjscript.data.format.v1",
+                "lkjscript.data.revision.v1",
+                "lkjscript.data.revision-envelope.v1",
+                "lkjscript.data.head-envelope.v1",
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::DataBackup,
+            name: "canonical logical application-data backup",
+            identity: DATA_BACKUP_CONTRACT_IDENTITY,
+            version: DATA_BACKUP_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::Operational,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJDBAK1"],
+            digest_domains: &["lkjscript.data.backup-envelope.v1"],
+        },
         simple_contract(
             ContractKey::ConfigurationAdapter,
             "configuration adapter",
             "lkjscript-configuration-adapter-1",
             CONFIGURATION_ADAPTER_CONTRACT_VERSION,
-            ContractAuthority::Runtime,
-        ),
-        simple_contract(
-            ContractKey::PostgresAdapter,
-            "PostgreSQL adapter",
-            "lkjscript-postgres-adapter-1",
-            POSTGRES_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
@@ -832,6 +862,7 @@ const fn simple_contract(
 #[serde(rename_all = "snake_case")]
 pub enum PublicOperation {
     Capabilities,
+    Data,
     New,
     Status,
     Inspect,
@@ -846,8 +877,9 @@ pub enum PublicOperation {
 }
 
 impl PublicOperation {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Capabilities,
+        Self::Data,
         Self::New,
         Self::Status,
         Self::Inspect,
@@ -864,6 +896,7 @@ impl PublicOperation {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Capabilities => "capabilities",
+            Self::Data => "data",
             Self::New => "new",
             Self::Status => "status",
             Self::Inspect => "inspect",
@@ -958,6 +991,8 @@ impl BudgetProfile {
 pub enum ControlModel {
     CapabilitiesRequest,
     CapabilitiesResult,
+    DataRequest,
+    DataResult,
     NewRequest,
     NewResult,
     StatusRequest,
@@ -986,6 +1021,8 @@ impl ControlModel {
         match self {
             Self::CapabilitiesRequest => "capabilities_request",
             Self::CapabilitiesResult => "capabilities_result",
+            Self::DataRequest => "data_request",
+            Self::DataResult => "data_result",
             Self::NewRequest => "new_request",
             Self::NewResult => "new_result",
             Self::StatusRequest => "status_request",
@@ -1030,6 +1067,15 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "Discover product operations, grammar, limits, diagnostics, effects, and changed capability sections.",
             "capabilities [COMMAND] [--known-capabilities DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
         ),
+        operation(
+            PublicOperation::Data,
+            "Initialize, verify, back up, or restore one first-party ordered application-data root.",
+            "data initialize --root PATH | data verify --root PATH | data backup --root PATH --output PATH | data restore --backup PATH --root PATH",
+            (ControlModel::DataRequest, ControlModel::DataResult),
+            AuthorityEffect::ExternalOutput,
+            ProjectRequirement::None,
+            BudgetProfile::Maintenance,
+        ),
         new_operation(
             "Create fresh normalized semantic authority atomically at one absent safe destination.",
             "new DEST [--template minimal|command|http] [--name NAME]",
@@ -1057,8 +1103,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Package,
-            "Inspect or export the executable's one exact built-in standard dependency.",
-            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH",
+            "Inspect the built-in standard, export one current package transport, or stage one exact dependency transport without editing meaning.",
+            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH | package current export --kind transport --output PATH | package dependency stage --transport DIGEST --input-file PATH",
             (ControlModel::PackageRequest, ControlModel::PackageResult),
             AuthorityEffect::OptionalExternalOutput,
             ProjectRequirement::None,
@@ -1434,6 +1480,111 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             LimitUnit::Bytes,
             OverridePolicy::Fixed,
         ),
+        limit(
+            "data_namespace_bytes",
+            MAXIMUM_DATA_NAMESPACE_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_space_name_bytes",
+            MAXIMUM_DATA_SPACE_NAME_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_key_parts",
+            MAXIMUM_DATA_KEY_PARTS,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Items,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_key_bytes",
+            MAXIMUM_DATA_KEY_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_value_bytes",
+            MAXIMUM_DATA_VALUE_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_transaction_mutations",
+            MAXIMUM_DATA_TRANSACTION_MUTATIONS,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Records,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_transaction_bytes",
+            MAXIMUM_DATA_TRANSACTION_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_scan_items",
+            MAXIMUM_DATA_SCAN_ITEMS,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Items,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_scan_bytes",
+            MAXIMUM_DATA_SCAN_BYTES,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Bytes,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_scan_work",
+            MAXIMUM_DATA_SCAN_WORK,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Work,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_live_transactions",
+            MAXIMUM_DATA_LIVE_TRANSACTIONS,
+            LimitClass::DeploymentResourcePolicy,
+            LimitUnit::Items,
+            OverridePolicy::DeploymentUpToMaximum,
+        ),
+        limit(
+            "data_revision_bytes",
+            MAXIMUM_DATA_REVISION_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "data_backup_bytes",
+            MAXIMUM_DATA_BACKUP_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "data_history_revisions",
+            MAXIMUM_DATA_HISTORY_REVISIONS,
+            LimitClass::ImplementationLimitation,
+            LimitUnit::Records,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "data_store_objects",
+            MAXIMUM_DATA_STORE_OBJECTS,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
     ];
     LIMITS
 }
@@ -1485,6 +1636,96 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             meaning: "The command, option, or argument grammar is invalid.",
             retry: "Correct the request using capabilities output.",
         },
+        diagnostic(
+            "data_root_absent",
+            DiagnosticClass::Source,
+            "A selected first-party data root does not exist.",
+            "Initialize the root or restore a strict logical backup into an absent destination.",
+        ),
+        diagnostic(
+            "data_root_type",
+            DiagnosticClass::Source,
+            "A selected first-party data root is not an ordinary directory.",
+            "Select an ordinary local directory that does not traverse symbolic links.",
+        ),
+        diagnostic(
+            "data_path_symlink",
+            DiagnosticClass::Source,
+            "A data lifecycle path traverses a symbolic link.",
+            "Select an ordinary path with no symbolic-link component.",
+        ),
+        diagnostic(
+            "data_path_traversal",
+            DiagnosticClass::Source,
+            "A data lifecycle path contains a parent-traversal component.",
+            "Select a confined path without '..' components.",
+        ),
+        diagnostic(
+            "data_root_inventory",
+            DiagnosticClass::Corrupt,
+            "A data root is incomplete or contains foreign authoritative entries.",
+            "Preserve the root; restore a verified backup into a new absent destination.",
+        ),
+        diagnostic(
+            "data_store_identity_changed",
+            DiagnosticClass::Corrupt,
+            "The physical data-store identity changed while the root was open.",
+            "Stop using the root and restore a verified backup into a new absent destination.",
+        ),
+        diagnostic(
+            "data_head_checksum",
+            DiagnosticClass::Corrupt,
+            "The accepted data-head envelope fails canonical integrity validation.",
+            "Preserve the root; restore a verified backup into a new absent destination.",
+        ),
+        diagnostic(
+            "data_revision_checksum",
+            DiagnosticClass::Corrupt,
+            "An immutable accepted data revision fails canonical integrity validation.",
+            "Preserve the root; restore a verified backup into a new absent destination.",
+        ),
+        diagnostic(
+            "data_backup_checksum",
+            DiagnosticClass::Corrupt,
+            "A logical data backup fails canonical integrity validation.",
+            "Use the complete backup bytes and verify their separately retained digest.",
+        ),
+        diagnostic(
+            "data_restore_destination_exists",
+            DiagnosticClass::Source,
+            "A data restore destination already exists.",
+            "Choose an absent destination; restore never overwrites a root.",
+        ),
+        diagnostic(
+            "data_output_exists",
+            DiagnosticClass::Source,
+            "A data backup output path already exists.",
+            "Choose an absent output path; backup never overwrites a file.",
+        ),
+        diagnostic(
+            "data_limit",
+            DiagnosticClass::Source,
+            "A deployment-selected data limit is zero or above its executable maximum.",
+            "Select independent limits within the deployment and global capability bounds.",
+        ),
+        diagnostic(
+            "data_verify_bytes",
+            DiagnosticClass::Resource,
+            "Complete data-root verification exceeds its independent byte accounting domain.",
+            "Preserve the root and use a verified executable with sufficient admitted resources.",
+        ),
+        diagnostic(
+            "data_head_visibility_unknown",
+            DiagnosticClass::Infrastructure,
+            "A data-head visibility change failed with an indeterminate publication result.",
+            "Reopen and verify the exact root before deciding whether any logical retry is safe.",
+        ),
+        diagnostic(
+            "data_head_durability_unknown",
+            DiagnosticClass::Infrastructure,
+            "A visible data head could not be confirmed durable at the root boundary.",
+            "Reopen and verify the exact root before deciding whether any logical retry is safe.",
+        ),
         diagnostic(
             "control_input_bytes",
             DiagnosticClass::Resource,
@@ -3957,12 +4198,11 @@ fn validate_deployment_schema_inventory() -> Result<(), String> {
         "password_hash",
         "secret_verifier",
         "byte_stream",
-        "postgres",
+        "data",
         "object_memory",
         "object_local",
         "object_s3",
-        "durable_queue_memory",
-        "durable_queue_postgres",
+        "durable_queue_data",
     ];
     if DEPLOYMENT_ADAPTER_SCHEMAS
         .iter()
@@ -4191,17 +4431,31 @@ fn validate_compact_change_inventory(
                 field.operation, field.name, field.form
             ));
         }
-        if !field.required && (field.operation, field.name) != ("add.case", "payload") {
+        let optional = [
+            ("add.case", "payload"),
+            ("add.parameter", "function"),
+            ("add.parameter", "operation"),
+        ];
+        if !field.required && !optional.contains(&(field.operation, field.name)) {
             return Err(format!(
                 "change field '{}.{}' is unexpectedly optional",
                 field.operation, field.name
             ));
         }
     }
-    if !fields.iter().any(|field| {
-        (field.operation, field.name, field.required) == ("add.case", "payload", false)
-    }) {
-        return Err("add.case.payload must be the sole optional change field".to_owned());
+    for (operation, name) in [
+        ("add.case", "payload"),
+        ("add.parameter", "function"),
+        ("add.parameter", "operation"),
+    ] {
+        if !fields
+            .iter()
+            .any(|field| (field.operation, field.name, field.required) == (operation, name, false))
+        {
+            return Err(format!(
+                "{operation}.{name} must be an optional change field"
+            ));
+        }
     }
 
     let direct_operations = operations

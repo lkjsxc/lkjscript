@@ -1869,7 +1869,7 @@ mod tests {
     const SERVICE: &str = r#"(module resources
   (import json std.json)
   (import http std.http)
-  (import relational std.relational)
+  (import state std.state)
   (import clock std.clock)
   (import random std.secure-random)
   (export Resource Web create-resource)
@@ -1878,14 +1878,14 @@ mod tests {
   (fn owns ((actor Text) (resource Resource)) Bool
     (call std.eq actor (field resource owner)))
   (task create-resource ((request http.Request)) http.Response
-    (requires (db relational.Database) (clock clock.Clock) (random random.SecureRandom))
+    (requires (data state.Ledger) (clock clock.Clock) (random random.SecureRandom))
     (let ((now (perform clock utc-now))
           (id (perform random bytes 16)))
-      (transaction db tx
-        (perform tx execute insert-resource
+      (transaction data tx
+        (perform tx append create-resource
           (record _ (id id) (created-at now))))))
   (component Web
-    (require db relational.Database (operations query execute transaction)
+    (require data state.Ledger (operations read append transaction)
       (limit maximum-rows 1000))
     (require clock clock.Clock (operations utc-now))
     (require random random.SecureRandom (operations bytes)
@@ -1925,10 +1925,7 @@ mod tests {
                 .map(|capability| (capability.alias.as_str(), capability.interface.clone()))
                 .collect::<Vec<_>>(),
             vec![
-                (
-                    "db",
-                    unresolved_declaration_reference("relational.Database")
-                ),
+                ("data", unresolved_declaration_reference("state.Ledger")),
                 ("clock", unresolved_declaration_reference("clock.Clock")),
                 (
                     "random",
@@ -1942,7 +1939,7 @@ mod tests {
             performed,
             BTreeSet::from([
                 "clock".to_owned(),
-                "db".to_owned(),
+                "data".to_owned(),
                 "random".to_owned(),
                 "tx".to_owned()
             ])

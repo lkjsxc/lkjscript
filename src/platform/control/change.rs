@@ -14,8 +14,8 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
-    DeclarationVisibility, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
-    ResourceUnit,
+    DeclarationVisibility, ExternalVisibility, Idempotency, ImplementationName, Name,
+    NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ResourceUnit,
 };
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{
@@ -26,8 +26,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-6";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 6;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-7";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 7;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-6";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 6;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -65,15 +65,20 @@ pub(crate) enum CompactChangeOperation {
     CreateModule,
     CreateRecord,
     CreateVariant,
+    CreateInterface,
+    CreateExternal,
     CreateFunction,
     CreateConstant,
     CreateTest,
     AddField,
     AddCase,
+    AddOperation,
     AddTypeParameter,
     AddParameter,
     AddRequirement,
+    ReplaceDependency,
     SetFunctionContract,
+    SetRequirementContract,
     DeleteOwner,
     RenameOwner,
     MoveDeclaration,
@@ -81,19 +86,24 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 16] = [
+    pub(crate) const ALL: [Self; 21] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
+        Self::CreateInterface,
+        Self::CreateExternal,
         Self::CreateFunction,
         Self::CreateConstant,
         Self::CreateTest,
         Self::AddField,
         Self::AddCase,
+        Self::AddOperation,
         Self::AddTypeParameter,
         Self::AddParameter,
         Self::AddRequirement,
+        Self::ReplaceDependency,
         Self::SetFunctionContract,
+        Self::SetRequirementContract,
         Self::DeleteOwner,
         Self::RenameOwner,
         Self::MoveDeclaration,
@@ -121,10 +131,14 @@ pub(crate) enum CompactChangeFieldForm {
     ExactPackageRevision,
     RequestFragment,
     DeclarationReference,
+    OperationSelector,
+    Idempotency,
+    ExternalVisibility,
+    ImplementationName,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 18] = [
+    pub(crate) const ALL: [Self; 22] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -143,6 +157,10 @@ impl CompactChangeFieldForm {
         Self::ExactPackageRevision,
         Self::RequestFragment,
         Self::DeclarationReference,
+        Self::OperationSelector,
+        Self::Idempotency,
+        Self::ExternalVisibility,
+        Self::ImplementationName,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -165,6 +183,10 @@ impl CompactChangeFieldForm {
             Self::ExactPackageRevision => "exact_package_revision",
             Self::RequestFragment => "request_fragment",
             Self::DeclarationReference => "declaration_reference",
+            Self::OperationSelector => "operation_selector",
+            Self::Idempotency => "idempotency",
+            Self::ExternalVisibility => "external_visibility",
+            Self::ImplementationName => "implementation_name",
         }
     }
 
@@ -188,6 +210,10 @@ impl CompactChangeFieldForm {
             Self::ExactPackageRevision => "package_revision_HEX",
             Self::RequestFragment => "%NAME",
             Self::DeclarationReference => "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+            Self::OperationSelector => "$NAME|op_HEX",
+            Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
+            Self::ExternalVisibility => "none|possible",
+            Self::ImplementationName => "dot.separated.name",
         }
     }
 }
@@ -283,6 +309,70 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "visibility",
                 required: true,
                 form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateInterface,
+        name: "create.interface",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateExternal,
+        name: "create.external",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "result",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "implementation",
+                required: true,
+                form: FieldForm::ImplementationName,
             },
         ],
         direct: None,
@@ -458,6 +548,43 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddOperation,
+        name: "add.operation",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "interface",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "result",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "idempotency",
+                required: true,
+                form: FieldForm::Idempotency,
+            },
+            CompactChangeOperationField {
+                name: "external-visibility",
+                required: true,
+                form: FieldForm::ExternalVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::AddTypeParameter,
         name: "add.type-parameter",
         fields: &[
@@ -490,8 +617,13 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
             CompactChangeOperationField {
                 name: "function",
-                required: true,
+                required: false,
                 form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "operation",
+                required: false,
+                form: FieldForm::OperationSelector,
             },
             CompactChangeOperationField {
                 name: "name",
@@ -534,6 +666,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::ReplaceDependency,
+        name: "replace.dependency",
+        fields: &[
+            CompactChangeOperationField {
+                name: "package",
+                required: true,
+                form: FieldForm::ExactPackage,
+            },
+            CompactChangeOperationField {
+                name: "semantic-revision",
+                required: true,
+                form: FieldForm::ExactRevision,
+            },
+            CompactChangeOperationField {
+                name: "package-revision",
+                required: true,
+                form: FieldForm::ExactPackageRevision,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::SetFunctionContract,
         name: "set.function-contract",
         fields: &[
@@ -556,6 +710,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "effect",
                 required: true,
                 form: FieldForm::FunctionEffect,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetRequirementContract,
+        name: "set.requirement-contract",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestFragment,
+            },
+            CompactChangeOperationField {
+                name: "requirement",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "interface",
+                required: true,
+                form: FieldForm::DeclarationReference,
             },
         ],
         direct: None,
@@ -1722,7 +1898,11 @@ impl Decoder {
                 }
                 operation => {
                     if let Some(descriptor) = compact_change_operation_descriptor(operation) {
-                        if descriptor.operation == CompactChangeOperation::SetFunctionContract {
+                        if matches!(
+                            descriptor.operation,
+                            CompactChangeOperation::SetFunctionContract
+                                | CompactChangeOperation::SetRequirementContract
+                        ) {
                             let label = fragment(&record, "as")?;
                             if self
                                 .fragments
@@ -1969,6 +2149,23 @@ impl Decoder {
                 visibility: parse_visibility(record, "visibility")?,
                 cases: Vec::new(),
             }),
+            CompactChangeOperation::CreateInterface => Ok(AuthoredChange::CreateInterface {
+                symbol: symbol(record, "as")?,
+                module: parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                operations: Vec::new(),
+            }),
+            CompactChangeOperation::CreateExternal => Ok(AuthoredChange::CreateExternal {
+                symbol: symbol(record, "as")?,
+                module: parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: self.decode_type(required(record, "result")?)?,
+                implementation: parse_implementation_name(record, "implementation")?,
+            }),
             CompactChangeOperation::CreateFunction => {
                 let function_symbol = symbol(record, "as")?;
                 let body = required(record, "body")?.to_owned();
@@ -2029,6 +2226,17 @@ impl Decoder {
                         .transpose()?,
                 },
             }),
+            CompactChangeOperation::AddOperation => Ok(AuthoredChange::AddOperation {
+                interface: parse_declaration_selector(record, "interface")?,
+                operation: crate::platform::change::AuthoredOperation {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    parameters: Vec::new(),
+                    result: self.decode_type(required(record, "result")?)?,
+                    idempotency: parse_idempotency(record, "idempotency")?,
+                    external_visibility: parse_external_visibility(record, "external-visibility")?,
+                },
+            }),
             CompactChangeOperation::AddTypeParameter => Ok(AuthoredChange::AddTypeParameter {
                 declaration: parse_declaration_selector(record, "function")?,
                 parameter: AuthoredTypeParameter {
@@ -2036,16 +2244,31 @@ impl Decoder {
                     name: parse_name(record, "name")?,
                 },
             }),
-            CompactChangeOperation::AddParameter => Ok(AuthoredChange::AddParameter {
-                parent: ParameterParentSelector::Declaration {
-                    declaration: parse_declaration_selector(record, "function")?,
-                },
-                parameter: AuthoredParameter {
-                    symbol: symbol(record, "as")?,
-                    name: parse_name(record, "name")?,
-                    ty: self.decode_type(required(record, "type")?)?,
-                },
-            }),
+            CompactChangeOperation::AddParameter => {
+                let parent = match (optional(record, "function"), optional(record, "operation")) {
+                    (Some(_), None) => ParameterParentSelector::Declaration {
+                        declaration: parse_declaration_selector(record, "function")?,
+                    },
+                    (None, Some(_)) => ParameterParentSelector::Operation {
+                        operation: parse_owner_selector(record, "operation")?,
+                    },
+                    _ => {
+                        return Err(record_error(
+                            record,
+                            "change_parameter_parent",
+                            "add.parameter requires exactly one of function or operation",
+                        ));
+                    }
+                };
+                Ok(AuthoredChange::AddParameter {
+                    parent,
+                    parameter: AuthoredParameter {
+                        symbol: symbol(record, "as")?,
+                        name: parse_name(record, "name")?,
+                        ty: self.decode_type(required(record, "type")?)?,
+                    },
+                })
+            }
             CompactChangeOperation::AddRequirement => {
                 let requirement_symbol = symbol(record, "as")?;
                 let operations = self
@@ -2078,6 +2301,11 @@ impl Decoder {
                     },
                 })
             }
+            CompactChangeOperation::ReplaceDependency => Ok(AuthoredChange::ReplaceDependency {
+                package: parse_field(record, "package")?,
+                semantic_revision: parse_field(record, "semantic-revision")?,
+                package_revision: parse_field(record, "package-revision")?,
+            }),
             CompactChangeOperation::SetFunctionContract => {
                 let fragment = fragment(record, "as")?;
                 Ok(AuthoredChange::SetFunctionContract {
@@ -2088,6 +2316,31 @@ impl Decoder {
                         &fragment,
                         required(record, "effect")?,
                     )?,
+                })
+            }
+            CompactChangeOperation::SetRequirementContract => {
+                let fragment = fragment(record, "as")?;
+                let operations = self
+                    .ordered_record_edges("requirement.operation", &fragment)?
+                    .iter()
+                    .map(|edge| parse_operation_reference(&edge.record, "operation"))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let limits = self
+                    .ordered_record_edges("requirement.limit", &fragment)?
+                    .iter()
+                    .map(|edge| {
+                        Ok(AuthoredResourceLimit {
+                            name: parse_name(&edge.record, "name")?,
+                            maximum: parse_field(&edge.record, "maximum")?,
+                            unit: parse_resource_unit(&edge.record, "unit")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
+                Ok(AuthoredChange::SetRequirementContract {
+                    requirement: parse_owner_selector(record, "requirement")?,
+                    interface: parse_declaration_reference(record, "interface")?,
+                    operations,
+                    limits,
                 })
             }
             CompactChangeOperation::DeleteOwner => {
@@ -2979,6 +3232,46 @@ fn parse_visibility(
         })
 }
 
+fn parse_idempotency(record: &CompactRecord, field_name: &str) -> Result<Idempotency, Diagnostic> {
+    match required(record, field_name)? {
+        "idempotent" => Ok(Idempotency::Idempotent),
+        "idempotent-with-key" => Ok(Idempotency::IdempotentWithKey),
+        "non-idempotent" => Ok(Idempotency::NonIdempotent),
+        value => Err(field_error(
+            record,
+            field_name,
+            "change_idempotency_class",
+            format!(
+                "idempotency must be idempotent, idempotent-with-key, or non-idempotent; observed '{value}'"
+            ),
+        )),
+    }
+}
+
+fn parse_external_visibility(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<ExternalVisibility, Diagnostic> {
+    match required(record, field_name)? {
+        "none" => Ok(ExternalVisibility::None),
+        "possible" => Ok(ExternalVisibility::Possible),
+        value => Err(field_error(
+            record,
+            field_name,
+            "change_external_visibility",
+            format!("external visibility must be none or possible; observed '{value}'"),
+        )),
+    }
+}
+
+fn parse_implementation_name(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<ImplementationName, Diagnostic> {
+    ImplementationName::new(required(record, field_name)?)
+        .map_err(|error| field_error(record, field_name, error.code, error.message))
+}
+
 fn parse_module_selector(
     record: &CompactRecord,
     field_name: &str,
@@ -3350,6 +3643,48 @@ mod tests {
     }
 
     #[test]
+    fn interfaces_operations_and_generic_externals_decode_with_exact_contracts() {
+        let input = format!(
+            "request base={}\n\
+             create.module as=$data name=data\n\
+             create.interface as=$store module=$data name=DataStore visibility=public\n\
+             add.operation as=$get interface=$store name=get result=bytes idempotency=idempotent external-visibility=none\n\
+             add.parameter as=$key operation=$get name=key type=bytes\n\
+             type.parameter as=@item parameter=$item-type\n\
+             create.external as=$encode module=$data name=data-encode visibility=public result=bytes implementation=core.data.encode\n\
+             add.type-parameter as=$item-type function=$encode name=Item\n\
+             add.parameter as=$value function=$encode name=value type=@item\n",
+            revision()
+        );
+        let decoded = decode_compact_change("data.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.changes.len(), 7);
+        assert!(matches!(
+            &decoded.semantic.changes[1],
+            AuthoredChange::CreateInterface { name, operations, .. }
+                if name.as_str() == "DataStore" && operations.is_empty()
+        ));
+        assert!(matches!(
+            &decoded.semantic.changes[2],
+            AuthoredChange::AddOperation { operation, .. }
+                if operation.name.as_str() == "get"
+                    && operation.idempotency == Idempotency::Idempotent
+                    && operation.external_visibility == ExternalVisibility::None
+        ));
+        assert!(matches!(
+            &decoded.semantic.changes[3],
+            AuthoredChange::AddParameter {
+                parent: ParameterParentSelector::Operation { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            &decoded.semantic.changes[4],
+            AuthoredChange::CreateExternal { implementation, .. }
+                if implementation.as_str() == "core.data.encode"
+        ));
+    }
+
+    #[test]
     fn generic_function_values_and_invocation_decode_through_one_public_vocabulary() {
         let input = format!(
             "request base={}\n\
@@ -3474,9 +3809,9 @@ mod tests {
              type.field parent=@response index=0 name=body type=bytes\n\
              type.field parent=@response index=1 name=status type=i64\n\
              create.module as=$module name=application_state\n\
-             add.requirement as=$database component={component} name=database interface={package}/{interface}\n\
-             requirement.operation parent=$database index=0 operation={package}/{operation}\n\
-             requirement.limit parent=$database index=0 name=calls maximum=32 unit=calls\n\
+             add.requirement as=$store component={component} name=store interface={package}/{interface}\n\
+             requirement.operation parent=$store index=0 operation={package}/{operation}\n\
+             requirement.limit parent=$store index=0 name=calls maximum=32 unit=calls\n\
              expression.text as=$let-value value=value\n\
              expression.local as=$let-body value=$binding\n\
              expression.let as=$let body=$let-body\n\
@@ -3497,10 +3832,10 @@ mod tests {
              expression.match as=$match value=$match-value\n\
              expression.match-arm parent=$match index=0 case={package}/{case} as=$matched name=matched type=text body=$match-body\n\
              expression.unit as=$call-argument\n\
-             expression.capability-call as=$capability requirement=$database operation={package}/{operation}\n\
+             expression.capability-call as=$capability requirement=$store operation={package}/{operation}\n\
              expression.argument parent=$capability index=0 expression=$call-argument\n\
              expression.unit as=$transaction-body\n\
-             expression.transaction as=$transaction requirement=$database binding=$transaction-binding name=transaction body=$transaction-body\n\
+             expression.transaction as=$transaction requirement=$store binding=$transaction-binding name=transaction body=$transaction-body\n\
              expression.sequence as=$body\n\
              expression.argument parent=$body index=0 expression=$let\n\
              expression.argument parent=$body index=1 expression=$record\n\
@@ -3510,9 +3845,9 @@ mod tests {
              expression.argument parent=$body index=5 expression=$capability\n\
              expression.argument parent=$body index=6 expression=$transaction\n\
              create.function as=$task module=$module name=task visibility=private result=unit effect=task body=$body\n\
-             effect.requirement parent=$task index=0 requirement=$database\n\
+             effect.requirement parent=$task index=0 requirement=$store\n\
              set.function-contract as=%handler function={handler} result=@response effect=task\n\
-             effect.requirement parent=%handler index=0 requirement=$database\n",
+             effect.requirement parent=%handler index=0 requirement=$store\n",
             revision()
         );
         let decoded = decode_compact_change("task.lkjc", input.as_bytes()).unwrap();

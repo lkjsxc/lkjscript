@@ -75,6 +75,16 @@ pub fn validate_intrinsic(
             }
             _ => false,
         },
+        "core.data.encode" => {
+            matches!(signature.parameters.as_slice(), [value] if value.is_durable())
+                && signature.result == ResolvedType::Bytes
+        }
+        "core.data.decode-or" => match signature.parameters.as_slice() {
+            [ResolvedType::Bytes, fallback] => {
+                fallback.is_durable() && signature.result == *fallback
+            }
+            _ => false,
+        },
         "core.http.bearer-token" => exact(signature, &[http_headers_type()], &ResolvedType::Text),
         "core.bytes.from-text" => exact(signature, &[ResolvedType::Text], &ResolvedType::Bytes),
         "core.bytes.to-text" => exact(signature, &[ResolvedType::Bytes], &ResolvedType::Text),

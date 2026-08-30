@@ -1088,7 +1088,6 @@ fn audit_notice(path: &Path) -> Result<(), DevError> {
         "argon2 0.5.3",
         "axum 0.8.9",
         "object_store 0.14.1",
-        "postgres 0.19.14",
         "tokio 1.53.1",
     ] {
         if !text.contains(required) {
@@ -2037,8 +2036,7 @@ mod tests {
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));
-        assert!(build.contains("postgres_image=$(jq -er '.policy.postgres_image'"));
-        assert!(!workflow.contains(crate::service::POSTGRES_IMAGE));
+        assert!(!build.contains("postgres_image"));
         assert!(!workflow.contains("postgres:16-alpine"));
         assert!(workflow.matches("timeout-minutes:").count() >= 3);
     }

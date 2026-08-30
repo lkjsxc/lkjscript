@@ -7,14 +7,11 @@ use crate::error::DevError;
 use lkjscript::platform::control::render_record;
 use std::collections::BTreeMap;
 
-pub(crate) const MIGRATION_ID: i64 = 1;
 pub(crate) const MAXIMUM_REQUEST_JSON_BYTES: i64 = 65_536;
-pub(crate) const MIGRATION_STATEMENT: &str = "CREATE TABLE IF NOT EXISTS bbs_posts (id TEXT PRIMARY KEY, author TEXT NOT NULL CHECK (char_length(author) BETWEEN 1 AND 64), body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 4096), created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)";
-
-const LIST_STATEMENT: &str = "SELECT COALESCE(json_agg(json_build_object('id', id, 'author', author, 'body', body, 'created', created_at, 'updated', updated_at) ORDER BY created_at, id), '[]'::json)::text FROM bbs_posts";
-const CREATE_STATEMENT: &str = "INSERT INTO bbs_posts (id, author, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING json_build_object('id', id, 'author', author, 'body', body, 'created', created_at, 'updated', updated_at)::text";
-const UPDATE_STATEMENT: &str = "UPDATE bbs_posts SET author = $2, body = $3, updated_at = $4 WHERE id = $1 RETURNING json_build_object('id', id, 'author', author, 'body', body, 'created', created_at, 'updated', updated_at)::text";
-const DELETE_STATEMENT: &str = "DELETE FROM bbs_posts WHERE id = $1 RETURNING id";
+const POSTS_SPACE: &str = "posts";
+const POST_INDEX_SPACE: &str = "post-index";
+const BBS_SCHEMA_IDENTITY: &str = "bbs-post-v1";
+const BBS_SCHEMA_DIGEST: &str = "c7f973a247bcdcc9e942a3d71bf15732145f3929c16f6a462e84a5437e149693";
 
 #[derive(Clone, Debug)]
 pub(crate) struct StandardReferences {
@@ -22,6 +19,7 @@ pub(crate) struct StandardReferences {
     pub(crate) interfaces: BTreeMap<String, String>,
     pub(crate) operations: BTreeMap<String, String>,
     pub(crate) cases: BTreeMap<String, String>,
+    pub(crate) fields: BTreeMap<String, String>,
 }
 
 impl StandardReferences {
@@ -60,6 +58,14 @@ impl StandardReferences {
             .map(String::as_str)
             .ok_or_else(|| DevError::corrupt(format!("standard discovery omitted case '{key}'")))
     }
+
+    fn field(&self, record: &str, name: &str) -> Result<&str, DevError> {
+        let key = format!("{record}.{name}");
+        self.fields
+            .get(&key)
+            .map(String::as_str)
+            .ok_or_else(|| DevError::corrupt(format!("standard discovery omitted field '{key}'")))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -76,7 +82,6 @@ pub(crate) struct ProjectReferences {
 pub(crate) struct ProgramRequest {
     pub(crate) bytes: Vec<u8>,
     pub(crate) records: usize,
-    pub(crate) migration_checksum: String,
 }
 
 #[derive(Debug)]
@@ -200,6 +205,16 @@ impl<'a> Builder<'a> {
         self.expression("field", vec![("value", value), ("field", field.to_owned())])
     }
 
+    fn standard_field(
+        &mut self,
+        value: String,
+        record: &str,
+        name: &str,
+    ) -> Result<String, DevError> {
+        let field = self.standard.field(record, name)?.to_owned();
+        self.field_nominal(value, &field)
+    }
+
     fn call(
         &mut self,
         function: &str,
@@ -289,12 +304,6 @@ impl<'a> Builder<'a> {
                 ("when-false", when_false),
             ],
         )
-    }
-
-    fn sequence(&mut self, items: Vec<String>) -> Result<String, DevError> {
-        let label = self.expression("sequence", vec![])?;
-        self.expression_arguments(&label, items)?;
-        Ok(label)
     }
 
     fn let_one(
@@ -470,12 +479,11 @@ impl<'a> Builder<'a> {
         self.call(&function, &[ty], arguments)
     }
 
-    fn finish(self, migration_checksum: String) -> ProgramRequest {
+    fn finish(self) -> ProgramRequest {
         let records = self.records.len();
         ProgramRequest {
             bytes: self.records.concat().into_bytes(),
             records,
-            migration_checksum,
         }
     }
 }
@@ -525,14 +533,11 @@ pub(crate) fn build_program_request(
     add_capability_requirements(&mut builder)?;
     add_response_functions(&mut builder)?;
     add_validation_and_route_functions(&mut builder)?;
-    add_sql_conversion_functions(&mut builder)?;
+    add_data_helpers(&mut builder)?;
     add_persistence_functions(&mut builder)?;
     add_handler(&mut builder)?;
     add_graph_tests(&mut builder)?;
-    let checksum = blake3::hash(MIGRATION_STATEMENT.as_bytes())
-        .to_hex()
-        .to_string();
-    Ok(builder.finish(checksum))
+    Ok(builder.finish())
 }
 
 fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
@@ -608,7 +613,7 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
             "$posts_result",
             "PostsResult",
             vec![
-                ("$posts_result_found", "Found", Some("@posts")),
+                ("$posts_result_found", "Found", Some("bytes")),
                 ("$posts_result_corrupt", "Corrupt", None),
             ],
         ),
@@ -655,12 +660,36 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
     builder.type_named("@posts_result", "$posts_result")?;
     builder.type_named("@route", "$route")?;
     builder.type_list("@posts", "@post")?;
-    builder.type_named("@sql_value", builder.standard.declaration("SqlValue")?)?;
-    builder.type_named("@sql_type", builder.standard.declaration("SqlType")?)?;
-    builder.type_list("@sql_values", "@sql_value")?;
-    builder.type_list("@sql_row", "@sql_value")?;
-    builder.type_list("@sql_rows", "@sql_row")?;
-    builder.type_list("@sql_types", "@sql_type")?;
+    builder.type_named(
+        "@data_key_part",
+        builder.standard.declaration("DataKeyPart")?,
+    )?;
+    builder.type_named(
+        "@data_expectation",
+        builder.standard.declaration("DataExpectation")?,
+    )?;
+    builder.type_named(
+        "@data_schema_expectation",
+        builder.standard.declaration("DataSchemaExpectation")?,
+    )?;
+    builder.type_named(
+        "@data_direction",
+        builder.standard.declaration("DataScanDirection")?,
+    )?;
+    builder.type_named("@data_schema", builder.standard.declaration("DataSchema")?)?;
+    builder.type_named("@data_entry", builder.standard.declaration("DataEntry")?)?;
+    builder.type_named(
+        "@data_scan_item",
+        builder.standard.declaration("DataScanItem")?,
+    )?;
+    builder.type_named(
+        "@data_scan_page",
+        builder.standard.declaration("DataScanPage")?,
+    )?;
+    builder.type_list("@data_key", "@data_key_part")?;
+    builder.type_list("@data_schemas", "@data_schema")?;
+    builder.type_list("@data_entries", "@data_entry")?;
+    builder.type_list("@data_scan_items", "@data_scan_item")?;
     builder.type_structural("@header", &[("name", "text"), ("value", "bytes")])?;
     builder.type_list("@headers", "@header")?;
     builder.type_stream("@body_stream", "bytes")?;
@@ -678,13 +707,22 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
 fn add_capability_requirements(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let definitions = [
         (
-            "$database",
-            "database",
-            "Database",
-            vec!["execute", "migration", "transaction", "query"],
+            "$data",
+            "data",
+            "DataStore",
             vec![
-                ("maximum_calls", 128_u64, "calls"),
-                ("maximum_rows", 128, "items"),
+                "schema-read",
+                "schema-set",
+                "get",
+                "scan",
+                "put",
+                "delete",
+                "transaction",
+            ],
+            vec![
+                ("maximum_calls", 256_u64, "calls"),
+                ("maximum_input_bytes", 4_194_304, "bytes"),
+                ("maximum_output_bytes", 4_194_304, "bytes"),
             ],
         ),
         (
@@ -990,55 +1028,33 @@ fn select_route_method_equal(
     builder.external_call("text-equal", vec![method, expected])
 }
 
-fn add_sql_conversion_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
-    let value = builder.local("$sql_text_value")?;
-    let mut cases = [
-        "NullText",
-        "I64",
-        "Bytes",
-        "Text",
-        "NullBool",
-        "NullBytes",
-        "NullI64",
-        "Bool",
-    ]
-    .into_iter()
-    .map(|name| Ok((name, builder.standard.case("SqlValue", name)?.to_owned())))
-    .collect::<Result<Vec<_>, DevError>>()?;
-    cases.sort_by(|left, right| left.1.cmp(&right.1));
-    let mut arms = Vec::with_capacity(cases.len());
-    for (name, case) in cases {
-        let payload = matches!(name, "I64" | "Bytes" | "Text" | "Bool");
-        if payload {
-            let binding = builder.binding_label();
-            let body = if name == "Text" {
-                builder.local(&binding)?
-            } else {
-                builder.local("$sql_text_fallback")?
-            };
-            let ty = match name {
-                "I64" => "i64",
-                "Bytes" => "bytes",
-                "Text" => "text",
-                "Bool" => "bool",
-                _ => return Err(DevError::corrupt("unexpected SQL value payload case")),
-            };
-            arms.push(MatchArm::payload(&case, binding, "payload", ty, body));
-        } else {
-            let body = builder.local("$sql_text_fallback")?;
-            arms.push(MatchArm::plain(&case, body));
-        }
-    }
-    let matched = builder.match_expression(value, arms)?;
+fn add_data_helpers(builder: &mut Builder<'_>) -> Result<(), DevError> {
+    let id = builder.local("$post_key_id")?;
+    let id = data_key_text(builder, id)?;
+    let key = builder.list("@data_key_part", vec![id])?;
     builder.create_function(
-        "$sql_text_or",
-        "sql-text-or",
-        "text",
+        "$post_key",
+        "post-key",
+        "@data_key",
         &[],
-        matched,
+        key,
+        &[("$post_key_id", "id", "text")],
+    )?;
+
+    let created = builder.local("$index_key_created")?;
+    let created = data_key_i64(builder, created)?;
+    let id = builder.local("$index_key_id")?;
+    let id = data_key_text(builder, id)?;
+    let key = builder.list("@data_key_part", vec![created, id])?;
+    builder.create_function(
+        "$index_key",
+        "post-index-key",
+        "@data_key",
+        &[],
+        key,
         &[
-            ("$sql_text_value", "value", "@sql_value"),
-            ("$sql_text_fallback", "fallback", "text"),
+            ("$index_key_created", "created", "i64"),
+            ("$index_key_id", "id", "text"),
         ],
     )?;
 
@@ -1057,126 +1073,386 @@ fn add_sql_conversion_functions(builder: &mut Builder<'_>) -> Result<(), DevErro
             ("$post_updated", zero_updated),
         ],
     )?;
-    let json = builder.local("$decode_post_json")?;
-    let bytes = builder.external_call("bytes-from-text", vec![json])?;
+    let bytes = builder.local("$decode_post_bytes")?;
     let decoded =
-        builder.generic_external_call("json-decode-or", "@post", vec![bytes, fallback_post])?;
-    let decoded_post = builder.let_one("decoded", decoded, None, |builder, binding| {
-        let valid_source = builder.local(binding)?;
-        let valid = builder.field_name(valid_source, "valid")?;
-        let value_source = builder.local(binding)?;
-        let value = builder.field_name(value_source, "value")?;
-        let found = builder.variant("$post_result_found", Some(value))?;
-        let corrupt = builder.variant("$post_result_corrupt", None)?;
-        builder.if_expression(valid, found, corrupt)
-    })?;
+        builder.generic_external_call("data-decode-or", "@post", vec![bytes, fallback_post])?;
+    let decoded_post = builder.let_one(
+        "decoded-post",
+        decoded,
+        Some("@post"),
+        |builder, binding| {
+            let source = builder.local(binding)?;
+            let id = builder.field_nominal(source, "$post_id")?;
+            let expected = builder.local("$decode_post_expected_id")?;
+            let valid = builder.external_call("text-equal", vec![id, expected])?;
+            let value = builder.local(binding)?;
+            let found = builder.variant("$post_result_found", Some(value))?;
+            let corrupt = builder.variant("$post_result_corrupt", None)?;
+            builder.if_expression(valid, found, corrupt)
+        },
+    )?;
     builder.create_function(
         "$decode_post",
-        "decode-post-row",
+        "decode-post",
         "@post_result",
         &[],
         decoded_post,
-        &[("$decode_post_json", "json", "text")],
+        &[
+            ("$decode_post_bytes", "value", "bytes"),
+            ("$decode_post_expected_id", "expected-id", "text"),
+        ],
     )?;
 
-    let fallback_posts = builder.list("@post", vec![])?;
-    let json = builder.local("$decode_posts_json")?;
-    let bytes = builder.external_call("bytes-from-text", vec![json])?;
-    let decoded =
-        builder.generic_external_call("json-decode-or", "@posts", vec![bytes, fallback_posts])?;
-    let decoded_posts = builder.let_one("decoded", decoded, None, |builder, binding| {
-        let valid_source = builder.local(binding)?;
-        let valid = builder.field_name(valid_source, "valid")?;
-        let value_source = builder.local(binding)?;
-        let value = builder.field_name(value_source, "value")?;
-        let found = builder.variant("$posts_result_found", Some(value))?;
-        let corrupt = builder.variant("$posts_result_corrupt", None)?;
-        builder.if_expression(valid, found, corrupt)
-    })?;
+    let revision = builder.local("$exact_revision")?;
+    let exact = data_expectation_exact(builder, revision)?;
     builder.create_function(
-        "$decode_posts",
-        "decode-post-list-row",
-        "@posts_result",
+        "$exact_expectation",
+        "exact-entry-expectation",
+        "@data_expectation",
         &[],
-        decoded_posts,
-        &[("$decode_posts_json", "json", "text")],
+        exact,
+        &[("$exact_revision", "revision", "bytes")],
     )?;
     Ok(())
 }
 
-fn add_persistence_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
-    let text_case = builder.standard.case("SqlType", "Text")?.to_owned();
-    let text_column = builder.variant(&text_case, None)?;
-    let columns = builder.list("@sql_type", vec![text_column])?;
-    let statement = builder.local("$query_one_statement")?;
-    let parameters = builder.local("$query_one_parameters")?;
-    let maximum_rows = builder.i64(1)?;
-    let rows = builder.capability_call(
-        "$database",
-        builder.standard.operation("Database", "query")?,
-        vec![statement, parameters, columns, maximum_rows],
+fn add_schema_migration(builder: &mut Builder<'_>) -> Result<(), DevError> {
+    let posts_space = builder.static_text(POSTS_SPACE)?;
+    let posts = builder.capability_call(
+        "$data",
+        builder.standard.operation("DataStore", "schema-read")?,
+        vec![posts_space],
     )?;
-    let query_body =
-        builder.let_one("rows", rows, Some("@sql_rows"), |builder, rows_binding| {
-            let rows = builder.local(rows_binding)?;
-            let length = builder.external_call("sql-rows-length", vec![rows])?;
-            let zero = builder.i64(0)?;
-            let has_row = builder.external_call("less", vec![zero, length])?;
-            let rows = builder.local(rows_binding)?;
-            let zero = builder.i64(0)?;
-            let row = builder.external_call("sql-rows-get", vec![rows, zero])?;
-            let zero = builder.i64(0)?;
-            let value = builder.external_call("sql-row-get", vec![row, zero])?;
-            let fallback = builder.text("")?;
-            let text = builder.call("$sql_text_or", &[], vec![value, fallback])?;
-            let found = builder.variant("$maybe_text_found", Some(text))?;
-            let missing = builder.variant("$maybe_text_missing", None)?;
-            builder.if_expression(has_row, found, missing)
-        })?;
-    builder.create_function(
-        "$query_one_text",
-        "query-one-text",
-        "@maybe_text",
-        &["$database"],
-        query_body,
-        &[
-            ("$query_one_statement", "statement", "static-text"),
-            ("$query_one_parameters", "parameters", "@sql_values"),
-        ],
+    let index_space = builder.static_text(POST_INDEX_SPACE)?;
+    let index = builder.capability_call(
+        "$data",
+        builder.standard.operation("DataStore", "schema-read")?,
+        vec![index_space],
     )?;
+    let body = builder.let_one(
+        "post-schemas",
+        posts,
+        Some("@data_schemas"),
+        |builder, posts_binding| {
+            builder.let_one(
+                "index-schemas",
+                index,
+                Some("@data_schemas"),
+                |builder, index_binding| {
+                    let posts = builder.local(posts_binding)?;
+                    let posts_length = builder.generic_external_call(
+                        "list-length",
+                        "@data_schema",
+                        vec![posts],
+                    )?;
+                    let zero = builder.i64(0)?;
+                    let posts_missing =
+                        builder.external_call("i64-equal", vec![posts_length, zero])?;
+                    let index = builder.local(index_binding)?;
+                    let index_length = builder.generic_external_call(
+                        "list-length",
+                        "@data_schema",
+                        vec![index],
+                    )?;
+                    let zero = builder.i64(0)?;
+                    let index_missing =
+                        builder.external_call("i64-equal", vec![index_length, zero])?;
+                    let both_missing =
+                        builder.external_call("bool-and", vec![posts_missing, index_missing])?;
 
-    let migration_id = builder.i64(MIGRATION_ID)?;
-    let migration_checksum = blake3::hash(MIGRATION_STATEMENT.as_bytes())
-        .to_hex()
-        .to_string();
-    let checksum = builder.static_text(&migration_checksum)?;
-    let statement = builder.static_text(MIGRATION_STATEMENT)?;
-    let migrate = builder.capability_call(
-        "$database",
-        builder.standard.operation("Database", "migration")?,
-        vec![migration_id, checksum, statement],
-    )?;
-    builder.create_function("$migrate", "migrate", "bool", &["$database"], migrate, &[])?;
+                    let posts_schema = data_schema(builder)?;
+                    let posts_expected = data_schema_expectation_missing(builder)?;
+                    let posts_space = builder.static_text(POSTS_SPACE)?;
+                    let posts_set = builder.capability_call(
+                        "$data",
+                        builder.standard.operation("DataStore", "schema-set")?,
+                        vec![posts_space, posts_expected, posts_schema],
+                    )?;
+                    let index_schema = data_schema(builder)?;
+                    let index_expected = data_schema_expectation_missing(builder)?;
+                    let index_space = builder.static_text(POST_INDEX_SPACE)?;
+                    let index_set = builder.capability_call(
+                        "$data",
+                        builder.standard.operation("DataStore", "schema-set")?,
+                        vec![index_space, index_expected, index_schema],
+                    )?;
+                    let initialized =
+                        builder.external_call("bool-and", vec![posts_set, index_set])?;
 
-    let statement = builder.static_text(LIST_STATEMENT)?;
-    let parameters = builder.list("@sql_value", vec![])?;
-    let selected = builder.call("$query_one_text", &[], vec![statement, parameters])?;
-    let missing = builder.variant("$posts_result_corrupt", None)?;
-    let found_binding = builder.binding_label();
-    let found_value = builder.local(&found_binding)?;
-    let found = builder.call("$decode_posts", &[], vec![found_value])?;
-    let list_posts = builder.match_expression(
-        selected,
+                    let posts = builder.local(posts_binding)?;
+                    let posts_length = builder.generic_external_call(
+                        "list-length",
+                        "@data_schema",
+                        vec![posts],
+                    )?;
+                    let one = builder.i64(1)?;
+                    let posts_one = builder.external_call("i64-equal", vec![posts_length, one])?;
+                    let index = builder.local(index_binding)?;
+                    let index_length = builder.generic_external_call(
+                        "list-length",
+                        "@data_schema",
+                        vec![index],
+                    )?;
+                    let one = builder.i64(1)?;
+                    let index_one = builder.external_call("i64-equal", vec![index_length, one])?;
+                    let both_one = builder.external_call("bool-and", vec![posts_one, index_one])?;
+
+                    let posts = builder.local(posts_binding)?;
+                    let zero = builder.i64(0)?;
+                    let posts_schema = builder.generic_external_call(
+                        "list-get",
+                        "@data_schema",
+                        vec![posts, zero],
+                    )?;
+                    let posts_identity =
+                        builder.standard_field(posts_schema, "DataSchema", "identity")?;
+                    let identity = builder.text(BBS_SCHEMA_IDENTITY)?;
+                    let posts_identity_ok =
+                        builder.external_call("text-equal", vec![posts_identity, identity])?;
+                    let posts = builder.local(posts_binding)?;
+                    let zero = builder.i64(0)?;
+                    let posts_schema = builder.generic_external_call(
+                        "list-get",
+                        "@data_schema",
+                        vec![posts, zero],
+                    )?;
+                    let posts_digest =
+                        builder.standard_field(posts_schema, "DataSchema", "digest")?;
+                    let digest = builder.text(BBS_SCHEMA_DIGEST)?;
+                    let digest = builder.external_call("bytes-from-text", vec![digest])?;
+                    let posts_digest_ok =
+                        builder.external_call("bytes-equal", vec![posts_digest, digest])?;
+                    let posts_valid = builder
+                        .external_call("bool-and", vec![posts_identity_ok, posts_digest_ok])?;
+
+                    let index = builder.local(index_binding)?;
+                    let zero = builder.i64(0)?;
+                    let index_schema = builder.generic_external_call(
+                        "list-get",
+                        "@data_schema",
+                        vec![index, zero],
+                    )?;
+                    let index_identity =
+                        builder.standard_field(index_schema, "DataSchema", "identity")?;
+                    let identity = builder.text(BBS_SCHEMA_IDENTITY)?;
+                    let index_identity_ok =
+                        builder.external_call("text-equal", vec![index_identity, identity])?;
+                    let index = builder.local(index_binding)?;
+                    let zero = builder.i64(0)?;
+                    let index_schema = builder.generic_external_call(
+                        "list-get",
+                        "@data_schema",
+                        vec![index, zero],
+                    )?;
+                    let index_digest =
+                        builder.standard_field(index_schema, "DataSchema", "digest")?;
+                    let digest = builder.text(BBS_SCHEMA_DIGEST)?;
+                    let digest = builder.external_call("bytes-from-text", vec![digest])?;
+                    let index_digest_ok =
+                        builder.external_call("bytes-equal", vec![index_digest, digest])?;
+                    let index_valid = builder
+                        .external_call("bool-and", vec![index_identity_ok, index_digest_ok])?;
+                    let schemas_valid =
+                        builder.external_call("bool-and", vec![posts_valid, index_valid])?;
+                    let false_value = builder.boolean(false)?;
+                    let existing = builder.if_expression(both_one, schemas_valid, false_value)?;
+                    builder.if_expression(both_missing, initialized, existing)
+                },
+            )
+        },
+    )?;
+    let body = builder.transaction("$data", body)?;
+    builder.create_function("$migrate", "migrate", "bool", &["$data"], body, &[])
+}
+
+fn add_index_projection(builder: &mut Builder<'_>) -> Result<(), DevError> {
+    let index = builder.local("$collect_index")?;
+    let items = builder.local("$collect_items")?;
+    let length = builder.generic_external_call("list-length", "@data_scan_item", vec![items])?;
+    let more = builder.external_call("less", vec![index, length])?;
+
+    let items = builder.local("$collect_items")?;
+    let index = builder.local("$collect_index")?;
+    let item = builder.generic_external_call("list-get", "@data_scan_item", vec![items, index])?;
+    let key = builder.standard_field(item, "DataScanItem", "key")?;
+    let one = builder.i64(1)?;
+    let id_part = builder.generic_external_call("list-get", "@data_key_part", vec![key, one])?;
+
+    let bool_binding = builder.binding_label();
+    let bool_corrupt = builder.variant("$posts_result_corrupt", None)?;
+    let i64_binding = builder.binding_label();
+    let i64_corrupt = builder.variant("$posts_result_corrupt", None)?;
+    let text_binding = builder.binding_label();
+    let text_body = index_text_projection(builder, &text_binding)?;
+    let bytes_binding = builder.binding_label();
+    let bytes_corrupt = builder.variant("$posts_result_corrupt", None)?;
+    let projected = builder.match_expression(
+        id_part,
         vec![
-            MatchArm::plain("$maybe_text_missing", missing),
-            MatchArm::payload("$maybe_text_found", found_binding, "json", "text", found),
+            MatchArm::payload(
+                builder.standard.case("DataKeyPart", "Bool")?,
+                bool_binding,
+                "foreign-bool-key",
+                "bool",
+                bool_corrupt,
+            ),
+            MatchArm::payload(
+                builder.standard.case("DataKeyPart", "I64")?,
+                i64_binding,
+                "foreign-i64-key",
+                "i64",
+                i64_corrupt,
+            ),
+            MatchArm::payload(
+                builder.standard.case("DataKeyPart", "Text")?,
+                text_binding,
+                "post-id",
+                "text",
+                text_body,
+            ),
+            MatchArm::payload(
+                builder.standard.case("DataKeyPart", "Bytes")?,
+                bytes_binding,
+                "foreign-bytes-key",
+                "bytes",
+                bytes_corrupt,
+            ),
         ],
     )?;
+
+    let output = builder.local("$collect_output")?;
+    let closing = builder.text("]")?;
+    let closing = builder.external_call("bytes-from-text", vec![closing])?;
+    let completed = builder.external_call("bytes-concat", vec![output, closing])?;
+    let completed = builder.variant("$posts_result_found", Some(completed))?;
+    let body = builder.if_expression(more, projected, completed)?;
+    builder.create_function(
+        "$collect_posts_json",
+        "collect-post-index-json",
+        "@posts_result",
+        &["$data"],
+        body,
+        &[
+            ("$collect_index", "index", "i64"),
+            ("$collect_items", "items", "@data_scan_items"),
+            ("$collect_output", "output", "bytes"),
+        ],
+    )
+}
+
+fn index_text_projection(builder: &mut Builder<'_>, id_binding: &str) -> Result<String, DevError> {
+    let id = builder.local(id_binding)?;
+    let key = builder.call("$post_key", &[], vec![id])?;
+    let space = builder.static_text(POSTS_SPACE)?;
+    let entries = builder.capability_call(
+        "$data",
+        builder.standard.operation("DataStore", "get")?,
+        vec![space, key],
+    )?;
+    builder.let_one(
+        "indexed-post-entry",
+        entries,
+        Some("@data_entries"),
+        |builder, entries_binding| {
+            let entries = builder.local(entries_binding)?;
+            let length =
+                builder.generic_external_call("list-length", "@data_entry", vec![entries])?;
+            let one = builder.i64(1)?;
+            let present = builder.external_call("i64-equal", vec![length, one])?;
+
+            let entries = builder.local(entries_binding)?;
+            let zero = builder.i64(0)?;
+            let entry =
+                builder.generic_external_call("list-get", "@data_entry", vec![entries, zero])?;
+            let value = builder.standard_field(entry, "DataEntry", "value")?;
+            let id = builder.local(id_binding)?;
+            let decoded = builder.call("$decode_post", &[], vec![value, id])?;
+
+            let post_binding = builder.binding_label();
+            let post = builder.local(&post_binding)?;
+            let encoded = builder.generic_external_call("json-encode", "@post", vec![post])?;
+            let index = builder.local("$collect_index")?;
+            let zero = builder.i64(0)?;
+            let first = builder.external_call("i64-equal", vec![index, zero])?;
+            let empty = empty_bytes(builder)?;
+            let comma = builder.text(",")?;
+            let comma = builder.external_call("bytes-from-text", vec![comma])?;
+            let delimiter = builder.if_expression(first, empty, comma)?;
+            let output = builder.local("$collect_output")?;
+            let output = builder.external_call("bytes-concat", vec![output, delimiter])?;
+            let output = builder.external_call("bytes-concat", vec![output, encoded])?;
+            let index = builder.local("$collect_index")?;
+            let one = builder.i64(1)?;
+            let next = builder.external_call("add", vec![index, one])?;
+            let items = builder.local("$collect_items")?;
+            let recurse = builder.call("$collect_posts_json", &[], vec![next, items, output])?;
+            let missing = builder.variant("$posts_result_corrupt", None)?;
+            let corrupt = builder.variant("$posts_result_corrupt", None)?;
+            let decoded_result = builder.match_expression(
+                decoded,
+                vec![
+                    MatchArm::plain("$post_result_missing", missing),
+                    MatchArm::payload("$post_result_found", post_binding, "post", "@post", recurse),
+                    MatchArm::plain("$post_result_corrupt", corrupt),
+                ],
+            )?;
+            let missing = builder.variant("$posts_result_corrupt", None)?;
+            builder.if_expression(present, decoded_result, missing)
+        },
+    )
+}
+
+fn add_persistence_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
+    add_schema_migration(builder)?;
+    add_index_projection(builder)?;
+
+    let prefix = builder.list("@data_key_part", vec![])?;
+    let direction = data_direction(builder, "Forward")?;
+    let maximum_items = builder.i64(128)?;
+    let maximum_bytes = builder.i64(1_048_576)?;
+    let maximum_work = builder.i64(4_096)?;
+    let continuation = empty_bytes(builder)?;
+    let space = builder.static_text(POST_INDEX_SPACE)?;
+    let page = builder.capability_call(
+        "$data",
+        builder.standard.operation("DataStore", "scan")?,
+        vec![
+            space,
+            prefix,
+            direction,
+            maximum_items,
+            maximum_bytes,
+            maximum_work,
+            continuation,
+        ],
+    )?;
+    let list_posts = builder.let_one(
+        "post-index-page",
+        page,
+        Some("@data_scan_page"),
+        |builder, page_binding| {
+            let source = builder.local(page_binding)?;
+            let continuation = builder.standard_field(source, "DataScanPage", "continuation")?;
+            let continuation_length = builder.external_call("bytes-length", vec![continuation])?;
+            let zero = builder.i64(0)?;
+            let complete = builder.external_call("i64-equal", vec![continuation_length, zero])?;
+            let source = builder.local(page_binding)?;
+            let items = builder.standard_field(source, "DataScanPage", "items")?;
+            let index = builder.i64(0)?;
+            let opening = builder.text("[")?;
+            let opening = builder.external_call("bytes-from-text", vec![opening])?;
+            let projected =
+                builder.call("$collect_posts_json", &[], vec![index, items, opening])?;
+            let corrupt = builder.variant("$posts_result_corrupt", None)?;
+            builder.if_expression(complete, projected, corrupt)
+        },
+    )?;
+    let list_posts = builder.transaction("$data", list_posts)?;
     builder.create_function(
         "$list_posts",
         "list-posts",
         "@posts_result",
-        &["$database"],
+        &["$data"],
         list_posts,
         &[],
     )?;
@@ -1195,41 +1471,62 @@ fn add_persistence_functions(builder: &mut Builder<'_>) -> Result<(), DevError> 
             vec![],
         )?;
         builder.let_one("now", now, Some("i64"), |builder, now_binding| {
-            let id_value = builder.local(id_binding)?;
-            let id = sql_text_value(builder, id_value)?;
+            let id = builder.local(id_binding)?;
             let input = builder.local("$create_post_input")?;
             let author = builder.field_nominal(input, "$write_author")?;
-            let author = sql_text_value(builder, author)?;
             let input = builder.local("$create_post_input")?;
             let body = builder.field_nominal(input, "$write_body")?;
-            let body = sql_text_value(builder, body)?;
-            let created_value = builder.local(now_binding)?;
-            let created = sql_i64_value(builder, created_value)?;
-            let updated_value = builder.local(now_binding)?;
-            let updated = sql_i64_value(builder, updated_value)?;
-            let parameters =
-                builder.list("@sql_value", vec![id, author, body, created, updated])?;
-            let statement = builder.static_text(CREATE_STATEMENT)?;
-            let selected = builder.call("$query_one_text", &[], vec![statement, parameters])?;
-            let missing = builder.variant("$post_result_corrupt", None)?;
-            let found_binding = builder.binding_label();
-            let found_value = builder.local(&found_binding)?;
-            let found = builder.call("$decode_post", &[], vec![found_value])?;
-            let result = builder.match_expression(
-                selected,
+            let created = builder.local(now_binding)?;
+            let updated = builder.local(now_binding)?;
+            let post = builder.nominal_record(
+                "$post",
                 vec![
-                    MatchArm::plain("$maybe_text_missing", missing),
-                    MatchArm::payload("$maybe_text_found", found_binding, "json", "text", found),
+                    ("$post_id", id),
+                    ("$post_author", author),
+                    ("$post_body", body),
+                    ("$post_created", created),
+                    ("$post_updated", updated),
                 ],
             )?;
-            builder.transaction("$database", result)
+            builder.let_one("new-post", post, Some("@post"), |builder, post_binding| {
+                let id = builder.local(id_binding)?;
+                let primary_key = builder.call("$post_key", &[], vec![id])?;
+                let value = builder.local(post_binding)?;
+                let value = builder.generic_external_call("data-encode", "@post", vec![value])?;
+                let expected = data_expectation_missing(builder)?;
+                let primary_space = builder.static_text(POSTS_SPACE)?;
+                let primary = builder.capability_call(
+                    "$data",
+                    builder.standard.operation("DataStore", "put")?,
+                    vec![primary_space, primary_key, value, expected],
+                )?;
+
+                let created = builder.local(now_binding)?;
+                let id = builder.local(id_binding)?;
+                let index_key = builder.call("$index_key", &[], vec![created, id])?;
+                let index_value = empty_bytes(builder)?;
+                let expected = data_expectation_missing(builder)?;
+                let index_space = builder.static_text(POST_INDEX_SPACE)?;
+                let index = builder.capability_call(
+                    "$data",
+                    builder.standard.operation("DataStore", "put")?,
+                    vec![index_space, index_key, index_value, expected],
+                )?;
+                let post = builder.local(post_binding)?;
+                let found = builder.variant("$post_result_found", Some(post))?;
+                let corrupt = builder.variant("$post_result_corrupt", None)?;
+                let dependent = builder.if_expression(index, found, corrupt)?;
+                let corrupt = builder.variant("$post_result_corrupt", None)?;
+                let result = builder.if_expression(primary, dependent, corrupt)?;
+                builder.transaction("$data", result)
+            })
         })
     })?;
     builder.create_function(
         "$create_post",
         "create-post",
         "@post_result",
-        &["$database", "$identifiers", "$clock"],
+        &["$data", "$identifiers", "$clock"],
         create,
         &[("$create_post_input", "input", "@write_post")],
     )?;
@@ -1242,37 +1539,118 @@ fn add_persistence_functions(builder: &mut Builder<'_>) -> Result<(), DevError> 
         vec![],
     )?;
     let update = builder.let_one("now", now, Some("i64"), |builder, now_binding| {
-        let id_value = builder.local("$update_post_id")?;
-        let id = sql_text_value(builder, id_value)?;
-        let input = builder.local("$update_post_input")?;
-        let author = builder.field_nominal(input, "$write_author")?;
-        let author = sql_text_value(builder, author)?;
-        let input = builder.local("$update_post_input")?;
-        let body = builder.field_nominal(input, "$write_body")?;
-        let body = sql_text_value(builder, body)?;
-        let updated_value = builder.local(now_binding)?;
-        let updated = sql_i64_value(builder, updated_value)?;
-        let parameters = builder.list("@sql_value", vec![id, author, body, updated])?;
-        let statement = builder.static_text(UPDATE_STATEMENT)?;
-        let selected = builder.call("$query_one_text", &[], vec![statement, parameters])?;
-        let missing = builder.variant("$post_result_missing", None)?;
-        let found_binding = builder.binding_label();
-        let found_value = builder.local(&found_binding)?;
-        let found = builder.call("$decode_post", &[], vec![found_value])?;
-        let result = builder.match_expression(
-            selected,
-            vec![
-                MatchArm::plain("$maybe_text_missing", missing),
-                MatchArm::payload("$maybe_text_found", found_binding, "json", "text", found),
-            ],
+        let id = builder.local("$update_post_id")?;
+        let key = builder.call("$post_key", &[], vec![id])?;
+        let space = builder.static_text(POSTS_SPACE)?;
+        let entries = builder.capability_call(
+            "$data",
+            builder.standard.operation("DataStore", "get")?,
+            vec![space, key],
         )?;
-        builder.transaction("$database", result)
+        let result = builder.let_one(
+            "update-entry-list",
+            entries,
+            Some("@data_entries"),
+            |builder, entries_binding| {
+                let entries = builder.local(entries_binding)?;
+                let length =
+                    builder.generic_external_call("list-length", "@data_entry", vec![entries])?;
+                let one = builder.i64(1)?;
+                let found_entry = builder.external_call("i64-equal", vec![length, one])?;
+
+                let entries = builder.local(entries_binding)?;
+                let zero = builder.i64(0)?;
+                let entry = builder.generic_external_call(
+                    "list-get",
+                    "@data_entry",
+                    vec![entries, zero],
+                )?;
+                let revision = builder.standard_field(entry, "DataEntry", "revision")?;
+                let entries = builder.local(entries_binding)?;
+                let zero = builder.i64(0)?;
+                let entry = builder.generic_external_call(
+                    "list-get",
+                    "@data_entry",
+                    vec![entries, zero],
+                )?;
+                let value = builder.standard_field(entry, "DataEntry", "value")?;
+                let expected_id = builder.local("$update_post_id")?;
+                let decoded = builder.call("$decode_post", &[], vec![value, expected_id])?;
+
+                let old_binding = builder.binding_label();
+                let old = builder.local(&old_binding)?;
+                let id = builder.field_nominal(old, "$post_id")?;
+                let input = builder.local("$update_post_input")?;
+                let author = builder.field_nominal(input, "$write_author")?;
+                let input = builder.local("$update_post_input")?;
+                let body = builder.field_nominal(input, "$write_body")?;
+                let old = builder.local(&old_binding)?;
+                let created = builder.field_nominal(old, "$post_created")?;
+                let updated = builder.local(now_binding)?;
+                let next = builder.nominal_record(
+                    "$post",
+                    vec![
+                        ("$post_id", id),
+                        ("$post_author", author),
+                        ("$post_body", body),
+                        ("$post_created", created),
+                        ("$post_updated", updated),
+                    ],
+                )?;
+                let next_scope = builder.let_one(
+                    "updated-post",
+                    next,
+                    Some("@post"),
+                    |builder, next_binding| {
+                        let next_value = builder.local(next_binding)?;
+                        let encoded = builder.generic_external_call(
+                            "data-encode",
+                            "@post",
+                            vec![next_value],
+                        )?;
+                        let id = builder.local("$update_post_id")?;
+                        let key = builder.call("$post_key", &[], vec![id])?;
+                        let expected = builder.call("$exact_expectation", &[], vec![revision])?;
+                        let space = builder.static_text(POSTS_SPACE)?;
+                        let written = builder.capability_call(
+                            "$data",
+                            builder.standard.operation("DataStore", "put")?,
+                            vec![space, key, encoded, expected],
+                        )?;
+                        let next_value = builder.local(next_binding)?;
+                        let written_value =
+                            builder.variant("$post_result_found", Some(next_value))?;
+                        let stale = builder.variant("$post_result_missing", None)?;
+                        builder.if_expression(written, written_value, stale)
+                    },
+                )?;
+                let missing = builder.variant("$post_result_missing", None)?;
+                let corrupt = builder.variant("$post_result_corrupt", None)?;
+                let decoded_result = builder.match_expression(
+                    decoded,
+                    vec![
+                        MatchArm::plain("$post_result_missing", missing),
+                        MatchArm::payload(
+                            "$post_result_found",
+                            old_binding,
+                            "post",
+                            "@post",
+                            next_scope,
+                        ),
+                        MatchArm::plain("$post_result_corrupt", corrupt),
+                    ],
+                )?;
+                let missing = builder.variant("$post_result_missing", None)?;
+                builder.if_expression(found_entry, decoded_result, missing)
+            },
+        )?;
+        builder.transaction("$data", result)
     })?;
     builder.create_function(
         "$update_post",
         "update-post",
         "@post_result",
-        &["$database", "$clock"],
+        &["$data", "$clock"],
         update,
         &[
             ("$update_post_id", "id", "text"),
@@ -1280,47 +1658,182 @@ fn add_persistence_functions(builder: &mut Builder<'_>) -> Result<(), DevError> 
         ],
     )?;
 
-    let id_value = builder.local("$delete_post_id")?;
-    let id = sql_text_value(builder, id_value)?;
-    let parameters = builder.list("@sql_value", vec![id])?;
-    let statement = builder.static_text(DELETE_STATEMENT)?;
-    let selected = builder.call("$query_one_text", &[], vec![statement, parameters])?;
-    let missing = builder.boolean(false)?;
-    let found_binding = builder.binding_label();
-    let found = builder.boolean(true)?;
-    let result = builder.match_expression(
-        selected,
-        vec![
-            MatchArm::plain("$maybe_text_missing", missing),
-            MatchArm::payload(
-                "$maybe_text_found",
-                found_binding,
-                "deleted-id",
-                "text",
-                found,
-            ),
-        ],
+    let id = builder.local("$delete_post_id")?;
+    let key = builder.call("$post_key", &[], vec![id])?;
+    let space = builder.static_text(POSTS_SPACE)?;
+    let entries = builder.capability_call(
+        "$data",
+        builder.standard.operation("DataStore", "get")?,
+        vec![space, key],
     )?;
-    let delete = builder.transaction("$database", result)?;
+    let delete = builder.let_one(
+        "delete-entry-list",
+        entries,
+        Some("@data_entries"),
+        |builder, entries_binding| {
+            let entries = builder.local(entries_binding)?;
+            let length =
+                builder.generic_external_call("list-length", "@data_entry", vec![entries])?;
+            let one = builder.i64(1)?;
+            let found_entry = builder.external_call("i64-equal", vec![length, one])?;
+
+            let entries = builder.local(entries_binding)?;
+            let zero = builder.i64(0)?;
+            let entry =
+                builder.generic_external_call("list-get", "@data_entry", vec![entries, zero])?;
+            let primary_revision = builder.standard_field(entry, "DataEntry", "revision")?;
+            let entries = builder.local(entries_binding)?;
+            let zero = builder.i64(0)?;
+            let entry =
+                builder.generic_external_call("list-get", "@data_entry", vec![entries, zero])?;
+            let value = builder.standard_field(entry, "DataEntry", "value")?;
+            let expected_id = builder.local("$delete_post_id")?;
+            let decoded = builder.call("$decode_post", &[], vec![value, expected_id])?;
+
+            let post_binding = builder.binding_label();
+            let post = builder.local(&post_binding)?;
+            let created = builder.field_nominal(post, "$post_created")?;
+            let id = builder.local("$delete_post_id")?;
+            let index_key = builder.call("$index_key", &[], vec![created, id])?;
+            let index_space = builder.static_text(POST_INDEX_SPACE)?;
+            let index_entries = builder.capability_call(
+                "$data",
+                builder.standard.operation("DataStore", "get")?,
+                vec![index_space, index_key],
+            )?;
+            let removed = builder.let_one(
+                "delete-index-entry-list",
+                index_entries,
+                Some("@data_entries"),
+                |builder, index_entries_binding| {
+                    let entries = builder.local(index_entries_binding)?;
+                    let length = builder.generic_external_call(
+                        "list-length",
+                        "@data_entry",
+                        vec![entries],
+                    )?;
+                    let one = builder.i64(1)?;
+                    let found_index = builder.external_call("i64-equal", vec![length, one])?;
+
+                    let entries = builder.local(index_entries_binding)?;
+                    let zero = builder.i64(0)?;
+                    let index_entry = builder.generic_external_call(
+                        "list-get",
+                        "@data_entry",
+                        vec![entries, zero],
+                    )?;
+                    let index_revision =
+                        builder.standard_field(index_entry, "DataEntry", "revision")?;
+
+                    let id = builder.local("$delete_post_id")?;
+                    let primary_key = builder.call("$post_key", &[], vec![id])?;
+                    let expected =
+                        builder.call("$exact_expectation", &[], vec![primary_revision])?;
+                    let primary_space = builder.static_text(POSTS_SPACE)?;
+                    let primary_removed = builder.capability_call(
+                        "$data",
+                        builder.standard.operation("DataStore", "delete")?,
+                        vec![primary_space, primary_key, expected],
+                    )?;
+
+                    let post = builder.local(&post_binding)?;
+                    let created = builder.field_nominal(post, "$post_created")?;
+                    let id = builder.local("$delete_post_id")?;
+                    let index_key = builder.call("$index_key", &[], vec![created, id])?;
+                    let expected = builder.call("$exact_expectation", &[], vec![index_revision])?;
+                    let index_space = builder.static_text(POST_INDEX_SPACE)?;
+                    let index_removed = builder.capability_call(
+                        "$data",
+                        builder.standard.operation("DataStore", "delete")?,
+                        vec![index_space, index_key, expected],
+                    )?;
+                    let both =
+                        builder.external_call("bool-and", vec![primary_removed, index_removed])?;
+                    let false_value = builder.boolean(false)?;
+                    builder.if_expression(found_index, both, false_value)
+                },
+            )?;
+            let missing_post = builder.boolean(false)?;
+            let corrupt_post = builder.boolean(false)?;
+            let decoded_result = builder.match_expression(
+                decoded,
+                vec![
+                    MatchArm::plain("$post_result_missing", missing_post),
+                    MatchArm::payload("$post_result_found", post_binding, "post", "@post", removed),
+                    MatchArm::plain("$post_result_corrupt", corrupt_post),
+                ],
+            )?;
+            let missing = builder.boolean(false)?;
+            builder.if_expression(found_entry, decoded_result, missing)
+        },
+    )?;
+    let delete = builder.transaction("$data", delete)?;
     builder.create_function(
         "$delete_post",
         "delete-post",
         "bool",
-        &["$database"],
+        &["$data"],
         delete,
         &[("$delete_post_id", "id", "text")],
     )?;
     Ok(())
 }
 
-fn sql_text_value(builder: &mut Builder<'_>, value: String) -> Result<String, DevError> {
-    let case = builder.standard.case("SqlValue", "Text")?.to_owned();
+fn data_key_text(builder: &mut Builder<'_>, value: String) -> Result<String, DevError> {
+    let case = builder.standard.case("DataKeyPart", "Text")?.to_owned();
     builder.variant(&case, Some(value))
 }
 
-fn sql_i64_value(builder: &mut Builder<'_>, value: String) -> Result<String, DevError> {
-    let case = builder.standard.case("SqlValue", "I64")?.to_owned();
+fn data_key_i64(builder: &mut Builder<'_>, value: String) -> Result<String, DevError> {
+    let case = builder.standard.case("DataKeyPart", "I64")?.to_owned();
     builder.variant(&case, Some(value))
+}
+
+fn data_expectation_missing(builder: &mut Builder<'_>) -> Result<String, DevError> {
+    let case = builder
+        .standard
+        .case("DataExpectation", "Missing")?
+        .to_owned();
+    builder.variant(&case, None)
+}
+
+fn data_expectation_exact(builder: &mut Builder<'_>, revision: String) -> Result<String, DevError> {
+    let case = builder
+        .standard
+        .case("DataExpectation", "Exact")?
+        .to_owned();
+    builder.variant(&case, Some(revision))
+}
+
+fn data_schema_expectation_missing(builder: &mut Builder<'_>) -> Result<String, DevError> {
+    let case = builder
+        .standard
+        .case("DataSchemaExpectation", "Missing")?
+        .to_owned();
+    builder.variant(&case, None)
+}
+
+fn data_direction(builder: &mut Builder<'_>, name: &str) -> Result<String, DevError> {
+    let case = builder.standard.case("DataScanDirection", name)?.to_owned();
+    builder.variant(&case, None)
+}
+
+fn data_schema(builder: &mut Builder<'_>) -> Result<String, DevError> {
+    let declaration = builder.standard.declaration("DataSchema")?.to_owned();
+    let identity_field = builder.standard.field("DataSchema", "identity")?.to_owned();
+    let digest_field = builder.standard.field("DataSchema", "digest")?.to_owned();
+    let identity = builder.text(BBS_SCHEMA_IDENTITY)?;
+    let digest = builder.text(BBS_SCHEMA_DIGEST)?;
+    let digest = builder.external_call("bytes-from-text", vec![digest])?;
+    builder.nominal_record(
+        &declaration,
+        vec![(&identity_field, identity), (&digest_field, digest)],
+    )
+}
+
+fn empty_bytes(builder: &mut Builder<'_>) -> Result<String, DevError> {
+    let empty = builder.text("")?;
+    builder.external_call("bytes-from-text", vec![empty])
 }
 
 fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
@@ -1367,7 +1880,8 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         ],
     )?;
     let migration = builder.call("$migrate", &[], vec![])?;
-    let body = builder.sequence(vec![migration, routed])?;
+    let schema_error = error_response(builder, 500, "schema_mismatch")?;
+    let body = builder.if_expression(migration, routed, schema_error)?;
 
     let streams = format!(
         "{}/{}",
@@ -1382,7 +1896,7 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
             ("effect", "task".to_owned()),
         ],
     )?;
-    for (index, requirement) in [streams.as_str(), "$database", "$identifiers", "$clock"]
+    for (index, requirement) in [streams.as_str(), "$data", "$identifiers", "$clock"]
         .into_iter()
         .enumerate()
     {
@@ -1434,16 +1948,15 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let list_corrupt = error_response(builder, 500, "persistence_shape")?;
     let list_binding = builder.binding_label();
     let list_value = builder.local(&list_binding)?;
-    let list_json = builder.generic_external_call("json-encode", "@posts", vec![list_value])?;
-    let list_ok = json_response(builder, 200, list_json)?;
+    let list_ok = json_response(builder, 200, list_value)?;
     let list_response = builder.match_expression(
         listed,
         vec![
             MatchArm::payload(
                 "$posts_result_found",
                 list_binding,
-                "posts",
-                "@posts",
+                "json",
+                "bytes",
                 list_ok,
             ),
             MatchArm::plain("$posts_result_corrupt", list_corrupt),
@@ -1453,7 +1966,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$handle_list",
         "handle-list-posts",
         "@response",
-        &["$database"],
+        &["$data"],
         list_response,
         &[],
     )?;
@@ -1473,7 +1986,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$handle_create",
         "handle-create-post",
         "@response",
-        &[streams.as_str(), "$database", "$identifiers", "$clock"],
+        &[streams.as_str(), "$data", "$identifiers", "$clock"],
         create_response,
         &[
             ("$create_headers", "headers", "@headers"),
@@ -1496,7 +2009,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$handle_update",
         "handle-update-post",
         "@response",
-        &[streams.as_str(), "$database", "$clock"],
+        &[streams.as_str(), "$data", "$clock"],
         update_response,
         &[
             ("$update_id", "id", "text"),
@@ -1518,7 +2031,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$handle_delete",
         "handle-delete-post",
         "@response",
-        &["$database"],
+        &["$data"],
         delete_response,
         &[("$delete_id", "id", "text")],
     )?;
@@ -1736,15 +2249,41 @@ fn add_graph_tests(builder: &mut Builder<'_>) -> Result<(), DevError> {
         expected,
     )?;
 
-    let value = builder.text("row-value")?;
-    let sql_value = sql_text_value(builder, value)?;
-    let fallback = builder.text("fallback")?;
-    let actual = builder.call("$sql_text_or", &[], vec![sql_value, fallback])?;
-    let expected = builder.text("row-value")?;
+    let id = builder.text("post-id")?;
+    let author = builder.text("agent")?;
+    let body = builder.text("body")?;
+    let created = builder.i64(1)?;
+    let updated = builder.i64(2)?;
+    let post = builder.nominal_record(
+        "$post",
+        vec![
+            ("$post_id", id),
+            ("$post_author", author),
+            ("$post_body", body),
+            ("$post_created", created),
+            ("$post_updated", updated),
+        ],
+    )?;
+    let encoded = builder.generic_external_call("data-encode", "@post", vec![post])?;
+    let expected_id = builder.text("post-id")?;
+    let decoded = builder.call("$decode_post", &[], vec![encoded, expected_id])?;
+    let missing = builder.boolean(false)?;
+    let found_binding = builder.binding_label();
+    let found = builder.boolean(true)?;
+    let corrupt = builder.boolean(false)?;
+    let actual = builder.match_expression(
+        decoded,
+        vec![
+            MatchArm::plain("$post_result_missing", missing),
+            MatchArm::payload("$post_result_found", found_binding, "post", "@post", found),
+            MatchArm::plain("$post_result_corrupt", corrupt),
+        ],
+    )?;
+    let expected = builder.boolean(true)?;
     add_test(
         builder,
-        "$test_sql_text",
-        "sql-text-row-conversion",
+        "$test_data_codec",
+        "data-codec-roundtrip",
         actual,
         expected,
     )?;

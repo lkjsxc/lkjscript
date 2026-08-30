@@ -17,7 +17,7 @@ pub(super) const TAR_NAME: &str = "lkjscript-x86_64-unknown-linux-musl.tar";
 pub(super) const LINKAGE_MODEL: &str = "static-musl";
 pub(super) const ELF_INSPECTOR: &str = "lkjscript-elf64-little-endian-inspector-1";
 pub(super) const POLICY_SCHEMA: &str = "lkjscript-release-target-policy";
-pub(super) const POLICY_SCHEMA_VERSION: u32 = 1;
+pub(super) const POLICY_SCHEMA_VERSION: u32 = 2;
 pub(super) const BUILD_SCHEMA: &str = "lkjscript-target-build-receipt";
 pub(super) const BUILD_SCHEMA_VERSION: u32 = 1;
 
@@ -65,7 +65,6 @@ pub(super) struct TargetPolicy {
     pub(super) c_compiler: String,
     pub(super) musl_packages: Vec<MuslPackage>,
     pub(super) userlands: Vec<UserlandPolicy>,
-    pub(super) postgres_image: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -133,7 +132,6 @@ pub(super) fn policy() -> TargetPolicy {
                 expected_libc: "glibc-2.31".to_owned(),
             },
         ],
-        postgres_image: crate::service::POSTGRES_IMAGE.to_owned(),
     }
 }
 

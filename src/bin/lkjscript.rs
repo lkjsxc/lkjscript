@@ -11,8 +11,8 @@ use lkjscript::platform::contract::{
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     Diagnostic, PreparedDeployment, PublicOperation, ShutdownReceipt, execute_build,
-    execute_capabilities, execute_change, execute_check, execute_inspect, execute_new,
-    execute_package_builtin, execute_query, execute_run, execute_status,
+    execute_capabilities, execute_change, execute_check, execute_data, execute_inspect,
+    execute_new, execute_package_builtin, execute_query, execute_run, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -31,6 +31,9 @@ fn main() -> ExitCode {
     }
     if let Some(new_arguments) = compact_new_arguments(&arguments) {
         return compact_new(&new_arguments);
+    }
+    if arguments.first().map(String::as_str) == Some("data") {
+        return compact_data(&arguments[1..]);
     }
     if compact_status_arguments(&arguments) {
         return compact_status(arguments);
@@ -86,6 +89,18 @@ fn main() -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => write_failure(&error),
+    }
+}
+
+fn compact_data(arguments: &[String]) -> ExitCode {
+    match execute_data(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("data", &error),
     }
 }
 
