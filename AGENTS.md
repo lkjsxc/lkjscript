@@ -32,6 +32,9 @@ binary, and running service are distinct states.
 - Source text, compact requests, projections, indexes, caches, artifacts, runtime handles,
   deployment data, receipts, release archives, and checksums are derived, operational, or
   evidentiary; none is a second editable program authority.
+- Operational application data, durable queues, and object bytes are deployment-selected effect
+  authorities distinct from program meaning and from one another; live effects must never select
+  or advance semantic `HEAD`.
 - Ordinary application development must work through the distributed `lkjscript` executable.
 - Application policy belongs in graph meaning. Rust owns generic semantic, compiler, runtime,
   adapter, verification, and distribution mechanisms.
