@@ -65,13 +65,13 @@ or lifecycle evidence.
 
 Service verification freshly builds `lkjournal` through the public binary, requires byte equality
 with the checked-in artifact bundle, and copies the bundle plus deployment descriptors to an
-isolated run. It validates exact bundle/manifest/root/revision/state identity, launches
-`serve`/`worker`, and exercises the maintained external workflow. It must audit that no project
-marker or repository path is opened and that canonical typed meaning authority is unchanged
-before/after.
-
-If PostgreSQL/container/environment prerequisites are absent, service is `unavailable` with an
-exact reason. Unavailable is never rewritten as pass or silently omitted.
+isolated run. It initializes one first-party data root shared by separately validated service and
+worker grants, validates exact bundle/manifest/root/revision/state identity, launches
+`serve`/`worker`, and exercises login, actor isolation, resource/history/object reconciliation,
+durable claim/completion/stale-attempt behavior, restart, backup, absent-root restore, failed startup
+without readiness, and cleanup. It must audit that no project marker or repository path is opened
+and that canonical typed meaning authority is unchanged before/after. This required product/service
+gate has no database server, container, connection secret, or host database-library prerequisite.
 
 ## Exact release-target admission
 
@@ -89,7 +89,7 @@ inputs without using `ldd` or trusting the target name.
 The candidate must complete the command lifecycle in two independently pinned Linux/amd64
 userlands: one musl-based and one older-glibc-based. Candidate execution has no network and no host
 library bind mount. Admission also requires the same bytes to pass the maintained distributed HTTP,
-stateful HTTP, and standalone service oracles. The receipt records distinct userland, application,
+stateful HTTP, and standalone service oracles using isolated first-party data roots. The receipt records distinct userland, application,
 static-inspection, cleanup, and resource classifications. Static linkage and those two userlands do
 not imply a minimum kernel, universal Linux portability, another architecture, or hostile-code
 isolation.
@@ -103,19 +103,28 @@ Cargo, read a source/generated/template file, or use an ambient application help
 binds the verifier, source candidate, private copied candidate, execution context, optional checkout,
 result, bounded logs, and complete cleanup.
 
-The stateful owner constructs its 982-record BBS change from exact candidate discovery. It retains
+The stateful owner constructs its bounded BBS change from exact candidate discovery. It retains
 one application definition across contributor, target-admission, pre-publication, and anonymous
 public verification. Passing evidence requires reviewed plan/apply, idempotent reprepare,
 clean/incremental artifact equality, the named reducer/function value/standard fold construction,
 real HTTP create/read/update/delete, missing/nonmatching/repeated/reordered header admission,
-strict malformed input, statement rollback, migration divergence failure, restart persistence,
-failed-startup behavior, graceful shutdown, unchanged accepted graph authority, secret redaction,
-database cleanup, and runner-root cleanup. PostgreSQL unavailability, timeout, early exit,
-migration/statement failure, shutdown failure, or cleanup failure remains a typed non-pass.
-Workflow shell cannot reclassify it.
+strict malformed input, expectation rollback, schema divergence failure, restart persistence,
+logical backup/absent-root restore, corrupt/absent-root failed startup, graceful shutdown, unchanged
+accepted graph authority, and data/runner-root cleanup. Timeout, early exit, data failure, shutdown
+failure, or cleanup failure remains a typed non-pass. Workflow shell cannot reclassify it.
 
-The no-database distributed HTTP oracle remains an implementation-disjoint faster gate. Neither
+The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. Neither
 application oracle replaces the other at release admission.
+
+Contributor-only migration evidence runs an exact PostgreSQL 16.15 image pinned by manifest and
+config digests. It creates deterministic representation-neutral BBS and `lkjournal` fixtures in an
+isolated database, exports sorted canonical facts without using the first-party codec or transaction
+model, imports them into an absent data root, verifies backup/restore equality and the copied public
+workflow receipts, then removes the temporary container and data roots. After one warm-up, three
+fresh samples per workload retain median wall time, CPU observation, peak RSS, durable logical-data
+bytes, synchronization/publication counts, and operation counts. Ratios above 5x wall, 2x RSS, or 4x
+durable bytes block admission. PostgreSQL is an oracle only: it is not a product dependency,
+release-candidate prerequisite, alternate adapter, dual reader/writer, or public import path.
 
 ## Package and public-release evidence
 
@@ -133,7 +142,7 @@ checkout, and executes no repository binary or script.
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
 verified independently. Each path requires checksum, GitHub asset digest, release/asset attestation,
 strict extraction, source/manifest/candidate equality, static inspection, transferred distributed
-HTTP, transferred stateful HTTP against a fresh isolated database, and cleanup. Exact/latest
+HTTP, transferred stateful HTTP against a fresh isolated first-party data root, and cleanup. Exact/latest
 release-asset, manifest, and candidate byte equality is required but cannot replace either
 behavioral run. Clean/incremental artifact equality is required within each independently created
 application; artifacts from the two fresh applications have independently allocated semantic
@@ -150,9 +159,11 @@ cargo run --locked -p lkjscript-dev -- check PROFILE
 
 `focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
 widening rules. `product` builds release and verifies copied-binary workflows, maintained typed
-meaning graph consumers, generated docs, and built-in/generated assets. `service` owns isolated standalone
-artifact bundle service acceptance. `full` owns formatting, lints, workspace targets, all tests,
-release/product/service classification, and diff checks; final full evidence must be fresh.
+meaning graph consumers, generated docs, and built-in/generated assets. `service` owns isolated
+standalone artifact bundle service acceptance. The data cutover additionally requires the
+contributor PostgreSQL differential/resource receipt. `full` owns formatting, lints, workspace
+targets, all tests, release/product/service classification, and diff checks; final full evidence
+must be fresh.
 
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the

@@ -28,6 +28,12 @@ A predecessor `.lkjscript` marker is not a storage edition. Project discovery re
 opening derived state or mutating the destination. A root containing both current and predecessor
 markers is rejected as ambiguous; it never selects a fallback.
 
+Operational application data is not stored in this root and does not reuse any repository,
+revision, pack, object, map, or digest identity. A deployment-selected `lkjscript-data-store-1`
+root has its own physical identity and atomic head as specified in
+[data-capabilities.md](data-capabilities.md). Runtime data writes cannot author, select, or advance
+semantic `HEAD`; semantic publication cannot silently mutate operational data.
+
 ## Immutable objects and packs
 
 Typed canonical objects occupy distinct domains for semantic owners, types, blobs, persistent-map

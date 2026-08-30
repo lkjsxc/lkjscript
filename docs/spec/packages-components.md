@@ -94,8 +94,8 @@ test execution must agree with the canonical repository reference interpreter.
 
 A deployment descriptor is external operational authority. It selects an exact artifact and target,
 binds requirement aliases to generic adapters and secret/configuration sources, and sets resource
-limits/topology. Application routes, SQL, authorization, representations, object keys, and queue
-transitions belong in graph meaning; Rust owns generic host mechanisms.
+limits/topology. Application routes, data spaces/indexes/encodings, authorization, representations,
+object keys, and queue transitions belong in graph meaning; Rust owns generic host mechanisms.
 
 Current `serve` and `worker` descriptors select the maintained artifact bundle. Standalone
 preparation strictly loads the bundle without project discovery, resolves the exact root-package
@@ -103,6 +103,7 @@ target, component, runner, and complete requirement closure, then binds external
 effects execute once through the normalized production VM; reference execution remains limited to
 pure or deterministic oracle work and never repeats external effects.
 
-The HTTP listener is plaintext and PostgreSQL uses `NoTls`. Encrypted transport requires an
-external trusted boundary or a future explicitly selected adapter; no TLS or certificate machinery
-is implied by the component model.
+The HTTP listener is plaintext. Encrypted transport requires an external trusted boundary or a
+future explicitly selected adapter; no TLS or certificate machinery is implied by the component
+model. The first-party data root is local trusted-host authority, not encrypted storage or a remote
+database service.

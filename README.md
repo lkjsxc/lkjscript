@@ -10,22 +10,25 @@ The supported v0.1.10 executable provides offline command, editable HTTP, and re
 application lifecycles through one copied binary. They create typed meaning graph projects, inspect
 and change accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute
 through the standalone deployment boundary without Cargo, a checkout, or an application helper.
-The stateful workflow uses an explicitly provisioned PostgreSQL authority.
+That immutable release's stateful workflow uses an explicitly provisioned PostgreSQL authority.
 
 The current source and immutable v0.1.10 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Public product surfaces expose the root product
 version and opaque capabilities digest without separate subsystem generation numbers.
 
-The checkout is now unreleased product version 0.1.11. It additionally provides bounded,
-revision-pinned `query context` traversal described below. The immutable latest download remains
-v0.1.10 and does not claim that source-only operation.
+The checkout is now unreleased product version 0.1.12. In addition to bounded revision-pinned
+`query context`, it replaces every maintained SQL/PostgreSQL production path with one repository-
+owned ordered data store and durable queue. It exposes public data initialize/verify/backup/restore,
+canonical typed application values, and `data`/`durable_queue_data` deployment adapters. The
+immutable latest download remains v0.1.10 and retains its historical PostgreSQL workflow; it does
+not claim these source-only cutovers.
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands, and its distributed and PostgreSQL-backed HTTP workflows passed independently from both
-exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
+userlands, and its historical distributed and PostgreSQL-backed HTTP workflows passed independently
+from both exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
 environment, or broader Linux portability.
 
 ## Download
@@ -123,25 +126,27 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
-### Stateful HTTP from the public binary
+### Stateful HTTP and first-party data from current source
 
-Use the downloaded executable for all application-facing discovery and authoring:
+The immutable v0.1.10 download retains its published PostgreSQL contract. A current 0.1.12 source
+candidate exposes the completed first-party boundary through the same application-facing discovery:
 
 ```sh
-./lkjscript/lkjscript capabilities change
-./lkjscript/lkjscript capabilities --section deployment
-./lkjscript/lkjscript package builtin inspect
-./lkjscript/lkjscript package builtin query owners --name Database
-./lkjscript/lkjscript package builtin inspect owner interface decl_...
+./target/release/lkjscript capabilities data
+./target/release/lkjscript capabilities change
+./target/release/lkjscript capabilities --section deployment
+./target/release/lkjscript package builtin inspect
+./target/release/lkjscript package builtin query owners --name DataStore
+./target/release/lkjscript package builtin inspect owner interface decl_...
 ```
 
-The downloaded executable also supports the exact standalone identity query
-`./lkjscript/lkjscript --version`, which prints only `lkjscript 0.1.10`.
+The exact standalone identity query prints only `lkjscript 0.1.12` for that source candidate.
 
-The v0.1.10 binary's compact change records can add exact component requirements, create task
-functions, update the starter handler contract, and compose structural records, lexical bindings,
-fields, lists, variants, matches, exact built-in calls, requirement-scoped capability calls, and
-lexical transactions. The public vocabulary also includes exactly
+Current compact change records can add exact component requirements, interfaces, operations and
+externals, create task functions, rebind requirements/dependencies, update the starter handler
+contract, and compose structural records, lexical bindings, fields, lists, variants, matches, exact
+built-in calls, requirement-scoped capability calls, and lexical transactions. The public
+vocabulary also includes exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
 capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
@@ -150,21 +155,38 @@ capture, partial application, or inference alias. The generated
 [stateful walkthrough](docs/generated/stateful-http-authoring.md) are the offline executable-owned
 authoring references.
 
-The current maintained acceptance authors a 982-record BBS from a fresh `http` project exclusively
-through those public records. Its pure header reducer is passed as a named function value to the
-built-in standard fold. It builds equal clean/incremental artifacts and runs create/read/update/
-delete plus missing, nonmatching, repeated and reordered content-type, strict-input, rollback,
-restart, and failure checks through one `lkjscript serve` process and isolated PostgreSQL instance:
+The maintained acceptance authors a bounded BBS from a fresh `http` project exclusively through
+those public records. Its pure header reducer is passed as a named function value to the built-in
+standard fold. Each post is stored once and one `(created-at, id)` index is maintained atomically.
+The copied candidate builds equal clean/incremental artifacts and runs ordered create/list/update/
+delete, stale and strict-input rollback, restart, failed startup, logical backup, absent-root
+restore, and semantic-authority checks through one `lkjscript serve` process with no database
+server or container:
 
 ```sh
-LKJSCRIPT_POSTGRES_ROOT=/path/to/exact-postgresql-16.15-root \
-  cargo run --locked -p lkjscript-dev -- stateful-http \
+cargo run --release --locked -p lkjscript-dev -- stateful-http \
   --binary target/release/lkjscript --machine
 ```
 
-The contributor harness may instead use its pinned immutable PostgreSQL image. Database
-provisioning and HTTP probing are independent test oracles; they do not supply application routes,
-storage semantics, or graph mutations.
+PostgreSQL 16.15 remains only in `lkjscript-dev data-oracle`. That contributor command uses an exact
+immutable image to export bounded neutral BBS and `lkjournal` fixtures and compare facts, public
+workflow receipts, and resource samples; it is not a public provider, import path, release
+dependency, or application helper.
+
+Operational data lifecycle is explicit and create-new:
+
+```sh
+./target/release/lkjscript data initialize --root /tmp/example-data
+./target/release/lkjscript data verify --root /tmp/example-data
+./target/release/lkjscript data backup --root /tmp/example-data \
+  --output /tmp/example-data.lkjd
+./target/release/lkjscript data restore --backup /tmp/example-data.lkjd \
+  --root /tmp/example-data-restored
+```
+
+Restore creates a logically equivalent root with a new physical store identity. These commands do
+not inspect or change a program repository, overwrite a destination, repair corruption, import SQL,
+or switch deployment policy.
 
 Project creation accepts an absent destination. It rejects invalid names, every existing
 destination (including an empty directory), non-directory parents, and symlink path components
@@ -198,7 +220,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-An executable built from current 0.1.11 source can obtain one complete admitted local neighborhood
+An executable built from current 0.1.12 source can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -303,10 +325,10 @@ configuration, named secrets, and host resources only. It does not discover or o
 project authority:
 
 ```sh
-export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
 export LKJOURNAL_BOOTSTRAP_TOKEN='replace-with-a-random-bootstrap-token'
 cd applications/lkjournal
-mkdir -p state/objects
+mkdir -p state state/objects
+../../target/release/lkjscript data initialize --root state/data
 ../../target/release/lkjscript serve --deployment service.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
@@ -315,7 +337,9 @@ Readiness binds the domain-tagged `artifact_bundle_...` identity after exact tar
 grant, secret, adapter, and external-authority preflight. HTTP and worker effects execute once
 through production; only pure deterministic behavior uses the reference interpreter.
 
-The HTTP listener is plaintext and PostgreSQL uses `NoTls`; encrypted transport requires an
+Service and worker use separately validated `data` and `durable_queue_data` grants that share
+`state/data`; object bytes remain beneath `state/objects`. The HTTP listener is plaintext and the
+data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
 ## Public surface and compatibility
@@ -326,9 +350,10 @@ It reports the product version and an opaque capabilities digest. See the genera
 [operation table](docs/generated/operations.md) and focused capability guides.
 Finite outcomes use deterministic bounded compact records and keep stderr empty.
 
-Predecessor graph repositories are rejected before mutation or cache work. Removed operations
-such as `draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor` are
-absent from discovery and receive the ordinary `cli_usage` failure. There is no compatibility
+Predecessor graph repositories are rejected before mutation or cache work. Removed project
+operations such as `draft`, `history`, general package staging, `review`, `backup`, `restore`, and
+`doctor` are absent and receive ordinary `cli_usage`; top-level `data backup|restore` are distinct
+operational-data commands. There is no compatibility
 flag, legacy mode, migration command, graph edition, fallback reader, or dual write.
 
 ## Build and verify the repository
@@ -345,10 +370,11 @@ cargo run --locked -p lkjscript-dev -- check service
 cargo run --locked -p lkjscript-dev -- check full
 ```
 
-`stateful_http_application` is a non-cacheable required gate in service and full profiles; the
-separate `distributed_http_application` no-database gate remains required by product, service, and
-full. On hosts without the cached immutable image, service and stateful verification accept an
-exact PostgreSQL 16.15 tool root via `LKJSCRIPT_POSTGRES_ROOT`.
+`stateful_http_application` is a non-cacheable required first-party-data gate in service and full
+profiles; the separate stateless `distributed_http_application` gate remains required by product,
+service, and full. Product, service, full, target, transferred, and release-candidate verification
+need no database server or container. The contributor-only PostgreSQL differential/resource oracle
+is a separate required campaign receipt.
 
 The harness records exact fingerprints, classifications, receipts, and bounded child logs under
 `.artifacts/lkjscript-dev/check/`. The authoritative `full` profile requires fresh gates.

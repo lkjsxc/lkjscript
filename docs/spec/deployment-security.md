@@ -23,7 +23,7 @@ application work. Artifacts contain none of these deployment facts.
 `deployment inspect` returns public descriptor structure; runtime readiness returns the
 domain-tagged artifact-bundle digest,
 target, runner, listener, typed configuration observation, secret names, and adapter kinds. Secret
-bytes, database/object credentials, password inputs, and live handles are omitted. Startup failure
+bytes, data/object authority internals, password inputs, and live handles are omitted. Startup failure
 publishes no application work.
 
 ## Configuration and secrets
@@ -60,20 +60,22 @@ or application policy, not this adapter.
 ## Adapter lifecycle and trust
 
 Current descriptor adapters are configuration, wall clock, secure randomness, UUID identifier,
-password hash, secret verifier, byte stream, PostgreSQL, memory/local/S3 object, and memory/
-PostgreSQL durable queue. Sharing domain identifies common operational authority; it does not by
-itself require two grants to share one concrete pool. Authority revision and descriptor digest
-identify the exact operational binding. None becomes program semantic identity.
+password hash, secret verifier, byte stream, first-party `data`, memory/local/S3 object, and
+first-party `durable_queue_data`. A data grant binds a confined relative root, strict namespace,
+sharing domain, authority revision, and independent limits; it has no connection secret, host,
+port, TLS, pool, or network timeout. Service and worker may use separate grants that resolve to the
+same root. Authority revision and descriptor digest identify the exact operational binding. None
+becomes program semantic identity.
 
 Adapters acquire live resources during preparation or calls, retain them only within deployment or
 task scope, reject use after close, and receive one recorded idempotent shutdown after admission stops. A
-restart re-reads descriptor/artifact/secrets and reconstructs database/object/queue authority; pools,
-streams, task IDs, random state, connections, and compiled code are disposable.
+restart re-reads descriptor/artifact/secrets and reconstructs data/object/queue authority; streams,
+task IDs, random state, locks, and compiled code are disposable.
 
 The trust and denial model is normative in `docs/security.md`. First-party Rust forbids `unsafe`,
-but dependencies and the operator/OS are trusted. The HTTP listener is plaintext and PostgreSQL
-uses `NoTls`. TLS termination, PostgreSQL TLS, certificate management, and ACME are deliberately
-out of scope and not planned; encrypted deployments require an external trusted transport boundary
-or a different adapter. This boundary also does not claim credential rotation without restart, a
-hostile-code sandbox, tenant resource isolation, provenance, artifact signatures, or distributed
-atomicity.
+but dependencies and the operator/OS are trusted. The HTTP listener is plaintext; TLS termination,
+certificate management, and ACME are deliberately out of scope. The local data root is neither
+encrypted nor a tenant-isolation boundary. Encrypted network deployments require an external
+trusted transport boundary. This boundary also does not claim credential rotation without restart,
+a hostile-code sandbox, tenant resource isolation, provenance, artifact signatures, replication,
+consensus, or distributed atomicity.

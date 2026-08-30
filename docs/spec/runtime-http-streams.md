@@ -2,7 +2,7 @@
 
 This specification owns generic resident admission, structured request/worker task scopes, HTTP/1
 transport adaptation, byte-stream lifetime, overload, and shutdown. It does not own routes,
-middleware order, actor policy, response content, SQL, or job meaning.
+middleware order, actor policy, response content, data-space/index policy, or job meaning.
 
 ## Resident tasks
 
@@ -14,7 +14,7 @@ as `resident_overloaded`; it never forms another hidden queue.
 Each admitted call receives a nonreused process-local u64 task identity, fresh capability counters,
 an operational deadline, parent deployment cancellation, one worker permit, and one active guard.
 Scheduler order and worker count are not language values. Independent calls may overlap; external
-authority ordering remains the adapter/database/object/queue contract. Pure results must agree with
+authority ordering remains the adapter/data/object/queue contract. Pure results must agree with
 serial execution.
 
 Runtime observations include current queued/active and admitted, completed, failed, cancelled,
@@ -59,7 +59,7 @@ authorization, request decoding, status selection, and content.
 Malformed method/URI/query/header, excess, disconnect, closed body, component failure, overload,
 deadline, and shutdown have distinct stable adapter/runtime outcomes. Request rejection occurs
 before component admission where transport facts suffice. Response emission cannot roll back prior
-database/object/queue publication. Adapter-generated failure responses contain a bounded
+data/object/queue publication. Adapter-generated failure responses contain a bounded
 `x-lkjscript-failure-class` and, when representable in at most 128 bytes, an
 `x-lkjscript-failure-code`; they never contain the provider diagnostic message.
 

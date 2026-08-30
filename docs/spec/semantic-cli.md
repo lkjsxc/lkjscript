@@ -19,8 +19,9 @@ unchanged result. The predecessor registry-named cache spelling and removed cont
 reject without aliases.
 `--generate-docs DIR` and `--verify-generated DIR` are the sole generated-document owner.
 
-The public operation set is closed: `capabilities`, `new`, `status`, `inspect`, `query`, `change`,
-normalized built-in `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
+The public operation set is closed: `capabilities`, `new`, top-level operational `data`, `status`,
+`inspect`, `query`, `change`, normalized built-in `package`, `check`, `build`, `run`, and
+artifact-runtime `serve` and `worker`.
 An unknown command or option returns `cli_usage`. There is no universal namespace, compatibility
 alias, marker-selected alternate dispatcher, or fallback parser.
 
@@ -85,6 +86,26 @@ through `cli_usage` and are not aliases.
 Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
 source file, database, container, or helper command. Release availability is current distribution
 state and is intentionally not part of this normative contract.
+
+## Operational data lifecycle
+
+```text
+data initialize --root PATH
+data verify --root PATH
+data backup --root PATH --output PATH
+data restore --backup PATH --root PATH
+```
+
+This top-level operation manages only first-party operational application-data authority. It never
+discovers, reads, or advances a project repository. Roots and backup/output paths are strict bounded
+arguments; creation and restore require an absent destination, backup requires an absent output,
+and all paths reject symlink/non-regular/path-traversal surprises. Initialize is idempotent only for
+one matching valid store. Verify is read-only and walks the complete retained accepted closure.
+Backup pins one exact head and create-new publishes a canonical logical backup; restore creates an
+equivalent store under a new physical identity, verifies it, and makes the root visible once. There
+is no repair, overwrite, SQL import, query shell, implicit descriptor change, or project-meaning
+backup alias. Exact behavior and limits are specified in
+[data-capabilities.md](data-capabilities.md) and executable discovery.
 
 ## Status, inspection, and query
 
@@ -154,8 +175,8 @@ type, expression, precondition, selector, and field vocabularies are capability-
 Compact change records support `pure` and exact-requirement `task` function effects. Their public
 dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
 record types, lexical bindings, structural and nominal record construction/projection, typed lists,
-variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical
-database transactions. Nested shapes use ordered flat fragment records and explicit parent/index
+variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical data
+transactions. Nested shapes use ordered flat fragment records and explicit parent/index
 edges. Request-local labels are notation only; normalized authored intent owns stable allocation
 and request commitment.
 
@@ -166,8 +187,11 @@ expression plus ordered `expression.argument` children. A function value is mono
 complete explicit substitution, carries no capture or capability authority, and is evaluated once
 before invocation arguments are evaluated left-to-right. Missing, excess, duplicate, foreign, task,
 nonfunction, arity, and argument-type cases reject before publication. `function-ref`, `lambda`,
-`closure`, and `apply` are not aliases. Maps and arbitrary component, interface, external, port, and
-target creation remain outside the compact surface.
+`closure`, and `apply` are not aliases. The dependency-closed data cutover also adds exact
+`create.interface`, `create.external`, interface `add.operation`, operation parameters,
+`set.requirement-contract`, and `replace.dependency`; these remain reviewed typed graph changes and
+do not form a private builder. Arbitrary component, port, and target creation remains outside the
+compact surface.
 
 Task effect requirements are an ordered exact set of component-local requirement references. A
 new requirement names one exact built-in interface, an ordered admitted operation set, and separate
@@ -278,14 +302,16 @@ operations, not current graph build commands. Their descriptors reference an exp
 artifact bundle. Loading reads descriptor, artifact, environment, and named host resources only;
 it does not discover a repository. Preparation resolves the exact target and grants before
 readiness, and `artifact_digest` is the domain-tagged artifact bundle identity. Resident events are
-bounded and resources are released on failure, cancellation, exhaustion, and shutdown. The
-plaintext HTTP and `NoTls` PostgreSQL adapters require an external trusted encryption boundary.
+bounded and resources are released on failure, cancellation, exhaustion, and shutdown. The HTTP
+listener is plaintext and requires an external trusted encryption boundary when network encryption
+is required. The local first-party data root is a trusted-host boundary and is not encrypted.
 
 ## Removed behavior and non-goals
 
-`draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor` are absent
-from discovery and dispatch. They are not compatibility aliases and have not been silently moved to
-another spelling. Predecessor repositories and binary formats reject.
+Project-scoped `draft`, `history`, general package staging, `review`, `backup`, `restore`, and
+`doctor` are absent from discovery and dispatch. The top-level `data backup` and `data restore`
+operations are distinct operational-data lifecycle commands, not compatibility aliases for removed
+project behavior. Predecessor repositories and binary formats reject.
 
 The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
 package manager, remote registry, source language, full owner-body projection, generic impact, an

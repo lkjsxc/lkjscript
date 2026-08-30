@@ -22,8 +22,8 @@ compatibility identities remain independently owned as described by
 [the release and contract version decision](decisions/20260829-release-contract-version-authority.md).
 
 `lkjscript-dev release target` is the sole executable owner of the current release target triple,
-archive name, static-linkage policy, native build inputs, pinned test userlands, and PostgreSQL
-prerequisite. The current policy selects one asset:
+archive name, static-linkage policy, native build inputs, and pinned test userlands. The current
+policy selects one asset:
 
 ```text
 lkjscript-x86_64-unknown-linux-musl.tar.gz
@@ -56,9 +56,14 @@ only its ephemeral workflow token.
 
 `rust-toolchain.toml` pins Rust/Cargo 1.98.0, rustfmt, clippy, and the musl x86-64 Rust target. The
 typed target policy pins the Ubuntu musl compiler packages by exact version, URL, and SHA-256 and
-pins one Linux/amd64 musl userland, one Linux/amd64 older-glibc userland, and the PostgreSQL image by
-platform-manifest digest. `cargo-about` 0.9.2 remains independently pinned by its downloaded archive
+pins one Linux/amd64 musl userland and one Linux/amd64 older-glibc userland by platform-manifest
+digest. `cargo-about` 0.9.2 remains independently pinned by its downloaded archive
 and executable SHA-256 in the first-party release owner and workflow.
+
+The first-party data cutover has a separate contributor-only PostgreSQL 16.15 differential/resource
+receipt. It must be fresh for that source campaign, but PostgreSQL is deliberately absent from the
+product dependency graph, target policy, service gate, transferred verifier, release handoff, and
+publication/anonymous-download jobs.
 
 Inspect the canonical policy before installing its exact native inputs:
 
@@ -161,9 +166,9 @@ commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP roles.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
 the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,
-and runs both transferred application oracles. Stateful verification provisions only the target
-policy's exact PostgreSQL image and uses an explicit absolute create-new evidence root. Both receipts
-must classify passed before the publication job can run.
+and runs both transferred application oracles. Stateful verification uses only an explicit absolute
+create-new evidence root and an isolated first-party data store; it provisions no database server or
+container. Both receipts must classify passed before the publication job can run.
 
 Dispatch a dry run against the final source commit:
 
@@ -222,8 +227,8 @@ manually create a parallel release.
 The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum
 pairs. For each pair independently it verifies checksums, release and asset attestations, strict
 extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs transferred
-distributed HTTP and transferred stateful HTTP against fresh roots and a fresh isolated PostgreSQL
-authority. Exact/latest archive, checksum, candidate, and manifest byte equality is checked after,
+distributed HTTP and transferred stateful HTTP against fresh roots and fresh isolated first-party
+data authorities. Exact/latest archive, checksum, candidate, and manifest byte equality is checked after,
 and never substitutes for, both behavioral runs. Each stateful run requires its own clean and
 incremental artifacts to agree; artifacts from independently allocated fresh applications are not
 cross-compared. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation
@@ -266,6 +271,6 @@ or delete it or its assets. Read-only propagation and verification may retry wit
 workflow policy; a content defect recovers only through a new patch identity.
 
 Official actions remain pinned to full commit SHAs. Review changes to action SHAs, toolchain,
-native-package digests, userland/PostgreSQL images, cargo-about digests, runner labels, and resource
+native-package digests, userland images, cargo-about digests, runner labels, and resource
 measurements as explicit release inputs. Static linkage is directly inspected evidence, not build
 provenance, binary signing, hostile-code isolation, or universal Linux portability.

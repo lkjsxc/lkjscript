@@ -25,7 +25,7 @@ argv / compact records / bounded JSON arguments / offline discovery
                                  + logical review evidence
                                            │
                                            ▼
-                              immutable data, then atomic HEAD
+                         immutable semantic objects, then atomic HEAD
 ```
 
 `GraphRepository` is the sole normal accepted-authority writer. Public adapters never write raw
@@ -138,8 +138,8 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9, and the v0.1.10 publication moved no predecessor tag, release,
 or asset.
-Current source is the separate unreleased 0.1.11 product snapshot; its query-4/CLI-13 context
-cutover has no public-release claim.
+Current source is the separate unreleased 0.1.12 product snapshot; its first-party ordered-data,
+deployment-2, compact-change-7, and CLI-14 cutovers have no public-release claim.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
@@ -173,12 +173,13 @@ cursor exists.
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
-| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
+| Operational data | `platform/data.rs`, normalized data adapter, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, one durable queue backend | program meaning, object bytes, deployment policy, or remote database service |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
 The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
-backup/restore, review projection, query indexes, predecessor artifact reader/runtime, and predecessor value
+project backup/restore, review projection, query indexes, predecessor artifact reader/runtime, and predecessor value
 representation have no current consumer and are deleted. The source-era parser remains only as an
 implementation-disjoint language test oracle; it has no public project or deployment path.
 
@@ -270,17 +271,17 @@ copied binary discovery
                      ▼
 HTTP client -> HTTP adapter -> graph handler/domain policy
                              -> graph persistence functions
-                             -> exact database requirement
-                             -> PostgreSQL adapter
+                             -> exact DataStore requirement
+                             -> first-party ordered data adapter
 ```
 
 The graph owns route selection, header/body admission, strict JSON interpretation, post domain
-types and validation, response status/headers/body, migration identity/checksum, parameterized
-statements, typed row conversion, and transaction boundaries. HTTP/domain functions call a narrow
-application-owned persistence layer and contain no provider coordinates or driver representation.
-Deployment separately owns the PostgreSQL adapter, connection secret name, pool/timeouts, listener,
-and runtime limits. PostgreSQL rows are operational state; SQL and PostgreSQL remain replaceable
-current mechanisms rather than language meaning.
+types and validation, response status/headers/body, space/schema/index policy, canonical typed
+encoding, expectations, and transaction boundaries. HTTP/domain functions call a narrow
+application-owned persistence layer and contain no filesystem representation. Deployment separately
+owns the confined first-party root, namespace, sharing domain, authority revision, data limits,
+listener, and runtime limits. Runtime facts are operational authority; they never become graph
+meaning or share semantic repository identities.
 
 `SetFunctionContract` updates the starter handler's exact result/effect requirement closure while
 preserving its identity and parameter. Generic runtime call frames carry concrete graph type
@@ -339,7 +340,8 @@ strict deployment descriptor + relative artifact bundle
                          ▼
        normalized capability codecs at artifact edge
                          │
-     representation-neutral PostgreSQL/object/queue engines
+       first-party ordered data + object capability
+       + first-party durable-queue namespace
 ```
 
 `PreparedDeployment::load` consumes descriptor, artifact, environment, and named host resources
@@ -349,9 +351,10 @@ Preparation failure shuts down every already-created adapter in reverse order; r
 stops admission, drains/cancels bounded work, and records adapter cleanup exactly once.
 
 The service harness freshly builds `lkjournal`, requires byte equality with the checked-in bundle,
-then stages only a copied binary, the bundle, descriptors, configuration/secrets, a local object
-directory, and PostgreSQL coordinates. It snapshots canonical graph authority before and after the
-live HTTP/worker/restart workflow. No deployment path opens or advances accepted `HEAD`.
+then stages only a copied binary, the bundle, descriptors, configuration/secrets, one shared local
+data root, and a local object directory. It snapshots canonical graph authority before and after
+the live HTTP/worker/restart/backup/restore workflow. No deployment path opens or advances accepted
+semantic `HEAD`.
 
 The independent `distributed_http_application` product gate has no database or container
 dependency. It copies one candidate executable to a fresh root outside the checkout, creates and
@@ -363,18 +366,45 @@ checkout path. Product/full verification and the target-admission, pre-publicati
 anonymous exact/latest paths all use this same owner.
 
 The separate `stateful_http_application` owner has the same contributor/transferred context seam and
-copies the candidate to a fresh root. It uses executable discovery to construct the 982-record BBS
-request and deployment, plans and applies through the public CLI, compares clean and incremental
-artifacts, then drives real BBS HTTP and PostgreSQL behavior through one `lkjscript serve` process.
-It requires the named header reducer/function value/standard fold records, proves missing,
-nonmatching, repeated, and reordered content-type behavior, and proves malformed input and failed
-statements do not mutate rows. Migration checksum divergence fails safely, persistence survives
-restart, failed startup emits no readiness, and build/runtime work leaves accepted graph authority
-unchanged. Its typed receipt binds verifier/source/copied candidate identities, execution
-context, optional checkout, PostgreSQL authority, redaction, and complete cleanup. Service/full
-verification and the target-admission, pre-publication, and anonymous exact/latest paths share this
-owner. The existing `lkjournal` service oracle remains a separate maintained workload, and
-distributed HTTP remains the faster no-database oracle.
+copies the candidate to a fresh root. It uses executable discovery to construct a bounded BBS
+request and `data` deployment, plans and applies through the public CLI, compares clean and
+incremental artifacts, initializes an isolated store, then drives real BBS HTTP behavior through one
+`lkjscript serve` process. Each post has one primary fact and one `(created-at, id)` index fact;
+listing resolves both in one snapshot and create/update/delete maintain them in one transaction. It
+proves header and malformed-input behavior, stale expectations and rollback, schema divergence,
+restart persistence, backup/absent-root restore, corrupt/absent-root failed startup without
+readiness, and unchanged semantic authority. Its current receipt binds verifier/source/copied
+candidate identities, context, optional checkout, data authority, and complete cleanup. Service/full
+verification and target-admission, pre-publication, and anonymous exact/latest paths share this
+owner. The `lkjournal` service oracle remains a separate maintained workload, and distributed HTTP
+remains the faster stateless oracle.
+
+The data authority itself is an independent deployment branch:
+
+```text
+strict data or durable_queue_data grant
+               │ validate confined root / namespace / limits
+               ▼
+     lkjscript-data-store-1 physical identity
+               │ immutable complete revisions
+               │ cross-process lock + exact-base recheck
+               ▼
+        durable atomic operational HEAD
+          ├─ application spaces/indexes
+          └─ internal durable-queue namespace
+```
+
+Readers pin immutable revisions. A commit synchronizes its complete revision before one head
+visibility change. Public logical backup pins a head and excludes page/object layout; restore creates
+an equivalent absent root with a new physical identity. This operational head has no dependency on
+and no write path to `GraphRepository::HEAD`.
+
+Contributor-only `lkjscript-dev data-oracle` is outside that product dependency direction. It owns
+the PostgreSQL client and exact isolated PostgreSQL 16.15 container, constructs and exports neutral
+facts, invokes the first-party store only through its independent import side, binds copied BBS and
+service receipts, records resource samples, and removes its temporary authorities. Product,
+service, static-target, transferred, and release-candidate paths neither link that client nor start
+a database server.
 
 The release command lifecycle also copies the exact candidate into a fresh private root, creates a
 command project through that binary, and isolates a complete `lkjournal` authority copy. Candidate
@@ -391,6 +421,7 @@ adapter inputs are hostile boundaries with independent limits. Diagnostics prese
 and code without exposing secrets or large payloads. Runtime resources are scoped and released on
 success, failure, cancellation, exhaustion, and shutdown.
 
-The HTTP listener is plaintext and PostgreSQL uses `NoTls`. TLS termination, encrypted graph
-storage, hostile-code sandboxing, multi-tenant isolation, artifact signatures, distributed
-consensus, JIT/AOT, custom allocation, and a resident authoring daemon are not implemented.
+The HTTP listener is plaintext, and first-party data is unencrypted local trusted-host storage. TLS
+termination, encrypted graph or data storage, hostile-code sandboxing, multi-tenant isolation,
+artifact signatures, replication, distributed consensus, online data compaction, JIT/AOT, custom
+allocation, and a resident authoring daemon are not implemented.

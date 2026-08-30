@@ -2,15 +2,16 @@
 
 `lkjournal` is an actor-aware resource journal whose current editable application authority is the
 typed meaning graph repository in this directory. It stores named Markdown-like text without
-parsing it, retains an immutable snapshot for every accepted update, publishes named objects, and completes one
-durable indexing job for each created resource.
+parsing it, retains an immutable snapshot for every accepted update, publishes named objects, and
+completes one durable indexing job for each created resource.
 
 Its stable modules are:
 
 - `domain` (`mod_86e34c967b6c9ebc5b3db7da53012a48`) for domain records, exact-base
   transitions, and ownership meaning;
 - `service` (`mod_50e2d3318b93f572dad082bd4f42c526`) for routes, strict JSON schemas,
-  authorization, SQL, migrations, rendering, object reconciliation, and enqueue policy; and
+  authorization, data spaces/indexes/schema transitions, rendering, object reconciliation, and
+  enqueue policy; and
 - `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) for queue claim and exact-attempt
   completion meaning.
 
@@ -18,11 +19,11 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf`;
-- semantic state: `semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479`;
-- artifact manifest: `artifact_manifest_1d37694f0357f6d5895c7387d1bcd187a25baa1d570bd5090434edb9ebba9ada`;
-- artifact bundle: `artifact_bundle_35269bc05054dfb366f1fda3d00c83f3c951928f66abd463cf695c0008ec4d8a`;
-- 1,313 root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f`;
+- semantic state: `semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f`;
+- artifact manifest: `artifact_manifest_2087386a0c1ff708b04db2221a5a20ac3d3f66ac3443e4dc2a25f032f38398d1`;
+- artifact bundle: `artifact_bundle_b5a2f01d952416c5f9b61b36d1335ded8698acc653ae677974b43dc57c8acb6c`;
+- 1,559 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
 
@@ -51,22 +52,22 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 728,187-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 813,625-byte
 artifact bundle above (SHA-256
-`d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf`). `serve` resolves target
+`9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
-readiness only after required PostgreSQL and queue preflight. It does not discover this typed
+readiness only after first-party data/queue/object preflight. It does not discover this typed
 meaning graph repository or read accepted `HEAD`.
 
-To exercise the service, create an empty PostgreSQL database and the configured local object host
-directory, then bind the two named secrets without committing their values:
+To exercise the service, initialize the configured first-party root, create the local object host
+directory, and bind the bootstrap secret without committing its value:
 
 ```sh
-export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
 export LKJOURNAL_BOOTSTRAP_TOKEN='replace-with-a-random-bootstrap-token'
 cd applications/lkjournal
-mkdir -p state/objects
+mkdir -p state state/objects
+../../target/release/lkjscript data initialize --root state/data
 ../../target/release/lkjscript serve --deployment service.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
@@ -76,25 +77,26 @@ requests, bounds request bodies to 8 MiB and response bodies to 4 MiB, and assig
 operational deadline. The worker runs at most two tasks. Deployment JSON is operational authority,
 not program meaning.
 
-PostgreSQL, local/S3 object, and memory/PostgreSQL queue mechanisms are representation-neutral host
-engines with exact normalized codecs at the artifact edge. A common sharing-domain expresses common
-operational authority; the current descriptors still construct separate concrete pools per grant.
-Live effects run once through the production VM and never through differential replay.
+The service `data` and worker `durable_queue_data` grants share `state/data` under strict distinct
+namespaces. Actor, session, resource, immutable-snapshot, object-metadata, lookup, and job facts use
+explicit graph-owned spaces/indexes with canonical typed values. Object bytes remain under the
+local/S3 object capability. Live effects run once through the production VM and never through
+differential replay.
 
 ## Routes
 
 | Method and path | Meaning-owned behavior |
 |---|---|
-| `GET /health` | readiness independent of database work |
+| `GET /health` | readiness after complete adapter/data preflight |
 | `GET /` | escaped server-rendered service page |
-| `POST /initialize?actor=…` | bootstrap-token check, migration, actor/password creation |
+| `POST /initialize?actor=…` | bootstrap-token check, schema transition, actor/password creation |
 | `POST /login?actor=…` | password verification and random expiring bearer session |
 | `POST /resources` | strict typed JSON create, resource/snapshot transaction, enqueue |
 | `GET /resources` | actor-owned resource summaries |
 | `GET /resource?id=…` | authenticated owner read |
 | `GET /resource/history?id=…` | immutable ordered snapshots |
 | `POST /resource/update?id=…` | strict typed JSON exact-base update and snapshot transaction |
-| `POST /objects?name=…` | streaming no-replace object publication and database reference |
+| `POST /objects?name=…` | streaming no-replace object publication and data metadata reference |
 | `POST /objects/reconcile?name=…` | reconcile a possibly visible object publication |
 
 Unknown routes return 404. Missing/invalid sessions return 401, cross-actor checks return 403,
@@ -103,11 +105,11 @@ values rather than adapter diagnostics.
 
 The bootstrap token is checked by the generic secret-verifier adapter and never becomes a
 serializable language value. Password hashes use bounded Argon2 deployment parameters. Session
-expiry, actor ownership, SQL, object keys, and job payloads remain graph policy.
+expiry, actor ownership, data spaces/indexes, object keys, and job payloads remain graph policy.
 
-The HTTP listener is plaintext and PostgreSQL uses `NoTls`. Do not expose either across an
-untrusted network without an appropriate external trusted transport boundary. The runtime is not a
-hostile-code or multi-tenant sandbox.
+The HTTP listener is plaintext, and the local data/object roots are not encrypted. Do not expose
+them across an untrusted boundary without appropriate external transport/storage protection. The
+runtime is not a hostile-code or multi-tenant sandbox.
 
 ## Service acceptance
 
@@ -117,15 +119,14 @@ cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 
 The acceptance tool first builds through the public command and requires byte equality with the
 checked-in bundle. It stages only the copied binary, artifact, descriptors, configuration/secrets,
-local object directory, and PostgreSQL coordinates; it snapshots canonical typed meaning authority
-before and after. It requires the cached Linux amd64 image
-`postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`.
-It never resolves or pulls a mutable image name itself. It starts an isolated database, exercises
-live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded evidence
-under `.artifacts/lkjscript-dev/service/`. Missing container/database prerequisites are reported as
-unavailable, never as pass.
+one initialized shared data root, and a local object directory; it snapshots canonical typed
+meaning authority before and after. It exercises initialization, login, actor isolation,
+resource/history/object reconciliation, durable claim/completion/stale attempts, restart,
+failed-startup/no-readiness, logical backup, absent-root restore, post-restore equality, shutdown,
+and cleanup. Bounded evidence is retained under `.artifacts/lkjscript-dev/service/`. This product
+and service workflow has no container, database server, connection secret, or host database-library
+prerequisite.
 
-The same workflow can use a verified local PostgreSQL 16.15 tool root through
-`--postgres-root PATH` or `LKJSCRIPT_POSTGRES_ROOT`; the tool verifies the exact server/client
-version and preserves the same isolated database and cleanup contract. This is contributor-only
-test provisioning, not a product adapter or application helper.
+Contributor-only `lkjscript-dev data-oracle` separately uses an exact PostgreSQL 16.15 image for
+neutral migration and differential/resource evidence. That tool is not a deployment provider,
+application helper, public import path, or permanent dual reader/writer.

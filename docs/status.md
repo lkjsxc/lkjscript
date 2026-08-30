@@ -13,23 +13,23 @@ closure selected by `HEAD`. No maintained project contains a predecessor `.lkjsc
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_b7e85425b4d2a15c6e7cbdc2c9128addeaebf24b9cb3dd626f2570ba47da23ee`; state `semantic_state_7590ee186644db29e411c9f919dbbde32daee9382a68f39d7270ff791632c93f` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_5b177805d9e9f6bc81cfdc7d1877d7a9b3d108f93a0bce1594f51b25c13009cf`; state `semantic_state_09c563120fba16b2c47ba7c9fc3d30d50ac107d24ca87ae6b1a7c09d8e779479` |
-| built-in standard dependency | package revision `package_revision_b133c038d2997b440d5a6ec3fe9ec326e6c7c2c75259be7499aa234313bd6515`; transport `package_transport_9326e2744a3bfe401ef03750c162d32c1e3d4151a9b384fdd8fb28261601464a`; artifact manifest `artifact_manifest_48e18403aec9c5c74db8c4a0d75633cbe4f38648218c2e58fe5d7d3d1ca267a0` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_5cb5d4c5a285cc4b71d1be86a616194ad51c2408d640ae0ca99bac4ba1bc2df5`; state `semantic_state_88a45f181829503c93ecf98d08d83670ce49376c7c0790e17d7061dd619d63a4` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f`; state `semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f` |
+| built-in standard dependency | package revision `package_revision_f053de4a920d44c877ee1754c8dea56ecd957ea2d83abb6f476aedc3572846aa`; transport `package_transport_daf5729ccacd430c56b5f9750795448976d980947e7974b2ad09c2c46f086f96`; artifact manifest `artifact_manifest_dd043a03c87749cd758829a52ab668a7b6ac5c61bf35262cb40e99b77d318d54` |
 
-The standard package owns 381 semantic owners, 72 compiler units, and 11 graph tests. Its current
-artifact has 716 closure objects and 224,984 bytes. `lkjournal` owns 1,313 semantic owners and one
-exact standard dependency; its two-package artifact has 132 compiler units, 2,424 closure objects,
-and 728,187 bytes. Its complete dependency closure runs 16 graph tests. Both consumers currently
-pass production/reference equality.
+The standard package owns 409 live semantic owners, 77 compiler units, and 11 graph tests. Its
+current artifact has 780 closure objects and 244,125 bytes. `lkjournal` owns 1,559 live semantic
+owners and one exact standard dependency; its two-package artifact has 137 compiler units, 2,736
+closure objects, and 813,625 bytes. Its complete dependency closure runs 16 graph tests. Both
+consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 77,273 bytes | `b5514baecae1276b8bfc5e551859e0ed351ff8e29a4fcddb66b76ddf5f23479c` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 224,984 bytes | `e30f5c00166bb4b808e5e6557d5043faba492d44818a18e7a53d5113e9366485` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 728,187 bytes | `d28232523c319c8bf09d6cb3f54643b0ddd2aaf02d59acf08d741de86093a6cf` |
+| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 86,697 bytes | `d46939d6ec91b3b403ce2bf54a5fd3ca768bf2ff4259628a03d2ca133b0c7c3f` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 244,125 bytes | `7f47ce86a6d33d39f1f354f515dafd66fcf4cd734f9f36fb6ef83c504d1edf04` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 813,625 bytes | `9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -88,15 +88,24 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source owns unreleased product version 0.1.11; immutable public latest remains v0.1.10.
-Both contain the higher-order and product-surface cutovers. Current source advances only the public
-CLI and normalized-query encodings for bounded context traversal;
-meaning graph, storage, change, compiler, artifact, deployment, runtime, standard-package, and
-application identities remain unchanged. The source executable exposes exactly
-`capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
-`check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
+Current source owns unreleased product version 0.1.12; immutable public latest remains v0.1.10.
+Current source completes the first-party ordered-data cutover. Its executable owners advance the
+CLI, deployment, compact-change, standard/application meaning, and artifact encodings exactly as
+their changed behavior requires, and introduce separately owned first data-store and logical-backup
+encodings. Graph, package, artifact, deployment, and operational-data identities remain separate.
+The source executable exposes exactly
+`capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
+`package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
-name and product version and reports an opaque capabilities digest computed by the executable.
+name and product version and reports capabilities digest
+`6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81` computed by the executable.
+
+`data initialize|verify|backup|restore` owns operational lifecycle for one local
+`lkjscript-data-store-1` root and `lkjscript-data-backup-1` logical backup. Initialize and restore
+publish only absent roots; backup publishes only an absent file; verify walks the complete retained
+closure without mutation. Restore reproduces sorted logical schema/key/value/revision facts under a
+new physical store identity. These commands never discover or advance semantic `HEAD` and expose no
+query shell, repair, overwrite, SQL import, or deployment switch.
 
 `new --template minimal` creates an empty package. `new --template command` creates an offline,
 standard-dependent pure command project with an application module, implementation, component,
@@ -113,12 +122,16 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP and predecessor stateful recipes remain public behavior. Public `v0.1.10` retains
-the task/capability slice and adds the exact
+The closed HTTP recipe remains public behavior. Public `v0.1.10` retains the predecessor
+PostgreSQL-backed stateful behavior immutably; current source rejects that input and uses
+first-party data. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
-capture, partial application, inference, maps, and arbitrary component, interface, external, port,
-or target creation remain unavailable. The built-in standard exports graph-owned generic
+capture, partial application, inference, maps, and arbitrary component, port, or target creation
+remain unavailable. The current compact-change surface additionally exposes exact
+interface/external creation, operation parameters, dependency replacement, and requirement
+rebinding required for reviewed dependency-closed cutovers. The built-in standard exports
+graph-owned generic
 `list-fold-left<Item, State>`, and the source BBS authors its content-type predicate with a named
 header reducer and that fold. Immutable predecessor releases remain unchanged.
 
@@ -170,8 +183,9 @@ reported separately as `updated`, `not-available`, `not-attempted-replay`, or `f
 failure cannot change the accepted semantic result.
 
 Predecessor project markers receive `project_predecessor_authority` before cache or output work.
-The removed `draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor`
-names are absent from discovery and fail with ordinary `cli_usage`. The old workspace/repository
+The removed project-scoped `draft`, `history`, general package staging, `review`, `backup`,
+`restore`, and `doctor` names are absent and fail with ordinary `cli_usage`; top-level
+`data backup|restore` are distinct operational-data operations. The old workspace/repository
 mutation stack and public check/build/run routing have been deleted. There is no legacy flag,
 fallback reader, graph selector, converter, or dual write.
 
@@ -186,20 +200,23 @@ and topology; deployment preparation never discovers or opens a project reposito
 execute once through production rather than differential replay.
 
 Configuration, secrets, clock, secure randomness, identifiers, password hashing, byte streams,
-PostgreSQL, object storage, and durable queue all have exact normalized capability bindings.
-PostgreSQL, object, and queue codecs use one representation-neutral host engine per family.
-Adapter preparation is all-or-nothing, and repeated shutdown reuses one recorded cleanup outcome.
+first-party ordered data, object storage, and the first-party durable queue all have exact normalized
+capability bindings. `data` and `durable_queue_data` may share one confined local root through
+separately validated grants and namespaces. Adapter preparation is all-or-nothing, and repeated
+shutdown reuses one recorded cleanup outcome.
 
-Runtime call frames carry exact generic type substitutions so the generic `json-decode-or<T>`,
-`json-encode<T>`, `list-length<T>`, `list-get<T>`, and `list-fold-left<Item, State>` standard
+Runtime call frames carry exact generic type substitutions so generic `json-decode-or<T>`,
+`json-encode<T>`, `data-encode<T>`, `data-decode-or<T>`, `list-length<T>`, `list-get<T>`, and
+`list-fold-left<Item, State>` standard
 declarations execute against the concrete typed meaning graph runtime layout. Production and
-canonical-reference implementations remain
-disjoint and agree for maintained pure behavior. The stateful BBS uses explicit database,
-identifier, wall-clock, and byte-stream requirements; its HTTP/domain layer is isolated from
-PostgreSQL coordinates and driver representation behind graph-owned persistence functions.
+canonical-reference implementations remain disjoint and agree for maintained pure behavior. The
+stateful BBS uses explicit `DataStore`, identifier, wall-clock, and byte-stream requirements. It
+stores each post once and atomically maintains a `(created-at, id)` index. `lkjournal` owns explicit
+actor, session, resource, immutable-snapshot, object-metadata, lookup, and job spaces/indexes while
+object bytes remain in object storage.
 
-The HTTP listener is plaintext and PostgreSQL uses `NoTls`. The runtime is not a hostile-code
-sandbox or multi-tenant isolation boundary.
+The HTTP listener is plaintext, and the local data root is unencrypted trusted-host storage. The
+runtime is not a hostile-code sandbox or multi-tenant isolation boundary.
 
 ## Current limits and unproved properties
 
@@ -210,21 +227,25 @@ sandbox or multi-tenant isolation boundary.
   a maintained consumer justifies a dependency-closed capability cutover.
 - Full owner-body projection, generic impact query, fuzzy search, multiple-root context, and
   historical query are absent.
-- Removed draft/history/review/backup/restore/doctor workflows have not yet been reintroduced on
-  typed meaning authority.
+- Removed draft/history/review/project-backup/project-restore/doctor workflows have not been
+  reintroduced on typed meaning authority. Operational data backup/restore is separately public.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
   remain private until a complete public workflow exists. Existing component requirements can be
   extended, existing function contracts changed, and pure functions given explicit type parameters,
-  named values, and invocation, but generic component, interface, external, port, and target
-  creation remains private.
+  named values, invocation, interface/external creation, operation parameters, dependency
+  replacement, and requirement rebinding, but generic component, port, and target creation remains
+  private.
 - Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
   budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
   registry data.
 - Artifact input/output, compiler units, graph traversal, expression depth, execution stack,
   instruction count, capability work, and adapter resources retain separate checked boundaries.
   These bounds are implementation admissions, not demonstrated scale ceilings.
-- No million-owner complete application lifecycle, long-history retention policy, garbage
-  collection, live-store packing, artifact signing, encrypted graph storage, or distributed
+- The first-party data format retains all reachable history and has no compaction, garbage
+  collection, destructive repair, replication, consensus, encryption, remote service, or
+  million-key admission. Its current support boundary is one local trusted Linux host.
+- No million-owner complete application lifecycle, long-history retention policy, graph-store
+  garbage collection, live-store packing, artifact signing, encrypted graph storage, or distributed
   publication protocol has been proved.
 - The supported public binary is exactly `x86_64-unknown-linux-musl` with the static linkage and
   pinned Alpine 3.22.5 and Debian 11 userland observations above. A minimum kernel, macOS, Windows,
@@ -255,13 +276,21 @@ no-Docker `distributed_http_application` gate is required by product, service, a
 and copies one candidate executable into a fresh root outside the checkout. These campaigns are
 summarized in [performance.md](performance.md).
 
-Campaign [202608281817](campaigns/202608281817.md) adds the distinct non-cacheable
-`stateful_http_application` gate to service and full profiles. It copies the candidate outside the
-checkout, discovers current grammar/interfaces/deployment fields through that copy, authors a
-982-record fold-based BBS only through reviewed public changes, requires deterministic clean/incremental
-artifact bundle bytes, and exercises PostgreSQL-backed create/read/update/delete, strict-input,
-missing/nonmatching/repeated/reordered content-type, rollback, checksum-divergence, no-readiness,
-shutdown, and restart behavior while graph authority remains byte-identical. The contributor
-harness may provision the already supported service and stateful gates from either the pinned
-immutable PostgreSQL image or an exact verified local PostgreSQL 16.15 tool root; neither
-provisioning path is a product dependency or application helper.
+Campaign [202608281817](campaigns/202608281817.md) introduced the distinct non-cacheable
+`stateful_http_application` gate. Campaign [202608300840](campaigns/202608300840.md) advances its
+receipt schema to bind the first-party data authority. The gate copies the candidate
+outside the checkout, discovers current grammar/interfaces/deployment fields through that copy,
+authors a bounded indexed BBS only through reviewed public changes, requires deterministic
+clean/incremental artifact bytes, and exercises create/list/update/delete ordering, stale
+expectations, strict input, transaction rollback, schema divergence, failed startup, shutdown,
+restart, logical backup, absent-root restore, and byte-identical graph authority without a database
+server or container.
+
+The maintained `lkjournal` service/worker gate shares an isolated data root, freshly rebuilds the
+checked artifact byte-for-byte, and exercises login, actor isolation, resource/history, object
+publication/reconciliation, durable claim/completion/stale attempts, restart, failed startup,
+backup/restore, and cleanup. PostgreSQL 16.15 remains only in contributor command `data-oracle`,
+which compares 416 deterministic neutral facts, public receipts, and three post-warm-up resource
+samples for each workload. Exact identities, medians, gate classifications, and raw pointers are
+owned by
+[`202608300840-first-party-data-engine.json`](evidence/202608300840-first-party-data-engine.json).

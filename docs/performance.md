@@ -642,6 +642,43 @@ remain separate first-party measurements and are recorded with the final campaig
 speedup, SLO, universal resource improvement, or semantic-work reduction is inferred from shorter
 metadata.
 
+## First-party ordered-data cutover
+
+The 2026-08-30 admission uses deterministic neutral fixtures containing 96 BBS posts (192 primary
+and index facts) and 224 `lkjournal` actor/session/resource/snapshot/object/lookup/job facts. The
+contributor oracle loaded and independently exported the fixture through exact PostgreSQL 16.15,
+imported 416 sorted facts into an absent first-party root, and reproduced them after logical backup
+and absent-root restore. PostgreSQL was the isolated image
+`postgres@sha256:485935f94cc7165afa896978809c37b592dc07f0a37d2c8f645f12412d0212c8`
+with config digest
+`sha256:80f4c7a5e91618546dce5b4fe60cf03b14c0f9efa7e40157278d122772ced8d2`.
+
+Each workload ran one warm-up and three fresh samples. These medians are campaign admission data,
+not an SLO or a general scale curve:
+
+| Workload/backend | Wall | sampled CPU | peak RSS | durable bytes | sync/publications | operations |
+|---|---:|---:|---:|---:|---:|---:|
+| BBS first-party | 54.660 ms | 0 ms | 3,632 KiB | 59,581 | 12 | 388 |
+| BBS PostgreSQL oracle | 24.787 ms | 0 ms | 91,526 KiB | 90,112 | 0 | 388 |
+| `lkjournal` first-party | 66.649 ms | 0 ms | 3,792 KiB | 111,831 | 12 | 452 |
+| `lkjournal` PostgreSQL oracle | 26.884 ms | 0 ms | 91,666 KiB | 122,880 | 0 | 452 |
+
+First-party/PostgreSQL ratios were 2.205x wall, 0.040x RSS, and 0.661x durable bytes for BBS;
+2.479x wall, 0.041x RSS, and 0.910x durable bytes for `lkjournal`. All are below the blocking 5x,
+2x, and 4x thresholds. The process sampler has 10 ms CPU-tick resolution, so all short child CPU
+medians rounded to zero; those values are retained observations, not evidence of zero work.
+PostgreSQL WAL synchronization counters also observed a zero median and are not used as a ratio.
+
+The source cutover grows the standard from 381 to 409 live owners, 72 to 77 compiler units, and
+224,984 to 244,125 artifact bytes. The current standard transport is 86,697 bytes. `lkjournal`
+grows from 1,313 to 1,559 live owners and its two-package artifact from 728,187 to 813,625 bytes,
+with 137 compiler units and the same 16 differential graph tests. These changes replace the SQL
+surface and persistence meaning; they do not imply generalized compiler or runtime regression.
+
+Raw samples, fixtures, public-workflow bindings, and cleanup facts remain under the campaign's
+ignored `.artifacts/lkjscript-dev/data-oracle/` root. The final tracked summary is
+[`202608300840-first-party-data-engine.json`](evidence/202608300840-first-party-data-engine.json).
+
 ## Historical compiler, service, and verification receipts
 
 Before the current cutover, graph packages passed 6 standard and 11 `lkjournal` tests with
