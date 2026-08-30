@@ -38,21 +38,21 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.10`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.10) is the current public and
+[`v0.1.12`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.12) is the current public and
 supported release. Its annotated tag object
-`866f1cc4fa85e5f6ecdec97cd9666912c020b14c` selects source commit
-`5cc8f79c55d9baa0a6ef964db502567b59c4d079`; GitHub reports release `379029576` as immutable,
+`d6d81e2398ced78023a8ea62d69e03f6b9f5d4da` selects source commit
+`8a0141a151a87fe59ccc1ebc738a7e5dd51c6882`; GitHub reports release `379320112` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 15,968,480-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 15,767,776-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,225,282 | `bb44681f93f5a65105f8897c9876abcbc0901a42e71b5b0129eccd4b38f3f3b8` |
-| `SHA256SUMS` | 109 | `39cff48f52c775bdfdf55ef32fd6f13c6a3a01c23674d35d93e9a659ee4b15e0` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,113,264 | `96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4` |
+| `SHA256SUMS` | 109 | `a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091` |
 
 Release workflow
-[`33260579946`](https://github.com/lkjsxc/lkjscript/actions/runs/33260579946) passed all four jobs on
+[`33318722126`](https://github.com/lkjsxc/lkjscript/actions/runs/33318722126) passed all four jobs on
 attempt 1. Tagged source passed 23/23 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
 and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed the
@@ -64,10 +64,10 @@ Exact and latest candidate and manifest bytes agree; each fresh BBS independentl
 clean/incremental artifact equality, persistence, rollback, failure behavior, authority equality,
 redaction, and cleanup.
 
-The public binary contains the explicit higher-order generic authoring and single-product-version
-surface cutovers completed after v0.1.9. Exact identities, classifications, resource observations,
-the pre-tag stale-assertion correction, and raw-evidence pointers are retained in
-[`202608292254-public-product-release.json`](evidence/202608292254-public-product-release.json).
+The public binary contains the explicit higher-order generic authoring, single-product-version
+surface, bounded context traversal, and complete first-party ordered-data/durable-queue cutovers.
+Exact identities, classifications, resource observations, and raw-evidence pointers are retained in
+[`202608302224-public-product-release.json`](evidence/202608302224-public-product-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -88,12 +88,12 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source owns unreleased product version 0.1.12; immutable public latest remains v0.1.10.
-Current source completes the first-party ordered-data cutover. Its executable owners advance the
+Current source and immutable public latest both own product version 0.1.12 and the completed
+first-party ordered-data cutover. Its executable owners advance the
 CLI, deployment, compact-change, standard/application meaning, and artifact encodings exactly as
 their changed behavior requires, and introduce separately owned first data-store and logical-backup
 encodings. Graph, package, artifact, deployment, and operational-data identities remain separate.
-The source executable exposes exactly
+The source and distributed executable expose exactly
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
@@ -122,9 +122,9 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.10` retains the predecessor
-PostgreSQL-backed stateful behavior immutably; current source rejects that input and uses
-first-party data. The higher-order slice includes the exact
+The closed HTTP recipe remains public behavior. Public `v0.1.12` rejects predecessor PostgreSQL
+deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
+PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
 capture, partial application, inference, maps, and arbitrary component, port, or target creation
@@ -137,8 +137,8 @@ header reducer and that fold. Immutable predecessor releases remain unchanged.
 
 Exact source-campaign identities, receipts, classifications, and resource observations are retained
 in [`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json),
-and the public distribution boundary is retained in
-[`202608292254-public-product-release.json`](evidence/202608292254-public-product-release.json).
+and the current public distribution boundary is retained in
+[`202608302224-public-product-release.json`](evidence/202608302224-public-product-release.json).
 
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,

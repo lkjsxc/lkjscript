@@ -4,50 +4,49 @@ Measurements are observations, not promises.
 
 ## Current public binary release
 
-Release `v0.1.10` was built and published by GitHub Actions run
-[`33260579946`](https://github.com/lkjsxc/lkjscript/actions/runs/33260579946) on explicit
+Release `v0.1.12` was built and published by GitHub Actions run
+[`33318722126`](https://github.com/lkjsxc/lkjscript/actions/runs/33318722126) on explicit
 `ubuntu-24.04` with Rust/Cargo 1.98.0. Its read-only build/verification, no-checkout
 pre-publication, write-isolated publication, and anonymous post-publication jobs completed in about
-18 minutes 26 seconds, 36 seconds, 15 seconds, and 51 seconds respectively. All passed on attempt 1.
+16 minutes 46 seconds, 24 seconds, 19 seconds, and 54 seconds respectively. All passed on attempt 1.
 
 | Observation | Value |
 |---|---:|
-| fresh full verification | 457.408 s; 23/23 gates fresh passed; zero reused |
-| exact musl candidate build | 240.159 s; 0.880 s sampled child CPU; 79,352 KiB peak RSS |
-| target admission after build | 22.224 s; 6/6 required classifications fresh passed |
+| fresh full verification | 430.225 s; 23/23 gates fresh passed; zero reused |
+| exact musl candidate build | 191.108 s; 0.600 s sampled child CPU; 76,648 KiB peak RSS |
+| target admission after build | 24.394 s; 6/6 required classifications fresh passed |
 | candidate command userlands | 12 commands each; Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31 |
-| target distributed HTTP oracle | 1.711 s; 23 commands; 2 runners; 2 requests |
-| target stateful HTTP oracle | 13.107 s; 63 commands; 3 runners; 27 requests |
-| target `lkjournal` service oracle | 3.133 s; 13 commands; 3 runners; 14 requests |
-| deterministic release preparation | 58.993 s including strict verification and command lifecycle |
-| transferred pre-publication distributed/stateful oracles | 2.508 s / 14.198 s; no checkout; complete cleanup |
-| anonymous exact distributed/stateful oracles | 1.711 s / 13.338 s |
-| anonymous latest distributed/stateful oracles | 1.693 s / 13.013 s |
+| target distributed HTTP oracle | 2.426 s; 23 commands; 2 runners; 2 requests |
+| target stateful HTTP oracle | 14.062 s; 70 commands; 3 runners; 25 requests |
+| target `lkjournal` service oracle | 2.525 s; 8 commands; 4 runners; 15 requests |
+| deterministic release preparation | 69.849 s including strict verification and command lifecycle |
+| transferred pre-publication distributed/stateful oracles | 1.779 s / 15.390 s; no checkout; complete cleanup |
+| anonymous exact distributed/stateful oracles | 1.770 s / 15.519 s |
+| anonymous latest distributed/stateful oracles | 1.753 s / 15.359 s |
 
-The exact release executable is 15,968,480 bytes with SHA-256
-`938d1ff0b79f6c82f83f8efe5a18e8af92152f27523b1a9f5e06b328b3eaf19f`. Direct inspection found
+The exact release executable is 15,767,776 bytes with SHA-256
+`58a4735b26a486e340837bf570408c288089454ebbf26beec6d43d94cf19acc2`. Direct inspection found
 zero ELF interpreter headers, runtime-needed libraries, and GLIBC symbol-version requirements. The
-11,336-byte license, 315,160-byte generated notices, and 3,907-byte manifest bring uncompressed
-payload bytes to 16,298,883; the 7,225,282-byte archive has a 0.443299 ratio (55.67% smaller). The
+11,336-byte license, 301,413-byte generated notices, and 3,907-byte manifest bring uncompressed
+payload bytes to 16,084,432; the 7,113,264-byte archive has a 0.442245 ratio (55.78% smaller). The
 109-byte checksum contains exactly that archive.
 
-Exact and latest downloads each independently completed the distributed and PostgreSQL-backed BBS
+Exact and latest downloads each independently completed the distributed and first-party-data BBS
 workflows. Their fresh BBS applications intentionally allocated different identities and artifact
 bytes; each run's clean and incremental artifact hashes agreed. All hosted downloads, attestations,
 and application oracles succeeded on their first attempt. A separate token-free client downloaded
 all four exact/latest files on its first attempt, validated both checksums, strictly verified both
-packages, and found archive, checksum, candidate, and manifest bytes equal. The first pre-tag hosted
-dry run exposed a stale duplicate workflow assertion after both application oracles themselves
-passed; source was corrected before tag creation and a new dry run passed. No publication or
-recovery mutation was retried.
+packages, and found archive, checksum, candidate, and manifest bytes equal. The one pre-tag hosted
+dry run and canonical publication both passed on attempt 1. No publication or recovery mutation was
+retried.
 
 These are point observations across one hosted runner and one client, not latency distributions or
-cross-run reproducibility evidence. Runner cache, scheduling, network, database, filesystem, and
+cross-run reproducibility evidence. Runner cache, scheduling, network, filesystem, and
 kernel effects were uncontrolled. Static linkage and the two named userlands do not establish a
 minimum kernel or universal Linux compatibility. Provider token use, monetary cost, exact syscalls,
 and reliable aggregate process CPU/RSS for containerized work were unavailable. Exact identities,
 classifications, and raw-evidence pointers are in
-[`202608292254-public-product-release.json`](evidence/202608292254-public-product-release.json).
+[`202608302224-public-product-release.json`](evidence/202608302224-public-product-release.json).
 
 ## Historical v0.1.7 public binary release
 

@@ -8,7 +8,7 @@ authored change, normalized query, standalone artifact bundle service/worker dep
 first-party ordered application data and durable queue, operational backup/restore, complete
 SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
 and first-party-data copied-binary HTTP acceptance are current architecture. PostgreSQL 16.15 is
-retained only as contributor differential evidence. Immutable `v0.1.10` is the supported public
+retained only as contributor differential evidence. Immutable `v0.1.12` is the supported public
 `x86_64-unknown-linux-musl` distribution; its exact and latest
 downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable
 v0.1.8 remains an unclosed historical recovery point.

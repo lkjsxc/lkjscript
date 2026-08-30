@@ -1,0 +1,600 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-product-release-evidence",
+    "version": 1
+  },
+  "campaign": "202608302224",
+  "status": "complete",
+  "assembled_at_utc": "2026-08-30T15:31:59Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "e674b6715cc3e0b3ab596bfc4dd85e015f7087d2",
+    "entry_tree": "9efb77aa05145680ec9d7fe14dfc4a7650798960",
+    "entry_origin_main": "e674b6715cc3e0b3ab596bfc4dd85e015f7087d2",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "entry_supplied_work": [
+      {
+        "path": "AGENTS.md",
+        "state": "modified",
+        "sha256": "cf9318f418798af7e16af6312176620d073554473a9b00e4a8ac88adad7a3bee",
+        "disposition": "committed unchanged as a release-source authority clarification"
+      },
+      {
+        "path": "docs/campaigns/202608302224.md",
+        "state": "untracked",
+        "sha256": "7300150819bb266e49ea8daf21461408a491f6bdc9e0df87dbbe745ced9ac6ea",
+        "disposition": "committed as the active mandate; only lifecycle status and terminal record change at closure"
+      }
+    ],
+    "preserved_work": [],
+    "open_issues_at_entry": 0,
+    "open_pull_requests_at_entry": 0,
+    "queued_or_running_release_runs_at_entry": 0
+  },
+  "source": {
+    "orientation_baseline": "e674b6715cc3e0b3ab596bfc4dd85e015f7087d2",
+    "release_source_commit_R": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+    "release_source_tree": "a9d72855f44def04b8bd5f72646135b282df36c0",
+    "release_source_commit": {
+      "sha": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+      "summary": "Prepare immutable first-party data publication",
+      "paths": [
+        "AGENTS.md",
+        "docs/campaigns/202608302224.md"
+      ]
+    },
+    "origin_main_equal_before_tag_push": true,
+    "worktree_clean_before_tag_push": true,
+    "root_product_version": "0.1.12",
+    "release_tag": "v0.1.12",
+    "workflow_git_blob": "e55e821ca7427403702edb8017e32394e031aef4",
+    "workflow_sha256": "94cc4181c0a8c57a284758e754e8989a8db869a77e0b7bdf70ab804ef5591ef3",
+    "cargo_lock_sha256": "9bca68d98a136e5cf499420688a6442d955cccdebdb77ada8b006b4b399e685c",
+    "rust_toolchain_sha256": "f1adfed25fca89d418637337ee32a6580d06de345c179472acc780e17f291df4",
+    "public_delta_from_v0_1_10": [
+      "bounded revision-pinned semantic context traversal with stateless continuation",
+      "first-party ordered application-data store and logical backup lifecycle",
+      "complete maintained BBS and lkjournal service/worker cutover",
+      "first-party durable queue and deletion of SQL/PostgreSQL product paths"
+    ],
+    "release_blocker_corrections": [],
+    "source_behavior_changed_during_campaign": false
+  },
+  "product_and_contract_identities": {
+    "product": "0.1.12",
+    "cli": "lkjscript-cli-14",
+    "deployment": 2,
+    "compact_change": 7,
+    "data_store": "lkjscript-data-store-1",
+    "logical_backup": "lkjscript-data-backup-1",
+    "data_standard_interface": "DataStore",
+    "data_deployment_adapters": [
+      "data",
+      "durable_queue_data"
+    ],
+    "capabilities_digest": "6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81",
+    "release_target_policy": {
+      "schema": {
+        "identity": "lkjscript-release-target-policy",
+        "version": 2
+      },
+      "sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152"
+    },
+    "release_receipt": {
+      "identity": "lkjscript-release-receipt",
+      "version": 2
+    },
+    "target_build_receipt": {
+      "identity": "lkjscript-target-build-receipt",
+      "version": 1
+    },
+    "target_admission_receipt": {
+      "identity": "lkjscript-target-admission-receipt",
+      "version": 1
+    },
+    "application_verifier_handoff": {
+      "identity": "lkjscript-application-verifier-handoff",
+      "version": 2
+    },
+    "distributed_http_acceptance": {
+      "identity": "lkjscript-distributed-http-acceptance",
+      "version": 2
+    },
+    "stateful_http_acceptance": {
+      "identity": "lkjscript-stateful-http-acceptance",
+      "version": 3
+    }
+  },
+  "maintained_authority": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_5cb5d4c5a285cc4b71d1be86a616194ad51c2408d640ae0ca99bac4ba1bc2df5",
+      "semantic_state": "semantic_state_88a45f181829503c93ecf98d08d83670ce49376c7c0790e17d7061dd619d63a4",
+      "package_revision": "package_revision_f053de4a920d44c877ee1754c8dea56ecd957ea2d83abb6f476aedc3572846aa",
+      "package_transport": "package_transport_daf5729ccacd430c56b5f9750795448976d980947e7974b2ad09c2c46f086f96",
+      "artifact_manifest": "artifact_manifest_dd043a03c87749cd758829a52ab668a7b6ac5c61bf35262cb40e99b77d318d54",
+      "artifact_bundle": "artifact_bundle_6871446723930f366efb438b46570efc4cbdda6a664ed07d80e7decb45f4ab8d",
+      "transport_sha256": "d46939d6ec91b3b403ce2bf54a5fd3ca768bf2ff4259628a03d2ca133b0c7c3f",
+      "artifact_sha256": "7f47ce86a6d33d39f1f354f515dafd66fcf4cd734f9f36fb6ef83c504d1edf04"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f",
+      "semantic_state": "semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f",
+      "compilation_manifest": "compilation_manifest_f32f1d0988737e8eb15d3396356618e440038afca7c69afebbc4248f0893b3d0",
+      "artifact_manifest": "artifact_manifest_2087386a0c1ff708b04db2221a5a20ac3d3f66ac3443e4dc2a25f032f38398d1",
+      "artifact_bundle": "artifact_bundle_b5a2f01d952416c5f9b61b36d1335ded8698acc653ae677974b43dc57c8acb6c",
+      "artifact_sha256": "9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28"
+    }
+  },
+  "reconciliation": {
+    "entry_latest_release": {
+      "tag": "v0.1.10",
+      "release_id": 379029576,
+      "tag_object": "866f1cc4fa85e5f6ecdec97cd9666912c020b14c",
+      "source_commit": "5cc8f79c55d9baa0a6ef964db502567b59c4d079",
+      "immutable": true
+    },
+    "intended_tag_absent_before_publication": true,
+    "intended_release_absent_before_publication": true,
+    "immutable_releases_enabled": true,
+    "workflow_default_permissions": "read",
+    "workflow_active": true,
+    "workflow_boundaries": {
+      "build": "read-only checkout",
+      "pre_publication": "read-only and no checkout",
+      "publication": "contents:write only, no checkout, dependent on build and pre-publication evidence",
+      "post_publication": "read-only and no checkout"
+    },
+    "product_postgresql_dependency_absent": true,
+    "public_release_paths_provision_postgresql": false,
+    "predecessor_inputs_reject": [
+      "postgres adapter",
+      "durable_queue_postgres adapter",
+      "database command and SQL standard references",
+      "predecessor deployment and application artifacts"
+    ],
+    "contributor_only_postgresql": [
+      "tools/lkjscript-dev/src/postgres.rs",
+      "tools/lkjscript-dev/src/data_oracle.rs",
+      "tools/lkjscript-dev/Cargo.toml"
+    ]
+  },
+  "pinned_inputs": {
+    "rust_toolchain": "1.98.0",
+    "target": "x86_64-unknown-linux-musl",
+    "runtime_linkage": "static-musl",
+    "musl_packages": "1.2.4-2",
+    "cargo_about": {
+      "version": "0.9.2",
+      "archive_sha256": "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af",
+      "executable_sha256": "b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8"
+    },
+    "userlands": [
+      "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+      "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+    ]
+  },
+  "predecessor_orientation": {
+    "bounded_context_source_evidence": {
+      "classification": "reused passed",
+      "path": "docs/evidence/202608300506-bounded-context-traversal.json",
+      "use": "orientation only; current copied-command and full release gates reran freshly"
+    },
+    "first_party_data_source_evidence": {
+      "classification": "reused passed",
+      "path": "docs/evidence/202608300840-first-party-data-engine.json",
+      "use": "implementation and PostgreSQL differential orientation only; all release and public application boundaries reran freshly without PostgreSQL"
+    }
+  },
+  "local_final_proof": {
+    "root": ".artifacts/campaign/202608302224/local-final",
+    "full": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788100630223262557-671420-0/receipt.json",
+      "receipt_sha256": "9be9bb57f63ab00fdd7aa02c79c14a51128e36989a9f3dbd77f0273831609daa",
+      "receipt_digest": "verification_0923848a5659e7c3a230a1040aacb507e7e607dd9a13197d3fbab575dbba3b9c",
+      "elapsed_nanoseconds": 119655989957,
+      "selected": 23,
+      "fresh_passed": 23,
+      "reused_passed": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 0,
+      "input_stable": true,
+      "copied_context_owner": "release_command_lifecycle fresh passed"
+    },
+    "candidate_build": {
+      "classification": "fresh passed",
+      "candidate": ".artifacts/campaign/202608302224/local-final/target/lkjscript",
+      "candidate_bytes": 15763680,
+      "candidate_sha256": "eb82def5e1eba1b59af6ac67551d54547c664e7909a2e824c8f3b974a015a83e",
+      "receipt": ".artifacts/campaign/202608302224/local-final/target/build-receipt.json",
+      "receipt_sha256": "3d1260570d2c8925b75608cba7040a455d16fb77d341f3b9faf5edef03e6d608"
+    },
+    "target_admission": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202608302224/local-final/target-admission/receipt.json",
+      "receipt_sha256": "6ce55e631a5d383663fccee8c17bf6adba9a71c65c2d333fc8d5e51c3b77def3",
+      "receipt_digest": "verification_dde451d1cde428a45e3e8d3d0a9086279527c5fbde13f541cca2a7398348eeca",
+      "elapsed_nanoseconds": 18812275472,
+      "fresh_passed_classifications": 6,
+      "oracles": [
+        "distributed_http",
+        "stateful_http",
+        "service_acceptance"
+      ],
+      "cleanup_complete": true
+    },
+    "package": {
+      "classification": "fresh passed",
+      "archive_bytes": 7112245,
+      "archive_sha256": "236a3742805678bb0de3a2b2c47ffd9c92675015ada4d6d6a952bec32ac49d82",
+      "checksum_sha256": "78c4e40b1da59141c2cacf14180c600277823923b37ce43298bff3e765cd9e75",
+      "manifest_sha256": "2772b4a5b87cf81450ca2484a4424bb2947f78004d3775f2946857a33cd03c63",
+      "release_receipt_sha256": "7fd850d994b84c7a427adaa11acd7d06b02c7c3aa6a2a687c090db0a887796dc",
+      "same_input_repetition_equal": true,
+      "strict_verify": "fresh passed"
+    }
+  },
+  "hosted_dry_run": {
+    "classification": "fresh passed",
+    "run_id": 33317597991,
+    "run_attempt": 1,
+    "run_number": 36,
+    "source_commit": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+    "created_at": "2026-08-30T14:42:23Z",
+    "completed_at": "2026-08-30T15:02:57Z",
+    "jobs": [
+      {
+        "id": 99273782678,
+        "name": "Build, verify, and package",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 99276223516,
+        "name": "Verify transferred packaged application candidate",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 99276279585,
+        "name": "Publish immutable release",
+        "classification": "skipped"
+      },
+      {
+        "id": 99276280116,
+        "name": "Verify anonymous public release",
+        "classification": "skipped"
+      }
+    ],
+    "artifacts": [
+      {"id": 9734110321, "name": "full-verification-evidence-33317597991-1", "digest": "sha256:bfcfbec2de1ebf7b996f2b6ba1567834eb5d0006467a9974a355a7cff0e330ff"},
+      {"id": 9734165556, "name": "target-admission-evidence-33317597991-1", "digest": "sha256:2a1031b01d9ce33c8686e0c45cc0b76f7884f1a458a6063d4cc36c5a43c04cb6"},
+      {"id": 9734184042, "name": "release-handoff-33317597991-1", "digest": "sha256:553db52affaafca7fe060d139579075887e7f04781f92fe4603a44c1b0fe0bd6"},
+      {"id": 9734184226, "name": "verifier-handoff-33317597991-1", "digest": "sha256:723446b1b575c28bd0f25d378e9d2da3ca6491b32b6e23f7bd4b82e164152eb9"},
+      {"id": 9734190207, "name": "pre-publication-application-evidence-33317597991-1", "digest": "sha256:ed1931cd7ea9524172de656508af9ae9884c9c565679462ce8b856c201236828"}
+    ],
+    "full_receipt_sha256": "a8b4960f61b959808822daf0008283a651f51a7d5a6d65e8084c76e3f8b84565",
+    "target_receipt_sha256": "4bc72c649055f745a86cbabb4e7f2d3a351516fecbce9820cb5270967c756373",
+    "archive_sha256": "e4e58526bb0a57206eb39ea2908c5d8a96096c038562f03aa9bb0f4e2a07aec6",
+    "verifier_sha256": "2afafdb3b8d9fdbb65d50a6f52ef9dc7274c34a236c3b1c08775dbc4ec661ff3",
+    "pre_publication_distributed_receipt_sha256": "b6c1062e787f6e3613830566d8b16ebff0914c767ebb8e41c0bbd5b1057dcf9c",
+    "pre_publication_stateful_receipt_sha256": "76cb438a1c24f047ef47e1bb1f95c4be22ac438f5fd10e1cbcd9b00cbe6d2f0a",
+    "public_objects_created": 0,
+    "raw_root": ".artifacts/campaign/202608302224/hosted-dry-run-33317597991"
+  },
+  "publication": {
+    "tag": {
+      "name": "v0.1.12",
+      "object_sha": "d6d81e2398ced78023a8ea62d69e03f6b9f5d4da",
+      "peeled_commit": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+      "annotated": true,
+      "remote_exact": true
+    },
+    "confirmation_variable": {
+      "name": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+      "value": "d6d81e2398ced78023a8ea62d69e03f6b9f5d4da",
+      "read_back_exact": true,
+      "updated_at": "2026-08-30T15:06:08Z"
+    },
+    "run": {
+      "id": 33318722126,
+      "number": 37,
+      "attempt": 1,
+      "event": "push",
+      "source_commit": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+      "created_at": "2026-08-30T15:06:52Z",
+      "completed_at": "2026-08-30T15:25:26Z",
+      "conclusion": "success",
+      "jobs": [
+        {"id": 99276775298, "name": "Build, verify, and package", "classification": "fresh passed", "elapsed_seconds": 1006},
+        {"id": 99278893572, "name": "Verify transferred packaged application candidate", "classification": "fresh passed", "elapsed_seconds": 24},
+        {"id": 99278951261, "name": "Publish immutable release", "classification": "fresh passed", "elapsed_seconds": 19},
+        {"id": 99278992184, "name": "Verify anonymous public release", "classification": "fresh passed", "elapsed_seconds": 54}
+      ]
+    },
+    "artifacts": [
+      {"id": 9734400464, "name": "full-verification-evidence-33318722126-1", "digest": "sha256:a06a3b86485f4f54419e49889d62f7cb05c96e4fc19d9a38e37497105953b314"},
+      {"id": 9734448822, "name": "target-admission-evidence-33318722126-1", "digest": "sha256:3d4e5300c7e5ed330ad6ed751dbb56ba0cd2caec5267e7680b651a637899cfe8"},
+      {"id": 9734464950, "name": "release-handoff-33318722126-1", "digest": "sha256:84f9f0b132d3e194f67e38fb057b244255a3ac5e914195820ccf61258f815d3f"},
+      {"id": 9734465364, "name": "verifier-handoff-33318722126-1", "digest": "sha256:bc602a109c2f371261c341220af9e8ceb6f13fbdef93704cf42d2f6f222698b5"},
+      {"id": 9734471743, "name": "pre-publication-application-evidence-33318722126-1", "digest": "sha256:71d56fd4a0381ccf5bfc7ca764c4db597e26c3302b0a881eb25dde7d3426f647"},
+      {"id": 9734488514, "name": "public-application-verification-evidence-33318722126-1", "digest": "sha256:dbcadf1477fb8d75656271d472b8595d7f831917db5e76ce21fba46f0b1cd205"}
+    ],
+    "full": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202608302224/publication-33318722126/full-verification-evidence-33318722126-1/check/1788102694953859901-6018-0/receipt.json",
+      "receipt_sha256": "2ce023080232922d326f50688fd8ef4dddd340f01249ec33b5090802f2074796",
+      "elapsed_nanoseconds": 430224785512,
+      "fresh_passed": 23,
+      "reused_passed": 0
+    },
+    "target": {
+      "classification": "fresh passed",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "build_receipt_sha256": "deb9362eb1e500bfa2820e970a0589993bb7fa38dac17fd34f3bd37dcc291614",
+      "build_elapsed_nanoseconds": 191108405082,
+      "build_cpu_nanoseconds": 600000000,
+      "build_peak_rss_kib": 76648,
+      "candidate_bytes": 15767776,
+      "candidate_sha256": "58a4735b26a486e340837bf570408c288089454ebbf26beec6d43d94cf19acc2",
+      "receipt_sha256": "6b9135f2089b7f96a34d32cadfe29a13c992efcf9c15eaf603c2c604dd7fdc54",
+      "elapsed_nanoseconds": 24393807150,
+      "fresh_passed_classifications": 6,
+      "elf": {
+        "class": "ELF64",
+        "machine": "x86-64",
+        "position_independent": true,
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0
+      },
+      "oracles_elapsed_nanoseconds": {
+        "distributed_http": 2425713016,
+        "stateful_http": 14061808334,
+        "service_acceptance": 2525463791
+      },
+      "cleanup_complete": true
+    },
+    "package": {
+      "classification": "fresh passed",
+      "release_receipt_sha256": "792b83bd58d09a6a086a12626ffa3282a69d7d71b8727f15861b29cf0a5641ce",
+      "elapsed_nanoseconds": 69849173079,
+      "archive_bytes": 7113264,
+      "archive_sha256": "96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4",
+      "checksum_bytes": 109,
+      "checksum_sha256": "a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091",
+      "manifest_sha256": "cb4ba3b206d989750eeb452adedf7361de1c5265f4a18551dec0ebf14e0f7c10",
+      "members": 5,
+      "same_input_repetition_equal": true,
+      "strict_verify": "fresh passed"
+    },
+    "verifier": {
+      "bytes": 5266840,
+      "sha256": "2afafdb3b8d9fdbb65d50a6f52ef9dc7274c34a236c3b1c08775dbc4ec661ff3",
+      "identity_sha256": "3331b5b218ed26ba7002e177b1fbdc3c85627f5af1a6712fb2b75d9963b998f6",
+      "roles": ["release-verify", "distributed-http", "stateful-http"]
+    },
+    "pre_publication": {
+      "classification": "fresh passed",
+      "distributed_receipt_sha256": "8f4b875f73c7e30cfb0ac3187d7bf6aa326caae6f1a7276fe11d360d7fc0c6bd",
+      "distributed_elapsed_nanoseconds": 1779176449,
+      "stateful_receipt_sha256": "0bb4867b81ff2fcf892b2e34db2f3181c5a31a497d8b0ed93f0e207733096b10",
+      "stateful_elapsed_nanoseconds": 15389501190,
+      "data_contract": "lkjscript-data-store-1",
+      "checkout_root": null,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    }
+  },
+  "public_release": {
+    "release_id": 379320112,
+    "tag": "v0.1.12",
+    "name": "v0.1.12",
+    "url": "https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.12",
+    "published_at": "2026-08-30T15:24:25Z",
+    "immutable": true,
+    "latest": true,
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      {
+        "id": 536753733,
+        "name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+        "bytes": 7113264,
+        "sha256": "96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4",
+        "github_digest": "sha256:96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4"
+      },
+      {
+        "id": 536753748,
+        "name": "SHA256SUMS",
+        "bytes": 109,
+        "sha256": "a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091",
+        "github_digest": "sha256:a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091"
+      }
+    ],
+    "attestation": {
+      "classification": "fresh passed",
+      "predicate_type": "https://in-toto.io/attestation/release/v0.2",
+      "tag_object_subject_sha1": "d6d81e2398ced78023a8ea62d69e03f6b9f5d4da",
+      "repository": "lkjsxc/lkjscript",
+      "release_id": "379320112",
+      "verified_identity": "https://dotcom.releases.github.com",
+      "verified_timestamp": "2026-08-30T15:24:25Z",
+      "retained_json_sha256": "a7b733bcfd39e088f092fe5bc6d677186e08e6538be5af3d3117edea2c551875"
+    }
+  },
+  "anonymous_public_acceptance": {
+    "classification": "fresh passed",
+    "artifact_root": ".artifacts/campaign/202608302224/publication-33318722126/public-application-verification-evidence-33318722126-1",
+    "archive_sha256": "96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4",
+    "checksum_sha256": "a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091",
+    "candidate_sha256": "58a4735b26a486e340837bf570408c288089454ebbf26beec6d43d94cf19acc2",
+    "manifest_sha256": "cb4ba3b206d989750eeb452adedf7361de1c5265f4a18551dec0ebf14e0f7c10",
+    "exact": {
+      "checksum": "fresh passed",
+      "attestation": "fresh passed",
+      "strict_release_static_verify": "fresh passed",
+      "distributed_http": "fresh passed",
+      "distributed_receipt_sha256": "2156e9b74bb51def851f33169466e157874fb9a02d9a8d408aa075b05a09b993",
+      "distributed_elapsed_nanoseconds": 1769930941,
+      "stateful_http": "fresh passed",
+      "stateful_receipt_sha256": "5404d4eb9cadf089f75b3b7ed37c4b539ddf53d7f471d57092adb8df513ae7d9",
+      "stateful_elapsed_nanoseconds": 15518797964,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "checksum": "fresh passed",
+      "attestation": "fresh passed",
+      "strict_release_static_verify": "fresh passed",
+      "distributed_http": "fresh passed",
+      "distributed_receipt_sha256": "146e07c91592e9ed21e0f33644789176f8ea4466cdf0a63a14c8ae0a74c366cd",
+      "distributed_elapsed_nanoseconds": 1753344032,
+      "stateful_http": "fresh passed",
+      "stateful_receipt_sha256": "802fc7b4a050c1e5a54102b690d77473c1ccd32fd11c8ec1e29238d0f0451932",
+      "stateful_elapsed_nanoseconds": 15358835284,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "exact_latest_archive_equal": true,
+    "exact_latest_checksum_equal": true,
+    "exact_latest_candidate_equal": true,
+    "exact_latest_manifest_equal": true,
+    "data_contract_each": "lkjscript-data-store-1",
+    "persistence_after_restart_each": true,
+    "backup_restore_equivalent_each": true,
+    "failed_startup_without_readiness_each": true
+  },
+  "token_free_transport": {
+    "classification": "fresh passed",
+    "root": ".artifacts/campaign/202608302224/anonymous-token-free",
+    "downloads": 4,
+    "exact_and_latest_checksum_validation": true,
+    "exact_latest_archive_equal": true,
+    "exact_latest_checksum_equal": true,
+    "strict_release_static_verify_each": true,
+    "candidate_equal": true,
+    "manifest_equal": true
+  },
+  "classifications": {
+    "final_source_full": "fresh passed",
+    "copied_context": "fresh passed",
+    "final_target_admission": "fresh passed",
+    "data_lifecycle_and_restart": "fresh passed",
+    "lkjournal_service_worker": "fresh passed",
+    "final_local_package_verify": "fresh passed",
+    "hosted_dry_run": "fresh passed",
+    "publication_preconditions": "fresh passed",
+    "canonical_publication": "fresh passed",
+    "anonymous_exact": "fresh passed",
+    "anonymous_latest": "fresh passed",
+    "final_required_reused": 0,
+    "final_required_skipped": 0,
+    "final_required_unavailable": 0,
+    "final_required_failed": 0,
+    "final_required_not_run": 0
+  },
+  "recovery": {
+    "exact_tag_recovery_dispatch": "not executed",
+    "content_changing_additive_patch": "not executed",
+    "workflow_rerun": "not executed"
+  },
+  "cleanup": {
+    "local_target_admission_containers_removed": true,
+    "hosted_target_admission_containers_removed": true,
+    "temporary_application_and_data_roots_removed": true,
+    "runner_cleanup_complete": true,
+    "raw_logs_and_downloads": "retained only under ignored .artifacts roots",
+    "ambient_or_user_data_touched": false
+  },
+  "external_mutations": [
+    "normal fast-forward main push through R 8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+    "hosted dry-run dispatch 33317597991 with publication disabled",
+    "repository confirmation variable set to exact tag object d6d81e2398ced78023a8ea62d69e03f6b9f5d4da",
+    "annotated refs/tags/v0.1.12 push",
+    "canonical run 33318722126 created immutable latest release 379320112 and its two canonical assets"
+  ],
+  "non_mutations": [
+    "no force push, history rewrite, retag, tag deletion, release edit, asset replacement, unpublish, or predecessor mutation",
+    "no package-registry publication, deployment, hosted or user-data migration or mutation",
+    "no issue, pull-request, secret, credential, permission, or unrelated repository-setting mutation",
+    "immutable v0.1.10, historical v0.1.8, and all other predecessor tags, releases, assets, receipts, and evidence remain unchanged"
+  ],
+  "limitations_and_nonclaims": [
+    "tested public target is only x86_64-unknown-linux-musl",
+    "tested userlands are only the pinned Alpine/musl and Debian/glibc environments",
+    "no minimum-kernel or universal Linux portability claim",
+    "no reproducible-build claim; local, dry-run, and publication candidates may differ while each exact receipt remains internally bound",
+    "no code-signing, general provenance, hostile-code isolation, encryption, replication, consensus, multi-tenant isolation, exactly-once delivery, cross-capability atomicity, compaction, or million-key admission claim",
+    "installed binaries, deployments, hosted data, and user data were not inspected or mutated",
+    "provider token use, monetary cost, exact syscalls, and reliable aggregate container CPU/RSS were unavailable"
+  ],
+  "raw_artifacts": {
+    "campaign_root": ".artifacts/campaign/202608302224/",
+    "local_final": ".artifacts/campaign/202608302224/local-final/",
+    "hosted_dry_run": ".artifacts/campaign/202608302224/hosted-dry-run-33317597991/",
+    "publication": ".artifacts/campaign/202608302224/publication-33318722126/",
+    "anonymous_token_free": ".artifacts/campaign/202608302224/anonymous-token-free/",
+    "local_full_receipt": ".artifacts/lkjscript-dev/check/1788100630223262557-671420-0/receipt.json"
+  },
+  "closure": {
+    "evidence_path": "docs/evidence/202608302224-public-product-release.json",
+    "evidence_commit_E": "the containing evidence/current-truth commit; its SHA is reported externally because a commit cannot contain its own identity",
+    "validation": {
+      "json_decode": "fresh passed",
+      "diff_check": "fresh passed",
+      "rustfmt_check": "fresh passed",
+      "product_surface": {
+        "classification": "fresh passed",
+        "contract_version": 1,
+        "scanned_files": 28,
+        "executable_commands": 26,
+        "violations": 0
+      },
+      "generated_documents": {
+        "classification": "fresh passed",
+        "files": 6,
+        "capabilities_digest": "6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81"
+      }
+    },
+    "external_reconciliation_before_E": {
+      "observed_at_utc": "2026-08-30T15:40:16Z",
+      "origin_main": "8a0141a151a87fe59ccc1ebc738a7e5dd51c6882",
+      "local_divergence": [0, 0],
+      "tag_object_and_peeled_source_exact": true,
+      "confirmation_variable_exact": true,
+      "immutable_releases_enabled": true,
+      "release_379320112_immutable_latest_with_exact_assets": true,
+      "queued_or_running_release_runs": 0,
+      "open_pull_requests": 0,
+      "open_issues": 0,
+      "predecessor_v0_1_10_and_v0_1_8_unchanged": true
+    },
+    "allowed_tracked_paths": [
+      "README.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/release.md",
+      "docs/performance.md",
+      "docs/security.md",
+      "docs/evidence/202608302224-public-product-release.json",
+      "docs/campaigns/202608302224.md"
+    ],
+    "release_inputs_changed": false,
+    "next_candidates": [
+      "large-graph and data-retention evidence before any compaction design",
+      "maintained owner-detail or additional authored operations only from a demonstrated consumer",
+      "separately gated additional targets"
+    ]
+  }
+}

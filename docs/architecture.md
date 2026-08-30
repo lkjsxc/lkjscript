@@ -130,16 +130,16 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.10` closes this path at source commit
-`5cc8f79c55d9baa0a6ef964db502567b59c4d079`. Its exact and latest downloads independently passed
-strict package and static inspection plus transferred distributed and stateful HTTP acceptance,
-including the explicit higher-order generic authoring and single-product-version surface cutovers.
+Immutable `v0.1.12` closes this path at source commit
+`8a0141a151a87fe59ccc1ebc738a7e5dd51c6882`. Its exact and latest downloads independently passed
+strict package and static inspection plus transferred distributed and first-party-data stateful
+HTTP acceptance, including bounded context traversal and the complete ordered-data/durable-queue
+cutover.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively through v0.1.9, and the v0.1.10 publication moved no predecessor tag, release,
-or asset.
-Current source is the separate unreleased 0.1.12 product snapshot; its first-party ordered-data,
-deployment-2, compact-change-7, and CLI-14 cutovers have no public-release claim.
+advanced additively through v0.1.9; the v0.1.10 and v0.1.12 publications moved no predecessor tag,
+release, or asset. Current source and the public release share product 0.1.12 while the data-store,
+logical-backup, deployment-2, compact-change-7, and CLI-14 identities remain independently owned.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 

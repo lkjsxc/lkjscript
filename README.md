@@ -6,29 +6,27 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.10 executable provides offline command, editable HTTP, and reviewed stateful HTTP
+The supported v0.1.12 executable provides offline command, editable HTTP, and reviewed stateful HTTP
 application lifecycles through one copied binary. They create typed meaning graph projects, inspect
 and change accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute
 through the standalone deployment boundary without Cargo, a checkout, or an application helper.
-That immutable release's stateful workflow uses an explicitly provisioned PostgreSQL authority.
+Its stateful workflow uses a deployment-selected first-party local data root and durable queue; no
+product or public verification path provisions PostgreSQL.
 
-The current source and immutable v0.1.10 binary include public explicit type-parameter,
+The current source and immutable v0.1.12 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
-maintained BBS uses that fold for header admission. Public product surfaces expose the root product
-version and opaque capabilities digest without separate subsystem generation numbers.
-
-The checkout is now unreleased product version 0.1.12. In addition to bounded revision-pinned
-`query context`, it replaces every maintained SQL/PostgreSQL production path with one repository-
-owned ordered data store and durable queue. It exposes public data initialize/verify/backup/restore,
-canonical typed application values, and `data`/`durable_queue_data` deployment adapters. The
-immutable latest download remains v0.1.10 and retains its historical PostgreSQL workflow; it does
-not claim these source-only cutovers.
+maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
+complete first-party ordered-data cutover are also public. The executable exposes data
+initialize/verify/backup/restore, canonical typed application values, and
+`data`/`durable_queue_data` deployment adapters while keeping semantic and operational authority
+separate. Public product surfaces expose the root product version and opaque capabilities digest
+without separate subsystem generation numbers.
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands, and its historical distributed and PostgreSQL-backed HTTP workflows passed independently
-from both exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
+userlands, and its distributed and first-party-data HTTP workflows passed independently from both
+exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
 environment, or broader Linux portability.
 
 ## Download
@@ -49,10 +47,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.10` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.10) owns the immutable
+[`v0.1.12` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.12) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.10/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.10/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.12/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.12/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -89,7 +87,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.10 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.12 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -126,23 +124,23 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
-### Stateful HTTP and first-party data from current source
+### Stateful HTTP and first-party data
 
-The immutable v0.1.10 download retains its published PostgreSQL contract. A current 0.1.12 source
-candidate exposes the completed first-party boundary through the same application-facing discovery:
+The immutable v0.1.12 download exposes the completed first-party boundary through the same
+application-facing discovery:
 
 ```sh
-./target/release/lkjscript capabilities data
-./target/release/lkjscript capabilities change
-./target/release/lkjscript capabilities --section deployment
-./target/release/lkjscript package builtin inspect
-./target/release/lkjscript package builtin query owners --name DataStore
-./target/release/lkjscript package builtin inspect owner interface decl_...
+./lkjscript capabilities data
+./lkjscript capabilities change
+./lkjscript capabilities --section deployment
+./lkjscript package builtin inspect
+./lkjscript package builtin query owners --name DataStore
+./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact standalone identity query prints only `lkjscript 0.1.12` for that source candidate.
+The exact standalone identity query `./lkjscript --version` prints only `lkjscript 0.1.12`.
 
-Current compact change records can add exact component requirements, interfaces, operations and
+Public compact change records can add exact component requirements, interfaces, operations and
 externals, create task functions, rebind requirements/dependencies, update the starter handler
 contract, and compose structural records, lexical bindings, fields, lists, variants, matches, exact
 built-in calls, requirement-scoped capability calls, and lexical transactions. The public
@@ -220,7 +218,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-An executable built from current 0.1.12 source can obtain one complete admitted local neighborhood
+The public v0.1.12 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh

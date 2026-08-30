@@ -91,14 +91,14 @@ runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. S
 verification rejects links, traversal, duplicates, extras, noncanonical metadata, target/linkage
 contradiction, checksum corruption, candidate substitution, and unsafe extraction targets.
 
-Exact v0.1.10 candidate execution passed in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands with network unavailable and no host library mounts. Current-source transferred
+Exact v0.1.12 candidate execution passed in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
+userlands with network unavailable and no host library mounts. Transferred
 application verification receives only exact candidate/verifier bytes, an explicit create-new
 private root, loopback HTTP, and isolated local data/object roots. It does not gain a checkout,
 Cargo, application helper, raw retained secret, database server, or publication permission. The
 separate publication job receives no verifier and executes no repository code.
 
-Immutable v0.1.10 and its independent anonymous exact/latest checks completed the predecessor
+Immutable v0.1.12 and its independent anonymous exact/latest checks completed the current
 release controls. They
 establish static runtime linkage and only the named Linux/amd64 userland boundary; they do not
 establish a minimum kernel, every CPU feature or filesystem, container independence,
