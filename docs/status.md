@@ -38,36 +38,38 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.12`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.12) is the current public and
+[`v0.1.13`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.13) is the current public and
 supported release. Its annotated tag object
-`d6d81e2398ced78023a8ea62d69e03f6b9f5d4da` selects source commit
-`8a0141a151a87fe59ccc1ebc738a7e5dd51c6882`; GitHub reports release `379320112` as immutable,
+`893dbcb107decd72d9bffbd6ca2d66389be7257a` selects source commit
+`dadc142c8230c58af6fc7884a3a4e3a5b7267d5e`; GitHub reports release `379981013` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 15,767,776-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 16,152,800-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,113,264 | `96d63b4cdcd598258635e4391c8e596b39f168c46d22fb4b380f0a3bff30efb4` |
-| `SHA256SUMS` | 109 | `a1b83b4e8e41dca07ce11713ddb7b7ba0b07866ada1b186cd2b8fbe392971091` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,286,963 | `75d5fa42fcfeb8b8ad506de570df890de75abbaf9238e081ddb22ce0a8a739a9` |
+| `SHA256SUMS` | 109 | `3395dcc58faeaff28d848c44d38283e0f784e259d90cd69cda436b6f89f34adb` |
 
 Release workflow
-[`33318722126`](https://github.com/lkjsxc/lkjscript/actions/runs/33318722126) passed all four jobs on
-attempt 1. Tagged source passed 23/23 fresh full gates with zero reuse. Exact target admission
+[`33425711515`](https://github.com/lkjsxc/lkjscript/actions/runs/33425711515) passed all four jobs on
+attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
-and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed the
-distributed HTTP, stateful HTTP, and maintained `lkjournal` service oracles. A no-checkout job then
-verified the handoffs and passed both transferred application oracles before the write-isolated
-publication job ran. Anonymous exact-tag and `releases/latest` downloads independently passed
-checksum, attestation, strict extraction, static inspection, distributed HTTP, and stateful HTTP.
-Exact and latest candidate and manifest bytes agree; each fresh BBS independently proved its own
-clean/incremental artifact equality, persistence, rollback, failure behavior, authority equality,
-redaction, and cleanup.
+and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
+distributed HTTP, outbound HTTPS/TLS/DNS, stateful HTTP, and maintained `lkjournal` service
+oracles. A no-checkout job then verified the handoffs and passed all three transferred
+application oracles before the write-isolated publication job ran. Anonymous exact-tag and
+`releases/latest` downloads independently passed
+checksum, attestation, strict extraction, static inspection, distributed HTTP, outbound
+HTTPS/TLS/DNS, and stateful HTTP. Exact and latest candidate and manifest bytes agree; each fresh
+application independently proved its clean/incremental equality, restart, failure/cancellation,
+authority equality, redaction, and cleanup behavior without contacting a live relay.
 
-The public binary contains the explicit higher-order generic authoring, single-product-version
-surface, bounded context traversal, and complete first-party ordered-data/durable-queue cutovers.
-Exact identities, classifications, resource observations, and raw-evidence pointers are retained in
-[`202608302224-public-product-release.json`](evidence/202608302224-public-product-release.json).
+The public binary contains the deployment-bound `HttpClient.get` and closed `nostr-relay-info`
+recipe, explicit higher-order generic authoring, single-product-version surface, bounded context
+traversal, and complete first-party ordered-data/durable-queue cutovers. Exact identities,
+classifications, resource observations, and raw-evidence pointers are retained in
+[`202609010158-public-outbound-https-release.json`](evidence/202609010158-public-outbound-https-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -88,13 +90,12 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source owns product snapshot 0.1.13 and the deployment-bound outbound HTTPS/NIP-11 slice.
-Immutable public latest remains 0.1.12 and does not contain that slice; no 0.1.13 tag, release,
-asset, workflow dispatch, or deployment exists. Source advances CLI 15, project creation 3,
-deployment 3, registry 4, and the separately owned `http_client_adapter` 1 because their observable
-contracts changed. Compact-change and unrelated graph, data, queue, object, artifact, compiler, and
-runtime contract numbers remain independently owned. Graph, package, artifact, deployment, and
-operational-data identities remain separate.
+Current source and immutable public latest own product snapshot 0.1.13 and the deployment-bound
+outbound HTTPS/NIP-11 slice. CLI 15, project creation 3, deployment 3, registry 4, and the
+separately owned `http_client_adapter` 1 advanced because their observable contracts changed.
+Compact-change and unrelated graph, data, queue, object, artifact, compiler, and runtime contract
+numbers remain independently owned. Graph, package, artifact, deployment, and operational-data
+identities remain separate. No deployment or live-relay contact occurred during publication.
 The source and distributed executable expose exactly
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
@@ -133,7 +134,7 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.12` rejects predecessor PostgreSQL
+The closed HTTP recipe remains public behavior. Public `v0.1.13` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function

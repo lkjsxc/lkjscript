@@ -10,11 +10,10 @@ first-party ordered application data and durable queue, operational backup/resto
 SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
 and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
 100,100-owner full-lifecycle admission are current architecture. PostgreSQL 16.15 is
-retained only as contributor differential evidence. Source product snapshot 0.1.13 contains the
-outbound slice; immutable `v0.1.12` remains the supported public
-`x86_64-unknown-linux-musl` distribution; its exact and latest
-downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable
-v0.1.8 remains an unclosed historical recovery point.
+retained only as contributor differential evidence. Immutable `v0.1.13` is the supported public
+`x86_64-unknown-linux-musl` distribution; its exact and latest downloads independently passed
+static, distributed HTTP, deployment-bound outbound HTTPS/TLS/DNS, and stateful HTTP acceptance.
+Immutable v0.1.8 remains an unclosed historical recovery point.
 
 Each future item requires a named maintained consumer, exact contract, independent oracle,
 measured reversal gate, and dependency-closed cutover/deletion plan.

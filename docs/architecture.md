@@ -130,17 +130,18 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.12` closes this path at source commit
-`8a0141a151a87fe59ccc1ebc738a7e5dd51c6882`. Its exact and latest downloads independently passed
-strict package and static inspection plus transferred distributed and first-party-data stateful
-HTTP acceptance, including bounded context traversal and the complete ordered-data/durable-queue
-cutover.
+Immutable `v0.1.13` closes this path at source commit
+`dadc142c8230c58af6fc7884a3a4e3a5b7267d5e`. Its exact and latest downloads independently passed
+strict package and static inspection plus transferred distributed HTTP, deployment-bound outbound
+HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. The release contains the closed
+NIP-11 relay-information recipe, bounded context traversal, and the complete
+ordered-data/durable-queue cutover without contacting a live relay or deploying an application.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively through v0.1.9; the v0.1.10 and v0.1.12 publications moved no predecessor tag,
-release, or asset. Current source owns product snapshot 0.1.13, CLI 15, project creation 3,
-deployment 3, registry 4, and HTTP-client-adapter 1. The immutable public release remains 0.1.12;
-data-store, logical-backup, compact-change, and all unrelated identities remain independently owned.
+advanced additively through v0.1.9; the v0.1.10, v0.1.12, and v0.1.13 publications moved no
+predecessor tag, release, or asset. Current source and public latest own product snapshot 0.1.13,
+CLI 15, project creation 3, deployment 3, registry 4, and HTTP-client-adapter 1. Data-store,
+logical-backup, compact-change, and all unrelated identities remain independently owned.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 

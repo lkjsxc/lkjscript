@@ -6,19 +6,20 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.12 executable provides offline command, editable HTTP, and reviewed stateful HTTP
-application lifecycles through one copied binary. They create typed meaning graph projects, inspect
-and change accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute
-through the standalone deployment boundary without Cargo, a checkout, or an application helper.
-Its stateful workflow uses a deployment-selected first-party local data root and durable queue; no
-product or public verification path provisions PostgreSQL.
+The supported v0.1.13 executable provides offline command, editable inbound HTTP,
+deployment-bound outbound HTTPS, and reviewed stateful HTTP application lifecycles through one
+copied binary. They create typed meaning graph projects, inspect and change accepted meaning, run
+graph-owned tests, build deterministic artifact bundles, and execute through the standalone
+deployment boundary without Cargo, a checkout, or an application helper. Its stateful workflow
+uses a deployment-selected first-party local data root and durable queue; no product or public
+verification path provisions PostgreSQL.
 
-Current source is product snapshot 0.1.13. It adds one deployment-bound outbound `HttpClient.get`
-capability and a closed `nostr-relay-info` recipe proved against local raw HTTP/TLS fixtures. The
-immutable supported release remains v0.1.12 and does not contain this source-only slice; no v0.1.13
-release or deployment is claimed here.
+Current source and the immutable supported release are product snapshot 0.1.13. They include one
+deployment-bound outbound `HttpClient.get` capability and a closed `nostr-relay-info` recipe proved
+against deterministic loopback raw HTTP/TLS/DNS fixtures. No deployment, live relay, WebSocket, or
+NIP-01 event flow is claimed here.
 
-The current source and immutable v0.1.12 binary include public explicit type-parameter,
+The current source and immutable v0.1.13 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -30,9 +31,9 @@ without separate subsystem generation numbers.
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands, and its distributed and first-party-data HTTP workflows passed independently from both
-exact-tag and latest downloads. These observations do not claim a minimum kernel, every x86-64
-environment, or broader Linux portability.
+userlands, and its distributed, first-party-data, and outbound HTTPS workflows passed independently
+from both exact-tag and latest downloads. These observations do not claim a minimum kernel, every
+x86-64 environment, or broader Linux portability.
 
 ## Download
 
@@ -52,10 +53,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.12` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.12) owns the immutable
+[`v0.1.13` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.13) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.12/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.12/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.13/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.13/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -92,7 +93,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.12 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.13 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -129,22 +130,23 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
-### Nostr relay information from current source
+### Nostr relay information from the public binary
 
-The current 0.1.13 source binary can create the complete closed NIP-11 information slice:
+The immutable v0.1.13 download can create the complete closed NIP-11 information slice:
 
 ```sh
-cargo build --release --locked -p lkjscript
-./target/release/lkjscript capabilities new
-./target/release/lkjscript new /tmp/relay-info \
+mkdir -p /tmp/lkjscript-relay-info-demo
+cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-relay-info-demo/lkjscript
+cd /tmp/lkjscript-relay-info-demo
+./lkjscript capabilities new
+./lkjscript new ./relay-info \
   --template nostr-relay-info --name relay-info \
   --relay-url wss://relay.example/nip11
-./target/release/lkjscript --project /tmp/relay-info status
-./target/release/lkjscript --project /tmp/relay-info check
-./target/release/lkjscript --project /tmp/relay-info build \
-  --output /tmp/relay-info/generated/application.lkja
-./target/release/lkjscript serve \
-  --deployment /tmp/relay-info/service.deployment.json
+./lkjscript --project ./relay-info status
+./lkjscript --project ./relay-info check
+./lkjscript --project ./relay-info build \
+  --output ./relay-info/generated/application.lkja
+./lkjscript serve --deployment ./relay-info/service.deployment.json
 ```
 
 The recipe normalizes `wss` to the exact `https` information endpoint and keeps that endpoint,
@@ -159,7 +161,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.12 download exposes the completed first-party boundary through the same
+The immutable v0.1.13 download exposes the completed first-party boundary through the same
 application-facing discovery:
 
 ```sh
@@ -171,7 +173,7 @@ application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact standalone identity query `./lkjscript --version` prints only `lkjscript 0.1.12`.
+The exact standalone identity query `./lkjscript --version` prints only `lkjscript 0.1.13`.
 
 Public compact change records can add exact component requirements, interfaces, operations and
 externals, create task functions, rebind requirements/dependencies, update the starter handler
@@ -252,7 +254,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.12 executable can obtain one complete admitted local neighborhood
+The public v0.1.13 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
