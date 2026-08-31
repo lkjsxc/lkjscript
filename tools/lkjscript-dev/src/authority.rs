@@ -22,13 +22,7 @@ pub(crate) fn observe_graph_authority(
     application: &Path,
 ) -> Result<AuthorityObservation, DevError> {
     let head = process::read_bounded(&application.join("HEAD"), MAXIMUM_HEAD_BYTES)?;
-    let mut paths = vec![
-        ("HEAD".to_owned(), application.join("HEAD")),
-        (
-            "catalog/current.lkjc".to_owned(),
-            application.join("catalog/current.lkjc"),
-        ),
-    ];
+    let mut paths = vec![("HEAD".to_owned(), application.join("HEAD"))];
     collect_authority_directory(application, "packs", &mut paths)?;
     collect_authority_directory(application, "PACKAGE-TRANSPORTS", &mut paths)?;
     paths.sort_by(|left, right| left.0.cmp(&right.0));
@@ -176,6 +170,11 @@ mod tests {
         let before = observe_graph_authority(temporary.path()).expect("before");
         fs::create_dir(temporary.path().join("derived")).expect("derived");
         fs::write(temporary.path().join("derived/cache"), b"cache\n").expect("cache");
+        fs::write(
+            temporary.path().join("catalog/current.lkjc"),
+            b"rebuilt catalog\n",
+        )
+        .expect("rebuilt catalog");
         assert_eq!(
             observe_graph_authority(temporary.path()).expect("after derived"),
             before

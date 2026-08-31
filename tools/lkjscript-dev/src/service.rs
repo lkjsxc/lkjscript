@@ -2369,11 +2369,13 @@ mod tests {
         )
         .expect("transport fixture");
         let before = observe_graph_authority(application).expect("authority observation");
-        assert_eq!(before.files, 4);
-        assert_eq!(before.bytes, 8 + 7 + 4 + 9);
+        assert_eq!(before.files, 3);
+        assert_eq!(before.bytes, 8 + 4 + 9);
 
         std::fs::create_dir(application.join("derived")).expect("derived directory");
         std::fs::write(application.join("derived/cache"), b"disposable").expect("derived fixture");
+        std::fs::write(application.join("catalog/current.lkjc"), b"rebuilt catalog")
+            .expect("rebuilt catalog fixture");
         assert_eq!(
             observe_graph_authority(application).expect("authority excludes derived"),
             before
