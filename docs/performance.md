@@ -138,6 +138,58 @@ Raw observations and bounded logs are under
 `.artifacts/campaign/202608270014/performance/work-KCVcbb/`; each structured row retains its
 observation SHA-256. These are single samples, not latency or topology distributions.
 
+## Current semantic-scale lifecycle
+
+At implementation commit `bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608`, receipt contract 2 copied
+the 15,616,616-byte release candidate (SHA-256
+`199f05c12e9bc546e831c89f573b78468d4648e6836ef689dbbec7af08bb01ee`), discovered product
+0.1.12 and capabilities digest
+`6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81`, and used only current
+public compact operations. The Linux x86-64 host exposed 16 logical CPUs, 12,884,901,888 memory
+bytes, ZFS, and 254,151,229,440 filesystem bytes. Filesystem-cache and scheduler state were not
+controlled.
+
+The required `small-functions` lifecycle authored 50,000 pure functions across 100 modules. Each
+function owns one expression and two relations, yielding exactly 100,100 live owners and 100,000
+relations. The current 1,000-operation public change budget produced 51 construction batches; one
+reviewed module rename made 52 plan/apply batches and 52 accepted revisions in total. All 115 public
+commands passed. Final `status`, exact module inspection, a 16-owner bounded query, exact name query,
+and a depth-one context query observed the final revision and agreed with the typed read-only
+repository oracle.
+
+| 100,100-owner observation | Value |
+|---|---:|
+| complete harness wall / sampled child CPU | 905.140 s / 857.660 s |
+| maximum child / harness peak RSS | 788,200 KiB / 300,176 KiB |
+| repository / two artifact bytes | 983,310,250 / 118,754,668 |
+| complete evidence-root bytes | 1,139,994,006 |
+| `check` | 50,000 compiled; 0 reused; differential equal |
+| forced-clean build | 50,000 compiled; 59,377,334 bytes |
+| exact-current build | 0 compiled; 50,000 reused; byte-equal |
+| artifact SHA-256 | `da859c4a00604babe64bc0dacd7f74ffc848391b8d1d30ea57258b7e04439dbd` |
+| typed-oracle validation work | 700,401; 100,619 store objects / 16,612,240 bytes |
+| cleanup | temporary project removed |
+
+The informative `independent-modules` capacity attempt requested one million live modules with a
+one-hour wall allocation, 64 GiB run budget, and 4 GiB/64 GiB available-memory/filesystem preflight.
+It completed 275 reviewed 1,000-module batches before the next apply exhausted the remaining command
+allocation. The result is exactly `environment_limit`, not million-owner admission. The partial
+typed oracle validated the last accepted revision as 275,000 modules and no relations; the timed-out
+apply emitted no accepted update. The 3,611.332-second observation recorded 3,425.670 seconds sampled
+child CPU, 1,525,820 KiB maximum child RSS, 997,968 KiB harness peak RSS, 4,281,607,101 repository
+bytes, and 4,345,842,409 total run bytes. Public status/query/inspection were intentionally not run
+after incomplete construction, so public/oracle equality is not claimed. Cleanup removed the
+temporary project.
+
+Small final-source fixtures for all five retained topologies passed public/oracle and clean/current
+artifact equality. Two independently allocated `small-functions` fixtures shared logical shape
+digest `verification_ceeb5037adb746cb5bb6dc76baf2b0b2b6a7e005d4ad5a3e09ec5852a3ea8415`.
+These are exact-host point observations, not latency distributions, service-level objectives, or
+evidence for operational-data scale, long-history retention, graph packing, compaction, or
+million-owner full check/build. Structured evidence is
+[`202608311331-current-semantic-scale.json`](evidence/202608311331-current-semantic-scale.json);
+bounded raw receipts and command logs are under `.artifacts/campaign/202608311331/`.
+
 ## Earlier evidence
 
 The normalized-query section below is current for query
@@ -145,8 +197,9 @@ contract 3 at its named commit. Unless another row explicitly says otherwise, th
 numbers predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v7, exact-ID
 imports/targets, normalized query, or explicit generics. Those rows are historical baselines and
 must not be presented as current-contract performance. Two graph-4 release workflows at 10,000
-empty background modules are retained below on opposite sides of the semantic-fact cutover; no
-current distribution, million-owner, or complete-service performance receipt exists yet.
+empty background modules are retained below on opposite sides of the semantic-fact cutover. The
+contract-2 semantic-scale observations above supersede their current-scale gap; no million-owner
+admission exists.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.

@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-30 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-08-31 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -189,6 +189,27 @@ The removed project-scoped `draft`, `history`, general package staging, `review`
 mutation stack and public check/build/run routing have been deleted. There is no legacy flag,
 fallback reader, graph selector, converter, or dual write.
 
+Contributor command `lkjscript-dev scale` now drives one current semantic-scale workflow through a
+copied supported executable. It discovers the public operation grammar and capabilities, constructs
+all retained topologies only through compact `change plan` and `change apply`, uses current
+`status`, exact owner `inspect`, bounded `query`, `check`, and `build`, and writes one bounded
+`lkjscript-semantic-scale-receipt` contract 2. A read-only typed `GraphRepository` inventory is its
+formatter-independent oracle; it has no accepted-authority write path.
+
+One fresh `small-functions` lifecycle admitted 100,100 live owners: 100 modules, 50,000 pure
+functions, 50,000 expressions, and 100,000 relations. Fifty-one construction batches plus one
+reviewed rename advanced accepted authority 52 times. All 115 copied-binary commands passed;
+bounded reads observed the final revision; `check` compiled 50,000 units with differential equality;
+and the forced-clean and exact-current builds produced equal 59,377,334-byte artifacts. The typed
+oracle agreed with public counts and the campaign removed the temporary project.
+
+The separately bounded one-million-module capacity attempt is classified `environment_limit`, not
+admission. Its one-hour allocation completed 275 reviewed 1,000-module batches. The partial typed
+oracle found exactly 275,000 live modules at the last accepted revision, after which the next apply
+timed out without a reported accepted update; the temporary project was removed. Exact inputs,
+receipts, classifications, observations, and limitations are retained in
+[`202608311331-current-semantic-scale.json`](evidence/202608311331-current-semantic-scale.json).
+
 ## Runtime boundary
 
 Normalized production and reference execution support pure commands and graph tests. Public `run`
@@ -244,7 +265,7 @@ runtime is not a hostile-code sandbox or multi-tenant isolation boundary.
 - The first-party data format retains all reachable history and has no compaction, garbage
   collection, destructive repair, replication, consensus, encryption, remote service, or
   million-key admission. Its current support boundary is one local trusted Linux host.
-- No million-owner complete application lifecycle, long-history retention policy, graph-store
+- No million-owner admission or complete application lifecycle, long-history retention policy, graph-store
   garbage collection, live-store packing, artifact signing, encrypted graph storage, or distributed
   publication protocol has been proved.
 - The supported public binary is exactly `x86_64-unknown-linux-musl` with the static linkage and

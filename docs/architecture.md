@@ -399,6 +399,15 @@ visibility change. Public logical backup pins a head and excludes page/object la
 an equivalent absent root with a new physical identity. This operational head has no dependency on
 and no write path to `GraphRepository::HEAD`.
 
+Contributor-only `lkjscript-dev scale` stays on the public product dependency direction for every
+measured effect: it copies one candidate, discovers its operation grammar, and invokes project
+creation, reviewed changes, reads, checks, and builds through that executable. Its separate
+read-only `platform::contributor::semantic_inventory` entry opens an exact `RepositoryView`, fully
+validates the selected accepted graph, and reports deterministic owner/relation counts and digests
+without calling the compact-result formatter or exposing a graph writer. Raw command output,
+requests, temporary projects, and artifacts remain derived campaign data; the bounded scale receipt
+is evidence rather than program authority.
+
 Contributor-only `lkjscript-dev data-oracle` is outside that product dependency direction. It owns
 the PostgreSQL client and exact isolated PostgreSQL 16.15 container, constructs and exports neutral
 facts, invokes the first-party store only through its independent import side, binds copied BBS and

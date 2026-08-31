@@ -7,7 +7,8 @@ normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal
 authored change, normalized query, standalone artifact bundle service/worker deployment,
 first-party ordered application data and durable queue, operational backup/restore, complete
 SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
-and first-party-data copied-binary HTTP acceptance are current architecture. PostgreSQL 16.15 is
+and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
+100,100-owner full-lifecycle admission are current architecture. PostgreSQL 16.15 is
 retained only as contributor differential evidence. Immutable `v0.1.12` is the supported public
 `x86_64-unknown-linux-musl` distribution; its exact and latest
 downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable
@@ -31,13 +32,14 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
 4. **Outbound HTTP from a maintained consumer.** Select exact URL, DNS, TLS, secret, redirect,
    response-limit, cancellation, retry, and SSRF policy before adding an interface or adapter. Do
    not infer outbound authority from the existing inbound HTTP server.
-5. **Large-graph compiler, artifact, data, and retention evidence.** Extend current locality and command
-   lifecycle measurements to controlled 100,000- and million-owner topologies, sparse/dense and
-   wide-fanout relations, large literals, and long histories. Measure compiler-unit selection,
-   pack/catalog/data I/O, artifact closure, fsyncs, CPU, RSS, interruption, and cache recovery. Add
-   graph revision pins, reader leases, registered backup roots, and an independent reachability
-   oracle before any deletion or compaction mechanism; select data compaction separately with its
-   own reader/recovery proof.
+5. **Million-owner compiler admission and separately selected data/history scale.** The current
+   harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
+   capacity attempt reached 275,000 accepted modules before its one-hour allocation and is
+   `environment_limit`, so complete the lightweight million-owner capacity boundary before
+   selecting a million-owner full check/build admission. Design operational-data scale and
+   long-history retention as a separate campaign with reader leases, registered backup roots, an
+   independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O observations
+   before any deletion, packing, or compaction mechanism.
 6. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
    and member/case edits, extraction, inline, and repair only from maintained workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,

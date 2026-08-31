@@ -1,0 +1,531 @@
+{
+  "schema": {
+    "identity": "lkjscript-current-semantic-scale-evidence",
+    "version": 1
+  },
+  "campaign": "202608311331",
+  "status": "complete",
+  "assembled_at_utc": "2026-08-31T08:02:29Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "649bf88a126c70ef6a88c3fb8c7d228978eae85c",
+    "entry_tree": "f04e346ac6d170458c96af7ea957ebea609508b6",
+    "entry_origin_main": "649bf88a126c70ef6a88c3fb8c7d228978eae85c",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "entry_supplied_work": [
+      {
+        "path": "AGENTS.md",
+        "state": "modified",
+        "bytes": 10916,
+        "sha256": "5203f2d88336b791cd7863745c1845a3be32fa940d59ba54c020439cb19b3346",
+        "disposition": "preserved unmodified and unstaged"
+      },
+      {
+        "path": "docs/campaigns/202608311331.md",
+        "state": "untracked",
+        "entry_bytes": 17798,
+        "entry_sha256": "f819faf64d9f4313fc9193f3ad8af59a7f07a59795f16b3e9221c54c2de51a04",
+        "disposition": "active mandate; initial body preserved, lifecycle fields close in the evidence commit"
+      }
+    ],
+    "superseded_campaign": {
+      "campaign": "202608310137",
+      "disposition": "terminated before independent implementation",
+      "termination_commit": "7c544c6d876c99813ecae4c653fad36fa1a0ec03",
+      "preserved_stash": {
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "base_tree": "f04e346ac6d170458c96af7ea957ebea609508b6",
+        "message": "preserve incomplete campaign 202608310137 before 202608311331 cutover"
+      },
+      "ignored_raw_root": ".artifacts/campaign/202608310137/"
+    }
+  },
+  "implementation": {
+    "final_source_commit": "bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608",
+    "final_source_tree": "73e6733733cc0d5c036c73e2455ac56b3d244db1",
+    "commits": [
+      {
+        "sha": "7c544c6d876c99813ecae4c653fad36fa1a0ec03",
+        "summary": "Terminate superseded scale retention campaign"
+      },
+      {
+        "sha": "e5a9900f2070ab182d7b9a8d99418b36c8d65d37",
+        "summary": "Cut semantic scale harness over to current CLI"
+      },
+      {
+        "sha": "be45f0b0aeb9daced6bdd214b5b6c83b923d5697",
+        "summary": "Respect compact change batch admission"
+      },
+      {
+        "sha": "bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608",
+        "summary": "Publish failed scale option receipts"
+      }
+    ],
+    "changed_owners": [
+      "src/platform/contributor.rs",
+      "src/platform/mod.rs",
+      "tools/lkjscript-dev/src/scale.rs",
+      "tools/lkjscript-dev/src/scale/model.rs",
+      "tools/lkjscript-dev/src/scale/runner.rs"
+    ],
+    "deleted_predecessor_paths": [
+      "scale receipt contract 1 models and tests",
+      "hard-coded public change contract 3 encoding",
+      "scale-only JSON change request structures",
+      "scale-only JSON result envelope decoding",
+      "direct change --commit execution",
+      "inspect project measurement",
+      "query find --exact --limit measurement",
+      "doctor --deep measurement",
+      "project backup measurement"
+    ],
+    "compatibility_paths_retained": 0
+  },
+  "toolchain_and_candidate": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "rust_toolchain_sha256": "f1adfed25fca89d418637337ee32a6580d06de345c179472acc780e17f291df4",
+    "cargo_lock_sha256": "9bca68d98a136e5cf499420688a6442d955cccdebdb77ada8b006b4b399e685c",
+    "candidate_path": "target/release/lkjscript",
+    "candidate_bytes": 15616616,
+    "candidate_sha256": "199f05c12e9bc546e831c89f573b78468d4648e6836ef689dbbec7af08bb01ee",
+    "dev_binary_path": "target/release/lkjscript-dev",
+    "dev_binary_sha256": "88450c6d53acf3511c2eeffca096b2d86a1990e489d0dbb026e8b4cbc815b143"
+  },
+  "product_and_contract_identities": {
+    "product_version": "0.1.12",
+    "capabilities_digest": "6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81",
+    "capabilities_export": {
+      "path": ".artifacts/campaign/202608311331/capabilities-final.lkjc",
+      "bytes": 124493,
+      "sha256": "317149df2cf356547bd26015bddf27dcc6ee2dbf1d8c4818c8d952da1e97b51f"
+    },
+    "registry": 3,
+    "cli": 14,
+    "graph": 5,
+    "revision": 7,
+    "repository_receipt": 5,
+    "transaction": 5,
+    "compact_change": 7,
+    "logical_change_plan": 2,
+    "query": 4,
+    "project_creation": 2,
+    "compilation_manifest": 3,
+    "compiler_unit": 1,
+    "artifact": 10,
+    "deployment": 2,
+    "scale_receipt": {
+      "identity": "lkjscript-semantic-scale-receipt",
+      "version": 2,
+      "sole_advanced_contract": true
+    },
+    "capability_projection_sha256": "593e0d183250cc13315b0eb8020d4c0d56ef73159e398ec53e0b94a0c6e27178",
+    "unrelated_contracts_advanced": false
+  },
+  "command_grammar": {
+    "usage": "lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]",
+    "current_public_operations": [
+      "capabilities",
+      "new",
+      "change plan",
+      "change apply",
+      "status",
+      "inspect owner",
+      "query owners",
+      "query find",
+      "query context",
+      "check",
+      "build"
+    ],
+    "maximum_topology_items": 1000000,
+    "current_maximum_batch_items": 1000,
+    "bounded_stdout_bytes_per_command": 4194304,
+    "bounded_stderr_bytes_per_command": 1048576,
+    "maximum_command_seconds": 3600
+  },
+  "predecessor": {
+    "classification": "fresh passed",
+    "meaning": "the narrow run freshly reproduced the obsolete harness failure and was not used as current evidence",
+    "receipt": ".artifacts/lkjscript-dev/scale/1788152024626354705-157144-0/receipt.json",
+    "receipt_contract": 1,
+    "receipt_sha256": "123a6e3977dcb50295be45a1d1de3d2a80517d3498d17f63a400ba896c9ff863",
+    "command_projection_sha256": "5a0473177292693a84237bc1c1a373165acebdc176f77c5241a2df37c7d93cb3",
+    "exit_code": 1,
+    "failed_command": "new",
+    "failure": "legacy scale expected a JSON-era public response and classified current compact output as an infrastructure failure"
+  },
+  "contract_two_failure_boundary": {
+    "classification": "fresh passed",
+    "receipt": ".artifacts/campaign/202608311331/invalid-options-current-final/receipt.json",
+    "receipt_sha256": "6f7ed40a0f8a847201e084686ab687f2fdec6ab982257ac359ec7dab178fb842",
+    "receipt_digest": "verification_80169f458f96e43da0771d519db173ebb9cef32fcd4403e7983aa505e831bdda",
+    "exit_code": 1,
+    "status": "failed",
+    "admission": "failed",
+    "commands": 0,
+    "cleanup": "not_created",
+    "failure_class": "usage",
+    "failure_message": "--items must be 1 through 1000000",
+    "incomplete_compact_output_unit_boundary": "fresh passed"
+  },
+  "final_source_fixtures": {
+    "classification": "fresh passed",
+    "root": ".artifacts/campaign/202608311331/fixtures-final-source/",
+    "projection_sha256": "7cdc135adcadb07d9ec3ec4dfe16ad342e7be58c31563666af9fc5c9f16aa158",
+    "all_public_oracle_equal": true,
+    "all_clean_exact_current_artifacts_equal": true,
+    "all_cleanup_removed": true,
+    "fixtures": [
+      {
+        "topology": "independent-modules",
+        "requested": {"owners": 4, "modules": 4, "functions": 0, "relations": 0},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/independent-modules/receipt.json",
+        "receipt_sha256": "1f650594be8b77a270cd0f43c7af3d444491807a40dae1e1d1d9052ea5983d29",
+        "receipt_digest": "verification_39b5a1a3fe60b027780687b0ccee853f85a6c70f8dfa4c01f8628a521e20d081",
+        "shape_digest": "verification_ed724effdc976751d0a062b7cbb3447bee5b95d669ec6f3c1a8fa645198a79ea"
+      },
+      {
+        "topology": "small-functions",
+        "requested": {"owners": 10, "modules": 2, "functions": 4, "relations": 8},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/small-functions-a/receipt.json",
+        "receipt_sha256": "ad6ab0825ff6a5666ef7db5587920bd3417f296076fd16413fcdfbb4a233ed88",
+        "receipt_digest": "verification_9184ff77369b1af10817615645568a67bba43dc4e64b45e4b05db069781e206b",
+        "shape_digest": "verification_ceeb5037adb746cb5bb6dc76baf2b0b2b6a7e005d4ad5a3e09ec5852a3ea8415"
+      },
+      {
+        "topology": "small-functions-repeat",
+        "requested": {"owners": 10, "modules": 2, "functions": 4, "relations": 8},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/small-functions-b/receipt.json",
+        "receipt_sha256": "d4c6fb2f86a0eb105c83f492220d922ffdf313381532125d0459d2e1d5cfb90e",
+        "receipt_digest": "verification_386baf7ef1d15af4adcf45a19da0b7e8c99d6516002e26146be236dfdb24677a",
+        "shape_digest": "verification_ceeb5037adb746cb5bb6dc76baf2b0b2b6a7e005d4ad5a3e09ec5852a3ea8415"
+      },
+      {
+        "topology": "wide-module",
+        "requested": {"owners": 9, "modules": 1, "functions": 4, "relations": 8},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/wide-module/receipt.json",
+        "receipt_sha256": "16b5fb6779d8714052976f9eb6b276b2ab04f2ecfb6adb57a27d026b58ffd876",
+        "receipt_digest": "verification_93365319a6fd26ddf5107232279d5f060d94323d00ad004fcc635fd35340a24e",
+        "shape_digest": "verification_0fa723512d7f01cf23f710efa4914245a4174fd34a670060f90102124a2d0536"
+      },
+      {
+        "topology": "deep-chain",
+        "requested": {"owners": 9, "modules": 1, "functions": 4, "relations": 11},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/deep-chain/receipt.json",
+        "receipt_sha256": "3e86012d228b8cfa3abecaa7faf7445d151173261760c8ccccdfaad5cc49dddd",
+        "receipt_digest": "verification_00ad62cd5002d9b43f549dac8bd19535ad4de0467fb4c4d90a4f44a101f88ec0",
+        "shape_digest": "verification_9d935b7dfa3f5e823e1adf67bb9a3ddd413712b9e01ae944007850ca7cf2488b"
+      },
+      {
+        "topology": "wide-fanout",
+        "requested": {"owners": 9, "modules": 1, "functions": 4, "relations": 11},
+        "receipt": ".artifacts/campaign/202608311331/fixtures-final-source/wide-fanout/receipt.json",
+        "receipt_sha256": "fc847cdfa6dd1c702aeb35c9d0d6a930626c7afd7d8eb16404a0c354a413b73f",
+        "receipt_digest": "verification_7163fc59637db22cf93d861877cb3a0712f60c132079d9aadec3397edc5e83f7",
+        "shape_digest": "verification_354b92b41e2b3fa611a7bdfa0c7e3817da7b5402ac8d58cb3337327ee9aa8145"
+      }
+    ]
+  },
+  "admission_100100": {
+    "classification": "fresh passed",
+    "receipt": ".artifacts/campaign/202608311331/admission-100100-final/receipt.json",
+    "receipt_sha256": "aa29b3d34590e890136cad7fcebca64f123682ad5967a75292202a41292cb9c1",
+    "receipt_digest": "verification_e6b2a0088fc7ed68750de18b67e94f39db344089dc34256d2220f6d7844fa2e1",
+    "source_commit": "bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608",
+    "source_tree": "73e6733733cc0d5c036c73e2455ac56b3d244db1",
+    "topology": "small-functions",
+    "parameters": {
+      "items": 50000,
+      "modules": 100,
+      "batch": 1000,
+      "lifecycle": "full",
+      "maximum_wall_seconds": 7200,
+      "maximum_run_bytes": 68719476736,
+      "minimum_available_memory_bytes": 4294967296,
+      "minimum_available_disk_bytes": 34359738368
+    },
+    "requested_and_observed": {
+      "owners": 100100,
+      "modules": 100,
+      "functions": 50000,
+      "relations": 100000
+    },
+    "authority": {
+      "repository": "repo_cd135311683944752faa2a76ab33302c",
+      "package": "pkg_1c741e6025f177fc5500667bbe08079d",
+      "starting_revision": "rev_4ea63446f57e3a00e56ed4436226aa5a392d8f22f4b938ee19af0a23df952df1",
+      "final_revision": "rev_c3c7dd4af5fc52227b4c4992b0ef16510b3a1781ab23c746694f1af76338f013",
+      "semantic_state": "semantic_state_ea03b893d3b72846b0430aac43ebf80a143ac1365136330816cb433d804ce002",
+      "construction_batches": 51,
+      "plan_batches": 52,
+      "apply_batches": 52,
+      "accepted_revisions": 52,
+      "accepted_revision_sequence_sha256": "7eb2e643f9ac764555a9e97299d517b10c6b019bd23c7ed6f9dc82ca09fca531",
+      "batch_projection_sha256": "3474f810217afe92b8882a47a78b1b78e38bc76ab0df5ea00814d5f583025338"
+    },
+    "rename": {
+      "owner": "mod_8996eeb5fb309f2c2ff547a37777bec7",
+      "before": "m0000000",
+      "after": "m0000000_renamed",
+      "base_revision": "rev_8d110764ace9ee72cc6d474c23d072f661514dce22165f4917f21cc5c6bd28b4",
+      "result_revision": "rev_c3c7dd4af5fc52227b4c4992b0ef16510b3a1781ab23c746694f1af76338f013",
+      "accepted_authority_advances": 1
+    },
+    "public_reads": {
+      "revision": "rev_c3c7dd4af5fc52227b4c4992b0ef16510b3a1781ab23c746694f1af76338f013",
+      "status_owners": 100100,
+      "exact_inspected_module": "mod_8996eeb5fb309f2c2ff547a37777bec7",
+      "owners_query_returned": 16,
+      "owners_query_visited": 16,
+      "owners_query_truncated": true,
+      "exact_name_query_owner": "mod_8996eeb5fb309f2c2ff547a37777bec7",
+      "context_owner": "decl_5d405893b9a6f51329699173f62200f7",
+      "context_returned": 5,
+      "context_total_owners": 3,
+      "context_total_relations": 2,
+      "context_truncated": false
+    },
+    "commands": {
+      "total": 115,
+      "passed": 115,
+      "failed": 0,
+      "timeout": 0,
+      "projection_sha256": "af80bbd4ef202dc4b3f133720db5e33e4aa9b65e2d6a535570ee3ce0da275ffb",
+      "bounded_log_root": ".artifacts/campaign/202608311331/admission-100100-final/logs/",
+      "paths_and_digests_owner": ".artifacts/campaign/202608311331/admission-100100-final/receipt.json"
+    },
+    "check": {
+      "compilation_cache": "clean",
+      "compiled": 50000,
+      "reused": 0,
+      "tests_passed": 0,
+      "tests_failed": 0,
+      "differential": "equal",
+      "artifact_manifest": "artifact_manifest_463d929f5d0502381538ad8cbcc4c45307230b0f9bb3d97fe26ca0c11f73fea3",
+      "artifact_bundle": "artifact_bundle_91e2d720ebcd77d584be4e05b183fa5ed6220b9997e5e935c2aaa53146736f61"
+    },
+    "builds": {
+      "clean_compiled": 50000,
+      "exact_current_compiled": 0,
+      "exact_current_reused": 50000,
+      "artifact_bytes_each": 59377334,
+      "artifact_sha256_each": "da859c4a00604babe64bc0dacd7f74ffc848391b8d1d30ea57258b7e04439dbd",
+      "artifact_verification_digest_each": "verification_049c4d9dcacfb9b3fd09750b891db9125353d217bcceb991014057ec362fb9d5",
+      "byte_equal": true
+    },
+    "oracle": {
+      "public_equal": true,
+      "owners": 100100,
+      "modules": 100,
+      "functions": 50000,
+      "relations": 100000,
+      "types": 1,
+      "dependencies": 0,
+      "retirements": 0,
+      "owner_kinds": {"expression": 50000, "module": 100, "pure_function": 50000},
+      "owner_identity_digest": "verification_6b76a8a1f6b0d17ceba4f857efdf15aafa84fe7908a7d3e4dcb8d40adfa0d531",
+      "relation_digest": "verification_363fc466115a7b88382ef3a307d57ca4fe3726c6213d8310722190c41e621ae4",
+      "validation_work": 700401,
+      "map_pages_read": 518,
+      "map_bytes_read": 5504180,
+      "store_objects_read": 100619,
+      "store_bytes_read": 16612240
+    },
+    "observations": {
+      "elapsed_nanoseconds": 905140357785,
+      "child_cpu_nanoseconds": 857660000000,
+      "maximum_child_peak_rss_kib": 788200,
+      "harness_peak_rss_kib": 300176,
+      "repository_files": 3632,
+      "repository_bytes": 983310250,
+      "derived_files": 2,
+      "derived_bytes": 133,
+      "artifact_files": 2,
+      "artifact_bytes": 118754668,
+      "total_run_bytes": 1139994006
+    },
+    "shape_digest": "verification_195e994758fccf1e92e53cff661b046b37a5b6fcefc911874dccebd90e3002d2",
+    "cleanup": "removed"
+  },
+  "capacity_1000000": {
+    "gate_classification": "fresh passed",
+    "admission_classification": "environment_limit",
+    "million_owner_admission": false,
+    "receipt": ".artifacts/campaign/202608311331/capacity-1000000/receipt.json",
+    "receipt_sha256": "8b0e8e2fcc2b3a0b49b02eb90a6fe33d57be3aab0e2f9b00245d97fff556a5e2",
+    "receipt_digest": "verification_ca7d116e4a45a09b091748a3b4719a79ffa4224d447e1da733839341913eb64a",
+    "measurement_source_commit": "be45f0b0aeb9daced6bdd214b5b6c83b923d5697",
+    "measurement_source_tree": "f9b7050663e2256e1ced4f961cb423255c1522b2",
+    "candidate_sha256": "ac664aa0bcbb467a37e78b6435818b49c70402c364a66c65a136719cdc005083",
+    "topology": "independent-modules",
+    "parameters": {
+      "items": 1000000,
+      "batch": 1000,
+      "lifecycle": "capacity",
+      "maximum_wall_seconds": 3600,
+      "maximum_run_bytes": 68719476736,
+      "minimum_available_memory_bytes": 4294967296,
+      "minimum_available_disk_bytes": 68719476736
+    },
+    "preflight": {
+      "logical_cpus": 16,
+      "memory_total_bytes": 12884901888,
+      "memory_available_bytes": 10280190976,
+      "filesystem": "zfs",
+      "disk_total_bytes": 254151491584,
+      "disk_available_bytes": 167752105984
+    },
+    "accepted": {
+      "owners": 275000,
+      "modules": 275000,
+      "functions": 0,
+      "relations": 0,
+      "construction_batches": 275,
+      "plan_batches": 275,
+      "apply_batches": 275,
+      "accepted_revisions": 275,
+      "starting_revision": "rev_f4067cb338cb1a35f8f1387dddd25288b3dcc5b85f4faf11b9dbe57844162721",
+      "last_revision": "rev_3cbb5123eff777a753bb805987b770ab3ca5c38c057f6434743cabcc6470ebdc",
+      "accepted_revision_sequence_sha256": "6a896e47869d40827bd81002fb8196d25829ef782fd3c0b4c156156536b15b72",
+      "batch_projection_sha256": "3376c5781260161dda03ea4959d5bcb50100effb642dc8c99a1248564c609e9a"
+    },
+    "commands": {
+      "total": 555,
+      "passed": 554,
+      "timeout": 1,
+      "projection_sha256": "d731a900d94b907d42612af9fc03d4aa95830619d3413ca5af5b87c3a74d9976",
+      "last_command": "independent-modules-apply",
+      "last_command_signal": 9,
+      "last_command_elapsed_nanoseconds": 10562816536,
+      "bounded_log_root": ".artifacts/campaign/202608311331/capacity-1000000/logs/",
+      "paths_and_digests_owner": ".artifacts/campaign/202608311331/capacity-1000000/receipt.json"
+    },
+    "partial_oracle": {
+      "revision": "rev_3cbb5123eff777a753bb805987b770ab3ca5c38c057f6434743cabcc6470ebdc",
+      "owners": 275000,
+      "modules": 275000,
+      "functions": 0,
+      "relations": 0,
+      "validation_work": 1100000,
+      "map_pages_read": 64790,
+      "map_bytes_read": 27013873,
+      "store_objects_read": 339790,
+      "store_bytes_read": 49013873,
+      "public_reads_completed": false,
+      "public_oracle_equality_claimed": false
+    },
+    "observations": {
+      "elapsed_nanoseconds": 3611332404798,
+      "child_cpu_nanoseconds": 3425670000000,
+      "maximum_child_peak_rss_kib": 1525820,
+      "harness_peak_rss_kib": 997968,
+      "repository_files": 16277,
+      "repository_bytes": 4281607101,
+      "total_run_bytes": 4345842409
+    },
+    "failure_class": "unavailable",
+    "failure_message": "scale maximum wall time was reached",
+    "cleanup": "removed",
+    "source_relation_limitation": "the mandated single capacity attempt ran at be45f0b0; bcbcbd68 subsequently changed only pre-execution invalid-option receipt publication, while final valid-path fixtures and the required 100,100-owner lifecycle reran on bcbcbd68"
+  },
+  "unchanged_maintained_assets": {
+    "classification": "fresh passed",
+    "aggregate_sha256": "fb63ebb12ec6063e498064bc5aa711524667b3c5fad18d600b419f36d53a82de",
+    "files": [
+      {
+        "path": "packages/standard/generated/standard.lkjp",
+        "sha256": "d46939d6ec91b3b403ce2bf54a5fd3ca768bf2ff4259628a03d2ca133b0c7c3f"
+      },
+      {
+        "path": "packages/standard/generated/standard.lkja",
+        "sha256": "7f47ce86a6d33d39f1f354f515dafd66fcf4cd734f9f36fb6ef83c504d1edf04"
+      },
+      {
+        "path": "applications/lkjournal/generated/lkjournal.lkja",
+        "sha256": "9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28"
+      }
+    ]
+  },
+  "generated_public_guides": {
+    "changed": false,
+    "aggregate_sha256": "96152fd371fb0586b981042f908b99378961331cdaf079e3e6e3f02ab2f0919c",
+    "capabilities_digest": "6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81"
+  },
+  "verification": {
+    "focused_scale_parser_encoder_receipt_options": "fresh passed",
+    "typed_repository_oracle": "fresh passed",
+    "legacy_vocabulary_absence": "fresh passed",
+    "all_retained_topology_fixtures": "fresh passed",
+    "same_input_logical_repeat": "fresh passed",
+    "required_100100_owner_lifecycle": "fresh passed",
+    "million_owner_capacity_classification": "fresh passed",
+    "maintained_asset_identity": "fresh passed",
+    "generated_public_guides": "fresh passed",
+    "product_verification": "fresh passed",
+    "full_profile": "fresh passed",
+    "required_reused": 0,
+    "required_skipped": 0,
+    "required_unavailable": 0,
+    "required_failed": 0
+  },
+  "success_conditions": {
+    "SCALE-1": "fresh passed",
+    "SCALE-2": "fresh passed",
+    "SCALE-3": "fresh passed",
+    "SCALE-4": "fresh passed",
+    "SCALE-5": "fresh passed",
+    "SCALE-6": "fresh passed",
+    "SCALE-7": "fresh passed"
+  },
+  "limitations_and_nonclaims": [
+    "the one-million-owner attempt is environment_limit and establishes no million-owner admission",
+    "the capacity lifecycle omitted rename, check, and build and did not reach final public reads",
+    "wall time, sampled CPU, sampled RSS, filesystem, and byte totals are point observations of one exact host and input, not service-level objectives or distributions",
+    "in-process request generation and typed-oracle CPU are not separately available",
+    "filesystem cache state, scheduler effects, exact synchronization syscall counts, provider tokens, and monetary cost are unavailable",
+    "no operational-data scale, long-history retention, packing, compaction, deletion, public owner-detail projection, new target, release, publication, or deployment was selected or performed"
+  ],
+  "cleanup": {
+    "required_admission_project_removed": true,
+    "capacity_project_removed": true,
+    "fixture_projects_removed": true,
+    "raw_outputs_retained_only_under_ignored_artifact_roots": true,
+    "maintained_or_user_data_touched": false
+  },
+  "closure": {
+    "evidence_path": "docs/evidence/202608311331-current-semantic-scale.json",
+    "evidence_commit": "the containing evidence/current-truth commit; its SHA is reported externally because a commit cannot contain its own identity",
+    "assembly_full": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788162732061233441-370195-0/receipt.json",
+      "receipt_sha256": "6680e4d8514477f473519d303cc8bd3106c2499a6dc6b55f620483bb23f21402",
+      "receipt_digest": "verification_ee93479255c6b453065848b604f593b9aa8aa29004756b6d34e4ee0fc1763d4d",
+      "contract_version": 5,
+      "selected": 23,
+      "passed": 23,
+      "fresh_passed": 23,
+      "reused_passed": 0,
+      "elapsed_nanoseconds": 173254061129,
+      "input_stable": true
+    },
+    "post_closure_full": "the exact post-closure full receipt and normal push result are reported externally because recording either would change the checked closure",
+    "push_state": "the containing evidence/current-truth commit and its normal push result are reported externally",
+    "preserved_work": [
+      "modified AGENTS.md at SHA-256 5203f2d88336b791cd7863745c1845a3be32fa940d59ba54c020439cb19b3346",
+      "stash object 87c2265f6faf0e815d80450ec2480d46c5e774fb preserving superseded campaign 202608310137 work",
+      "ignored .artifacts/campaign/202608310137/ raw output"
+    ],
+    "next_candidates": [
+      "a separately designed operational-data scale and long-history campaign",
+      "million-owner full check/build admission after a completed lightweight capacity run",
+      "owner-detail projection only when a maintained edit demonstrates the need",
+      "another platform target admitted independently"
+    ]
+  }
+}
