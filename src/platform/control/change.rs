@@ -6,7 +6,8 @@ use crate::platform::change::{
     AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredExpression,
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
     AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMatchExpressionArm,
-    AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPrecondition,
+    AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
     AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
@@ -17,17 +18,18 @@ use crate::platform::kernel::{
     DeclarationVisibility, ExternalVisibility, Idempotency, ImplementationName, Name,
     NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ResourceUnit,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, FieldId, ModuleId, OperationId, ParameterId, RequirementId,
-    RevisionId,
+    BindingId, CaseId, DeclarationId, FieldId, ModuleId, OperationId, ParameterId, PortId,
+    RequirementId, RevisionId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-7";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 7;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-8";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 8;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-6";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 6;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -69,13 +71,17 @@ pub(crate) enum CompactChangeOperation {
     CreateExternal,
     CreateFunction,
     CreateConstant,
+    CreateComponent,
     CreateTest,
+    CreateTarget,
     AddField,
     AddCase,
     AddOperation,
     AddTypeParameter,
     AddParameter,
     AddRequirement,
+    AddPort,
+    AddDependency,
     ReplaceDependency,
     SetFunctionContract,
     SetRequirementContract,
@@ -86,7 +92,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 21] = [
+    pub(crate) const ALL: [Self; 25] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -94,13 +100,17 @@ impl CompactChangeOperation {
         Self::CreateExternal,
         Self::CreateFunction,
         Self::CreateConstant,
+        Self::CreateComponent,
         Self::CreateTest,
+        Self::CreateTarget,
         Self::AddField,
         Self::AddCase,
         Self::AddOperation,
         Self::AddTypeParameter,
         Self::AddParameter,
         Self::AddRequirement,
+        Self::AddPort,
+        Self::AddDependency,
         Self::ReplaceDependency,
         Self::SetFunctionContract,
         Self::SetRequirementContract,
@@ -131,6 +141,8 @@ pub(crate) enum CompactChangeFieldForm {
     ExactPackageRevision,
     RequestFragment,
     DeclarationReference,
+    PortReference,
+    RunnerKind,
     OperationSelector,
     Idempotency,
     ExternalVisibility,
@@ -138,7 +150,7 @@ pub(crate) enum CompactChangeFieldForm {
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 22] = [
+    pub(crate) const ALL: [Self; 24] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -157,6 +169,8 @@ impl CompactChangeFieldForm {
         Self::ExactPackageRevision,
         Self::RequestFragment,
         Self::DeclarationReference,
+        Self::PortReference,
+        Self::RunnerKind,
         Self::OperationSelector,
         Self::Idempotency,
         Self::ExternalVisibility,
@@ -183,6 +197,8 @@ impl CompactChangeFieldForm {
             Self::ExactPackageRevision => "exact_package_revision",
             Self::RequestFragment => "request_fragment",
             Self::DeclarationReference => "declaration_reference",
+            Self::PortReference => "port_reference",
+            Self::RunnerKind => "runner_kind",
             Self::OperationSelector => "operation_selector",
             Self::Idempotency => "idempotency",
             Self::ExternalVisibility => "external_visibility",
@@ -210,6 +226,8 @@ impl CompactChangeFieldForm {
             Self::ExactPackageRevision => "package_revision_HEX",
             Self::RequestFragment => "%NAME",
             Self::DeclarationReference => "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+            Self::PortReference => "$NAME|pkg_HEX/port_HEX",
+            Self::RunnerKind => "command|http",
             Self::OperationSelector => "$NAME|op_HEX",
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
@@ -457,6 +475,33 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateComponent,
+        name: "create.component",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::CreateTest,
         name: "create.test",
         fields: &[
@@ -489,6 +534,38 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "expected",
                 required: true,
                 form: FieldForm::ExpressionReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateTarget,
+        name: "create.target",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "component",
+                required: true,
+                form: FieldForm::DeclarationReference,
+            },
+            CompactChangeOperationField {
+                name: "port",
+                required: true,
+                form: FieldForm::PortReference,
+            },
+            CompactChangeOperationField {
+                name: "runner",
+                required: true,
+                form: FieldForm::RunnerKind,
             },
         ],
         direct: None,
@@ -661,6 +738,60 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "interface",
                 required: true,
                 form: FieldForm::DeclarationReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddPort,
+        name: "add.port",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "component",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddDependency,
+        name: "add.dependency",
+        fields: &[
+            CompactChangeOperationField {
+                name: "package",
+                required: true,
+                form: FieldForm::ExactPackage,
+            },
+            CompactChangeOperationField {
+                name: "semantic-revision",
+                required: true,
+                form: FieldForm::ExactRevision,
+            },
+            CompactChangeOperationField {
+                name: "package-revision",
+                required: true,
+                form: FieldForm::ExactPackageRevision,
             },
         ],
         direct: None,
@@ -2196,6 +2327,14 @@ impl Decoder {
                     value: self.decode_expression(&value)?,
                 })
             }
+            CompactChangeOperation::CreateComponent => Ok(AuthoredChange::CreateComponent {
+                symbol: symbol(record, "as")?,
+                module: parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                requirements: Vec::new(),
+                ports: Vec::new(),
+            }),
             CompactChangeOperation::CreateTest => {
                 let actual = required(record, "actual")?.to_owned();
                 let expected = required(record, "expected")?.to_owned();
@@ -2208,6 +2347,13 @@ impl Decoder {
                     expected: self.decode_expression(&expected)?,
                 })
             }
+            CompactChangeOperation::CreateTarget => Ok(AuthoredChange::CreateTarget {
+                symbol: symbol(record, "as")?,
+                name: parse_name(record, "name")?,
+                component: parse_declaration_reference(record, "component")?,
+                port: parse_port_reference(record, "port")?,
+                runner: parse_runner_kind(record, "runner")?,
+            }),
             CompactChangeOperation::AddField => Ok(AuthoredChange::AddField {
                 record: parse_declaration_selector(record, "record")?,
                 field: AuthoredField {
@@ -2299,6 +2445,33 @@ impl Decoder {
                         operations,
                         limits,
                     },
+                })
+            }
+            CompactChangeOperation::AddPort => Ok(AuthoredChange::AddPort {
+                component: parse_declaration_selector(record, "component")?,
+                port: AuthoredPort {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    function_type: self.decode_type(required(record, "type")?)?,
+                    implementation: AuthoredPortImplementation::Function {
+                        function: parse_declaration_reference(record, "function")?,
+                    },
+                },
+            }),
+            CompactChangeOperation::AddDependency => {
+                let package = parse_field(record, "package")?;
+                let semantic_revision = parse_field(record, "semantic-revision")?;
+                let package_revision = parse_field(record, "package-revision")?;
+                validate_public_dependency_binding(
+                    record,
+                    package,
+                    semantic_revision,
+                    package_revision,
+                )?;
+                Ok(AuthoredChange::AddDependency {
+                    package,
+                    semantic_revision,
+                    package_revision,
                 })
             }
             CompactChangeOperation::ReplaceDependency => Ok(AuthoredChange::ReplaceDependency {
@@ -3372,6 +3545,73 @@ fn parse_declaration_reference(
     })
 }
 
+fn parse_port_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredPortReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredPortReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, port) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_port_reference",
+            "port reference requires $symbol or pkg_ID/port_ID",
+        )
+    })?;
+    Ok(AuthoredPortReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        port: port.parse::<PortId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_port_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
+fn parse_runner_kind(record: &CompactRecord, field_name: &str) -> Result<RunnerKind, Diagnostic> {
+    match required(record, field_name)? {
+        "command" => Ok(RunnerKind::Command),
+        "http" => Ok(RunnerKind::Http),
+        value => Err(field_error(
+            record,
+            field_name,
+            "change_runner_kind",
+            format!("runner must be command or http; observed '{value}'"),
+        )),
+    }
+}
+
+fn validate_public_dependency_binding(
+    record: &CompactRecord,
+    package: PackageId,
+    semantic_revision: RevisionId,
+    package_revision: PackageRevisionDigest,
+) -> Result<(), Diagnostic> {
+    let standard = crate::platform::builtin_standard::BuiltinStandard::load()?;
+    if package != standard.package
+        || semantic_revision != standard.semantic_revision
+        || package_revision != standard.package_revision
+    {
+        return Err(record_error(
+            record,
+            "change_dependency_binding_unsupported",
+            "add.dependency accepts only the exact executable-owned built-in package binding reported by package builtin inspect",
+        ));
+    }
+    Ok(())
+}
+
 fn parse_field_reference(
     record: &CompactRecord,
     field_name: &str,
@@ -3640,6 +3880,100 @@ mod tests {
         );
         let repeated = decode_compact_change("other.lk", input.as_bytes()).unwrap();
         assert_eq!(decoded.request_commitment, repeated.request_commitment);
+    }
+
+    #[test]
+    fn dependency_component_function_port_and_target_decode_as_one_forward_referenced_request() {
+        let standard =
+            crate::platform::builtin_standard::BuiltinStandard::load().expect("built-in standard");
+        let input = format!(
+            "request base={} idempotency=topology-1\n\
+             create.target as=$target name=main component=$component port=$port runner=command\n\
+             add.port as=$port component=$component name=main type=@entry function=$entry\n\
+             type.function as=@entry result=text\n\
+             expression.text as=$body value=hello\n\
+             create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+             create.component as=$component module=$module name=application visibility=package\n\
+             create.module as=$module name=application\n\
+             add.dependency package={} semantic-revision={} package-revision={}\n",
+            revision(),
+            standard.package,
+            standard.semantic_revision,
+            standard.package_revision,
+        );
+        let decoded = decode_compact_change("topology.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.changes.len(), 6);
+        assert!(matches!(
+            &decoded.semantic.changes[0],
+            AuthoredChange::CreateTarget {
+                runner: RunnerKind::Command,
+                component: AuthoredDeclarationReference::Local { .. },
+                port: AuthoredPortReference::Symbol { symbol },
+                ..
+            } if symbol == "$port"
+        ));
+        assert!(matches!(
+            &decoded.semantic.changes[1],
+            AuthoredChange::AddPort {
+                port: AuthoredPort {
+                    implementation: AuthoredPortImplementation::Function { .. },
+                    ..
+                },
+                ..
+            }
+        ));
+        assert!(matches!(
+            &decoded.semantic.changes[5],
+            AuthoredChange::AddDependency {
+                package,
+                semantic_revision,
+                package_revision,
+            } if *package == standard.package
+                && *semantic_revision == standard.semantic_revision
+                && *package_revision == standard.package_revision
+        ));
+        let repeated = decode_compact_change("repeated.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.request_commitment, repeated.request_commitment);
+    }
+
+    #[test]
+    fn topology_vocabulary_and_dependency_binding_fail_closed() {
+        let standard =
+            crate::platform::builtin_standard::BuiltinStandard::load().expect("built-in standard");
+        let foreign = PackageId::migrate(b"foreign-public-dependency", 1);
+        let unsupported = format!(
+            "request base={}\nadd.dependency package={} semantic-revision={} package-revision={}\n",
+            revision(),
+            foreign,
+            standard.semantic_revision,
+            standard.package_revision,
+        );
+        assert_eq!(
+            decode_compact_change("dependency.lkjc", unsupported.as_bytes()).unwrap_err()[0].code,
+            "change_dependency_binding_unsupported"
+        );
+
+        let bad_runner = format!(
+            "request base={}\ncreate.target as=$target name=serve component=$component port=$port runner=worker\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("runner.lkjc", bad_runner.as_bytes()).unwrap_err()[0].code,
+            "change_runner_kind"
+        );
+
+        for predecessor in [
+            "add.package",
+            "create.service",
+            "add.endpoint",
+            "create.runner",
+        ] {
+            let input = format!("request base={}\n{predecessor} as=$old\n", revision());
+            assert_eq!(
+                decode_compact_change("predecessor.lkjc", input.as_bytes()).unwrap_err()[0].code,
+                "change_operation_unknown"
+            );
+        }
     }
 
     #[test]

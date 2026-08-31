@@ -32,7 +32,7 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
-const STATEFUL_SCHEMA_VERSION: u32 = 3;
+const STATEFUL_SCHEMA_VERSION: u32 = 4;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
@@ -177,7 +177,15 @@ struct AuthoringResult {
     idempotent_reconciliation: bool,
     discovery_commands: u64,
     capabilities_digest: String,
+    initial_template: String,
+    initial_owners: u64,
+    initial_dependencies: u64,
+    builtin_package: String,
+    builtin_semantic_revision: String,
     builtin_package_revision: String,
+    builtin_transport: String,
+    dependency_staged: bool,
+    topology: TopologyObservation,
     artifact: String,
     artifact_bytes: u64,
     incremental_sha256: String,
@@ -185,6 +193,20 @@ struct AuthoringResult {
     deterministic: bool,
     live: LiveObservation,
     evidence: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct TopologyObservation {
+    module: String,
+    component: String,
+    handler: String,
+    request_parameter: String,
+    requirements: BTreeMap<String, String>,
+    port: String,
+    target: String,
+    target_name: String,
+    runner: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -510,6 +532,16 @@ pub(crate) fn read_transferred_receipt(
         || !result.idempotent_reconciliation
         || result.discovery_commands == 0
         || !result.deterministic
+        || result.initial_template != "minimal"
+        || result.initial_owners != 0
+        || result.initial_dependencies != 0
+        || !result.dependency_staged
+        || result.topology.target_name != "serve"
+        || result.topology.runner != "http"
+        || result.topology.requirements.len() != 4
+        || ["streams", "data", "identifiers", "clock"]
+            .iter()
+            .any(|name| !result.topology.requirements.contains_key(*name))
         || result.incremental_sha256 != result.clean_sha256
         || result.evidence != evidence_root.display().to_string()
         || result.live.data_contract != "lkjscript-data-store-1"
@@ -591,20 +623,29 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
             )?
             .bytes,
     )?;
-    let builtin_package_revision =
-        required_field(required_record(&builtin, "package")?, "package-revision")?.to_owned();
-    let standard = discover_standard(context, isolated)?;
+    let builtin_record = required_record(&builtin, "package")?;
+    let builtin_package = required_field(builtin_record, "id")?.to_owned();
+    let builtin_semantic_revision = required_field(builtin_record, "revision")?.to_owned();
+    let builtin_package_revision = required_field(builtin_record, "package-revision")?.to_owned();
+    let builtin_transport = required_field(builtin_record, "transport")?.to_owned();
+    let standard = discover_standard(
+        context,
+        isolated,
+        builtin_package.clone(),
+        builtin_semantic_revision.clone(),
+        builtin_package_revision.clone(),
+    )?;
     let discovery_commands = context.ordinal;
     let project = isolated.join("application");
     let created = records(
         &context
             .success(
-                "new-http",
+                "new-minimal",
                 &[
                     "new",
                     path_text(&project)?,
                     "--template",
-                    "http",
+                    "minimal",
                     "--name",
                     "bbs",
                 ],
@@ -612,15 +653,63 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
             )?
             .bytes,
     )?;
+    require_record_field(&created, "project", "template", "minimal")?;
+    require_record_field(&created, "summary", "owners", "0")?;
+    require_record_field(&created, "summary", "dependencies", "0")?;
     let initial_revision = required_field(required_record(&created, "revision")?, "id")?.to_owned();
-    let package = required_field(required_record(&created, "package")?, "id")?.to_owned();
-    let project_references = discover_project(
-        context,
-        isolated,
-        &project,
-        package,
-        initial_revision.clone(),
+    let transport_path = isolated.join("builtin-standard.transport");
+    let exported = records(
+        &context
+            .success(
+                "builtin-export-transport",
+                &[
+                    "package",
+                    "builtin",
+                    "export",
+                    "--kind",
+                    "transport",
+                    "--output",
+                    path_text(&transport_path)?,
+                ],
+                isolated,
+            )?
+            .bytes,
     )?;
+    require_record_field(&exported, "output", "digest", &builtin_transport)?;
+    let staged = records(
+        &context
+            .success(
+                "dependency-stage",
+                &[
+                    "--project",
+                    path_text(&project)?,
+                    "package",
+                    "dependency",
+                    "stage",
+                    "--transport",
+                    &builtin_transport,
+                    "--input-file",
+                    path_text(&transport_path)?,
+                ],
+                isolated,
+            )?
+            .bytes,
+    )?;
+    require_record_field(&staged, "result", "outcome", "inserted")?;
+    require_record_field(&staged, "package", "id", &builtin_package)?;
+    require_record_field(&staged, "package", "revision", &builtin_semantic_revision)?;
+    require_record_field(
+        &staged,
+        "package",
+        "package-revision",
+        &builtin_package_revision,
+    )?;
+    require_record_field(&staged, "package", "transport", &builtin_transport)?;
+    require_record_field(&staged, "authority", "current-revision", &initial_revision)?;
+    require_record_field(&staged, "authority", "semantic-head-changed", "false")?;
+    let project_references = ProjectReferences {
+        base_revision: initial_revision.clone(),
+    };
     let request = build_program_request(&standard, &project_references)?;
     let request_path = isolated.join("bbs-change.lkjc");
     evidence::publish(&request_path, &request.bytes)?;
@@ -768,11 +857,17 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
     )?;
     require_record_field(&reconciled, "result", "status", "already-accepted")?;
     require_record_field(&reconciled, "revision", "result", &accepted_revision)?;
+    let topology = discover_authored_topology(context, isolated, &project)?;
     context.success(
         "check",
         &["--project", path_text(&project)?, "check"],
         isolated,
     )?;
+    fs::create_dir(project.join("generated")).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create stateful derived output directory after semantic acceptance: {error}"
+        ))
+    })?;
     let artifact = project.join("generated/bbs.lkja");
     context.success(
         "build-incremental",
@@ -821,7 +916,15 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
         idempotent_reconciliation: true,
         discovery_commands,
         capabilities_digest,
+        initial_template: "minimal".to_owned(),
+        initial_owners: 0,
+        initial_dependencies: 0,
+        builtin_package,
+        builtin_semantic_revision,
         builtin_package_revision,
+        builtin_transport,
+        dependency_staged: true,
+        topology,
         artifact: artifact.display().to_string(),
         artifact_bytes: first.len() as u64,
         incremental_sha256: sha256(&first),
@@ -1094,7 +1197,13 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
             )?
             .bytes,
     )?;
-    for name in ["add.requirement", "set.function-contract"] {
+    for name in [
+        "add.dependency",
+        "create.component",
+        "add.requirement",
+        "add.port",
+        "create.target",
+    ] {
         require_named_record(&change, "change.operation", "name", name)?;
     }
     for name in ["pure", "task"] {
@@ -1219,8 +1328,17 @@ fn require_named_record(
     }
 }
 
-fn discover_standard(context: &mut Context, cwd: &Path) -> Result<StandardReferences, DevError> {
+fn discover_standard(
+    context: &mut Context,
+    cwd: &Path,
+    package: String,
+    semantic_revision: String,
+    package_revision: String,
+) -> Result<StandardReferences, DevError> {
     let mut references = StandardReferences {
+        package,
+        semantic_revision,
+        package_revision,
         declarations: BTreeMap::new(),
         interfaces: BTreeMap::new(),
         operations: BTreeMap::new(),
@@ -1386,54 +1504,161 @@ fn builtin_owner(
     Ok(required_field(owners[0], "reference")?.to_owned())
 }
 
-fn discover_project(
+fn discover_authored_topology(
     context: &mut Context,
     cwd: &Path,
     project: &Path,
-    package: String,
-    base_revision: String,
-) -> Result<ProjectReferences, DevError> {
-    let owners = records(
+) -> Result<TopologyObservation, DevError> {
+    let module = discover_project_owner(context, cwd, project, "module", "bbs", None)?;
+    let component = discover_project_owner(
+        context,
+        cwd,
+        project,
+        "component",
+        "application",
+        Some(&module),
+    )?;
+    let handler = discover_project_owner(
+        context,
+        cwd,
+        project,
+        "task_function",
+        "handle",
+        Some(&module),
+    )?;
+    let request_parameter = discover_project_owner(
+        context,
+        cwd,
+        project,
+        "parameter",
+        "request",
+        Some(&handler),
+    )?;
+    let mut requirements = BTreeMap::new();
+    for name in ["streams", "data", "identifiers", "clock"] {
+        let owner =
+            discover_project_owner(context, cwd, project, "requirement", name, Some(&component))?;
+        requirements.insert(name.to_owned(), owner);
+    }
+    let port = discover_project_owner(context, cwd, project, "port", "http", Some(&component))?;
+    let target = discover_project_owner(context, cwd, project, "target", "serve", Some("package"))?;
+
+    let target_relations = project_relations(context, cwd, project, &target)?;
+    require_relation(&target_relations, "target_component", &target, &component)?;
+    require_relation(&target_relations, "target_port", &target, &port)?;
+    let port_relations = project_relations(context, cwd, project, &port)?;
+    require_relation(&port_relations, "member_declaration", &port, &component)?;
+    require_relation(&port_relations, "function_value", &port, &handler)?;
+
+    Ok(TopologyObservation {
+        module,
+        component,
+        handler,
+        request_parameter,
+        requirements,
+        port,
+        target,
+        target_name: "serve".to_owned(),
+        runner: "http".to_owned(),
+    })
+}
+
+fn discover_project_owner(
+    context: &mut Context,
+    cwd: &Path,
+    project: &Path,
+    kind: &str,
+    name: &str,
+    expected_parent: Option<&str>,
+) -> Result<String, DevError> {
+    let output = records(
         &context
             .success(
-                "project-owners",
+                &format!("project-owner-{kind}-{name}"),
                 &[
                     "--project",
                     path_text(project)?,
                     "query",
                     "owners",
+                    "--kind",
+                    kind,
                     "--limit",
-                    "100",
+                    "4096",
+                    "--bytes",
+                    "1048576",
                 ],
                 cwd,
             )?
             .bytes,
     )?;
-    let find = |kind: &str, name: &str| -> Result<String, DevError> {
-        let matches = owners
-            .iter()
-            .filter(|record| {
-                record.operation == "owner"
-                    && field(record, "kind") == Some(kind)
-                    && field(record, "name") == Some(name)
-            })
-            .collect::<Vec<_>>();
-        if matches.len() != 1 {
-            return Err(DevError::corrupt(format!(
-                "starter project has {} {kind} owners named '{name}'",
-                matches.len()
-            )));
-        }
-        Ok(required_field(matches[0], "id")?.to_owned())
-    };
-    Ok(ProjectReferences {
-        base_revision,
-        package,
-        component: find("component", "application")?,
-        handler: find("task_function", "handle")?,
-        request_parameter: find("parameter", "request")?,
-        streams_requirement: find("requirement", "streams")?,
-    })
+    require_record_field(&output, "summary", "truncated", "false")?;
+    let matches = output
+        .iter()
+        .filter(|record| {
+            record.operation == "owner"
+                && field(record, "kind") == Some(kind)
+                && field(record, "name") == Some(name)
+                && expected_parent.is_none_or(|parent| field(record, "parent") == Some(parent))
+        })
+        .collect::<Vec<_>>();
+    if matches.len() != 1 {
+        return Err(DevError::corrupt(format!(
+            "authored project has {} {kind} owners named '{name}' with the expected parent",
+            matches.len()
+        )));
+    }
+    Ok(required_field(matches[0], "id")?.to_owned())
+}
+
+fn project_relations(
+    context: &mut Context,
+    cwd: &Path,
+    project: &Path,
+    owner: &str,
+) -> Result<Vec<CompactRecord>, DevError> {
+    let output = records(
+        &context
+            .success(
+                &format!("project-relations-{owner}"),
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "query",
+                    "relations",
+                    owner,
+                    "--direction",
+                    "outgoing",
+                    "--limit",
+                    "4096",
+                    "--bytes",
+                    "1048576",
+                ],
+                cwd,
+            )?
+            .bytes,
+    )?;
+    require_record_field(&output, "summary", "truncated", "false")?;
+    Ok(output)
+}
+
+fn require_relation(
+    records: &[CompactRecord],
+    kind: &str,
+    source: &str,
+    target: &str,
+) -> Result<(), DevError> {
+    if records.iter().any(|record| {
+        record.operation == "relation"
+            && field(record, "kind") == Some(kind)
+            && field(record, "source-owner") == Some(source)
+            && field(record, "target-owner") == Some(target)
+    }) {
+        Ok(())
+    } else {
+        Err(DevError::corrupt(format!(
+            "authored topology omitted {kind} relation {source} -> {target}"
+        )))
+    }
 }
 
 struct ActiveRunner {
@@ -2502,7 +2727,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode stateful schema"),
-            r#"{"identity":"lkjscript-stateful-http-acceptance","version":3}"#
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":4}"#
         );
         assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
     }

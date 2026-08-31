@@ -21,6 +21,14 @@ expression ownership, relations, dependencies/interfaces, components/ports/targe
 documentation/annotations, retirements, counts, and digest. Migration tooling is temporary and
 must be deleted after materialization. The retained projection is evidence, never authority.
 
+Recipe lowering additionally requires generation-neutral projections for `minimal`, `command`,
+`http`, and `nostr-relay-info` to agree with their predecessor results while excluding deliberately
+fresh repository, package, revision, and owner identities. The oracle must use an independent graph
+reader or explicit expected records, not the recipe operation list. It compares owner kinds/names,
+parentage, types, expressions, dependency bindings, requirements, ports, targets, tests, relations,
+and deployment inventory. Each nonempty recipe must also prove that every operation is owned by the
+public compact descriptor and uses ordinary authored preparation and full validation.
+
 Built-in evidence has two independent byte owners: maintained standard package generation and the
 embedded executable assets. Product verification exports both package transport and artifact and
 requires exact byte equality with the generated maintained files.
@@ -103,9 +111,13 @@ Cargo, read a source/generated/template file, or use an ambient application help
 binds the verifier, source candidate, private copied candidate, execution context, optional checkout,
 result, bounded logs, and complete cleanup.
 
-The stateful owner constructs its bounded BBS change from exact candidate discovery. It retains
-one application definition across contributor, target-admission, pre-publication, and anonymous
-public verification. Passing evidence requires reviewed plan/apply, idempotent reprepare,
+The stateful owner creates a dependency-free `minimal` project, discovers and exports the exact
+built-in transport through the copied candidate, stages it without changing semantic `HEAD`, and
+constructs one bounded request adding the dependency, component, requirements, function-backed HTTP
+port, `serve` target, and BBS policy. It retains one application definition across contributor,
+target-admission, pre-publication, and anonymous public verification. It may use public parsing
+utilities but no recipe owner builder, source, fixture topology, or `http` recipe. Passing evidence
+requires direct/input normalization equality, reviewed plan/apply, idempotent reprepare,
 clean/incremental artifact equality, the named reducer/function value/standard fold construction,
 real HTTP create/read/update/delete, missing/nonmatching/repeated/reordered header admission,
 strict malformed input, expectation rollback, schema divergence failure, restart persistence,

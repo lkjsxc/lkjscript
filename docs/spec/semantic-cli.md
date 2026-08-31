@@ -55,10 +55,13 @@ new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--rel
 
 The parent must be an ordinary existing directory. The destination must be absent and may not
 traverse a symlink; an existing empty directory is still a conflict. Creation validates the name
-and path before publication, constructs the
-complete typed meaning graph repository in a private sibling, synchronizes canonical data, and
-makes it visible by one rename. Failed creation removes only its own stage and never changes an
-existing destination.
+and path before publication. Every nonempty recipe is typed authored intent whose operations have
+the same normalized meaning and public compact representation as reviewed changes. It passes
+through ordinary normalization, allocation, preparation, logical planning, impact/test selection,
+and complete validation; there is no recipe-specific owner, ID, snapshot, or validator path. The
+resulting repository has exactly one initial accepted revision. Canonical repository data and any
+bounded auxiliary inventory are synchronized in a private sibling and made visible by one rename.
+Failed creation removes only its own stage and never changes an existing destination.
 
 `minimal` creates an empty dependency-free package. `command` creates one useful pure command
 application with an exact built-in standard dependency, application module, private function,
@@ -94,10 +97,11 @@ Authority, explicit port, and path are preserved; user information, query, fragm
 authority, malformed port, noncanonical escape, and unsupported scheme reject before the
 destination is visible. This normalization does not implement WebSocket.
 
-All four recipes are executable-owned typed construction, not source templates or a general
-template language. Unknown template spellings, including `web`, `server`, and `service`, reject
-through `cli_usage` and are not aliases. Invalid template/option combinations fail before any
-project destination becomes visible.
+All four recipes are executable-owned typed operation lists, not source templates or a general
+template language. Internal recipe construction avoids a pointless text round trip but may use only
+operations owned by the public compact grammar. Unknown template spellings, including `web`,
+`server`, and `service`, reject through `cli_usage` and are not aliases. Invalid template/option
+combinations fail before any project destination becomes visible.
 
 Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
 source file, database, container, or helper command. Release availability is current distribution
@@ -206,8 +210,31 @@ nonfunction, arity, and argument-type cases reject before publication. `function
 `closure`, and `apply` are not aliases. The dependency-closed data cutover also adds exact
 `create.interface`, `create.external`, interface `add.operation`, operation parameters,
 `set.requirement-contract`, and `replace.dependency`; these remain reviewed typed graph changes and
-do not form a private builder. Arbitrary component, port, and target creation remains outside the
-compact surface.
+do not form a private builder.
+
+The public exact-dependency and topology slice is:
+
+```text
+add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
+create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
+add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
+create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http
+```
+
+`add.dependency` accepts only the exact current built-in binding after its immutable transport has
+been staged through public package export. It performs no network, registry, ambient-directory, or
+unchecked-file lookup; unavailable, duplicate, stale, foreign, and mismatched bindings reject.
+`create.component` creates an empty component. Requirements and function-backed ports are separate
+independently budgeted operations. An `add.port` explicit function type must exactly agree with its
+function implementation. `create.target` binds exact component and port identities and checks that
+the port is owned by the component, the function's requirement closure is present on that component,
+and the port shape matches `command` or `http`. Expression-backed ports, `SetTarget`, dependency
+removal, arbitrary transports, and additional runner values are not exposed.
+
+Request-local forward references work across the complete request. The four records participate in
+the same strict decoder, canonical request commitment, allocation, logical plan, impact/relations,
+validation/test selection, budgets, idempotent re-preparation, stale-base/token behavior, and atomic
+publication as every other authored operation. Direct and input-file forms normalize identically.
 
 Task effect requirements are an ordered exact set of component-local requirement references. A
 new requirement names one exact built-in interface, an ordered admitted operation set, and separate

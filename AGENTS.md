@@ -38,6 +38,12 @@ binary, and running service are distinct states.
 - Ordinary application development must work through the distributed `lkjscript` executable.
 - Application policy belongs in graph meaning. Rust owns generic semantic, compiler, runtime,
   adapter, verification, and distribution mechanisms.
+- Choose the strongest graph-native semantic model that materially contracts authority or makes
+  maintained-application invariants machine-checkable. Human familiarity, conventional syntax, and
+  unaided manual authoring convenience are not design constraints.
+- Unfamiliar abstractions are welcome when a maintained workload, bounded public authoring and
+  failure behavior, dependency-closed migration and deletion, and independent proof justify them.
+  Ambition does not relax determinism, resource, security, or evidence obligations.
 - Accepted writes validate an exact-base complete candidate, make immutable canonical data durable,
   and expose one atomic visibility point.
 - Failed, stale, cancelled, exhausted, corrupt, or interrupted work must not partially advance
@@ -83,7 +89,6 @@ format, CI provider, release service, or storage provider into language semantic
 - `docs/generated/`: executable-generated public projections; never hand-edit.
 - `docs/campaigns/`: timestamped implementation mandates and concise terminal history.
 - `docs/release.md`: release preparation, publication, verification, and recovery procedure.
-- `prompts/`: historical inputs.
 
 Project-local `generated/` directories contain replaceable artifacts, not generated documentation or
 program authority. Do not turn `AGENTS.md` into a campaign, status report, roadmap, contract catalog,
@@ -127,11 +132,13 @@ generated assets, flags, aliases, and documentation after their last consumer. C
 requires a named external need, owner, removal condition, and proof; it is not a default.
 
 A typed semantic form unavailable through the distributed authoring surface is incomplete public
-capability. Prefer reusable pure graph meaning and `packages/standard/` over host intrinsics,
-special opcodes, generators, macros, or a second authoring format. New abstractions must define
-types, effects, evaluation order, identity, failure, resources, consumers, oracle, migration, and
-reversal. Do not add inference, capture, dynamic dispatch, JIT, AOT, SIMD, custom allocation, broad
-caching, or specialization without a measured maintained workload and independent proof.
+capability. Prefer the strongest reusable graph meaning and `packages/standard/` over host
+intrinsics, special opcodes, generators, macros, or a second authoring format. New abstractions must
+define types, effects, evaluation order, identity, failure, resources, consumers, oracle, migration,
+and reversal. Treat affine or linear ownership, typestate and session protocols, richer effects,
+refinement or dependent evidence, inference, capture, dynamic dispatch, specialization, JIT, AOT,
+SIMD, allocation, and broad caching as evidence-gated options, not exclusions based on unfamiliarity.
+Add them only from a measured maintained workload with independent proof.
 
 ## Git, worktree, and external safety
 

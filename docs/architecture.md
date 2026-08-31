@@ -32,14 +32,17 @@ argv / compact records / bounded JSON arguments / offline discovery
 storage objects. Names and compact syntax are locators or transport; stable typed keys and the
 accepted semantic graph own continuity and meaning.
 
-Closed project creation enters that same authority boundary without first inventing source or a
+Project creation uses the same authored-operation engine without first inventing source or a
 storage-shaped request:
 
 ```text
-closed minimal / command / HTTP / Nostr relay-information recipe
-            │ typed graph + complete validation
+minimal / command / HTTP / Nostr relay-information recipe
+            │ public-representable typed AuthoredChange operations
             ▼
- private sibling: canonical typed meaning graph repository
+ normalization + allocation + prepare + logical plan + full validation
+            │ exact complete candidate; no recipe-specific owner builder
+            ▼
+ private sibling: one-initial-revision typed meaning graph repository
             │ resident recipes: typed deployment descriptor + empty generated/
             │ synchronize complete private inventory
             ▼
@@ -49,7 +52,9 @@ closed minimal / command / HTTP / Nostr relay-information recipe
             └─ deployment descriptor: separate operator-editable authority
 ```
 
-The executable embeds every recipe rule and exact standard package byte. HTTP creation and runtime
+The executable embeds every recipe rule and exact standard package bytes. Recipe intent and public
+compact records converge before semantic allocation and lowering; recipes do not parse a text
+round trip, assign semantic IDs, assemble snapshots, or bypass validation. HTTP creation and runtime
 admission share generation-neutral structural HTTP types from `platform/http.rs`; an independent
 normative field oracle prevents a shared constructor from becoming the only evidence. Project
 creation depends on the validated built-in package interface and typed deployment encoder, not on
@@ -139,9 +144,10 @@ ordered-data/durable-queue cutover without contacting a live relay or deploying 
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, and v0.1.13 publications moved no
-predecessor tag, release, or asset. Current source and public latest own product snapshot 0.1.13,
-CLI 15, project creation 3, deployment 3, registry 4, and HTTP-client-adapter 1. Data-store,
-logical-backup, compact-change, and all unrelated identities remain independently owned.
+predecessor tag, release, or asset. Current source owns unreleased product snapshot 0.1.14, CLI 16,
+and compact-change records 8; public latest remains product snapshot 0.1.13. Project creation 3,
+deployment 3, registry 4, HTTP-client-adapter 1, data-store, logical-backup, and all unrelated
+identities remain independently owned.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
@@ -170,7 +176,7 @@ cursor exists.
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, relation, and bounded local-context reads with logical continuations | mutable cursors, query indexes, repair, or full owner bodies |
-| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP/Nostr-information recipe resolution | package implementation bodies, a general registry, or ambient resolver |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
@@ -238,12 +244,13 @@ for agreement. Public bounded query/detail exposes the implementation-free inter
 compact references; inspection/export exposes identities and exact bytes without permitting
 replacement.
 
-The command recipe constructs typed meaning directly. It resolves the public standard identity
-function through the validated built-in interface and stores an exact declaration reference. The
-HTTP recipe likewise resolves and signature-checks `StaticText -> Text`, `Text -> Bytes`, and the
-exact ByteStream interface and operation policies without hard-coded semantic IDs. It constructs
-the application response policy, task handler, component requirement and port, HTTP target, and
-test through ordinary typed meaning graph publication.
+Every nonempty recipe is a typed list of operations from the same authored model exposed by compact
+change grammar. It resolves declarations and interfaces through the validated built-in inventory,
+then uses normal normalization, deterministic allocation, authored preparation, logical planning,
+impact/test selection, full validation, and publication. The command recipe references the exact
+public standard identity function. HTTP resolves and signature-checks `StaticText -> Text`,
+`Text -> Bytes`, and the ByteStream interface and operation policy. No recipe assigns semantic IDs,
+inserts owner records, assembles snapshots, or retains a private topology path.
 
 The HTTP descriptor is encoded once through deployment-owned types with a fresh nonzero operational
 authority revision, loopback listener, one byte-stream grant, and independent bounded resources.
@@ -261,8 +268,8 @@ network request.
 
 ## Public stateful HTTP authoring path
 
-The starter topology is extended through the ordinary reviewed writer rather than a second recipe
-or private graph builder:
+The complete topology is authored through the ordinary reviewed writer from `minimal`, rather than
+inherited from a private graph builder:
 
 ```text
 copied binary discovery
@@ -271,8 +278,12 @@ copied binary discovery
   └─ strict deployment adapter schema
                      │
                      ▼
-          compact typed authored intent
- requirement + task effect + explicit generic/function values
+ export and stage exact immutable built-in transport
+                     │ semantic HEAD unchanged
+                     ▼
+          one compact typed authored request
+ dependency + component + requirements + function-backed HTTP port
+ + target + task effect + explicit generic/function values
                      │
             plan / exact-base apply
                      ▼
@@ -294,8 +305,9 @@ owns the confined first-party root, namespace, sharing domain, authority revisio
 listener, and runtime limits. Runtime facts are operational authority; they never become graph
 meaning or share semantic repository identities.
 
-`SetFunctionContract` updates the starter handler's exact result/effect requirement closure while
-preserving its identity and parameter. Generic runtime call frames carry concrete graph type
+The request creates the handler with its exact result and requirement closure, and topology
+validation checks port/function agreement, component requirement closure, component/port ownership,
+and HTTP runner shape before publication. Generic runtime call frames carry concrete graph type
 substitutions for standard JSON/list declarations in both production and reference tiers. An
 idempotent apply retry reopens the accepted request's exact parent and hides only the child-added
 physical type objects, preserving logical reprepare even though immutable storage grows.
@@ -389,8 +401,9 @@ live relay. Product/service/full, target admission, and future transferred relea
 same non-cacheable owner.
 
 The separate `stateful_http_application` owner has the same contributor/transferred context seam and
-copies the candidate to a fresh root. It uses executable discovery to construct a bounded BBS
-request and `data` deployment, plans and applies through the public CLI, compares clean and
+copies the candidate to a fresh root. It creates `minimal`, uses only executable discovery and
+public package export/staging to construct one bounded dependency/topology/BBS request and `data`
+deployment, plans and applies through the public CLI, compares clean and
 incremental artifacts, initializes an isolated store, then drives real BBS HTTP behavior through one
 `lkjscript serve` process. Each post has one primary fact and one `(created-at, id)` index fact;
 listing resolves both in one snapshot and create/update/delete maintain them in one transaction. It

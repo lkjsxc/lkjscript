@@ -91,7 +91,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-4";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 4;
-pub const CLI_CONTRACT_VERSION: u16 = 15;
+pub const CLI_CONTRACT_VERSION: u16 = 16;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1923,6 +1923,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use private, package, or public.",
         ),
         diagnostic(
+            "change_port_reference",
+            DiagnosticClass::Source,
+            "A port reference is neither a request-local symbol nor an exact package/port identity.",
+            "Use $symbol or pkg_ID/port_ID as reported by focused change discovery.",
+        ),
+        diagnostic(
+            "change_runner_kind",
+            DiagnosticClass::Source,
+            "A target runner is outside the public topology slice.",
+            "Use command or http as reported by focused change discovery.",
+        ),
+        diagnostic(
+            "change_dependency_binding_unsupported",
+            DiagnosticClass::Source,
+            "Dependency addition does not name the exact executable-owned built-in binding.",
+            "Discover the current built-in package, semantic revision, and package revision and stage its exact exported transport.",
+        ),
+        diagnostic(
             "change_declaration_selector",
             DiagnosticClass::Source,
             "A declaration selector has no supported exact form.",
@@ -2575,6 +2593,30 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Corrupt,
             "Prepared publication does not bind one exact accepted base.",
             "Preserve the repository and run deep verification.",
+        ),
+        diagnostic(
+            "kernel_full_target_port_owner",
+            DiagnosticClass::Semantic,
+            "A target selects a port that is not owned by its exact component.",
+            "Select a port added to the target component or correct the component reference.",
+        ),
+        diagnostic(
+            "kernel_type_target_http_runner",
+            DiagnosticClass::Semantic,
+            "An HTTP target port does not have the exact semantic HTTP function shape.",
+            "Use the discovered structural HTTP request/response function type and implementation.",
+        ),
+        diagnostic(
+            "kernel_type_target_command_runner",
+            DiagnosticClass::Semantic,
+            "A command target selects the semantic HTTP port shape.",
+            "Use runner=http or select a pure command-shaped port.",
+        ),
+        diagnostic(
+            "kernel_type_task_requirement",
+            DiagnosticClass::Semantic,
+            "A task function requires a capability absent from its component closure.",
+            "Add a matching component requirement with every operation used by the function.",
         ),
         DiagnosticDescriptor {
             code: "control_response_byte_budget",

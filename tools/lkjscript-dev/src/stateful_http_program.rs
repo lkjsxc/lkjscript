@@ -15,6 +15,9 @@ const BBS_SCHEMA_DIGEST: &str = "c7f973a247bcdcc9e942a3d71bf15732145f3929c16f6a4
 
 #[derive(Clone, Debug)]
 pub(crate) struct StandardReferences {
+    pub(crate) package: String,
+    pub(crate) semantic_revision: String,
+    pub(crate) package_revision: String,
     pub(crate) declarations: BTreeMap<String, String>,
     pub(crate) interfaces: BTreeMap<String, String>,
     pub(crate) operations: BTreeMap<String, String>,
@@ -71,11 +74,6 @@ impl StandardReferences {
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectReferences {
     pub(crate) base_revision: String,
-    pub(crate) package: String,
-    pub(crate) component: String,
-    pub(crate) handler: String,
-    pub(crate) request_parameter: String,
-    pub(crate) streams_requirement: String,
 }
 
 #[derive(Clone, Debug)]
@@ -87,17 +85,15 @@ pub(crate) struct ProgramRequest {
 #[derive(Debug)]
 struct Builder<'a> {
     standard: &'a StandardReferences,
-    project: &'a ProjectReferences,
     records: Vec<String>,
     next_expression: u64,
     next_binding: u64,
 }
 
 impl<'a> Builder<'a> {
-    fn new(standard: &'a StandardReferences, project: &'a ProjectReferences) -> Self {
+    fn new(standard: &'a StandardReferences) -> Self {
         Self {
             standard,
-            project,
             records: Vec::new(),
             next_expression: 0,
             next_binding: 0,
@@ -148,6 +144,40 @@ impl<'a> Builder<'a> {
             "type.stream",
             vec![("as", symbol.to_owned()), ("item", item.to_owned())],
         )
+    }
+
+    fn type_map(&mut self, symbol: &str, key: &str, value: &str) -> Result<(), DevError> {
+        self.record(
+            "type.map",
+            vec![
+                ("as", symbol.to_owned()),
+                ("key", key.to_owned()),
+                ("value", value.to_owned()),
+            ],
+        )
+    }
+
+    fn type_function(
+        &mut self,
+        symbol: &str,
+        parameters: &[&str],
+        result: &str,
+    ) -> Result<(), DevError> {
+        self.record(
+            "type.function",
+            vec![("as", symbol.to_owned()), ("result", result.to_owned())],
+        )?;
+        for (index, parameter) in parameters.iter().enumerate() {
+            self.record(
+                "type.argument",
+                vec![
+                    ("parent", symbol.to_owned()),
+                    ("index", index.to_string()),
+                    ("type", (*parameter).to_owned()),
+                ],
+            )?;
+        }
+        Ok(())
     }
 
     fn type_structural(&mut self, symbol: &str, fields: &[(&str, &str)]) -> Result<(), DevError> {
@@ -517,7 +547,7 @@ pub(crate) fn build_program_request(
     standard: &StandardReferences,
     project: &ProjectReferences,
 ) -> Result<ProgramRequest, DevError> {
-    let mut builder = Builder::new(standard, project);
+    let mut builder = Builder::new(standard);
     builder.record(
         "request",
         vec![
@@ -527,6 +557,14 @@ pub(crate) fn build_program_request(
                 "intent",
                 "author persistent request-dependent BBS through public compact changes".to_owned(),
             ),
+        ],
+    )?;
+    builder.record(
+        "add.dependency",
+        vec![
+            ("package", standard.package.clone()),
+            ("semantic-revision", standard.semantic_revision.clone()),
+            ("package-revision", standard.package_revision.clone()),
         ],
     )?;
     add_types_and_domain(&mut builder)?;
@@ -544,6 +582,15 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
     builder.record(
         "create.module",
         vec![("as", "$bbs".to_owned()), ("name", "bbs".to_owned())],
+    )?;
+    builder.record(
+        "create.component",
+        vec![
+            ("as", "$application_component".to_owned()),
+            ("module", "$bbs".to_owned()),
+            ("name", "application".to_owned()),
+            ("visibility", "package".to_owned()),
+        ],
     )?;
     builder.record(
         "create.record",
@@ -701,11 +748,32 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
             ("status", "i64"),
         ],
     )?;
+    builder.type_list("@query_values", "text")?;
+    builder.type_map("@query_parameters", "text", "@query_values")?;
+    builder.type_structural(
+        "@request",
+        &[
+            ("body", "@body_stream"),
+            ("headers", "@headers"),
+            ("method", "text"),
+            ("path", "text"),
+            ("query", "text"),
+            ("query_parameters", "@query_parameters"),
+        ],
+    )?;
+    builder.type_function("@http_function", &["@request"], "@response")?;
     Ok(())
 }
 
 fn add_capability_requirements(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let definitions = [
+        (
+            "$streams",
+            "streams",
+            "ByteStream",
+            vec!["close", "read-all", "read"],
+            vec![("maximum_calls", 10_000_u64, "calls")],
+        ),
         (
             "$data",
             "data",
@@ -745,7 +813,7 @@ fn add_capability_requirements(builder: &mut Builder<'_>) -> Result<(), DevError
             "add.requirement",
             vec![
                 ("as", symbol.to_owned()),
-                ("component", builder.project.component.clone()),
+                ("component", "$application_component".to_owned()),
                 ("name", name.to_owned()),
                 (
                     "interface",
@@ -1839,9 +1907,9 @@ fn empty_bytes(builder: &mut Builder<'_>) -> Result<String, DevError> {
 fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     add_route_handlers(builder)?;
 
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let method = builder.field_name(request, "method")?;
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let path = builder.field_name(request, "path")?;
     let route = builder.call("$select_route", &[], vec![method, path])?;
 
@@ -1852,15 +1920,15 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "<!doctype html><html><body><h1>lkjscript BBS</h1></body></html>",
     )?;
     let list = builder.call("$handle_list", &[], vec![])?;
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let headers = builder.field_name(request, "headers")?;
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let body_stream = builder.field_name(request, "body")?;
     let create = builder.call("$handle_create", &[], vec![headers, body_stream])?;
     let id = request_query_identity(builder)?;
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let headers = builder.field_name(request, "headers")?;
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let body_stream = builder.field_name(request, "body")?;
     let update = builder.call("$handle_update", &[], vec![id, headers, body_stream])?;
     let id = request_query_identity(builder)?;
@@ -1883,44 +1951,39 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let schema_error = error_response(builder, 500, "schema_mismatch")?;
     let body = builder.if_expression(migration, routed, schema_error)?;
 
-    let streams = format!(
-        "{}/{}",
-        builder.project.package, builder.project.streams_requirement
-    );
+    builder.create_function(
+        "$handle",
+        "handle",
+        "@response",
+        &["$streams", "$data", "$identifiers", "$clock"],
+        body,
+        &[("$request", "request", "@request")],
+    )?;
     builder.record(
-        "set.function-contract",
+        "add.port",
         vec![
-            ("as", "%handler-contract".to_owned()),
-            ("function", builder.project.handler.clone()),
-            ("result", "@response".to_owned()),
-            ("effect", "task".to_owned()),
+            ("as", "$http_port".to_owned()),
+            ("component", "$application_component".to_owned()),
+            ("name", "http".to_owned()),
+            ("type", "@http_function".to_owned()),
+            ("function", "$handle".to_owned()),
         ],
     )?;
-    for (index, requirement) in [streams.as_str(), "$data", "$identifiers", "$clock"]
-        .into_iter()
-        .enumerate()
-    {
-        builder.record(
-            "effect.requirement",
-            vec![
-                ("parent", "%handler-contract".to_owned()),
-                ("index", index.to_string()),
-                ("requirement", requirement.to_owned()),
-            ],
-        )?;
-    }
     builder.record(
-        "replace.body",
+        "create.target",
         vec![
-            ("function", builder.project.handler.clone()),
-            ("body", body),
+            ("as", "$serve_target".to_owned()),
+            ("name", "serve".to_owned()),
+            ("component", "$application_component".to_owned()),
+            ("port", "$http_port".to_owned()),
+            ("runner", "http".to_owned()),
         ],
     )?;
     Ok(())
 }
 
 fn request_query_identity(builder: &mut Builder<'_>) -> Result<String, DevError> {
-    let request = builder.local(&builder.project.request_parameter.clone())?;
+    let request = builder.local("$request")?;
     let query = builder.field_name(request, "query_parameters")?;
     let key = builder.text("id")?;
     let fallback = builder.list("text", vec![])?;
@@ -1978,15 +2041,11 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
     })?;
     let create_bad_type = error_response(builder, 400, "content_type")?;
     let create_response = builder.if_expression(create_admitted, create_body, create_bad_type)?;
-    let streams = format!(
-        "{}/{}",
-        builder.project.package, builder.project.streams_requirement
-    );
     builder.create_function(
         "$handle_create",
         "handle-create-post",
         "@response",
-        &[streams.as_str(), "$data", "$identifiers", "$clock"],
+        &["$streams", "$data", "$identifiers", "$clock"],
         create_response,
         &[
             ("$create_headers", "headers", "@headers"),
@@ -2009,7 +2068,7 @@ fn add_route_handlers(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$handle_update",
         "handle-update-post",
         "@response",
-        &[streams.as_str(), "$data", "$clock"],
+        &["$streams", "$data", "$clock"],
         update_response,
         &[
             ("$update_id", "id", "text"),
@@ -2051,10 +2110,7 @@ fn decode_write_body(
     let stream = builder.local(body_parameter)?;
     let maximum = builder.i64(MAXIMUM_REQUEST_JSON_BYTES)?;
     let bytes = builder.capability_call(
-        &format!(
-            "{}/{}",
-            builder.project.package, builder.project.streams_requirement
-        ),
+        "$streams",
         builder.standard.operation("ByteStream", "read-all")?,
         vec![stream, maximum],
     )?;

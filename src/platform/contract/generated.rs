@@ -201,7 +201,7 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
     let mut output = generated_header(snapshot);
     output.push_str("# Stateful HTTP authoring walkthrough\n\n");
     output.push_str(
-        "This is a generated composition guide, not a second authoring authority. Obtain project-local exact component, handler, parameter, and existing stream requirement identities with `query`/`inspect`; obtain standard identities with `package builtin query owners` and `package builtin inspect owner`. Secret values never enter semantic records or this guide.\n\n",
+        "This is a generated composition guide, not a second authoring authority. Start from `new --template minimal`, discover the exact built-in binding and owner references, export and stage that immutable transport, and submit dependency, component, requirements, function-backed HTTP port, target, and application policy in one bounded compact request. Secret values never enter semantic records or this guide.\n\n",
     );
     output.push_str("## Current exact capability and declaration references\n\n```text\n");
     let walkthrough_records = [
@@ -381,9 +381,36 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
     output.push_str("```\n\n## Composition\n\n```text\n");
     for (operation, fields) in [
         (
+            "walkthrough.bootstrap",
+            vec![
+                ("template", "minimal"),
+                ("owners", "0"),
+                ("dependencies", "0"),
+            ],
+        ),
+        (
+            "walkthrough.dependency",
+            vec![
+                ("operation", "add.dependency"),
+                ("binding", "package+semantic-revision+package-revision"),
+                ("transport", "builtin-export+dependency-stage"),
+            ],
+        ),
+        (
+            "walkthrough.topology",
+            vec![
+                (
+                    "operations",
+                    "create.component+add.requirement+add.port+create.target",
+                ),
+                ("port", "function-backed"),
+                ("runner", "http"),
+            ],
+        ),
+        (
             "walkthrough.request",
             vec![
-                ("parameter", "PROJECT_HANDLER_REQUEST"),
+                ("parameter", "$request"),
                 ("projection", "method,path,query_parameters,headers,body"),
             ],
         ),
@@ -438,7 +465,7 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
     ] {
         output.push_str(&render_record(operation, &fields).map_err(|error| error.to_string())?);
     }
-    output.push_str("```\n\nUse reviewed `change plan`, export and decode the complete logical plan, then apply the exact plan token. Run `check`, `build`, and `serve --deployment` only after publication. Runtime work reads the artifact and cannot advance project authority.\n");
+    output.push_str("```\n\nThe transport stage must leave semantic `HEAD` unchanged. Use reviewed `change plan`, export and decode the complete logical plan, then apply the exact plan token and idempotently re-prepare it. Run `check`, clean/incremental `build`, and `serve --deployment` only after publication. Runtime work reads the artifact and cannot advance project authority.\n");
     Ok(output)
 }
 

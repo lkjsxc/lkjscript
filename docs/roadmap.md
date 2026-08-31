@@ -1,7 +1,8 @@
 # Evidence-gated roadmap
 
 Implemented work is intentionally absent. Typed meaning authority, the public CLI, offline minimal, command, and
-HTTP recipes, exact built-in interface/deployment discovery, compact task/capability and explicit
+HTTP recipes lowered through public-representable authored operations, public exact built-in dependency and
+component/requirement/function-backed-port/target creation, exact built-in interface/deployment discovery, compact task/capability and explicit
 named higher-order generic authoring, graph-owned `list-fold-left`,
 normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact bundle service/worker deployment,
@@ -10,7 +11,8 @@ first-party ordered application data and durable queue, operational backup/resto
 SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
 and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
 100,100-owner full-lifecycle admission are current architecture. PostgreSQL 16.15 is
-retained only as contributor differential evidence. Immutable `v0.1.13` is the supported public
+retained only as contributor differential evidence. Current source is unreleased product snapshot
+0.1.14; immutable `v0.1.13` remains the supported public
 `x86_64-unknown-linux-musl` distribution; its exact and latest downloads independently passed
 static, distributed HTTP, deployment-bound outbound HTTPS/TLS/DNS, and stateful HTTP acceptance.
 Immutable v0.1.8 remains an unclosed historical recovery point.
@@ -23,20 +25,16 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    insufficient. Define exact disclosed fields, ordering, byte/resource bounds, continuation or
    external-output behavior, and redaction before widening inspection. Keep it a read projection of
    accepted graph meaning rather than source text, storage bytes, or a second editable form.
-2. **Dependency-closed remaining HTTP topology authoring.** Expose component, requirement, port,
-   and target creation only when another maintained workflow needs topology beyond the closed
-   recipe. Move every maintained consumer in one cutover and retain exact review, validation,
-   failure, and predecessor-rejection evidence.
-3. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
+2. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-4. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
+3. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
    DNS/address, TLS trust, cancellation, and resource ownership established by `HttpClient` without
    widening it into an ambient URL or socket capability. Define persistent connection ownership,
    framing, subscriptions, reconnect/backoff, NIP-01 event canonicalization, signing/key authority,
    relay authentication, replay visibility, and an independent raw WebSocket oracle before adding
    graph meaning or a deployment adapter.
-5. **Million-owner compiler admission and separately selected data/history scale.** The current
+4. **Million-owner compiler admission and separately selected data/history scale.** The current
    harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
    capacity attempt reached 275,000 accepted modules before its one-hour allocation and is
    `environment_limit`, so complete the lightweight million-owner capacity boundary before
@@ -44,30 +42,30 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    long-history retention as a separate campaign with reader leases, registered backup roots, an
    independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O observations
    before any deletion, packing, or compaction mechanism.
-6. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
+5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
    and member/case edits, extraction, inline, and repair only from maintained workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
    and predecessor rejection in each vertical slice.
-7. **Additional platform releases one target at a time.** Treat each architecture and operating
+6. **Additional platform releases one target at a time.** Treat each architecture and operating
    system as its own dependency-closed admission with a hosted execution oracle, exact runtime
    inventory, stable asset identity, and public-download smoke. Do not introduce a speculative
    build matrix.
-8. **Normalized package management and removed project workflows.** Introduce package
+7. **Normalized package management and removed project workflows.** Introduce package
    inspection/staging/publication, history, drafts, review, project backup/restore, and repository health
    only by exact consumer. Do not reinstate Graph 4 readers, compatibility commands, a general
    remote registry, or storage bytes as authoring input.
-9. **Broader incremental compilation and validation.** Generalize beyond the currently selected
+8. **Broader incremental compilation and validation.** Generalize beyond the currently selected
    compiler impacts and semantic edit classes only after clean/incremental artifact equality and
    randomized full-oracle evidence hold for signatures, types, effects, capabilities, targets,
    tests, dependencies, and mixed changes.
-10. **Broad branch and pull-request CI.** Select this only when its independent operating value,
+9. **Broad branch and pull-request CI.** Select this only when its independent operating value,
    required gate profile, retention, trust model, and recovery policy are explicit. Do not treat
    the release workflow or its transient artifacts as general CI.
-11. **Installers, package managers, signing, and build provenance.** Each registry, installer,
+10. **Installers, package managers, signing, and build provenance.** Each registry, installer,
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.
-12. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
+11. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
    implemented. Constraints, inference, lexical capture/closures, component composition,
    specialization, AOT, JIT, SIMD, or custom allocation still require multiple maintained
    workloads, independent semantic/reference behavior, measurements, and explicit reversal

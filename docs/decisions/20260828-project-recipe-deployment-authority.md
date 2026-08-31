@@ -49,3 +49,8 @@ contract are explicit, and the complete inventory can preserve the same one-rena
 Replace the closed recipe with broader public topology authoring only after a second real workflow
 proves a dependency-closed contract and all maintained consumers move in one cutover. Never retain
 both paths as editable authorities.
+
+The reversal condition was met by the maintained stateful HTTP, relay-information, and `lkjournal`
+workflows. [Public topology authority and unified recipe lowering](20260901-public-topology-authority.md)
+records the dependency-closed cutover; this record retains the original project-creation and
+deployment-separation rationale.

@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-31 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-01 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -90,18 +90,19 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source and immutable public latest own product snapshot 0.1.13 and the deployment-bound
-outbound HTTPS/NIP-11 slice. CLI 15, project creation 3, deployment 3, registry 4, and the
-separately owned `http_client_adapter` 1 advanced because their observable contracts changed.
-Compact-change and unrelated graph, data, queue, object, artifact, compiler, and runtime contract
-numbers remain independently owned. Graph, package, artifact, deployment, and operational-data
-identities remain separate. No deployment or live-relay contact occurred during publication.
-The source and distributed executable expose exactly
+Current source owns unreleased product snapshot 0.1.14. Immutable public latest remains v0.1.13
+and product snapshot 0.1.13. Source CLI 16 and compact-change records 8 advance for public exact
+dependency and topology authoring; project creation remains 3 because its resulting recipes,
+receipt model, deployment inventory, and one-rename atomicity are unchanged. Deployment 3,
+registry 4, `http_client_adapter` 1, and unrelated graph, data, queue, object, artifact, compiler,
+and runtime contract numbers remain independently owned. Graph, package, artifact, deployment, and
+operational-data identities remain separate. No deployment, release mutation, or live-relay contact
+occurred for the source change. The source executable exposes exactly
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`17ea689fc7e54fbb9f78c42882c739d1bcd36eb4f4153882ccf7d0aa9dd2402d` computed by the executable.
+`adcc89421a83ab1758a2a585bb1973161ead50314309d2165cafda0498418d4e` computed by the executable.
 
 `data initialize|verify|backup|restore` owns operational lifecycle for one local
 `lkjscript-data-store-1` root and `lkjscript-data-backup-1` logical backup. Initialize and restore
@@ -110,10 +111,15 @@ closure without mutation. Restore reproduces sorted logical schema/key/value/rev
 new physical store identity. These commands never discover or advance semantic `HEAD` and expose no
 query shell, repair, overwrite, SQL import, or deployment switch.
 
-`new --template minimal` creates an empty package. `new --template command` creates an offline,
-standard-dependent pure command project with an application module, implementation, component,
-port, `main` target, and graph-owned test. Both recipes are typed executable-owned construction
-and publish through the same atomic typed meaning graph creation boundary. `new --template http`
+`new --template minimal` creates an empty package. Every semantic record in `command`, `http`, and
+`nostr-relay-info` is executable-owned typed authored intent using only operations also represented
+by the public compact grammar. Recipes and public changes share normalization, allocation,
+preparation, logical planning, impact analysis, validation, selected tests, and publication
+machinery; no recipe-specific owner or snapshot builder remains. `new` validates the complete
+candidate privately and exposes one initial accepted revision in one destination rename.
+`new --template command` creates an offline, standard-dependent pure command project with an
+application module, implementation, component, port, `main` target, and graph-owned test.
+`new --template http`
 creates a 20-owner typed meaning graph application with one exact built-in
 dependency, task HTTP handler, byte-stream requirement, HTTP port, `serve` target, and stable
 status-code test. It atomically includes `service.deployment.json` and an empty `generated/`
@@ -139,10 +145,11 @@ deployment input and uses first-party data. Immutable `v0.1.10` remains unchange
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
-capture, partial application, inference, maps, and arbitrary component, port, or target creation
-remain unavailable. The current compact-change surface additionally exposes exact
-interface/external creation, operation parameters, dependency replacement, and requirement
-rebinding required for reviewed dependency-closed cutovers. The built-in standard exports
+capture, partial application, inference, and maps remain unavailable. The current source compact
+surface additionally exposes exact `add.dependency`, `create.component`, function-backed
+`add.port`, and `create.target` records alongside interface/external creation, operation parameters,
+dependency replacement, and requirement rebinding. Exact dependency addition is confined to an
+already-staged immutable built-in transport; it performs no lookup. The built-in standard exports
 graph-owned generic
 `list-fold-left<Item, State>`, and the source BBS authors its content-type predicate with a named
 header reducer and that fold. Immutable predecessor releases remain unchanged.
@@ -275,11 +282,12 @@ sandbox or multi-tenant isolation boundary.
 - Removed draft/history/review/project-backup/project-restore/doctor workflows have not been
   reintroduced on typed meaning authority. Operational data backup/restore is separately public.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
-  remain private until a complete public workflow exists. Existing component requirements can be
-  extended, existing function contracts changed, and pure functions given explicit type parameters,
-  named values, invocation, interface/external creation, operation parameters, dependency
-  replacement, and requirement rebinding, but generic component, port, and target creation remains
-  private.
+  remain private until a complete public workflow exists. Exact staged built-in dependencies,
+  components, requirements, function-backed ports, and command/HTTP targets can be created. Existing
+  function contracts can be changed, and pure functions support explicit type parameters, named
+  values, invocation, interface/external creation, operation parameters, dependency replacement,
+  and requirement rebinding. Expression-backed ports, dependency removal, general package
+  resolution, and additional runners remain private or absent.
 - Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
   budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
   registry data.
@@ -322,10 +330,11 @@ and copies one candidate executable into a fresh root outside the checkout. Thes
 summarized in [performance.md](performance.md).
 
 Campaign [202608281817](campaigns/202608281817.md) introduced the distinct non-cacheable
-`stateful_http_application` gate. Campaign [202608300840](campaigns/202608300840.md) advances its
-receipt schema to bind the first-party data authority. The gate copies the candidate
-outside the checkout, discovers current grammar/interfaces/deployment fields through that copy,
-authors a bounded indexed BBS only through reviewed public changes, requires deterministic
+`stateful_http_application` gate. Campaign [202608300840](campaigns/202608300840.md) advanced its
+receipt schema to bind the first-party data authority. The current gate copies the candidate
+outside the checkout, creates `minimal`, discovers and stages the exact built-in transport through
+that copy, and authors the dependency plus complete component/requirement/function-backed-port/
+HTTP-target topology and bounded indexed BBS in one reviewed public request. It requires deterministic
 clean/incremental artifact bytes, and exercises create/list/update/delete ordering, stale
 expectations, strict input, transaction rollback, schema divergence, failed startup, shutdown,
 restart, logical backup, absent-root restore, and byte-identical graph authority without a database

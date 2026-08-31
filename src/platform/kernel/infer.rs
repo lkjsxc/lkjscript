@@ -11,8 +11,9 @@ use super::owner::{
 use super::reference::{DeclarationReference, RequirementReference};
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
-use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord};
+use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord, TypeObjectInterner};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, ExpressionId, FieldId, OperationId, TypeParameterId,
 };
@@ -271,17 +272,80 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         ),
                         PortImplementation::Function(function) => {
                             match self.function_signature(function, &[]) {
-                                Ok(signature) => match self.function_type(&signature) {
-                                    Ok(actual) if actual == port.function_type => {}
-                                    Ok(_) => self.error(
-                                        "kernel_type_port_function",
-                                        "port function type disagrees with its exact declaration",
-                                    ),
-                                    Err(diagnostic) => self.push_diagnostic(diagnostic),
-                                },
+                                Ok(signature) => {
+                                    if let Err(diagnostic) =
+                                        self.validate_call_effect(&signature, &context)
+                                    {
+                                        self.push_diagnostic(diagnostic);
+                                    }
+                                    match self.function_type(&signature) {
+                                        Ok(actual) if actual == port.function_type => {}
+                                        Ok(_) => self.error(
+                                            "kernel_type_port_function",
+                                            "port function type disagrees with its exact declaration",
+                                        ),
+                                        Err(diagnostic) => self.push_diagnostic(diagnostic),
+                                    }
+                                }
                                 Err(diagnostic) => self.push_diagnostic(diagnostic),
                             }
                         }
+                    }
+                }
+                OwnerRecord::Target(target) => {
+                    if target.component.package == self.read.package_id()
+                        && target.port.package == self.read.package_id()
+                    {
+                        match self
+                            .read
+                            .owner(OwnerKey::Declaration(target.component.declaration))
+                        {
+                            Ok(Some(OwnerRecord::Declaration(component))) => {
+                                if !matches!(
+                                    component.payload,
+                                    DeclarationPayload::Component { ref ports, .. }
+                                        if ports.contains(&target.port.port)
+                                ) {
+                                    self.error(
+                                        "kernel_full_target_port_owner",
+                                        "target port does not belong to its component",
+                                    );
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(diagnostic) => self.push_diagnostic(diagnostic),
+                        }
+                    }
+                    if target.port.package != self.read.package_id() {
+                        continue;
+                    }
+                    let port = match self.read.owner(OwnerKey::Port(target.port.port)) {
+                        Ok(Some(OwnerRecord::Port(port))) => port,
+                        Ok(_) => continue,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    let http_type = match crate::platform::http::semantic_http_types(
+                        &mut TypeObjectInterner::default(),
+                    ) {
+                        Ok(types) => types.function_type,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    match target.runner {
+                        RunnerKind::Http if port.function_type != http_type => self.error(
+                            "kernel_type_target_http_runner",
+                            "http target requires the exact semantic HTTP function-backed port shape",
+                        ),
+                        RunnerKind::Command if port.function_type == http_type => self.error(
+                            "kernel_type_target_command_runner",
+                            "command target cannot select the semantic HTTP port shape",
+                        ),
+                        _ => {}
                     }
                 }
                 _ => {}

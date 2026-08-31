@@ -750,13 +750,17 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "create.external",
             "create.function",
             "create.constant",
+            "create.component",
             "create.test",
+            "create.target",
             "add.field",
             "add.case",
             "add.operation",
             "add.type-parameter",
             "add.parameter",
             "add.requirement",
+            "add.port",
+            "add.dependency",
             "replace.dependency",
             "set.function-contract",
             "set.requirement-contract",
@@ -770,7 +774,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 83);
+    assert_eq!(operation_fields.len(), 100);
     assert_eq!(
         operation_fields
             .iter()
@@ -793,7 +797,17 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 22);
+    assert_eq!(field_forms.len(), 24);
+    for (name, syntax) in [
+        ("port_reference", "$NAME|pkg_HEX/port_HEX"),
+        ("runner_kind", "command|http"),
+    ] {
+        assert!(change_section.iter().any(|record| {
+            record.operation == "change.field-form"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "syntax") == Some(syntax)
+        }));
+    }
     let name_form = change_section
         .iter()
         .find(|record| {
@@ -4006,6 +4020,421 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
     assert_eq!(
         compact_field(compact_record(&deleted, "summary"), "deleted"),
         Some("1")
+    );
+}
+
+#[test]
+fn copied_binary_authors_dependency_and_complete_command_topology_from_minimal() {
+    let temporary = tempfile::TempDir::new().expect("isolated topology workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("application");
+
+    let grammar = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["capabilities", "--section", "change"],
+    );
+    for operation in [
+        "add.dependency",
+        "create.component",
+        "add.port",
+        "create.target",
+    ] {
+        assert!(grammar.iter().any(|record| {
+            record.operation == "change.operation"
+                && compact_field(record, "name") == Some(operation)
+        }));
+    }
+
+    let builtin = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["package", "builtin", "inspect"],
+    );
+    let builtin = compact_record(&builtin, "package");
+    let dependency_package = compact_field(builtin, "id").expect("built-in package");
+    let dependency_revision = compact_field(builtin, "revision").expect("built-in revision");
+    let dependency_package_revision =
+        compact_field(builtin, "package-revision").expect("built-in package revision");
+    let dependency_transport = compact_field(builtin, "transport").expect("built-in transport");
+
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "minimal",
+            "--name",
+            "authored-topology",
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&created, "project"), "template"),
+        Some("minimal")
+    );
+    assert_eq!(
+        compact_field(compact_record(&created, "summary"), "owners"),
+        Some("0")
+    );
+    let base = compact_field(compact_record(&created, "revision"), "id")
+        .expect("minimal revision")
+        .to_owned();
+
+    let transport = temporary.path().join("standard.transport");
+    let exported = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "package",
+            "builtin",
+            "export",
+            "--kind",
+            "transport",
+            "--output",
+            path(&transport),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&exported, "output"), "digest"),
+        Some(dependency_transport)
+    );
+    let staged = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "package",
+            "dependency",
+            "stage",
+            "--transport",
+            dependency_transport,
+            "--input-file",
+            path(&transport),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&staged, "authority"), "current-revision"),
+        Some(base.as_str())
+    );
+    assert_eq!(
+        compact_field(
+            compact_record(&staged, "authority"),
+            "semantic-head-changed"
+        ),
+        Some("false")
+    );
+
+    let request = format!(
+        "request base={base} idempotency=public-topology-1 intent=author-complete-command-topology\n\
+         create.target as=$target name=main component=$component port=$port runner=command\n\
+         add.port as=$port component=$component name=main type=@entry function=$entry\n\
+         type.function as=@entry result=text\n\
+         expression.text as=$body value=hello\n\
+         create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+         create.component as=$component module=$module name=application visibility=package\n\
+         create.module as=$module name=application\n\
+         add.dependency package={dependency_package} semantic-revision={dependency_revision} package-revision={dependency_package_revision}\n"
+    );
+    let request_path = temporary.path().join("topology.lkjc");
+    std::fs::write(&request_path, &request).expect("topology request");
+    let inline_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &request,
+        ],
+    );
+    let file_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ],
+    );
+    let inline_token =
+        compact_field(compact_record(&inline_plan, "plan"), "token").expect("inline topology plan");
+    let file_token =
+        compact_field(compact_record(&file_plan, "plan"), "token").expect("file topology plan");
+    assert_eq!(inline_token, file_token);
+    assert_eq!(
+        inline_plan
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| (compact_field(record, "symbol"), compact_field(record, "id")))
+            .collect::<Vec<_>>(),
+        file_plan
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| (compact_field(record, "symbol"), compact_field(record, "id")))
+            .collect::<Vec<_>>()
+    );
+
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&request_path),
+            "--plan",
+            file_token,
+        ],
+    );
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted topology revision")
+        .to_owned();
+    let replay = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&request_path),
+            "--plan",
+            file_token,
+        ],
+    );
+    assert_eq!(
+        compact_field(&replay[0], "status"),
+        Some("already-accepted")
+    );
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    let before_run = std::fs::read(project.join("HEAD")).expect("HEAD before run");
+    let ran = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "run", "main"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&ran, "execution"), "value"),
+        Some("\"hello\"")
+    );
+    assert_eq!(
+        std::fs::read(project.join("HEAD")).expect("HEAD after run"),
+        before_run
+    );
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
+    );
+    let status = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "status"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "summary"), "dependencies"),
+        Some("1")
+    );
+}
+
+#[test]
+fn public_topology_validation_rejects_runner_port_component_and_requirement_mismatches() {
+    let temporary = tempfile::TempDir::new().expect("isolated topology negatives");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("minimal");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "minimal",
+            "--name",
+            "topology-negatives",
+        ],
+    );
+    let base = compact_field(compact_record(&created, "revision"), "id")
+        .expect("minimal base")
+        .to_owned();
+    let initial_head = std::fs::read(project.join("HEAD")).expect("initial HEAD");
+
+    let cases = [
+        (
+            "runner",
+            format!(
+                "request base={base}\n\
+                 create.module as=$module name=application\n\
+                 expression.text as=$body value=hello\n\
+                 create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+                 create.component as=$component module=$module name=application visibility=package\n\
+                 type.function as=@entry result=text\n\
+                 add.port as=$port component=$component name=http type=@entry function=$entry\n\
+                 create.target as=$target name=serve component=$component port=$port runner=http\n"
+            ),
+            "kernel_type_target_http_runner",
+        ),
+        (
+            "port-type",
+            format!(
+                "request base={base}\n\
+                 create.module as=$module name=application\n\
+                 expression.text as=$body value=hello\n\
+                 create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+                 create.component as=$component module=$module name=application visibility=package\n\
+                 type.function as=@entry result=i64\n\
+                 add.port as=$port component=$component name=main type=@entry function=$entry\n\
+                 create.target as=$target name=main component=$component port=$port runner=command\n"
+            ),
+            "kernel_type_port_function",
+        ),
+        (
+            "cross-component",
+            format!(
+                "request base={base}\n\
+                 create.module as=$module name=application\n\
+                 expression.text as=$body value=hello\n\
+                 create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+                 create.component as=$first module=$module name=first visibility=package\n\
+                 create.component as=$second module=$module name=second visibility=package\n\
+                 type.function as=@entry result=text\n\
+                 add.port as=$port component=$first name=main type=@entry function=$entry\n\
+                 add.port as=$second_port component=$second name=other type=@entry function=$entry\n\
+                 create.target as=$target name=main component=$second port=$port runner=command\n"
+            ),
+            "kernel_full_target_port_owner",
+        ),
+    ];
+    for (name, request, expected) in cases {
+        let request_path = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&request_path, request).expect("negative topology request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&request_path),
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(expected),
+            "{name}"
+        );
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("HEAD after rejection"),
+            initial_head,
+            "{name}"
+        );
+    }
+
+    let http_project = temporary.path().join("http");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&http_project),
+            "--template",
+            "http",
+            "--name",
+            "requirement-negative",
+        ],
+    );
+    let http_base = compact_field(compact_record(&created, "revision"), "id")
+        .expect("HTTP base")
+        .to_owned();
+    let module = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&http_project),
+            "query",
+            "find",
+            "module",
+            "application",
+        ],
+    );
+    let module = compact_field(compact_record(&module, "owner"), "id")
+        .expect("application module")
+        .to_owned();
+    let requirements = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&http_project),
+            "query",
+            "owners",
+            "--kind",
+            "requirement",
+        ],
+    );
+    let streams = requirements
+        .iter()
+        .find(|record| {
+            record.operation == "owner" && compact_field(record, "name") == Some("streams")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .expect("streams requirement")
+        .to_owned();
+    let package = compact_field(compact_record(&created, "package"), "id")
+        .expect("project package")
+        .to_owned();
+    let request = format!(
+        "request base={http_base}\n\
+         expression.unit as=$body\n\
+         create.function as=$entry module={module} name=isolated-task visibility=private result=unit effect=task body=$body\n\
+         effect.requirement parent=$entry index=0 requirement={package}/{streams}\n\
+         create.component as=$component module={module} name=isolated visibility=package\n\
+         type.function as=@entry result=unit\n\
+         add.port as=$port component=$component name=main type=@entry function=$entry\n\
+         create.target as=$target name=isolated component=$component port=$port runner=command\n"
+    );
+    let request_path = temporary.path().join("missing-requirement.lkjc");
+    std::fs::write(&request_path, request).expect("missing requirement request");
+    let before = std::fs::read(http_project.join("HEAD")).expect("HTTP HEAD");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&http_project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("kernel_type_task_requirement")
+    );
+    assert_eq!(
+        std::fs::read(http_project.join("HEAD")).expect("HTTP HEAD after rejection"),
+        before
     );
 }
 

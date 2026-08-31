@@ -39,26 +39,34 @@ contracts, artifact identity, and closure. Public inspect/export can observe or 
 bytes but cannot replace them. Product verification regenerates the maintained files and compares
 them byte for byte.
 
-The command project recipe resolves the public standard identity declaration from this validated
-interface, stores an exact declaration reference, and installs the exact transport. It does not
-retain name-only runtime resolution.
+Public `add.dependency` accepts only this exact built-in package, semantic revision, and logical
+package revision after its immutable transport has been staged through public export. It performs
+no network, registry, ambient-directory, or unchecked-file lookup. The command, HTTP, and
+relay-information recipes resolve their public declarations and interfaces from the same validated
+inventory and install the same exact transport through authored change lowering. They retain no
+name-only runtime resolution or recipe-only dependency path.
 
 ## Components, requirements, ports, and targets
 
-A component is graph meaning that groups stable requirements and ports. A requirement binds one
+A component is graph meaning that groups stable requirements and ports. Public
+`create.component` creates one empty owner; separate `add.requirement` and function-backed
+`add.port` records populate independently bounded children. A requirement binds one
 stable ID, exact interface declaration, exact operation set, and resource limits. A port binds a
 stable ID, function type, and exact function or expression implementation. Credentials, live
 adapters, sockets, and deployment topology are excluded.
 
 A target binds stable target identity and mutable target name to exact component and port
-identities plus one runner kind. The released `run` command accepts only a pure command target.
+identities plus one runner kind. Public `create.target` accepts only `command` or `http`; the
+released `run` command accepts only a pure command target.
 Tests are graph-owned actual/expected expressions with exact comparison policy. Task functions may
 name exact requirements; artifact linking retains their exact requirement owner closure without
 treating a use by multiple task functions as duplicate semantic definition.
 
 Validation rejects foreign domains, absent or retired owners, invalid type/effect shape,
-requirement widening, unavailable operations, incompatible ports, and runner mismatch before
-publication or execution.
+requirement widening, unavailable operations, a port/function type disagreement, a target whose
+port belongs to another component, a missing component requirement closure, incompatible ports,
+and runner mismatch before publication or execution. Request-local forward references are resolved
+within one normalized authored request and never weaken those checks.
 
 ## Compilation and artifact closure
 

@@ -14,10 +14,14 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source and the immutable supported release are product snapshot 0.1.13. They include one
-deployment-bound outbound `HttpClient.get` capability and a closed `nostr-relay-info` recipe proved
-against deterministic loopback raw HTTP/TLS/DNS fixtures. No deployment, live relay, WebSocket, or
-NIP-01 event flow is claimed here.
+Current source is unreleased product snapshot 0.1.14; the immutable supported release remains
+v0.1.13 and product snapshot 0.1.13. Source 0.1.14 adds public exact built-in dependency,
+component, requirement, function-backed port, and command/HTTP target authoring. All four built-in
+recipes now lower through that same typed authored-operation engine without changing the recipes'
+resulting meaning or atomic project-creation contract. These source changes have not been published.
+Both identities include one deployment-bound outbound `HttpClient.get` capability and a closed
+`nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures. No
+deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
 
 The current source and immutable v0.1.13 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
@@ -161,8 +165,8 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.13 download exposes the completed first-party boundary through the same
-application-facing discovery:
+Current source 0.1.14 exposes the complete first-party boundary and topology authoring through one
+copied candidate's application-facing discovery:
 
 ```sh
 ./lkjscript capabilities data
@@ -173,12 +177,24 @@ application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact standalone identity query `./lkjscript --version` prints only `lkjscript 0.1.13`.
+The exact current-source identity query `./lkjscript --version` prints only `lkjscript 0.1.14`.
+Immutable public v0.1.13 remains downloadable above and retains its earlier HTTP-starter stateful
+workflow; it does not contain the source-only topology records below.
 
-Public compact change records can add exact component requirements, interfaces, operations and
-externals, create task functions, rebind requirements/dependencies, update the starter handler
-contract, and compose structural records, lexical bindings, fields, lists, variants, matches, exact
-built-in calls, requirement-scoped capability calls, and lexical transactions. The public
+Public compact change records can add an exact staged built-in dependency, components,
+requirements, function-backed ports, command/HTTP targets, interfaces, operations and externals,
+create task functions, rebind requirements/dependencies, and compose structural records, lexical
+bindings, fields, lists, variants, matches, exact built-in calls, requirement-scoped capability
+calls, and lexical transactions. The topology records are:
+
+```text
+add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
+create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
+add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
+create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http
+```
+
+The public
 vocabulary also includes exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
 capture, partial application, or inference alias. The generated
@@ -189,9 +205,12 @@ capture, partial application, or inference alias. The generated
 [relay-information walkthrough](docs/generated/nostr-relay-info-authoring.md), are the offline
 executable-owned authoring references.
 
-The maintained acceptance authors a bounded BBS from a fresh `http` project exclusively through
-those public records. Its pure header reducer is passed as a named function value to the built-in
-standard fold. Each post is stored once and one `(created-at, id)` index is maintained atomically.
+The maintained acceptance creates a fresh dependency-free `minimal` project, exports and stages the
+exact built-in transport without changing graph authority, then authors its dependency, complete
+component/requirement/function-backed-port/target topology, and bounded BBS in one reviewed request
+exclusively through those public records. Its pure header reducer is passed as a named function
+value to the built-in standard fold. Each post is stored once and one `(created-at, id)` index is
+maintained atomically.
 The copied candidate builds equal clean/incremental artifacts and runs ordered create/list/update/
 delete, stale and strict-input rollback, restart, failed startup, logical backup, absent-root
 restore, and semantic-authority checks through one `lkjscript serve` process with no database
