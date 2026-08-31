@@ -345,7 +345,10 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         println!("{HELP}");
         return Ok(0);
     }
-    let options = parse_options(arguments.into_iter())?;
+    let options = match parse_options(arguments.clone().into_iter()) {
+        Ok(options) => options,
+        Err(error) => return publish_invalid_options_receipt(&arguments, error),
+    };
     let repository = repository_root()?;
     let evidence_root = prepare_evidence_root(&repository, options.evidence_root.as_deref())?;
     let project = options
@@ -529,12 +532,142 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         failure,
     };
     let published = evidence::publish_json(&evidence_root.join("receipt.json"), &receipt)?;
-    print_summary(&repository, &options, &receipt, &published)?;
+    print_summary(
+        &repository,
+        options.machine,
+        options.topology.name(),
+        options.lifecycle.name(),
+        &receipt,
+        &published,
+    )?;
     Ok(if receipt.status == ReceiptStatus::Passed {
         0
     } else {
         1
     })
+}
+
+fn publish_invalid_options_receipt(
+    arguments: &[OsString],
+    error: DevError,
+) -> Result<u8, DevError> {
+    let repository = repository_root()?;
+    let configured_root = argument_value(arguments, "--evidence-root").map(PathBuf::from);
+    let (evidence_root, used_fallback_root) =
+        match prepare_evidence_root(&repository, configured_root.as_deref()) {
+            Ok(path) => (path, false),
+            Err(_) if configured_root.is_some() => {
+                (prepare_evidence_root(&repository, None)?, true)
+            }
+            Err(root_error) => return Err(root_error),
+        };
+    let started_wall = unix_nanoseconds()?;
+    let started = Instant::now();
+    let topology = arguments.first().map_or_else(
+        || "missing".to_owned(),
+        |value| value.to_string_lossy().into_owned(),
+    );
+    let lifecycle = match argument_value(arguments, "--lifecycle") {
+        Some("capacity") => Lifecycle::Capacity,
+        _ => Lifecycle::Full,
+    };
+    let items = argument_u64(arguments, "--items").unwrap_or(DEFAULT_ITEMS);
+    let batch = argument_u64(arguments, "--batch").unwrap_or(DEFAULT_BATCH);
+    let modules = argument_u64(arguments, "--modules");
+    let project = argument_value(arguments, "--retain")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| evidence_root.join("project"));
+    let mut limitations = vec![
+        "option validation failed before candidate execution; no project authority was created"
+            .to_owned(),
+        "invalid UTF-8 option bytes, when present, are represented lossily in the failed receipt"
+            .to_owned(),
+    ];
+    if used_fallback_root {
+        limitations.push(
+            "the configured evidence root was invalid, so the failed receipt used an automatically allocated artifact root"
+                .to_owned(),
+        );
+    }
+    let receipt = ScaleReceipt {
+        schema: SCALE_SCHEMA.to_owned(),
+        contract_version: SCALE_CONTRACT_VERSION,
+        status: ReceiptStatus::Failed,
+        admission: AdmissionClassification::Failed,
+        source: source_identity(&repository).ok(),
+        toolchain: toolchain_identity(&repository).ok(),
+        candidate: None,
+        capabilities: None,
+        scenario: ScenarioEvidence {
+            topology: topology.clone(),
+            semantic_shape: "invalid_options".to_owned(),
+            lifecycle,
+            requested_items: items,
+            batch_size: batch,
+            requested_modules: modules,
+            requested: SemanticCounts::default(),
+            maximum_wall_seconds: argument_u64(arguments, "--maximum-wall-seconds")
+                .unwrap_or(DEFAULT_MAXIMUM_WALL_SECONDS),
+            maximum_run_bytes: argument_u64(arguments, "--maximum-run-bytes")
+                .unwrap_or(DEFAULT_MAXIMUM_RUN_BYTES),
+            minimum_available_memory_bytes: argument_u64(
+                arguments,
+                "--minimum-available-memory-bytes",
+            )
+            .unwrap_or(0),
+            minimum_available_disk_bytes: argument_u64(arguments, "--minimum-available-disk-bytes")
+                .unwrap_or(0),
+        },
+        logical: LogicalEvidence::default(),
+        commands: Vec::new(),
+        observations: ObservationEvidence {
+            started_unix_nanoseconds: started_wall,
+            completed_unix_nanoseconds: unix_nanoseconds()?,
+            elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+            host: observe_host(&repository),
+            child_cpu_nanoseconds: None,
+            maximum_child_peak_rss_kib: None,
+            harness_peak_rss_kib: process_peak_rss_kib(),
+            repository: None,
+            derived: None,
+            artifacts: None,
+            total_run_bytes: directory_bytes(&evidence_root).ok(),
+        },
+        cleanup: CleanupEvidence {
+            status: CleanupStatus::NotCreated,
+            project_path: project.to_string_lossy().into_owned(),
+            detail: "option validation stopped before project creation".to_owned(),
+        },
+        limitations,
+        failure: Some(FailureEvidence {
+            class: error.kind().to_owned(),
+            message: error.message().to_owned(),
+        }),
+    };
+    let published = evidence::publish_json(&evidence_root.join("receipt.json"), &receipt)?;
+    print_summary(
+        &repository,
+        arguments
+            .iter()
+            .any(|argument| argument.to_str() == Some("--machine")),
+        &topology,
+        lifecycle.name(),
+        &receipt,
+        &published,
+    )?;
+    Ok(1)
+}
+
+fn argument_value<'a>(arguments: &'a [OsString], option: &str) -> Option<&'a str> {
+    arguments.windows(2).find_map(|pair| {
+        (pair[0].to_str() == Some(option))
+            .then(|| pair[1].to_str())
+            .flatten()
+    })
+}
+
+fn argument_u64(arguments: &[OsString], option: &str) -> Option<u64> {
+    argument_value(arguments, option)?.parse().ok()
 }
 
 fn run_scale(
@@ -2403,7 +2536,9 @@ fn duration_nanoseconds(duration: Duration) -> u64 {
 
 fn print_summary(
     repository: &Path,
-    options: &Options,
+    machine: bool,
+    topology: &str,
+    lifecycle: &str,
     receipt: &ScaleReceipt,
     published: &PublishedEvidence,
 ) -> Result<(), DevError> {
@@ -2424,13 +2559,13 @@ fn print_summary(
         contract_version: receipt.contract_version,
         status: receipt.status,
         admission: receipt.admission,
-        topology: options.topology.name(),
-        lifecycle: options.lifecycle.name(),
+        topology,
+        lifecycle,
         receipt: evidence::relative(repository, &published.path),
         receipt_bytes: published.bytes,
         receipt_digest: &published.digest,
     };
-    if options.machine {
+    if machine {
         println!(
             "{}",
             serde_json::to_string(&summary).map_err(|error| {
@@ -2489,6 +2624,45 @@ mod tests {
             .is_err()
         );
         assert!(HELP.contains("contract 2"));
+    }
+
+    #[test]
+    fn invalid_options_publish_one_failed_contract_two_receipt() {
+        let repository = repository_root().expect("repository root");
+        let parent = repository.join(".artifacts/lkjscript-dev/scale-option-tests");
+        fs::create_dir_all(&parent).expect("option-test parent");
+        let evidence_root = parent.join(format!(
+            "{}-{}",
+            std::process::id(),
+            unix_nanoseconds().expect("test time")
+        ));
+        let code = command(
+            [
+                OsString::from("small-functions"),
+                OsString::from("--items"),
+                OsString::from("0"),
+                OsString::from("--evidence-root"),
+                evidence_root.clone().into_os_string(),
+                OsString::from("--machine"),
+            ]
+            .into_iter(),
+        )
+        .expect("invalid options publish a receipt");
+        assert_eq!(code, 1);
+        let bytes = fs::read(evidence_root.join("receipt.json")).expect("failed receipt");
+        let receipt: ScaleReceipt = serde_json::from_slice(&bytes).expect("contract-2 receipt");
+        assert_eq!(receipt.status, ReceiptStatus::Failed);
+        assert_eq!(receipt.admission, AdmissionClassification::Failed);
+        assert_eq!(receipt.commands.len(), 0);
+        assert_eq!(receipt.cleanup.status, CleanupStatus::NotCreated);
+        assert_eq!(
+            receipt
+                .failure
+                .as_ref()
+                .map(|failure| failure.class.as_str()),
+            Some("usage")
+        );
+        fs::remove_dir_all(&evidence_root).expect("remove option-test evidence");
     }
 
     #[test]
