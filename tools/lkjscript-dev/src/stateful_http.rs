@@ -1174,10 +1174,10 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
         .iter()
         .filter(|record| record.operation == "file")
         .count()
-        != 6
+        != 7
     {
         return Err(DevError::corrupt(
-            "generated guide discovery did not publish six owned documents",
+            "generated guide discovery did not publish seven owned documents",
         ));
     }
     let walkthrough = fs::read(generated.join("stateful-http-authoring.md"))?;

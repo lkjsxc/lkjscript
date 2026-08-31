@@ -58,6 +58,10 @@ pub fn generated_documents() -> Result<Vec<GeneratedDocument>, String> {
             relative_path: "stateful-http-authoring.md",
             bytes: stateful_http_walkthrough(&snapshot)?.into_bytes(),
         },
+        GeneratedDocument {
+            relative_path: "nostr-relay-info-authoring.md",
+            bytes: nostr_relay_info_walkthrough(&snapshot)?.into_bytes(),
+        },
     ])
 }
 
@@ -438,6 +442,175 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
     Ok(output)
 }
 
+fn nostr_relay_info_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    let standard = BuiltinStandard::load().map_err(|error| error.to_string())?;
+    let exact = |kind: OwnerKind, name: &str, parent: Option<OwnerKey>| {
+        standard
+            .interface_owners
+            .iter()
+            .find_map(|(owner, value)| {
+                (value.record.header().kind == kind
+                    && package_owner_name(&value.record) == name
+                    && package_owner_parent(&value.record) == parent)
+                    .then(|| format!("{}/{}", standard.package, owner))
+            })
+            .ok_or_else(|| format!("built-in standard lacks exact {kind:?} '{name}'"))
+    };
+    let client_owner = exact(OwnerKind::Interface, "HttpClient", None)?;
+    let client_id = parse_reference_owner(&client_owner)?;
+    let get_owner = exact(OwnerKind::Operation, "get", Some(client_id))?;
+    let template = ProjectTemplate::NostrRelayInfo;
+    let defaults = crate::platform::http_client::HttpClientLimits::default();
+    let mut output = generated_header(snapshot);
+    output.push_str("# Nostr relay-information authoring walkthrough\n\n");
+    output.push_str(
+        "This generated composition guide describes the closed NIP-11 information slice. The typed graph selects only request headers and response policy; one strict deployment grant owns the immutable endpoint, address class, TLS trust, and transport limits. It is not a second authoring authority and does not implement WebSocket or NIP-01.\n\n",
+    );
+    output.push_str("## Exact recipe and capability\n\n```text\n");
+    for (operation, fields) in [
+        (
+            "relay-info.recipe",
+            vec![
+                ("template", template.name().to_owned()),
+                (
+                    "usage",
+                    "new DEST --template nostr-relay-info [--name NAME] --relay-url URL".to_owned(),
+                ),
+                (
+                    "artifact",
+                    template
+                        .recommended_artifact_output()
+                        .unwrap_or("none")
+                        .to_owned(),
+                ),
+                ("runner", template.runner().to_owned()),
+            ],
+        ),
+        (
+            "relay-info.interface",
+            vec![
+                ("name", "HttpClient".to_owned()),
+                ("reference", client_owner),
+            ],
+        ),
+        (
+            "relay-info.operation",
+            vec![
+                ("name", "get".to_owned()),
+                ("reference", get_owner),
+                (
+                    "argument",
+                    "ordered-list<{name:text,value:bytes}>".to_owned(),
+                ),
+                (
+                    "result",
+                    "{status:i64,headers:list<{name:text,value:bytes}>,body:bytes}".to_owned(),
+                ),
+            ],
+        ),
+    ] {
+        let fields = fields
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect::<Vec<_>>();
+        output.push_str(&render_record(operation, &fields).map_err(|error| error.to_string())?);
+    }
+    output.push_str("```\n\n## Closed behavior\n\n```text\n");
+    let default_request_headers = defaults.maximum_request_headers.to_string();
+    let default_request_header_bytes = defaults.maximum_request_header_bytes.to_string();
+    let default_response_headers = defaults.maximum_response_headers.to_string();
+    let default_response_header_bytes = defaults.maximum_response_header_bytes.to_string();
+    let default_response_body_bytes = defaults.maximum_response_body_bytes.to_string();
+    let default_dns_results = defaults.maximum_dns_results.to_string();
+    let default_concurrent_requests = defaults.maximum_concurrent_requests.to_string();
+    let default_connection_milliseconds = defaults.connection_timeout_milliseconds.to_string();
+    let default_total_milliseconds = defaults.total_timeout_milliseconds.to_string();
+    let default_cleanup_milliseconds = defaults.cleanup_timeout_milliseconds.to_string();
+    for (operation, fields) in [
+        (
+            "relay-info.normalization",
+            vec![
+                ("secure", "wss->https,https->https"),
+                ("development", "ws->http,http->http"),
+                ("plaintext", "loopback-only"),
+                ("reject", "userinfo,query,fragment,noncanonical-authority"),
+            ],
+        ),
+        (
+            "relay-info.request",
+            vec![
+                ("inbound", "GET /relay-info"),
+                ("outbound", "GET exact-deployment-endpoint"),
+                ("accept", "application/nostr+json"),
+                ("body", "none"),
+            ],
+        ),
+        (
+            "relay-info.response",
+            vec![
+                (
+                    "success",
+                    "status=200+base-media-type=application/nostr+json",
+                ),
+                ("body", "bounded-byte-exact"),
+                ("failure", "local-status=502 body=bad-gateway"),
+                ("remote-detail", "redacted"),
+            ],
+        ),
+        (
+            "relay-info.transport",
+            vec![
+                ("protocol", "http/1.1"),
+                ("redirects", "never"),
+                ("retries", "never"),
+                ("decompression", "never"),
+                ("proxy", "none"),
+                ("credentials", "none"),
+            ],
+        ),
+        (
+            "relay-info.default-limits",
+            vec![
+                ("request-headers", default_request_headers.as_str()),
+                (
+                    "request-header-bytes",
+                    default_request_header_bytes.as_str(),
+                ),
+                ("response-headers", default_response_headers.as_str()),
+                (
+                    "response-header-bytes",
+                    default_response_header_bytes.as_str(),
+                ),
+                ("response-body-bytes", default_response_body_bytes.as_str()),
+                ("dns-results", default_dns_results.as_str()),
+                ("concurrent-requests", default_concurrent_requests.as_str()),
+                (
+                    "connection-milliseconds",
+                    default_connection_milliseconds.as_str(),
+                ),
+                ("total-milliseconds", default_total_milliseconds.as_str()),
+                (
+                    "cleanup-milliseconds",
+                    default_cleanup_milliseconds.as_str(),
+                ),
+            ],
+        ),
+        (
+            "relay-info.lifecycle",
+            vec![
+                ("inspect", "status+query+inspect"),
+                ("verify", "check"),
+                ("derive", "build --output generated/application.lkja"),
+                ("execute", "serve --deployment service.deployment.json"),
+            ],
+        ),
+    ] {
+        output.push_str(&render_record(operation, &fields).map_err(|error| error.to_string())?);
+    }
+    output.push_str("```\n\nRead `deployment.md` for the executable-owned strict adapter schema and global maxima. Read the normative outbound-client specification for DNS/address classification, TLS trust, cancellation, cleanup, and security nonclaims.\n");
+    Ok(output)
+}
+
 fn parse_reference_owner(reference: &str) -> Result<OwnerKey, String> {
     reference
         .split_once('/')
@@ -492,7 +665,7 @@ mod tests {
     fn generated_documents_are_unique_and_repeatable() {
         let first = generated_documents().expect("generated documents");
         let second = generated_documents().expect("generated documents");
-        assert_eq!(first.len(), 6);
+        assert_eq!(first.len(), 7);
         assert_eq!(first.len(), second.len());
         for (left, right) in first.iter().zip(second.iter()) {
             assert_eq!(left.relative_path, right.relative_path);

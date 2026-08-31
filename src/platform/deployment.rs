@@ -23,6 +23,14 @@ use super::http::{
     HttpDispatchObservation, HttpLimits, HttpRequest, HttpResponse, HttpServerReceipt,
     MAXIMUM_HTTP_BODY_BYTES, MAXIMUM_HTTP_HEADER_BYTES, MAXIMUM_HTTP_HEADERS,
 };
+use super::http_client::{
+    HttpClientAddressPolicy, HttpClientLimits, HttpClientTrust,
+    MAXIMUM_HTTP_CLIENT_CONCURRENT_REQUESTS, MAXIMUM_HTTP_CLIENT_DNS_RESULTS,
+    MAXIMUM_HTTP_CLIENT_ENDPOINT_BYTES, MAXIMUM_HTTP_CLIENT_MILLISECONDS,
+    MAXIMUM_HTTP_CLIENT_REQUEST_HEADER_BYTES, MAXIMUM_HTTP_CLIENT_REQUEST_HEADERS,
+    MAXIMUM_HTTP_CLIENT_RESPONSE_BODY_BYTES, MAXIMUM_HTTP_CLIENT_RESPONSE_HEADER_BYTES,
+    MAXIMUM_HTTP_CLIENT_RESPONSE_HEADERS, validate_http_client_descriptor,
+};
 use super::kernel::Name;
 use super::object::{MAXIMUM_OBJECT_BYTES, MAXIMUM_OBJECT_KEY_BYTES, ObjectLimits};
 use super::package::RunnerKind;
@@ -51,7 +59,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 2;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
@@ -130,6 +138,12 @@ pub enum AdapterDescriptor {
         maximum_candidate_bytes: usize,
     },
     ByteStream,
+    HttpClient {
+        endpoint: String,
+        address_policy: HttpClientAddressPolicy,
+        trust: HttpClientTrust,
+        limits: HttpClientLimits,
+    },
     Data {
         root: String,
         namespace: String,
@@ -671,6 +685,86 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         None,
     ),
+    schema_field(
+        "http-client-limits.maximum_request_headers",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_REQUEST_HEADERS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_request_header_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_REQUEST_HEADER_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_response_headers",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_RESPONSE_HEADERS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_response_header_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_RESPONSE_HEADER_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_response_body_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_RESPONSE_BODY_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_dns_results",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_DNS_RESULTS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.maximum_concurrent_requests",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_CONCURRENT_REQUESTS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.connection_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.total_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "http-client-limits.cleanup_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_MILLISECONDS),
+        false,
+        None,
+    ),
 ];
 
 const ADAPTER_CONFIGURATION_FIELDS: &[DeploymentSchemaField] = &[schema_field(
@@ -757,6 +851,48 @@ const ADAPTER_BYTE_STREAM_FIELDS: &[DeploymentSchemaField] = &[schema_field(
     false,
     None,
 )];
+const ADAPTER_HTTP_CLIENT_FIELDS: &[DeploymentSchemaField] = &[
+    schema_field(
+        "adapter.http_client.kind",
+        "literal:http_client",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.http_client.endpoint",
+        "canonical-http-endpoint",
+        Some(1),
+        Some(MAXIMUM_HTTP_CLIENT_ENDPOINT_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.http_client.address_policy",
+        "enum:public_only|loopback_only",
+        None,
+        None,
+        false,
+        None,
+    ),
+    schema_field(
+        "adapter.http_client.trust",
+        "tagged-object",
+        None,
+        None,
+        false,
+        Some("http-client-trust"),
+    ),
+    schema_field(
+        "adapter.http_client.limits",
+        "object",
+        None,
+        None,
+        false,
+        Some("http-client-limits"),
+    ),
+];
 const ADAPTER_DATA_FIELDS: &[DeploymentSchemaField] = &[
     schema_field("adapter.data.kind", "literal:data", None, None, false, None),
     schema_field(
@@ -999,6 +1135,10 @@ pub(crate) const DEPLOYMENT_ADAPTER_SCHEMAS: &[DeploymentAdapterSchema] = &[
         fields: ADAPTER_BYTE_STREAM_FIELDS,
     },
     DeploymentAdapterSchema {
+        kind: "http_client",
+        fields: ADAPTER_HTTP_CLIENT_FIELDS,
+    },
+    DeploymentAdapterSchema {
         kind: "data",
         fields: ADAPTER_DATA_FIELDS,
     },
@@ -1062,6 +1202,26 @@ pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnost
     Ok(descriptor)
 }
 
+pub(crate) fn starter_nostr_relay_deployment(
+    endpoint: &str,
+    address_policy: HttpClientAddressPolicy,
+) -> Result<DeploymentDescriptor, Diagnostic> {
+    let mut descriptor = starter_http_deployment()?;
+    descriptor.grants.push(DeploymentGrant {
+        requirement: "relay".to_owned(),
+        sharing_domain: "nostr-relay-info-endpoint".to_owned(),
+        authority_revision: DeploymentAuthorityRevision::generate()?.encode(),
+        adapter: AdapterDescriptor::HttpClient {
+            endpoint: endpoint.to_owned(),
+            address_policy,
+            trust: HttpClientTrust::WebpkiRoots,
+            limits: HttpClientLimits::default(),
+        },
+    });
+    validate_descriptor(&descriptor)?;
+    Ok(descriptor)
+}
+
 pub(crate) fn encode_deployment(descriptor: &DeploymentDescriptor) -> Result<Vec<u8>, Diagnostic> {
     validate_descriptor(descriptor)?;
     let mut bytes = serde_json::to_vec_pretty(descriptor).map_err(|error| {
@@ -1095,6 +1255,7 @@ impl AdapterDescriptor {
             Self::PasswordHash { .. } => "password-hash",
             Self::SecretVerifier { .. } => "secret-verifier",
             Self::ByteStream => "byte-stream",
+            Self::HttpClient { .. } => "http-client",
             Self::Data { .. } => "data",
             Self::ObjectMemory { .. } => "object-memory",
             Self::ObjectLocal { .. } => "object-local",
@@ -1535,6 +1696,17 @@ fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagno
                 ));
             }
         }
+        AdapterDescriptor::HttpClient {
+            endpoint,
+            address_policy,
+            trust,
+            limits,
+        } => {
+            validate_http_client_descriptor(endpoint, *address_policy, limits)?;
+            if let HttpClientTrust::NamedPemRoot { secret } = trust {
+                validate_name(secret, "HTTP client root secret name")?;
+            }
+        }
         AdapterDescriptor::Data {
             root,
             namespace,
@@ -1715,6 +1887,7 @@ fn validate_exact_adapter_interface(
         AdapterDescriptor::PasswordHash { .. } => "decl_375bc0a9f5214e8a27ede17a14e79f67",
         AdapterDescriptor::SecretVerifier { .. } => "decl_172ae7f44000b32243d75a92e6733e50",
         AdapterDescriptor::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
+        AdapterDescriptor::HttpClient { .. } => "decl_f1084ba5dca02ba338140747d0ea9d46",
         AdapterDescriptor::Data { .. } => "decl_640e96fa57dee1c09557eb4bc7b53398",
         AdapterDescriptor::ObjectMemory { .. }
         | AdapterDescriptor::ObjectLocal { .. }
@@ -1805,6 +1978,17 @@ fn normalized_adapter(
             maximum_candidate_bytes: *maximum_candidate_bytes,
         },
         AdapterDescriptor::ByteStream => NormalizedAdapterDescriptor::ByteStream,
+        AdapterDescriptor::HttpClient {
+            endpoint,
+            address_policy,
+            trust,
+            limits,
+        } => NormalizedAdapterDescriptor::HttpClient {
+            endpoint: endpoint.clone(),
+            address_policy: *address_policy,
+            trust: trust.clone(),
+            limits: limits.clone(),
+        },
         AdapterDescriptor::Data {
             root,
             namespace,
@@ -2028,6 +2212,12 @@ mod tests {
                 maximum_candidate_bytes: 1024,
             },
             AdapterDescriptor::ByteStream,
+            AdapterDescriptor::HttpClient {
+                endpoint: "https://relay.example/".to_owned(),
+                address_policy: HttpClientAddressPolicy::PublicOnly,
+                trust: HttpClientTrust::WebpkiRoots,
+                limits: HttpClientLimits::default(),
+            },
             AdapterDescriptor::Data {
                 root: "state/data".to_owned(),
                 namespace: "test-data".to_owned(),

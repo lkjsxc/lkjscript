@@ -1138,7 +1138,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(new_operation, "usage"),
-        Some("new DEST [--template minimal|command|http] [--name NAME]")
+        Some(
+            "new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--relay-url URL]"
+        )
     );
     assert_eq!(
         new_help
@@ -1146,7 +1148,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "template")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["minimal", "command", "http"]
+        vec!["minimal", "command", "http", "nostr-relay-info"]
     );
     let status_help = compact_success(&["capabilities", "status"]);
     let status_operation = compact_record(&status_help, "operation");
@@ -1162,7 +1164,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "template")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["minimal", "command", "http"]
+        vec!["minimal", "command", "http", "nostr-relay-info"]
     );
     let http_template = templates
         .iter()
@@ -1177,6 +1179,22 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(http_template, "recommended-artifact-output"),
+        Some("generated/application.lkja")
+    );
+    let nostr_template = templates
+        .iter()
+        .find(|record| {
+            record.operation == "template"
+                && compact_field(record, "name") == Some("nostr-relay-info")
+        })
+        .expect("Nostr relay information template descriptor");
+    assert_eq!(compact_field(nostr_template, "runner"), Some("http"));
+    assert_eq!(
+        compact_field(nostr_template, "starter-deployment"),
+        Some("true")
+    );
+    assert_eq!(
+        compact_field(nostr_template, "recommended-artifact-output"),
         Some("generated/application.lkja")
     );
     for name in ["minimal", "command"] {
@@ -1256,7 +1274,7 @@ fn generated_public_guides_match_executable() {
             .iter()
             .filter(|record| record.operation == "file")
             .count(),
-        6
+        7
     );
     assert!(!Path::new("docs/generated/contracts.md").exists());
 }
@@ -1402,7 +1420,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("16")
+        Some("18")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2524,7 +2542,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("12"));
+    assert_eq!(compact_field(tests, "passed"), Some("14"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -2592,7 +2610,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("12")
+        Some("14")
     );
 
     let artifact = temporary.path().join("sample.lkja");
@@ -5388,6 +5406,140 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         );
         assert!(!actual_parent.join("project").exists());
     }
+}
+
+#[test]
+fn copied_binary_creates_only_closed_nostr_relay_info_projects() {
+    let temporary = tempfile::TempDir::new().expect("isolated Nostr recipe workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+
+    for (name, expected_status, expected_code, arguments) in [
+        (
+            "missing",
+            2,
+            "cli_usage",
+            vec!["--template", "nostr-relay-info", "--name", "missing"],
+        ),
+        (
+            "foreign-option",
+            2,
+            "cli_usage",
+            vec![
+                "--template",
+                "command",
+                "--name",
+                "foreign-option",
+                "--relay-url",
+                "wss://relay.example/",
+            ],
+        ),
+        (
+            "query",
+            3,
+            "http_client_endpoint",
+            vec![
+                "--template",
+                "nostr-relay-info",
+                "--name",
+                "query",
+                "--relay-url",
+                "wss://relay.example/?token=secret",
+            ],
+        ),
+        (
+            "plaintext-public",
+            3,
+            "http_client_endpoint",
+            vec![
+                "--template",
+                "nostr-relay-info",
+                "--name",
+                "plaintext-public",
+                "--relay-url",
+                "ws://relay.example/",
+            ],
+        ),
+    ] {
+        let destination = temporary.path().join(name);
+        let mut command_arguments = vec!["new", path(&destination)];
+        command_arguments.extend(arguments);
+        let rejected = compact_failure_output_with_status(
+            command_at(&copied_binary, temporary.path(), &command_arguments),
+            expected_status,
+        );
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(expected_code)
+        );
+        assert!(!destination.exists(), "{name} became partially visible");
+    }
+
+    let project = temporary.path().join("relay");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "nostr-relay-info",
+            "--name",
+            "relay",
+            "--relay-url",
+            "wss://relay.example:7447/nostr/info",
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&created, "project"), "template"),
+        Some("nostr-relay-info")
+    );
+    let next = created
+        .iter()
+        .filter(|record| record.operation == "next")
+        .map(|record| {
+            (
+                compact_field(record, "order").expect("next order"),
+                compact_field(record, "kind").expect("next kind"),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        next,
+        [
+            ("1", "status"),
+            ("2", "check"),
+            ("3", "build"),
+            ("4", "serve")
+        ]
+    );
+    let descriptor = std::fs::read_to_string(project.join("service.deployment.json"))
+        .expect("Nostr starter deployment");
+    assert!(descriptor.contains("https://relay.example:7447/nostr/info"));
+    assert!(!descriptor.contains("wss://"));
+
+    let checked = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&checked, "tests"), "failed"),
+        Some("0")
+    );
+    let artifact = temporary.path().join("relay.lkja");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&artifact),
+        ],
+    );
+    assert!(artifact.is_file());
 }
 
 #[test]

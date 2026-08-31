@@ -13,6 +13,11 @@ through the standalone deployment boundary without Cargo, a checkout, or an appl
 Its stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
+Current source is product snapshot 0.1.13. It adds one deployment-bound outbound `HttpClient.get`
+capability and a closed `nostr-relay-info` recipe proved against local raw HTTP/TLS fixtures. The
+immutable supported release remains v0.1.12 and does not contain this source-only slice; no v0.1.13
+release or deployment is claimed here.
+
 The current source and immutable v0.1.12 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
@@ -124,6 +129,34 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
+### Nostr relay information from current source
+
+The current 0.1.13 source binary can create the complete closed NIP-11 information slice:
+
+```sh
+cargo build --release --locked -p lkjscript
+./target/release/lkjscript capabilities new
+./target/release/lkjscript new /tmp/relay-info \
+  --template nostr-relay-info --name relay-info \
+  --relay-url wss://relay.example/nip11
+./target/release/lkjscript --project /tmp/relay-info status
+./target/release/lkjscript --project /tmp/relay-info check
+./target/release/lkjscript --project /tmp/relay-info build \
+  --output /tmp/relay-info/generated/application.lkja
+./target/release/lkjscript serve \
+  --deployment /tmp/relay-info/service.deployment.json
+```
+
+The recipe normalizes `wss` to the exact `https` information endpoint and keeps that endpoint,
+public-only address admission, TLS trust, and transport limits in the deployment descriptor. For
+explicit local development it accepts `ws`/`http` only with a lexical loopback destination. Its
+inbound `GET /relay-info` performs one HTTP/1.1 GET with
+`Accept: application/nostr+json`; a bounded valid status-200 document is preserved byte-for-byte,
+while remote status, media-type, and capability failures produce a local redacted 502. It does not
+implement WebSocket, NIP-01, event signing, redirect following, retries, proxies, or arbitrary URLs.
+See the generated [relay-information guide](docs/generated/nostr-relay-info-authoring.md) and the
+normative [outbound client contract](docs/spec/outbound-http-client.md).
+
 ### Stateful HTTP and first-party data
 
 The immutable v0.1.12 download exposes the completed first-party boundary through the same
@@ -150,8 +183,9 @@ capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
 [built-in interface](docs/generated/builtin-standard.md),
 [deployment schema](docs/generated/deployment.md), and
-[stateful walkthrough](docs/generated/stateful-http-authoring.md) are the offline executable-owned
-authoring references.
+[stateful walkthrough](docs/generated/stateful-http-authoring.md), together with the current-source
+[relay-information walkthrough](docs/generated/nostr-relay-info-authoring.md), are the offline
+executable-owned authoring references.
 
 The maintained acceptance authors a bounded BBS from a fresh `http` project exclusively through
 those public records. Its pure header reducer is passed as a named function value to the built-in
@@ -284,7 +318,7 @@ The executable embeds one exact package transport and one exact artifact bundle 
 
 ```sh
 ./lkjscript package builtin inspect
-./lkjscript package builtin query owners --kind interface --name Database
+./lkjscript package builtin query owners --kind interface --name HttpClient
 ./lkjscript package builtin inspect owner interface decl_...
 ./lkjscript package builtin export --kind transport --output ./standard.lkjp
 ./lkjscript package builtin export --kind artifact --output ./standard.lkja
@@ -370,7 +404,9 @@ cargo run --locked -p lkjscript-dev -- check full
 
 `stateful_http_application` is a non-cacheable required first-party-data gate in service and full
 profiles; the separate stateless `distributed_http_application` gate remains required by product,
-service, and full. Product, service, full, target, transferred, and release-candidate verification
+service, and full. The non-cacheable `outbound_http_application` gate is required by product,
+service, and full and uses only implementation-disjoint local HTTP/TLS relay fixtures. Product,
+service, full, target, transferred, and release-candidate verification
 need no database server or container. The contributor-only PostgreSQL differential/resource oracle
 is a separate required campaign receipt.
 
@@ -383,5 +419,5 @@ Normative contracts live under [docs/spec](docs/spec), current facts and limitat
 [docs/performance.md](docs/performance.md).
 
 The platform does not claim hostile-code sandboxing, multi-tenant isolation, distributed
-consensus, encrypted graph storage, artifact signatures, or portability beyond its verified
-environment.
+consensus, encrypted graph storage, artifact signatures, inbound TLS, outbound privacy/DNSSEC, or
+portability beyond its verified environment.

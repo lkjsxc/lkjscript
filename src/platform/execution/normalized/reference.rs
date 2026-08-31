@@ -1769,6 +1769,17 @@ fn reference_intrinsic(
             }
         }
         "core.http.bearer-token" => reference_bearer_token(program, arguments.as_slice()),
+        "core.http.media-type-is" => match arguments.as_slice() {
+            [
+                NormalizedValue::Bytes(value),
+                NormalizedValue::Text(expected),
+            ] => Ok(NormalizedValue::Bool(reference_media_type_matches(
+                value, expected,
+            ))),
+            _ => Err(reference_type_error(
+                "media-type predicate received foreign values",
+            )),
+        },
         "core.bytes.from-text" => match arguments.as_slice() {
             [NormalizedValue::Text(value)] => Ok(NormalizedValue::bytes(value.as_bytes())),
             _ => Err(reference_type_error(
@@ -2025,6 +2036,99 @@ fn reference_bearer_token(
         found = Some(token.to_owned());
     }
     Ok(NormalizedValue::text(found.unwrap_or_default()))
+}
+
+fn reference_media_type_matches(value: &[u8], expected: &str) -> bool {
+    if !reference_media_token_pair(expected.as_bytes())
+        || expected.bytes().any(|byte| byte.is_ascii_uppercase())
+    {
+        return false;
+    }
+    let Ok(value) = std::str::from_utf8(value) else {
+        return false;
+    };
+    let mut sections = value.split(';');
+    let Some(base) = sections.next().map(str::trim) else {
+        return false;
+    };
+    if !reference_media_token_pair(base.as_bytes()) || !base.eq_ignore_ascii_case(expected) {
+        return false;
+    }
+    for parameter in sections {
+        let Some((name, value)) = parameter.trim().split_once('=') else {
+            return false;
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.is_empty()
+            || !name.bytes().all(reference_http_token)
+            || !reference_media_parameter_value(value)
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn reference_media_token_pair(value: &[u8]) -> bool {
+    let mut parts = value.split(|byte| *byte == b'/');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(left), Some(right), None) => {
+            !left.is_empty()
+                && !right.is_empty()
+                && left.iter().copied().all(reference_http_token)
+                && right.iter().copied().all(reference_http_token)
+        }
+        _ => false,
+    }
+}
+
+fn reference_media_parameter_value(value: &str) -> bool {
+    if let Some(inner) = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+    {
+        if inner.is_empty() {
+            return true;
+        }
+        let mut escaped = false;
+        for byte in inner.bytes() {
+            if escaped {
+                if !matches!(byte, b'\t' | b' '..=b'~') {
+                    return false;
+                }
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' || !matches!(byte, b'\t' | b' '..=b'~') {
+                return false;
+            }
+        }
+        !escaped
+    } else {
+        !value.is_empty() && value.bytes().all(reference_http_token)
+    }
+}
+
+fn reference_http_token(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
 }
 
 fn reference_map_intrinsic(

@@ -94,7 +94,9 @@ an interpreter program header, any runtime `DT_NEEDED` entry, a GLIBC version re
 machine, malformed or trailing linkage input, and a target-policy mismatch. It then runs the complete
 copied-binary command lifecycle with network unavailable during candidate execution in both pinned
 userlands. Finally it runs the exact candidate through the maintained distributed HTTP, transferred
-stateful HTTP, and standalone service oracles. Required unavailable, stale, foreign, reused, skipped,
+stateful HTTP, transferred outbound HTTP, and standalone service oracles. The outbound oracle uses
+only isolated loopback HTTP/TLS/DNS fixtures and contacts no live relay. Required unavailable,
+stale, foreign, reused, skipped,
 failed, or unrun evidence cannot produce a passing target-admission receipt.
 
 The userland observations establish only the named tested userland boundary. Static linkage does not
@@ -162,13 +164,15 @@ The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout j
 verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
 deterministic package, and uploads a three-file release handoff plus a two-file application-verifier
 handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
-commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP roles.
+commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP/outbound-HTTP roles.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
 the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,
-and runs both transferred application oracles. Stateful verification uses only an explicit absolute
+and runs all three transferred application oracles. Stateful verification uses only an explicit absolute
 create-new evidence root and an isolated first-party data store; it provisions no database server or
-container. Both receipts must classify passed before the publication job can run.
+container. Outbound verification uses a separate create-new root and deterministic local raw
+HTTP/TLS fixtures. All three application receipts must classify passed before the publication job
+can run.
 
 Dispatch a dry run against the final source commit:
 
@@ -185,7 +189,8 @@ gh run download --repo lkjsxc/lkjscript RUN_ID \
 ```
 
 The dry run must freshly pass build, full, target-admission, package, transferred distributed HTTP,
-and transferred stateful HTTP. Its publish and post-release jobs must be skipped, and no tag, draft,
+transferred stateful HTTP, and transferred outbound HTTP. Its publish and post-release jobs must be
+skipped, and no tag, draft,
 release, or public asset may be created. Evidence from another commit, workflow, target policy,
 candidate, verifier, image, or run attempt is stale.
 
@@ -226,10 +231,11 @@ manually create a parallel release.
 
 The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum
 pairs. For each pair independently it verifies checksums, release and asset attestations, strict
-extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs transferred
-distributed HTTP and transferred stateful HTTP against fresh roots and fresh isolated first-party
-data authorities. Exact/latest archive, checksum, candidate, and manifest byte equality is checked after,
-and never substitutes for, both behavioral runs. Each stateful run requires its own clean and
+extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs
+transferred distributed HTTP and transferred stateful HTTP against fresh roots and fresh isolated
+first-party data authorities, plus transferred outbound HTTP against fresh local relay fixtures.
+Exact/latest archive, checksum, candidate, and manifest byte equality is checked after, and never
+substitutes for the three behavioral runs. Each stateful run requires its own clean and
 incremental artifacts to agree; artifacts from independently allocated fresh applications are not
 cross-compared. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation
 results.

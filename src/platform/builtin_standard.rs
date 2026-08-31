@@ -30,16 +30,19 @@ const STANDARD_TRANSPORT_PACK: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_5cb5d4c5a285cc4b71d1be86a616194ad51c2408d640ae0ca99bac4ba1bc2df5";
+    "rev_805f3ec96b7907e8ad6ac63d53bdab63aee81d671a39b4ff6cd35604f97bd44f";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_f053de4a920d44c877ee1754c8dea56ecd957ea2d83abb6f476aedc3572846aa";
+    "package_revision_48cfe9aceb123da0d8a6fc30b034e89599cdc8235cf6b72085d2225b281cefc9";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_daf5729ccacd430c56b5f9750795448976d980947e7974b2ad09c2c46f086f96";
+    "package_transport_629e6035e974334ecb79431860bb0678d4946aaf67817baa53f5d15d89a816d6";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
 const HTTP_BYTES_FROM_TEXT_IMPLEMENTATION: &str = "core.bytes.from-text";
+const HTTP_MEDIA_TYPE_IS: &str = "media-type-is";
+const HTTP_MEDIA_TYPE_IS_IMPLEMENTATION: &str = "core.http.media-type-is";
 const HTTP_BYTE_STREAM_INTERFACE: &str = "ByteStream";
+const HTTP_CLIENT_INTERFACE: &str = "HttpClient";
 
 static BUILTIN_STANDARD: OnceLock<Result<BuiltinStandard, Diagnostic>> = OnceLock::new();
 
@@ -61,11 +64,20 @@ pub struct BuiltinHttpRecipeContract {
     pub static_text_type: TypeObjectDigest,
     pub text_type: TypeObjectDigest,
     pub bytes_type: TypeObjectDigest,
+    pub media_type_is: DeclarationReference,
+    pub text_equal: DeclarationReference,
+    pub i64_equal: DeclarationReference,
+    pub bool_and: DeclarationReference,
+    pub bool_or: DeclarationReference,
+    pub list_fold_left: DeclarationReference,
     pub byte_stream_interface: DeclarationReference,
     pub byte_stream_read: OperationReference,
     pub byte_stream_close: OperationReference,
     pub byte_stream_read_all: OperationReference,
     pub byte_stream_operations: Vec<OperationReference>,
+    pub http_client_interface: DeclarationReference,
+    pub http_client_get: OperationReference,
+    pub http_client_operations: Vec<OperationReference>,
 }
 
 impl BuiltinStandard {
@@ -163,17 +175,278 @@ impl BuiltinStandard {
             ));
         }
         let stream = self.byte_stream_contract(bytes_type)?;
+        let media_type_is = self.http_media_type_contract(bytes_type, text_type)?;
+        let text_equal = self.external_reference_by_implementation(
+            "text-equal",
+            "core.text.equal",
+            "builtin_standard_http_text_equal",
+            "built-in standard text equality predicate is absent or foreign",
+        )?;
+        let i64_equal = self.external_reference_by_implementation(
+            "i64-equal",
+            "core.i64.equal",
+            "builtin_standard_http_i64_equal",
+            "built-in standard integer equality predicate is absent or foreign",
+        )?;
+        let bool_and = self.external_reference_by_implementation(
+            "bool-and",
+            "core.bool.and",
+            "builtin_standard_http_bool_and",
+            "built-in standard boolean conjunction is absent or foreign",
+        )?;
+        let bool_or = self.external_reference_by_implementation(
+            "bool-or",
+            "core.bool.or",
+            "builtin_standard_http_bool_or",
+            "built-in standard boolean disjunction is absent or foreign",
+        )?;
+        let list_fold_left = self.public_pure_function_reference("list-fold-left")?;
+        let client = self.http_client_contract()?;
         Ok(BuiltinHttpRecipeContract {
             text_from_static,
             bytes_from_text,
             static_text_type,
             text_type,
             bytes_type,
+            media_type_is,
+            text_equal,
+            i64_equal,
+            bool_and,
+            bool_or,
+            list_fold_left,
             byte_stream_interface: stream.interface,
             byte_stream_read: stream.read,
             byte_stream_close: stream.close,
             byte_stream_read_all: stream.read_all,
             byte_stream_operations: stream.operations,
+            http_client_interface: client.interface,
+            http_client_get: client.get,
+            http_client_operations: vec![client.get],
+        })
+    }
+
+    fn public_pure_function_reference(
+        &self,
+        expected_name: &str,
+    ) -> Result<DeclarationReference, Diagnostic> {
+        let mut selected = None;
+        for (owner, value) in &self.interface_owners {
+            let OwnerKey::Declaration(declaration) = owner else {
+                continue;
+            };
+            let PackageInterfaceRecord::Declaration(interface) = &value.record else {
+                continue;
+            };
+            if interface.name.as_str() != expected_name
+                || !matches!(
+                    interface.payload,
+                    PackageInterfaceDeclarationPayload::Function(_)
+                )
+            {
+                continue;
+            }
+            let mut map_work = MapWork::default();
+            let mut store_work = StoreWork::default();
+            let Some(OwnerRecord::Declaration(canonical)) = self.artifact.reference_owner(
+                self.package,
+                OwnerKey::Declaration(*declaration),
+                &mut map_work,
+                &mut store_work,
+            )?
+            else {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_function",
+                    "built-in standard pure helper is absent from canonical authority",
+                ));
+            };
+            if canonical.visibility != DeclarationVisibility::Public
+                || !matches!(canonical.payload, DeclarationPayload::Function(_))
+                || selected.replace(*declaration).is_some()
+            {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_function",
+                    "built-in standard pure helper is ambiguous, private, or foreign",
+                ));
+            }
+        }
+        selected
+            .map(|declaration| DeclarationReference {
+                package: self.package,
+                declaration,
+            })
+            .ok_or_else(|| {
+                builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_function",
+                    "built-in standard pure helper is absent",
+                )
+            })
+    }
+
+    fn http_media_type_contract(
+        &self,
+        bytes_type: TypeObjectDigest,
+        text_type: TypeObjectDigest,
+    ) -> Result<DeclarationReference, Diagnostic> {
+        let declaration = self.external_reference_by_implementation(
+            HTTP_MEDIA_TYPE_IS,
+            HTTP_MEDIA_TYPE_IS_IMPLEMENTATION,
+            "builtin_standard_http_media_declaration",
+            "built-in standard media-type predicate is absent, ambiguous, private, or foreign",
+        )?;
+        let record = self.interface_declaration(declaration.declaration)?;
+        let PackageInterfaceDeclarationPayload::External(signature) = &record.payload else {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_media_signature",
+                "built-in standard media-type predicate is not an exact external declaration",
+            ));
+        };
+        let mut interner = TypeObjectInterner::default();
+        let bool_type = interner.intern(TypeForm::Bool)?;
+        if !signature.type_parameters.is_empty()
+            || signature.result != bool_type
+            || signature.parameters.len() != 2
+        {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_media_signature",
+                "built-in standard media-type predicate must have exact Bytes, Text -> Bool shape",
+            ));
+        }
+        for (parameter, (name, ty)) in signature
+            .parameters
+            .iter()
+            .zip([("value", bytes_type), ("expected", text_type)])
+        {
+            match self
+                .interface_owners
+                .get(&OwnerKey::Parameter(*parameter))
+                .map(|value| &value.record)
+            {
+                Some(PackageInterfaceRecord::Parameter(parameter))
+                    if parameter.parent == ParameterParent::Function(declaration.declaration)
+                        && parameter.name.as_str() == name
+                        && parameter.ty == ty => {}
+                _ => {
+                    return Err(builtin_error(
+                        DiagnosticClass::Corrupt,
+                        "builtin_standard_http_media_parameter",
+                        "built-in standard media-type predicate has a foreign exact parameter",
+                    ));
+                }
+            }
+        }
+        Ok(declaration)
+    }
+
+    fn http_client_contract(&self) -> Result<HttpClientContract, Diagnostic> {
+        let mut declarations = self.interface_owners.iter().filter_map(|(owner, value)| {
+            let OwnerKey::Declaration(declaration) = owner else {
+                return None;
+            };
+            let PackageInterfaceRecord::Declaration(record) = &value.record else {
+                return None;
+            };
+            (record.name.as_str() == HTTP_CLIENT_INTERFACE).then_some((*declaration, record))
+        });
+        let (declaration, record) = declarations.next().ok_or_else(|| {
+            builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_client_interface",
+                "built-in standard interface omits its exact HttpClient declaration",
+            )
+        })?;
+        if declarations.next().is_some()
+            || declaration.to_string() != "decl_f1084ba5dca02ba338140747d0ea9d46"
+        {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_client_interface",
+                "built-in standard HttpClient declaration is ambiguous or has a foreign identity",
+            ));
+        }
+        let PackageInterfaceDeclarationPayload::Interface { operations } = &record.payload else {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_client_interface",
+                "built-in standard HttpClient locator names another declaration kind",
+            ));
+        };
+        let [operation] = operations.as_slice() else {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_client_operation",
+                "built-in standard HttpClient must expose exactly get",
+            ));
+        };
+        let mut interner = TypeObjectInterner::default();
+        let types = super::http_client::semantic_http_client_types(&mut interner)?;
+        for (digest, object) in interner.into_objects() {
+            if self.interface_types.get(&digest) != Some(&object) {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_client_types",
+                    "built-in standard HttpClient omits an exact canonical type object",
+                ));
+            }
+        }
+        let operation_record = match self
+            .interface_owners
+            .get(&OwnerKey::Operation(*operation))
+            .map(|value| &value.record)
+        {
+            Some(PackageInterfaceRecord::Operation(operation_record)) => operation_record,
+            _ => {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_client_operation",
+                    "built-in standard HttpClient get operation is absent",
+                ));
+            }
+        };
+        if operation_record.declaration != declaration
+            || operation_record.name.as_str() != "get"
+            || operation_record.idempotency != Idempotency::Idempotent
+            || operation_record.external_visibility != ExternalVisibility::Possible
+            || operation_record.result != types.response_type
+            || operation_record.parameters.len() != 1
+        {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_http_client_operation",
+                "built-in standard HttpClient get operation has a foreign policy or signature",
+            ));
+        }
+        let parameter = operation_record.parameters[0];
+        match self
+            .interface_owners
+            .get(&OwnerKey::Parameter(parameter))
+            .map(|value| &value.record)
+        {
+            Some(PackageInterfaceRecord::Parameter(parameter))
+                if parameter.parent == ParameterParent::Operation(*operation)
+                    && parameter.name.as_str() == "headers"
+                    && parameter.ty == types.header_list_type => {}
+            _ => {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_http_client_parameter",
+                    "built-in standard HttpClient get parameter has a foreign exact shape",
+                ));
+            }
+        }
+        Ok(HttpClientContract {
+            interface: DeclarationReference {
+                package: self.package,
+                declaration,
+            },
+            get: OperationReference {
+                package: self.package,
+                operation: *operation,
+            },
         })
     }
 
@@ -564,6 +837,11 @@ struct ByteStreamContract {
     close: OperationReference,
     read_all: OperationReference,
     operations: Vec<OperationReference>,
+}
+
+struct HttpClientContract {
+    interface: DeclarationReference,
+    get: OperationReference,
 }
 
 fn store_diagnostic(error: StoreError) -> Diagnostic {

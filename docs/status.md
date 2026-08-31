@@ -13,23 +13,23 @@ closure selected by `HEAD`. No maintained project contains a predecessor `.lkjsc
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_5cb5d4c5a285cc4b71d1be86a616194ad51c2408d640ae0ca99bac4ba1bc2df5`; state `semantic_state_88a45f181829503c93ecf98d08d83670ce49376c7c0790e17d7061dd619d63a4` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f`; state `semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f` |
-| built-in standard dependency | package revision `package_revision_f053de4a920d44c877ee1754c8dea56ecd957ea2d83abb6f476aedc3572846aa`; transport `package_transport_daf5729ccacd430c56b5f9750795448976d980947e7974b2ad09c2c46f086f96`; artifact manifest `artifact_manifest_dd043a03c87749cd758829a52ab668a7b6ac5c61bf35262cb40e99b77d318d54` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_805f3ec96b7907e8ad6ac63d53bdab63aee81d671a39b4ff6cd35604f97bd44f`; state `semantic_state_7d089c26bd03b9bfd72638895bc78baa77f3dd74e100efdfd18b4a731942f281` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_1eb8825f79e542273c7df08e98720878b503f51c3cdbd91f5954d081f07aa203`; state `semantic_state_e2e3834a0a3f0f415f01eb6dc8ee9c8ff0e0c6e60725e51ad68202a9c576fb2a` |
+| built-in standard dependency | package revision `package_revision_48cfe9aceb123da0d8a6fc30b034e89599cdc8235cf6b72085d2225b281cefc9`; transport `package_transport_629e6035e974334ecb79431860bb0678d4946aaf67817baa53f5d15d89a816d6`; artifact manifest `artifact_manifest_025419b2248bacf0c01cbc9ad6928aecc4aed4364c5dc7262814e19f361f42e8` |
 
-The standard package owns 409 live semantic owners, 77 compiler units, and 11 graph tests. Its
-current artifact has 780 closure objects and 244,125 bytes. `lkjournal` owns 1,559 live semantic
-owners and one exact standard dependency; its two-package artifact has 137 compiler units, 2,736
-closure objects, and 813,625 bytes. Its complete dependency closure runs 16 graph tests. Both
+The standard package owns 427 live semantic owners, 81 compiler units, and 13 graph tests. Its
+current artifact has 808 closure objects and 253,276 bytes. `lkjournal` owns 1,559 live semantic
+owners and one exact standard dependency; its two-package artifact has 141 compiler units, 2,763
+closure objects, and 822,515 bytes. Its complete dependency closure runs 18 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 86,697 bytes | `d46939d6ec91b3b403ce2bf54a5fd3ca768bf2ff4259628a03d2ca133b0c7c3f` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 244,125 bytes | `7f47ce86a6d33d39f1f354f515dafd66fcf4cd734f9f36fb6ef83c504d1edf04` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 813,625 bytes | `9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28` |
+| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 88,618 bytes | `b863a95f62cf05fc8a9d6abe9c728c987c0d9b88b3d9d3d98cfda117a9140350` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 253,276 bytes | `1cfeb8545e045e86682950c1ba7fa2b63346ba349e4ca70d39645dce6a78a1a7` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 822,515 bytes | `1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -88,17 +88,19 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source and immutable public latest both own product version 0.1.12 and the completed
-first-party ordered-data cutover. Its executable owners advance the
-CLI, deployment, compact-change, standard/application meaning, and artifact encodings exactly as
-their changed behavior requires, and introduce separately owned first data-store and logical-backup
-encodings. Graph, package, artifact, deployment, and operational-data identities remain separate.
+Current source owns product snapshot 0.1.13 and the deployment-bound outbound HTTPS/NIP-11 slice.
+Immutable public latest remains 0.1.12 and does not contain that slice; no 0.1.13 tag, release,
+asset, workflow dispatch, or deployment exists. Source advances CLI 15, project creation 3,
+deployment 3, registry 4, and the separately owned `http_client_adapter` 1 because their observable
+contracts changed. Compact-change and unrelated graph, data, queue, object, artifact, compiler, and
+runtime contract numbers remain independently owned. Graph, package, artifact, deployment, and
+operational-data identities remain separate.
 The source and distributed executable expose exactly
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`6de9d6a4a3b8ec3611633de9241ebdd8353d486edfc0a0f25af5c230b8760f81` computed by the executable.
+`17ea689fc7e54fbb9f78c42882c739d1bcd36eb4f4153882ccf7d0aa9dd2402d` computed by the executable.
 
 `data initialize|verify|backup|restore` owns operational lifecycle for one local
 `lkjscript-data-store-1` root and `lkjscript-data-backup-1` logical backup. Initialize and restore
@@ -115,6 +117,15 @@ creates a 20-owner typed meaning graph application with one exact built-in
 dependency, task HTTP handler, byte-stream requirement, HTTP port, `serve` target, and stable
 status-code test. It atomically includes `service.deployment.json` and an empty `generated/`
 directory before the one destination visibility rename; no application artifact is prebuilt.
+
+`new DEST --template nostr-relay-info [--name NAME] --relay-url URL` creates a closed typed
+NIP-11 relay-information application. It has one exact `HttpClient.get` requirement plus the
+existing inbound byte-stream requirement, one `serve` target, and two graph-owned tests. The graph
+exposes `GET /relay-info`, sends exactly `Accept: application/nostr+json`, preserves a bounded valid
+status-200 document byte-for-byte, and maps remote status, media-type, and capability failures to a
+local redacted 502. `wss` normalizes to `https`; `ws`/`http` is admitted only for lexical loopback
+development. The strict descriptor owns the immutable normalized endpoint, address policy, TLS
+trust, and separate request, response, DNS, concurrency, connection, total, and cleanup limits.
 
 The starter descriptor remains separate operator authority. It names
 `generated/application.lkja`, target `serve`, one exact byte-stream grant, conservative independent
@@ -143,9 +154,10 @@ and the current public distribution boundary is retained in
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
 effects, idempotency, visibility, and revision-bound bounded continuations. Deployment discovery is
-generated from the strict descriptor inventory and includes every adapter field and range. Six
+generated from the strict descriptor inventory and includes every adapter field and range. Seven
 executable-owned generated documents now cover operations, diagnostics, compact change
-grammar, built-in public interface, deployment schema, and a stateful HTTP composition walkthrough.
+grammar, built-in public interface, deployment schema, and stateful and Nostr relay-information
+composition walkthroughs.
 
 `status`, exact owner `inspect`, and normalized owner/name/relation/context `query` read one accepted
 revision. Context takes one live local owner, mandatory incoming/outgoing/both direction, and depth
@@ -221,10 +233,18 @@ and topology; deployment preparation never discovers or opens a project reposito
 execute once through production rather than differential replay.
 
 Configuration, secrets, clock, secure randomness, identifiers, password hashing, byte streams,
-first-party ordered data, object storage, and the first-party durable queue all have exact normalized
+deployment-bound outbound HTTP, first-party ordered data, object storage, and the first-party durable queue all have exact normalized
 capability bindings. `data` and `durable_queue_data` may share one confined local root through
 separately validated grants and namespaces. Adapter preparation is all-or-nothing, and repeated
 shutdown reuses one recorded cleanup outcome.
+
+`HttpClient.get` receives only an ordered bounded header list and returns status, ordered headers,
+and whole body bytes. One exact deployment grant owns the endpoint and transport policy. Public
+destinations require HTTPS; explicit plaintext is loopback-only. Request-time bounded resolution
+rejects the entire answer set if any address violates `public_only` or `loopback_only`, and the
+client connects only to validated addresses. HTTPS verifies hostname, chain, and validity against
+locked WebPKI roots or one named PEM-root secret. It follows no redirect, reads no proxy setting,
+injects no credential, decompresses nothing, and automatically retries nothing.
 
 Runtime call frames carry exact generic type substitutions so generic `json-decode-or<T>`,
 `json-encode<T>`, `data-encode<T>`, `data-decode-or<T>`, `list-length<T>`, `list-get<T>`, and
@@ -236,16 +256,19 @@ stores each post once and atomically maintains a `(created-at, id)` index. `lkjo
 actor, session, resource, immutable-snapshot, object-metadata, lookup, and job spaces/indexes while
 object bytes remain in object storage.
 
-The HTTP listener is plaintext, and the local data root is unencrypted trusted-host storage. The
-runtime is not a hostile-code sandbox or multi-tenant isolation boundary.
+The inbound HTTP listener is plaintext, and the local data root is unencrypted trusted-host
+storage. Outbound HTTPS authenticates only its exact deployment endpoint under the selected trust
+mode; it is not a privacy, browser, DNSSEC, or sandbox boundary. The runtime is not a hostile-code
+sandbox or multi-tenant isolation boundary.
 
 ## Current limits and unproved properties
 
 - The only released dependency resolver accepts the exact built-in standard package. There is no
   general package manager, ambient filesystem lookup, mutable tag, network registry, or upgrade
   resolver.
-- Public `run` is pure-command-only. Outbound HTTP and additional effect families are absent until
-  a maintained consumer justifies a dependency-closed capability cutover.
+- Public `run` is pure-command-only. Arbitrary outbound URLs/methods, request bodies, streaming,
+  redirects, private-network destinations, proxies, client certificates, WebSocket, NIP-01 event
+  models/signing, and additional effect families remain absent.
 - Full owner-body projection, generic impact query, fuzzy search, multiple-root context, and
   historical query are absent.
 - Removed draft/history/review/project-backup/project-restore/doctor workflows have not been
@@ -306,6 +329,16 @@ clean/incremental artifact bytes, and exercises create/list/update/delete orderi
 expectations, strict input, transaction rollback, schema divergence, failed startup, shutdown,
 restart, logical backup, absent-root restore, and byte-identical graph authority without a database
 server or container.
+
+The distinct non-cacheable `outbound_http_application` gate is required by product, service, full,
+target admission, and future release verification. It copies one candidate outside the checkout,
+creates the closed recipe, proves status/query/check and clean/exact-current artifact equality, and
+runs it against an implementation-disjoint local raw HTTP/1.1/TLS relay. Its cases cover exact
+HTTPS and loopback HTTP, mixed/forbidden address admission, trusted/untrusted/expired/mismatched
+certificates, no redirect, forbidden headers, non-200/wrong media type, header/body limits, timeout,
+inbound cancellation, malformed protocol, failed startup, recovery, restart, active shutdown, and
+complete authority/resource cleanup. It uses no live relay and retains no private key or secret
+value.
 
 The maintained `lkjournal` service/worker gate shares an isolated data root, freshly rebuilds the
 checked artifact byte-for-byte, and exercises login, actor isolation, resource/history, object

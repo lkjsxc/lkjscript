@@ -9,6 +9,7 @@ mod data_codec;
 mod data_codec_reference;
 mod deployment;
 mod http;
+mod http_client;
 mod object;
 mod password;
 mod prepare;

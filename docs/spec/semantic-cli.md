@@ -50,7 +50,7 @@ runtime, and adapter boundaries.
 ## Project creation
 
 ```text
-new DEST [--template minimal|command|http] [--name NAME]
+new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--relay-url URL]
 ```
 
 The parent must be an ordinary existing directory. The destination must be absent and may not
@@ -79,9 +79,25 @@ mutable operator authority and is not part of semantic state. Creation returns i
 recommended artifact output, target, runner, listener, and ordered next-action records. Minimal and
 command creation do not report a deployment.
 
-All three recipes are executable-owned typed construction, not source templates or a general
+`nostr-relay-info` creates an exact-standard-dependent HTTP application with the existing inbound
+byte-stream requirement and one `HttpClient` requirement. Its graph-owned `GET /relay-info` route
+sends one `Accept: application/nostr+json` GET through that capability and returns the exact bounded
+status-200 document only for the same case-insensitive base media type; all transport, status, and
+media-type failures become deterministic local 502 without remote detail. Two graph tests cover
+the stable pure response policy. The starter descriptor binds the client requirement to the exact
+normalized endpoint and includes the same separate inbound listener and empty generated directory.
+
+`--relay-url` is required exactly once for `nostr-relay-info` and rejected for every other recipe.
+It accepts lowercase `wss` or `https`; `wss` normalizes to the `https` NIP-11 endpoint. Lowercase
+`ws` or `http` is admitted only for a lexical loopback destination and normalizes `ws` to `http`.
+Authority, explicit port, and path are preserved; user information, query, fragment, ambiguous
+authority, malformed port, noncanonical escape, and unsupported scheme reject before the
+destination is visible. This normalization does not implement WebSocket.
+
+All four recipes are executable-owned typed construction, not source templates or a general
 template language. Unknown template spellings, including `web`, `server`, and `service`, reject
-through `cli_usage` and are not aliases.
+through `cli_usage` and are not aliases. Invalid template/option combinations fail before any
+project destination becomes visible.
 
 Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
 source file, database, container, or helper command. Release availability is current distribution
@@ -253,7 +269,10 @@ descriptor inventory exercised by strict decoding. They enumerate top-level and 
 every adapter tag, required/optional status, scalar form, range, secret-name classification, and
 nested limit shape without secret values. The generated
 [`stateful-http-authoring.md`](../generated/stateful-http-authoring.md) walkthrough composes that
-schema with current built-in references and compact grammar; it is guidance, not program authority.
+schema with current built-in references and compact grammar. The generated
+[`nostr-relay-info-authoring.md`](../generated/nostr-relay-info-authoring.md) guide records the
+closed recipe lifecycle, exact `HttpClient` references, response policy, and conservative defaults.
+Both are guidance, not program authority.
 
 ## Check
 
@@ -315,4 +334,5 @@ project behavior. Predecessor repositories and binary formats reject.
 
 The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
 package manager, remote registry, source language, full owner-body projection, generic impact, an
-agent daemon, TLS, sandboxing, or multi-tenant isolation.
+agent daemon, inbound TLS, arbitrary network destinations, WebSocket, sandboxing, or multi-tenant
+isolation.

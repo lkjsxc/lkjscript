@@ -284,6 +284,8 @@ jobs:
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/*.log
             ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/receipt.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/*.log
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/outbound-http/*/receipt.json
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/outbound-http/*/*.log
             ${{ github.workspace }}/.artifacts/lkjscript-dev/stateful-http/*/receipt.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/stateful-http/*/*.log
           if-no-files-found: error
@@ -316,7 +318,7 @@ jobs:
             --arg target "${{ steps.target.outputs.target_triple }}" \
             --arg policy "${{ steps.target.outputs.policy_sha256 }}" \
             --arg candidate_sha "$candidate_sha" \
-            '.status == "passed" and .source_commit == $commit and .target_triple == $target and .runtime_linkage == "static-musl" and .target_policy_sha256 == $policy and .candidate_sha256 == $candidate_sha and .userlands == 2 and .oracles == 3 and .cleanup_complete == true' \
+            '.status == "passed" and .source_commit == $commit and .target_triple == $target and .runtime_linkage == "static-musl" and .target_policy_sha256 == $policy and .candidate_sha256 == $candidate_sha and .userlands == 2 and .oracles == 4 and .cleanup_complete == true' \
             "$root/admission-summary.json" > /dev/null
           receipt=$(jq -er '.receipt' "$root/admission-summary.json")
           test "$receipt" = "$evidence/receipt.json"
@@ -344,6 +346,8 @@ jobs:
             ${{ steps.admission.outputs.evidence }}/acceptance/*.log
             ${{ steps.admission.outputs.evidence }}/acceptance/distributed-http/receipt.json
             ${{ steps.admission.outputs.evidence }}/acceptance/distributed-http/*.log
+            ${{ steps.admission.outputs.evidence }}/acceptance/outbound-http/receipt.json
+            ${{ steps.admission.outputs.evidence }}/acceptance/outbound-http/*.log
             ${{ steps.admission.outputs.evidence }}/acceptance/stateful-http/receipt.json
             ${{ steps.admission.outputs.evidence }}/acceptance/stateful-http/*.log
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/receipt.json
@@ -603,6 +607,26 @@ jobs:
             '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
             "$distributed_receipt" > /dev/null
 
+          outbound_evidence="$root/outbound-http"
+          outbound_summary="$root/outbound-http-summary.json"
+          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" outbound-http \
+            --binary "$candidate" \
+            --evidence-root "$outbound_evidence" \
+            --machine | tee "$outbound_summary"
+          test "$(wc -l < "$outbound_summary")" -eq 1
+          outbound_receipt=$(jq -er '.receipt' "$outbound_summary")
+          test "$outbound_receipt" = "$outbound_evidence/receipt.json"
+          test -f "$outbound_receipt"
+          outbound_receipt_sha256=$(sha256sum "$outbound_receipt" | cut -d' ' -f1)
+          test "$outbound_receipt_sha256" = "$(jq -er '.receipt_sha256' "$outbound_summary")"
+          outbound_receipt_digest=$(jq -er '.receipt_digest' "$outbound_summary")
+          jq -e \
+            --arg candidate_sha "$candidate_sha" \
+            --arg version "$manifest_version" \
+            --arg capabilities "$manifest_capabilities" \
+            '.schema == {identity:"lkjscript-outbound-http-acceptance",version:1} and .workflow == "outbound-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 1 and (.result.responses | length) == 17 and (.result.no_connection | length) == 1 and .result.certificate.generator == "lkjscript-deterministic-ed25519-tls-fixture-1" and .cleanup.runner_cleanup_complete == true and .cleanup.oracle_cleanup_complete == true and .cleanup.isolated_root_removed == true and .cleanup.raw_secret_values_retained == false' \
+            "$outbound_receipt" > /dev/null
+
           stateful_evidence="$root/stateful-http"
           stateful_summary="$root/stateful-http-summary.json"
           env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" stateful-http \
@@ -624,6 +648,9 @@ jobs:
             echo "distributed_receipt=$distributed_receipt"
             echo "distributed_receipt_digest=$distributed_receipt_digest"
             echo "distributed_receipt_sha256=$distributed_receipt_sha256"
+            echo "outbound_receipt=$outbound_receipt"
+            echo "outbound_receipt_digest=$outbound_receipt_digest"
+            echo "outbound_receipt_sha256=$outbound_receipt_sha256"
             echo "stateful_receipt=$stateful_receipt"
             echo "stateful_receipt_digest=$stateful_receipt_digest"
             echo "stateful_receipt_sha256=$stateful_receipt_sha256"
@@ -638,10 +665,13 @@ jobs:
           path: |
             ${{ runner.temp }}/prepublication/release-verify-summary.json
             ${{ runner.temp }}/prepublication/distributed-http-summary.json
+            ${{ runner.temp }}/prepublication/outbound-http-summary.json
             ${{ runner.temp }}/prepublication/stateful-http-summary.json
             ${{ runner.temp }}/prepublication/extracted/RELEASE-MANIFEST.json
             ${{ runner.temp }}/prepublication/distributed-http/receipt.json
             ${{ runner.temp }}/prepublication/distributed-http/*.log
+            ${{ runner.temp }}/prepublication/outbound-http/receipt.json
+            ${{ runner.temp }}/prepublication/outbound-http/*.log
             ${{ runner.temp }}/prepublication/stateful-http/receipt.json
             ${{ runner.temp }}/prepublication/stateful-http/*.log
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json
@@ -1121,6 +1151,8 @@ jobs:
             local release_summary="$root/$label-release-summary.json"
             local distributed_evidence="$root/$label-distributed-http"
             local distributed_summary="$root/$label-distributed-http-summary.json"
+            local outbound_evidence="$root/$label-outbound-http"
+            local outbound_summary="$root/$label-outbound-http-summary.json"
             local stateful_evidence="$root/$label-stateful-http"
             local stateful_summary="$root/$label-stateful-http-summary.json"
             env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release verify \
@@ -1170,6 +1202,26 @@ jobs:
               '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and (.result.responses | length) == 2 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
               "$distributed_receipt" > /dev/null
 
+            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" outbound-http \
+              --binary "$candidate" \
+              --evidence-root "$outbound_evidence" \
+              --machine | tee "$outbound_summary"
+            test "$(wc -l < "$outbound_summary")" -eq 1
+            local outbound_receipt
+            local outbound_receipt_sha256
+            local outbound_receipt_digest
+            outbound_receipt=$(jq -er '.receipt' "$outbound_summary")
+            test "$outbound_receipt" = "$outbound_evidence/receipt.json"
+            outbound_receipt_sha256=$(sha256sum "$outbound_receipt" | cut -d' ' -f1)
+            test "$outbound_receipt_sha256" = "$(jq -er '.receipt_sha256' "$outbound_summary")"
+            outbound_receipt_digest=$(jq -er '.receipt_digest' "$outbound_summary")
+            jq -e \
+              --arg candidate_sha "$candidate_sha" \
+              --arg version "$manifest_version" \
+              --arg capabilities "$manifest_capabilities" \
+              '.schema == {identity:"lkjscript-outbound-http-acceptance",version:1} and .workflow == "outbound-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.product_version == $version and .result.capabilities_digest == $capabilities and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 1 and (.result.responses | length) == 17 and (.result.no_connection | length) == 1 and .result.certificate.generator == "lkjscript-deterministic-ed25519-tls-fixture-1" and .cleanup.runner_cleanup_complete == true and .cleanup.oracle_cleanup_complete == true and .cleanup.isolated_root_removed == true and .cleanup.raw_secret_values_retained == false' \
+              "$outbound_receipt" > /dev/null
+
             env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" stateful-http \
               --binary "$candidate" \
               --evidence-root "$stateful_evidence" \
@@ -1191,6 +1243,9 @@ jobs:
               echo "${label}_distributed_receipt=$distributed_receipt"
               echo "${label}_distributed_receipt_digest=$distributed_receipt_digest"
               echo "${label}_distributed_receipt_sha256=$distributed_receipt_sha256"
+              echo "${label}_outbound_receipt=$outbound_receipt"
+              echo "${label}_outbound_receipt_digest=$outbound_receipt_digest"
+              echo "${label}_outbound_receipt_sha256=$outbound_receipt_sha256"
               echo "${label}_stateful_receipt=$stateful_receipt"
               echo "${label}_stateful_receipt_digest=$stateful_receipt_digest"
               echo "${label}_stateful_receipt_sha256=$stateful_receipt_sha256"
@@ -1209,6 +1264,12 @@ jobs:
             "$(jq -er '.result.capabilities_digest' "$root/latest-distributed-http/receipt.json")"
           test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-distributed-http/receipt.json")" = \
             "$(jq -er '.result.responses[0].body_sha256' "$root/latest-distributed-http/receipt.json")"
+          test "$(jq -er '.candidate.sha256' "$root/exact-outbound-http/receipt.json")" = \
+            "$(jq -er '.candidate.sha256' "$root/latest-outbound-http/receipt.json")"
+          test "$(jq -er '.result.capabilities_digest' "$root/exact-outbound-http/receipt.json")" = \
+            "$(jq -er '.result.capabilities_digest' "$root/latest-outbound-http/receipt.json")"
+          test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-outbound-http/receipt.json")" = \
+            "$(jq -er '.result.responses[0].body_sha256' "$root/latest-outbound-http/receipt.json")"
           test "$(jq -er '.candidate.sha256' "$root/exact-stateful-http/receipt.json")" = \
             "$(jq -er '.candidate.sha256' "$root/latest-stateful-http/receipt.json")"
 
@@ -1221,10 +1282,13 @@ jobs:
           path: |
             ${{ runner.temp }}/public-verification/*-release-summary.json
             ${{ runner.temp }}/public-verification/*-distributed-http-summary.json
+            ${{ runner.temp }}/public-verification/*-outbound-http-summary.json
             ${{ runner.temp }}/public-verification/*-stateful-http-summary.json
             ${{ runner.temp }}/public-verification/*-extracted/RELEASE-MANIFEST.json
             ${{ runner.temp }}/public-verification/*-distributed-http/receipt.json
             ${{ runner.temp }}/public-verification/*-distributed-http/*.log
+            ${{ runner.temp }}/public-verification/*-outbound-http/receipt.json
+            ${{ runner.temp }}/public-verification/*-outbound-http/*.log
             ${{ runner.temp }}/public-verification/*-stateful-http/receipt.json
             ${{ runner.temp }}/public-verification/*-stateful-http/*.log
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json

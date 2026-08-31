@@ -86,6 +86,11 @@ pub fn validate_intrinsic(
             _ => false,
         },
         "core.http.bearer-token" => exact(signature, &[http_headers_type()], &ResolvedType::Text),
+        "core.http.media-type-is" => exact(
+            signature,
+            &[ResolvedType::Bytes, ResolvedType::Text],
+            &ResolvedType::Bool,
+        ),
         "core.bytes.from-text" => exact(signature, &[ResolvedType::Text], &ResolvedType::Bytes),
         "core.bytes.to-text" => exact(signature, &[ResolvedType::Bytes], &ResolvedType::Text),
         "core.bytes.concat" => exact(

@@ -5,11 +5,13 @@ HTTP recipes, exact built-in interface/deployment discovery, compact task/capabi
 named higher-order generic authoring, graph-owned `list-fold-left`,
 normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact bundle service/worker deployment,
+deployment-bound exact-endpoint outbound HTTP and the closed Nostr relay-information recipe,
 first-party ordered application data and durable queue, operational backup/restore, complete
 SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
 and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
 100,100-owner full-lifecycle admission are current architecture. PostgreSQL 16.15 is
-retained only as contributor differential evidence. Immutable `v0.1.12` is the supported public
+retained only as contributor differential evidence. Source product snapshot 0.1.13 contains the
+outbound slice; immutable `v0.1.12` remains the supported public
 `x86_64-unknown-linux-musl` distribution; its exact and latest
 downloads independently passed static, distributed HTTP, and stateful HTTP acceptance. Immutable
 v0.1.8 remains an unclosed historical recovery point.
@@ -29,9 +31,12 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
 3. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-4. **Outbound HTTP from a maintained consumer.** Select exact URL, DNS, TLS, secret, redirect,
-   response-limit, cancellation, retry, and SSRF policy before adding an interface or adapter. Do
-   not infer outbound authority from the existing inbound HTTP server.
+4. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
+   DNS/address, TLS trust, cancellation, and resource ownership established by `HttpClient` without
+   widening it into an ambient URL or socket capability. Define persistent connection ownership,
+   framing, subscriptions, reconnect/backoff, NIP-01 event canonicalization, signing/key authority,
+   relay authentication, replay visibility, and an independent raw WebSocket oracle before adding
+   graph meaning or a deployment adapter.
 5. **Million-owner compiler admission and separately selected data/history scale.** The current
    harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
    capacity attempt reached 275,000 accepted modules before its one-hour allocation and is
@@ -69,6 +74,7 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    workloads, independent semantic/reference behavior, measurements, and explicit reversal
    conditions. Do not infer capture from the existence of named function values.
 
-TLS is not a roadmap item. The present HTTP boundary is plaintext and requires an appropriate
-external trusted transport boundary. Local data encryption, hostile-code sandboxing, and
-multi-tenant isolation are separate unselected problems.
+Inbound TLS is not a roadmap item. The present listener remains plaintext and requires an
+appropriate external trusted transport boundary; outbound HTTPS trust is confined to one exact
+client endpoint. Local data encryption, hostile-code sandboxing, and multi-tenant isolation are
+separate unselected problems.

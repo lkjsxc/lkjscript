@@ -1558,6 +1558,18 @@ fn call_core_intrinsic(
             }
         }
         "core.http.bearer-token" => normalized_bearer_token(program, &arguments),
+        "core.http.media-type-is" => {
+            let [
+                NormalizedValue::Bytes(value),
+                NormalizedValue::Text(expected),
+            ] = arguments.as_slice()
+            else {
+                return Err(type_error("media-type predicate received foreign values"));
+            };
+            Ok(NormalizedValue::Bool(
+                crate::platform::http_client::media_type_matches(value, expected),
+            ))
+        }
         "core.bytes.from-text" => {
             let [NormalizedValue::Text(value)] = arguments.as_slice() else {
                 return Err(type_error("text-to-bytes received a foreign value"));

@@ -9,6 +9,7 @@ use super::capability::{
 };
 use super::configuration::NormalizedConfigurationAdapter;
 use super::data::NormalizedDataAdapter;
+use super::http_client::NormalizedHttpClientAdapter;
 use super::object::NormalizedObjectStorageAdapter;
 use super::password::{NormalizedPasswordHashAdapter, NormalizedPasswordHashOperation};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
@@ -22,6 +23,9 @@ use crate::platform::configuration::{ConfigurationOperation, ConfigurationValue}
 use crate::platform::data::{DataLimits, DataStore};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
+use crate::platform::http_client::{
+    HttpClient, HttpClientAddressPolicy, HttpClientLimits, HttpClientTrust,
+};
 use crate::platform::kernel::{
     DeclarationReference, Name, OperationReference, PackageId, RequirementReference, ResourceUnit,
     SemanticStateDigest, TypeForm, TypeObjectDigest,
@@ -67,6 +71,12 @@ pub(crate) enum NormalizedAdapterDescriptor {
         maximum_candidate_bytes: usize,
     },
     ByteStream,
+    HttpClient {
+        endpoint: String,
+        address_policy: HttpClientAddressPolicy,
+        trust: HttpClientTrust,
+        limits: HttpClientLimits,
+    },
     Data {
         root: String,
         namespace: String,
@@ -110,6 +120,7 @@ impl NormalizedAdapterDescriptor {
             Self::PasswordHash { .. } => NormalizedAdapterKind::PasswordHash,
             Self::SecretVerifier { .. } => NormalizedAdapterKind::SecretVerifier,
             Self::ByteStream => NormalizedAdapterKind::ByteStream,
+            Self::HttpClient { .. } => NormalizedAdapterKind::HttpClient,
             Self::Data { .. } => NormalizedAdapterKind::Data,
             Self::ObjectMemory { .. } => NormalizedAdapterKind::ObjectMemory,
             Self::ObjectLocal { .. } => NormalizedAdapterKind::ObjectLocal,
@@ -715,6 +726,37 @@ fn prepare_adapter(
                 selected,
             )?))
         }
+        NormalizedAdapterDescriptor::HttpClient {
+            endpoint,
+            address_policy,
+            trust,
+            limits,
+        } => {
+            let operation = require_operation(program, requirement, "get")?;
+            validate_signature(
+                program,
+                operation,
+                &[ExpectedType::HttpHeaders],
+                ExpectedType::HttpResponse,
+            )?;
+            let named_root_pem = match trust {
+                HttpClientTrust::WebpkiRoots => None,
+                HttpClientTrust::NamedPemRoot { secret } => Some(secrets.require(secret)?.text()?),
+            };
+            let client = HttpClient::prepare(
+                endpoint,
+                *address_policy,
+                trust,
+                named_root_pem,
+                limits.clone(),
+                runtime.clone(),
+            )?;
+            Ok(Arc::new(NormalizedHttpClientAdapter::new(
+                interface,
+                operation.reference,
+                client,
+            )?))
+        }
         NormalizedAdapterDescriptor::Data {
             root,
             namespace,
@@ -866,6 +908,7 @@ fn require_standard_interface(
         NormalizedAdapterKind::PasswordHash => "decl_375bc0a9f5214e8a27ede17a14e79f67",
         NormalizedAdapterKind::SecretVerifier => "decl_172ae7f44000b32243d75a92e6733e50",
         NormalizedAdapterKind::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
+        NormalizedAdapterKind::HttpClient => "decl_f1084ba5dca02ba338140747d0ea9d46",
         NormalizedAdapterKind::Data => "decl_640e96fa57dee1c09557eb4bc7b53398",
         NormalizedAdapterKind::ObjectMemory
         | NormalizedAdapterKind::ObjectLocal
@@ -1012,6 +1055,9 @@ enum ExpectedType {
     StaticText,
     ByteStream,
     ByteStreamRead,
+    HttpHeader,
+    HttpHeaders,
+    HttpResponse,
 }
 
 fn validate_signature(
@@ -1064,6 +1110,25 @@ fn type_matches(
                 && type_matches(program, fields[0].ty, ExpectedType::Bytes)
                 && fields[1].name.as_str() == "done"
                 && type_matches(program, fields[1].ty, ExpectedType::Bool)
+        }
+        (TypeForm::List { item }, ExpectedType::HttpHeaders) => {
+            type_matches(program, *item, ExpectedType::HttpHeader)
+        }
+        (TypeForm::StructuralRecord { fields }, ExpectedType::HttpHeader) => {
+            fields.len() == 2
+                && fields[0].name.as_str() == "name"
+                && type_matches(program, fields[0].ty, ExpectedType::Text)
+                && fields[1].name.as_str() == "value"
+                && type_matches(program, fields[1].ty, ExpectedType::Bytes)
+        }
+        (TypeForm::StructuralRecord { fields }, ExpectedType::HttpResponse) => {
+            fields.len() == 3
+                && fields[0].name.as_str() == "body"
+                && type_matches(program, fields[0].ty, ExpectedType::Bytes)
+                && fields[1].name.as_str() == "headers"
+                && type_matches(program, fields[1].ty, ExpectedType::HttpHeaders)
+                && fields[2].name.as_str() == "status"
+                && type_matches(program, fields[2].ty, ExpectedType::I64)
         }
         _ => false,
     }
@@ -1151,6 +1216,27 @@ fn encode_adapter(
             encode_u64(bytes, resources.streams.maximum_total_bytes);
             encode_u64(bytes, resources.streams.maximum_live_streams as u64);
         }
+        NormalizedAdapterDescriptor::HttpClient {
+            endpoint,
+            address_policy,
+            trust,
+            limits,
+        } => {
+            bytes.push(14);
+            encode_bytes(bytes, endpoint.as_bytes());
+            bytes.push(match address_policy {
+                HttpClientAddressPolicy::PublicOnly => 1,
+                HttpClientAddressPolicy::LoopbackOnly => 2,
+            });
+            match trust {
+                HttpClientTrust::WebpkiRoots => bytes.push(1),
+                HttpClientTrust::NamedPemRoot { secret } => {
+                    bytes.push(2);
+                    encode_bytes(bytes, secret.as_bytes());
+                }
+            }
+            encode_http_client_limits(bytes, limits);
+        }
         NormalizedAdapterDescriptor::Data {
             root,
             namespace,
@@ -1214,6 +1300,27 @@ fn encode_adapter(
             encode_data_limits(bytes, data_limits);
             encode_queue_limits(bytes, limits);
         }
+    }
+}
+
+fn encode_http_client_limits(bytes: &mut Vec<u8>, limits: &HttpClientLimits) {
+    for value in [
+        limits.maximum_request_headers,
+        limits.maximum_request_header_bytes,
+        limits.maximum_response_headers,
+        limits.maximum_response_header_bytes,
+        limits.maximum_response_body_bytes,
+        limits.maximum_dns_results,
+        limits.maximum_concurrent_requests,
+    ] {
+        encode_u64(bytes, value as u64);
+    }
+    for value in [
+        limits.connection_timeout_milliseconds,
+        limits.total_timeout_milliseconds,
+        limits.cleanup_timeout_milliseconds,
+    ] {
+        encode_u64(bytes, value);
     }
 }
 

@@ -41,6 +41,7 @@ use super::super::deployment::{
 use super::super::diagnostic::DiagnosticClass;
 use super::super::execution::normalized::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
+use super::super::http_client::HTTP_CLIENT_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
 use super::super::kernel::contract::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION};
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
@@ -88,15 +89,15 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 14;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-4";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 4;
+pub const CLI_CONTRACT_VERSION: u16 = 15;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v3";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v3";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v4";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v4";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -203,6 +204,7 @@ pub enum ContractKey {
     ConfigurationAdapter,
     CapabilityGrant,
     HttpAdapter,
+    HttpClientAdapter,
     Json,
     ObjectAdapter,
     QueueAdapter,
@@ -250,6 +252,7 @@ impl ContractKey {
             Self::ConfigurationAdapter => "configuration_adapter",
             Self::CapabilityGrant => "capability_grant",
             Self::HttpAdapter => "http_adapter",
+            Self::HttpClientAdapter => "http_client_adapter",
             Self::Json => "json",
             Self::ObjectAdapter => "object_adapter",
             Self::QueueAdapter => "queue_adapter",
@@ -772,6 +775,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             ContractAuthority::Runtime,
         ),
         simple_contract(
+            ContractKey::HttpClientAdapter,
+            "outbound HTTP client adapter",
+            "lkjscript-http-client-adapter-1",
+            HTTP_CLIENT_ADAPTER_CONTRACT_VERSION,
+            ContractAuthority::Runtime,
+        ),
+        simple_contract(
             ContractKey::Json,
             "bounded JSON value adapter",
             "lkjscript-json-1",
@@ -1078,7 +1088,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         new_operation(
             "Create fresh normalized semantic authority atomically at one absent safe destination.",
-            "new DEST [--template minimal|command|http] [--name NAME]",
+            "new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--relay-url URL]",
         ),
         status_operation(
             "Report the exact current semantic authority and its durable acceptance evidence.",
@@ -3136,6 +3146,162 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "A context query was cancelled by its owning execution scope.",
             "Retry the read-only query when the owning scope is active.",
         ),
+        diagnostic(
+            "http_client_contract",
+            DiagnosticClass::Capability,
+            "Outbound HTTP client limits use a predecessor or foreign adapter contract.",
+            "Use the exact current deployment schema and regenerate the descriptor.",
+        ),
+        diagnostic(
+            "http_client_endpoint",
+            DiagnosticClass::Capability,
+            "The deployment-bound HTTP endpoint is malformed, noncanonical, or incompatible with its address policy.",
+            "Select one exact canonical http/https endpoint using the documented destination policy.",
+        ),
+        diagnostic(
+            "http_client_limit",
+            DiagnosticClass::Capability,
+            "One outbound HTTP client deployment limit is zero, excessive, or internally inconsistent.",
+            "Select positive values within the executable-generated independent maxima.",
+        ),
+        diagnostic(
+            "http_client_trust",
+            DiagnosticClass::Capability,
+            "Outbound HTTPS trust material is absent, malformed, empty, excessive, or unsupported.",
+            "Use pinned public WebPKI roots or bind one valid bounded named PEM root secret.",
+        ),
+        diagnostic(
+            "http_client_argument",
+            DiagnosticClass::Capability,
+            "Graph-supplied HttpClient.get arguments do not have the exact ordered header-list shape.",
+            "Pass the current built-in operation's exact structural header list.",
+        ),
+        diagnostic(
+            "http_client_request_header_limit",
+            DiagnosticClass::Resource,
+            "Outbound request header count or bytes exceed the deployment limit.",
+            "Reduce application-selected headers or deliberately raise only the relevant deployment limit.",
+        ),
+        diagnostic(
+            "http_client_header",
+            DiagnosticClass::Capability,
+            "A graph-supplied outbound request header name or value is invalid.",
+            "Use a canonical HTTP field name and bounded value without prohibited control bytes.",
+        ),
+        diagnostic(
+            "http_client_header_forbidden",
+            DiagnosticClass::Capability,
+            "Graph meaning attempted to supply a transport-owned or credential-bearing outbound header.",
+            "Remove the header; Host, framing, connection, proxy, authorization, and cookie policy belong to the adapter.",
+        ),
+        diagnostic(
+            "http_client_dns",
+            DiagnosticClass::Capability,
+            "The exact outbound endpoint could not resolve to an admitted address set.",
+            "Correct DNS or the deployment endpoint without broadening graph authority.",
+        ),
+        diagnostic(
+            "http_client_dns_limit",
+            DiagnosticClass::Resource,
+            "Endpoint resolution returned more addresses than the deployment admits.",
+            "Reduce the DNS result set or deliberately raise only the DNS-result limit.",
+        ),
+        diagnostic(
+            "http_client_destination",
+            DiagnosticClass::Capability,
+            "At least one resolved endpoint address violates the exact public-only or loopback-only policy.",
+            "Correct the endpoint or DNS answer; mixed and forbidden address sets fail closed.",
+        ),
+        diagnostic(
+            "http_client_connect",
+            DiagnosticClass::Capability,
+            "No validated endpoint address accepted a connection within the common establishment bound.",
+            "Correct endpoint reachability and retry only at graph-owned policy.",
+        ),
+        diagnostic(
+            "http_client_tls",
+            DiagnosticClass::Capability,
+            "Outbound HTTPS certificate authentication or handshake failed.",
+            "Correct the endpoint hostname, certificate chain, validity, or selected trust root.",
+        ),
+        diagnostic(
+            "http_client_request_write",
+            DiagnosticClass::Capability,
+            "The outbound GET transport failed after remote visibility became possible.",
+            "Treat visibility as possible and retry only under explicit application policy.",
+        ),
+        diagnostic(
+            "http_client_protocol",
+            DiagnosticClass::Capability,
+            "The endpoint returned malformed, ambiguous, unsupported, or trailing HTTP/1.1 framing.",
+            "Correct the endpoint protocol response; no partial response is returned.",
+        ),
+        diagnostic(
+            "http_client_response_header_limit",
+            DiagnosticClass::Resource,
+            "Outbound response header count or bytes exceed the deployment limit.",
+            "Reduce the remote response or deliberately raise only the response-header limit.",
+        ),
+        diagnostic(
+            "http_client_response_body_limit",
+            DiagnosticClass::Resource,
+            "Outbound response body bytes exceed the deployment limit.",
+            "Reduce the remote response or deliberately raise only the response-body limit.",
+        ),
+        diagnostic(
+            "http_client_concurrency_limit",
+            DiagnosticClass::Resource,
+            "The deployment's outbound concurrent-request admission is exhausted.",
+            "Wait for owned requests to finish or deliberately raise only the concurrency limit.",
+        ),
+        diagnostic(
+            "http_client_deadline_overflow",
+            DiagnosticClass::Resource,
+            "The outbound request deadline cannot be represented by the runtime clock.",
+            "Use a smaller valid total-time limit and preserve the exact diagnostic.",
+        ),
+        diagnostic(
+            "http_client_timeout",
+            DiagnosticClass::Cancelled,
+            "The outbound request exceeded its connection, deployment-total, or owning task deadline.",
+            "Correct endpoint latency or deliberately change the owning deployment deadline; no automatic retry occurs.",
+        ),
+        diagnostic(
+            "http_client_cancelled",
+            DiagnosticClass::Cancelled,
+            "The owning task, inbound client, or resident shutdown cancelled the outbound request.",
+            "Retry only when a new owning task and application policy authorize another observable GET.",
+        ),
+        diagnostic(
+            "http_client_shutdown",
+            DiagnosticClass::Cancelled,
+            "The outbound HTTP client has stopped admitting new request resources.",
+            "Prepare a new deployment after the previous resident runtime has shut down.",
+        ),
+        diagnostic(
+            "http_client_cleanup",
+            DiagnosticClass::Infrastructure,
+            "Outbound request resources did not close within the configured cleanup bound.",
+            "Preserve bounded logs and inspect cancellation or host-network resource behavior.",
+        ),
+        diagnostic(
+            "normalized_http_client_operation_package",
+            DiagnosticClass::Capability,
+            "The prepared HttpClient operation does not share its interface package identity.",
+            "Rebuild the artifact and descriptor against the exact current built-in package.",
+        ),
+        diagnostic(
+            "normalized_http_client_policy",
+            DiagnosticClass::Infrastructure,
+            "Runtime HttpClient call policy disagrees with the exact prepared interface operation.",
+            "Preserve the artifact and use a verified matching executable.",
+        ),
+        diagnostic(
+            "normalized_http_client_shape",
+            DiagnosticClass::Infrastructure,
+            "Runtime HttpClient result construction disagrees with the exact structural result type.",
+            "Preserve the artifact and use a verified matching executable.",
+        ),
         DiagnosticDescriptor {
             code: "owner_selector_kind",
             class: DiagnosticClass::Source,
@@ -3267,7 +3433,7 @@ pub fn outcome_exit_status(status: &str) -> u8 {
 
 pub fn nonclaims() -> &'static [&'static str] {
     &[
-        "no TLS implementation or encrypted transport guarantee",
+        "no inbound TLS termination, client certificate, or insecure outbound trust mode",
         "no hostile-code or hostile-multi-tenant sandbox",
         "no artifact signature or authenticated provenance",
         "no distributed consensus or multi-node publication",
@@ -4198,6 +4364,7 @@ fn validate_deployment_schema_inventory() -> Result<(), String> {
         "password_hash",
         "secret_verifier",
         "byte_stream",
+        "http_client",
         "data",
         "object_memory",
         "object_local",

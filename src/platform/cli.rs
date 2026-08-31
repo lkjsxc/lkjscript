@@ -28,7 +28,7 @@ use super::kernel::{
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
 use super::owned_output::publish_create_new;
-use super::project_creation::{ProjectTemplate, create_project};
+use super::project_creation::{ProjectTemplate, create_project, create_project_with_relay};
 use super::project_discovery::discover_project;
 use super::publication::{
     GraphRepository, PreparedAuthoredPublication, PublicationOptions,
@@ -171,12 +171,16 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         .first()
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| usage_error("new requires one destination directory"))?;
-    ensure_options(&arguments[1..], &["--template", "--name"], &[])?;
+    ensure_options(
+        &arguments[1..],
+        &["--template", "--name", "--relay-url"],
+        &[],
+    )?;
     let template_name =
         option_value(&arguments[1..], "--template")?.unwrap_or_else(|| "minimal".to_owned());
     let template = ProjectTemplate::parse(&template_name).ok_or_else(|| {
         usage_error(format!(
-            "unknown normalized project template '{template_name}'; expected minimal, command, or http"
+            "unknown normalized project template '{template_name}'; expected minimal, command, http, or nostr-relay-info"
         ))
     })?;
     let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
@@ -191,7 +195,23 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             "new requires --name when the destination name is not valid UTF-8",
         ));
     }
-    let created = create_project(Path::new(destination), &package_name, template)?;
+    let relay_url = option_value(&arguments[1..], "--relay-url")?;
+    let created = match (template, relay_url.as_deref()) {
+        (ProjectTemplate::NostrRelayInfo, Some(relay_url)) => {
+            create_project_with_relay(Path::new(destination), &package_name, relay_url)?
+        }
+        (ProjectTemplate::NostrRelayInfo, None) => {
+            return Err(usage_error(
+                "nostr-relay-info requires exactly one --relay-url URL",
+            ));
+        }
+        (_, Some(_)) => {
+            return Err(usage_error(
+                "--relay-url is accepted only with --template nostr-relay-info",
+            ));
+        }
+        (_, None) => create_project(Path::new(destination), &package_name, template)?,
+    };
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -291,7 +311,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             ("project", project.clone()),
         ],
     )?;
-    if let Some(deployment) = &created.deployment {
+    if created.deployment.is_some() && created.template == ProjectTemplate::Http {
         append_compact_record(
             &mut output,
             "next",
@@ -321,11 +341,23 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
                 ("plan", "token-from-order-3".to_owned()),
             ],
         )?;
+    }
+    if let Some(deployment) = &created.deployment {
+        let build_order = if created.template == ProjectTemplate::Http {
+            "5"
+        } else {
+            "3"
+        };
+        let serve_order = if created.template == ProjectTemplate::Http {
+            "6"
+        } else {
+            "4"
+        };
         append_compact_record(
             &mut output,
             "next",
             &[
-                ("order", "5".to_owned()),
+                ("order", build_order.to_owned()),
                 ("kind", "build".to_owned()),
                 ("operation", "build".to_owned()),
                 ("project", project.clone()),
@@ -339,7 +371,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             &mut output,
             "next",
             &[
-                ("order", "6".to_owned()),
+                ("order", serve_order.to_owned()),
                 ("kind", "serve".to_owned()),
                 ("operation", "serve".to_owned()),
                 ("deployment", deployment.descriptor.display().to_string()),

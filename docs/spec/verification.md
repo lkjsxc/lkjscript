@@ -89,14 +89,14 @@ inputs without using `ldd` or trusting the target name.
 The candidate must complete the command lifecycle in two independently pinned Linux/amd64
 userlands: one musl-based and one older-glibc-based. Candidate execution has no network and no host
 library bind mount. Admission also requires the same bytes to pass the maintained distributed HTTP,
-stateful HTTP, and standalone service oracles using isolated first-party data roots. The receipt records distinct userland, application,
+stateful HTTP, outbound HTTP, and standalone service oracles using isolated authorities. The receipt records distinct userland, application,
 static-inspection, cleanup, and resource classifications. Static linkage and those two userlands do
 not imply a minimum kernel, universal Linux portability, another architecture, or hostile-code
 isolation.
 
 ## Transferable application evidence
 
-`distributed-http` and `stateful-http` each have contributor and transferred execution contexts.
+`distributed-http`, `stateful-http`, and `outbound-http` each have contributor and transferred execution contexts.
 Transferred mode requires an explicit absolute lexically canonical create-new evidence root outside
 any checkout. It must not discover a repository root, use a compile-time checkout path, invoke
 Cargo, read a source/generated/template file, or use an ambient application helper. The receipt
@@ -113,8 +113,26 @@ logical backup/absent-root restore, corrupt/absent-root failed startup, graceful
 accepted graph authority, and data/runner-root cleanup. Timeout, early exit, data failure, shutdown
 failure, or cleanup failure remains a typed non-pass. Workflow shell cannot reclassify it.
 
-The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. Neither
-application oracle replaces the other at release admission.
+The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. None of the
+three application oracles replaces another at release admission.
+
+The outbound owner creates `nostr-relay-info` only through copied-candidate discovery and project
+creation, checks it, compares clean and exact-current artifact bytes, and serves it from an isolated
+root. Its implementation-disjoint raw HTTP/1.1 and TLS oracle records exact request line, Host,
+headers, connection count, and bounded response bytes without sharing production endpoint parsing,
+HTTP parsing, response generation, or application assertions. Fixed deterministic certificate
+fixtures exercise trusted, untrusted, expired, and hostname-mismatched chains without retaining a
+private key or root-secret value.
+
+Passing aggregate outbound proof combines the copied-candidate receipt with focused adapter tests.
+The receipt covers exact HTTPS success and byte preservation, explicit loopback HTTP,
+public-versus-loopback admission, redirect non-following, non-200 and wrong media type, response
+header/body exhaustion, total timeout, inbound-client cancellation, malformed protocol, invalid
+startup trust, recovery, restart, shutdown during an active request, repeated clean shutdown,
+unchanged accepted graph authority, and complete process/socket/secret/project/artifact/root
+cleanup. Focused adapter tests with independently enumerated expected outcomes cover
+mixed/forbidden scripted DNS and graph-supplied forbidden headers. No required case contacts a live
+relay or automatically replays a GET.
 
 Contributor-only migration evidence runs an exact PostgreSQL 16.15 image pinned by manifest and
 config digests. It creates deterministic representation-neutral BBS and `lkjournal` fixtures in an
@@ -135,14 +153,16 @@ byte-equal. Strict verification owns archive inventory, order, mode, timestamp, 
 canonical metadata, checksum, target/linkage, candidate, and extraction-conflict rejection.
 
 Before publication, a read-only no-checkout job verifies exact artifact and verifier handoffs,
-re-inspects the extracted candidate, and freshly passes transferred distributed and stateful HTTP.
+re-inspects the extracted candidate, and freshly passes transferred distributed, stateful, and
+outbound HTTP.
 The publication job depends on both receipts, has the only release-write permission, performs no
 checkout, and executes no repository binary or script.
 
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
 verified independently. Each path requires checksum, GitHub asset digest, release/asset attestation,
 strict extraction, source/manifest/candidate equality, static inspection, transferred distributed
-HTTP, transferred stateful HTTP against a fresh isolated first-party data root, and cleanup. Exact/latest
+HTTP, transferred stateful HTTP against a fresh isolated first-party data root, transferred
+outbound HTTP against fresh local HTTP/TLS fixtures, and cleanup. Exact/latest
 release-asset, manifest, and candidate byte equality is required but cannot replace either
 behavioral run. Clean/incremental artifact equality is required within each independently created
 application; artifacts from the two fresh applications have independently allocated semantic

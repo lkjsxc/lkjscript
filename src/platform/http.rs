@@ -561,6 +561,7 @@ fn is_transport_owned_header(name: &HeaderName) -> bool {
 pub(crate) fn execution_error_status(error: &ExecutionError) -> StatusCode {
     match error.code.as_str() {
         "http_query_decode" => StatusCode::BAD_REQUEST,
+        code if code.starts_with("http_client_") => StatusCode::BAD_GATEWAY,
         "resident_overloaded" => StatusCode::SERVICE_UNAVAILABLE,
         "execution_deadline" | "execution_cancelled" | "resident_shutting_down" => {
             StatusCode::SERVICE_UNAVAILABLE

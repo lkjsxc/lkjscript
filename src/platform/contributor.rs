@@ -146,7 +146,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 409);
+        assert_eq!(inventory.owners, 427);
         assert_eq!(inventory.modules, 12);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

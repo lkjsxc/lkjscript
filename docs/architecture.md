@@ -36,11 +36,11 @@ Closed project creation enters that same authority boundary without first invent
 storage-shaped request:
 
 ```text
-closed minimal / command / HTTP recipe
+closed minimal / command / HTTP / Nostr relay-information recipe
             │ typed graph + complete validation
             ▼
  private sibling: canonical typed meaning graph repository
-            │ HTTP only: typed deployment descriptor + empty generated/
+            │ resident recipes: typed deployment descriptor + empty generated/
             │ synchronize complete private inventory
             ▼
        one destination visibility rename
@@ -99,29 +99,29 @@ locked source + typed target policy
                  + byte-bound verifier handoff
                               │
         read-only no-checkout package/static verification
-             + transferred distributed/stateful HTTP
+             + transferred distributed/stateful/outbound HTTP
                               │
        no-checkout publication job with contents:write only
                               │
                immutable GitHub Release
                               │
- anonymous exact/latest static + distributed/stateful acceptance
+ anonymous exact/latest static + distributed/stateful/outbound acceptance
 ```
 
 `tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
 preparation, strict archive/static verification, and application-verifier handoff. Target admission
 binds source and candidate identities to direct ELF inspection, two pinned networkless userland
-command lifecycles, and the distributed HTTP, stateful HTTP, and standalone service oracles. A host
+command lifecycles, and the distributed HTTP, stateful HTTP, outbound HTTP, and standalone service oracles. A host
 build and the source-wide full receipt remain distinct from this exact-candidate evidence.
 
 The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
 handoff owns the archive, checksum, and private release receipt. The verifier handoff binds the exact
-host `lkjscript-dev` bytes and its release/distributed/stateful roles. Read-only jobs verify those
+host `lkjscript-dev` bytes and its release/distributed/stateful/outbound roles. Read-only jobs verify those
 bytes before restoring executable mode after artifact transport. The pre-publication job checks out
-no source, safely extracts and re-inspects the packaged candidate, then runs both transferred
+no source, safely extracts and re-inspects the packaged candidate, then runs all three transferred
 application oracles. The publication job receives only the release handoff and is the only job with
 release-write authority. Post-publication verification downloads exact and latest assets
-anonymously and runs strict static inspection plus both oracles independently against each.
+anonymously and runs strict static inspection plus all three oracles independently against each.
 
 The public release, transient artifacts, archive, manifest, checksum, receipts, asset digest, and
 attestation are derived distribution evidence. None can select or edit typed meaning, executable
@@ -138,8 +138,9 @@ cutover.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10 and v0.1.12 publications moved no predecessor tag,
-release, or asset. Current source and the public release share product 0.1.12 while the data-store,
-logical-backup, deployment-2, compact-change-7, and CLI-14 identities remain independently owned.
+release, or asset. Current source owns product snapshot 0.1.13, CLI 15, project creation 3,
+deployment 3, registry 4, and HTTP-client-adapter 1. The immutable public release remains 0.1.12;
+data-store, logical-backup, compact-change, and all unrelated identities remain independently owned.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
@@ -168,11 +169,12 @@ cursor exists.
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, relation, and bounded local-context reads with logical continuations | mutable cursors, query indexes, repair, or full owner bodies |
-| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP recipe resolution | package implementation bodies, a general registry, or ambient resolver |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, narrow command/HTTP/Nostr-information recipe resolution | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
+| Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, WebSocket, or application response policy |
 | Operational data | `platform/data.rs`, normalized data adapter, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, one durable queue backend | program meaning, object bytes, deployment policy, or remote database service |
 | Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
@@ -247,6 +249,14 @@ authority revision, loopback listener, one byte-stream grant, and independent bo
 Publishing it beside graph authority in one complete directory does not merge their identity or
 mutation rules. There is no source template, migration reader, path lookup, network fetch, hidden
 sidecar, or prebuilt application artifact.
+
+The Nostr relay-information recipe reuses that inbound topology and resolves the exact standard
+`HttpClient.get` interface/operation plus a pure media-type predicate. Its graph owns route,
+ordered `Accept` header, status/media policy, byte-preserving response, and deterministic 502. Its
+descriptor adds one exact client grant whose normalized endpoint, address class, TLS trust, and
+independent limits remain operator authority. Project creation validates and synchronizes graph,
+descriptor, and empty generated directory before one destination rename; readiness performs no
+network request.
 
 ## Public stateful HTTP authoring path
 
@@ -340,7 +350,8 @@ strict deployment descriptor + relative artifact bundle
                          ▼
        normalized capability codecs at artifact edge
                          │
-       first-party ordered data + object capability
+       exact-endpoint outbound HTTP
+       + first-party ordered data + object capability
        + first-party durable-queue namespace
 ```
 
@@ -364,6 +375,17 @@ inventories. Its stable receipt binds the verifier and candidate bytes. An expli
 create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
 checkout path. Product/full verification and the target-admission, pre-publication, and
 anonymous exact/latest paths all use this same owner.
+
+The distinct `outbound_http_application` owner copies the candidate into a fresh root, creates the
+closed relay-information recipe, exercises discovery/status/query/check/build/serve, and compares
+clean and exact-current artifacts. An independent raw HTTP/1.1/TLS oracle uses deterministic
+certificate fixtures and records exact wire requests while sharing no production endpoint parser,
+HTTP parser, response generator, or application assertions. It proves public/loopback address
+admission, mixed-answer rejection, TLS chain/hostname/validity failures, no redirect/retry,
+forbidden headers, response limits, timeout, inbound cancellation, malformed protocol, failed
+startup, restart, active shutdown, unchanged semantic authority, and complete cleanup without a
+live relay. Product/service/full, target admission, and future transferred release paths use this
+same non-cacheable owner.
 
 The separate `stateful_http_application` owner has the same contributor/transferred context seam and
 copies the candidate to a fresh root. It uses executable discovery to construct a bounded BBS
@@ -430,7 +452,10 @@ adapter inputs are hostile boundaries with independent limits. Diagnostics prese
 and code without exposing secrets or large payloads. Runtime resources are scoped and released on
 success, failure, cancellation, exhaustion, and shutdown.
 
-The HTTP listener is plaintext, and first-party data is unencrypted local trusted-host storage. TLS
-termination, encrypted graph or data storage, hostile-code sandboxing, multi-tenant isolation,
-artifact signatures, replication, distributed consensus, online data compaction, JIT/AOT, custom
-allocation, and a resident authoring daemon are not implemented.
+The inbound HTTP listener is plaintext, and first-party data is unencrypted local trusted-host
+storage. Outbound HTTPS authenticates one deployment endpoint under locked public roots or one
+named PEM root; it provides no browser trust UI, insecure switch, client certificate, privacy
+layer, DNSSEC, private-network mode, or sandbox. Inbound TLS termination, encrypted graph or data
+storage, hostile-code sandboxing, multi-tenant isolation, artifact signatures, replication,
+distributed consensus, online data compaction, JIT/AOT, custom allocation, and a resident authoring
+daemon are not implemented.

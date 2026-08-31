@@ -19,10 +19,10 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_8c9af517a19991e1e71c69dfa427fdddf0e0f9f69161522a7cf6889db88f938f`;
-- semantic state: `semantic_state_6ab133945cc984ab98305897c1ce9daaec7f6ce089ea937f60023f326aa5dc9f`;
-- artifact manifest: `artifact_manifest_2087386a0c1ff708b04db2221a5a20ac3d3f66ac3443e4dc2a25f032f38398d1`;
-- artifact bundle: `artifact_bundle_b5a2f01d952416c5f9b61b36d1335ded8698acc653ae677974b43dc57c8acb6c`;
+- semantic revision: `rev_1eb8825f79e542273c7df08e98720878b503f51c3cdbd91f5954d081f07aa203`;
+- semantic state: `semantic_state_e2e3834a0a3f0f415f01eb6dc8ee9c8ff0e0c6e60725e51ad68202a9c576fb2a`;
+- artifact manifest: `artifact_manifest_d604b351f90292393f1ffce2b28c550592cea46f6d2c20b370489669d2498536`;
+- artifact bundle: `artifact_bundle_eba2a6963dcda9338039f1e9b53660d021e3615fec57b02de1e07561619759c7`;
 - 1,559 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
@@ -40,8 +40,8 @@ target/release/lkjscript --project applications/lkjournal build \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure and runs 5 application tests plus 11 standard
-tests. All 16 must agree between normalized bytecode and the canonical reference interpreter.
+Check compiles and links the exact two-package closure and runs 5 application tests plus 13 standard
+tests. All 18 must agree between normalized bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
 not change accepted `HEAD`.
 
@@ -52,9 +52,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 813,625-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 822,515-byte
 artifact bundle above (SHA-256
-`9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28`). `serve` resolves target
+`1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after first-party data/queue/object preflight. It does not discover this typed

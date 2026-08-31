@@ -50,10 +50,11 @@ Cancellation and resource exhaustion are distinct from typed application failure
 
 ## Generic adapters
 
-Current adapters cover strict HTTP server dispatch, typed JSON, the first-party ordered data store
-and lexical transactions, configuration, redacted secrets, clocks, secure/deterministic randomness,
-UUID, Argon2 password hashing, bounded streams, memory/local/S3-compatible objects, and the
-first-party durable queue and workers.
+Current adapters cover strict inbound HTTP server dispatch, deployment-bound exact-endpoint
+outbound HTTP/1.1 GET, typed JSON, the first-party ordered data store and lexical transactions,
+configuration, redacted secrets, clocks, secure/deterministic randomness, UUID, Argon2 password
+hashing, bounded streams, memory/local/S3-compatible objects, and the first-party durable queue and
+workers.
 
 Production and deterministic test adapters share public behavior contracts but use disjoint
 implementations. Tests use explicit scripted or deterministic grants and never ambient production
@@ -66,6 +67,13 @@ types and those narrow functions. Space and index policy, typed encodings, schem
 expectations, and transaction ordering are graph meaning. Deployment owns the confined first-party
 root, namespace, sharing domain, authority revision, and independent limits. There is no production
 provider selector, SQL surface, connection credential, network database, or fallback backend.
+
+Outbound graph meaning depends on the exact standard `HttpClient` interface. It supplies only a
+bounded ordered header list and consumes status, ordered headers, and whole body bytes. The exact
+endpoint, address class, TLS trust, deadlines, and independent limits belong to one deployment
+grant. The operation is idempotent with possible external visibility, but the adapter does not
+redirect or retry. Exact destination admission, cancellation, and nonclaims are normative in
+[outbound-http-client.md](outbound-http-client.md).
 
 ## Structured runtime
 

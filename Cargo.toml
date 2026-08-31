@@ -1,6 +1,6 @@
 [package]
 name = "lkjscript"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
@@ -19,12 +19,17 @@ bytes = "1.12.1"
 fs2 = "0.4.3"
 futures-util = { version = "0.3.34", default-features = false }
 getrandom = "0.3.4"
+httparse = "1.10.1"
 object_store = { version = "0.14.1", default-features = false, features = ["aws", "fs"] }
+rustls = { version = "0.23.43", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
+rustls-pemfile = "2.2.0"
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
-tokio = { version = "1.53.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws_lc_rs", "tls12"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
+webpki-roots = "1.0.9"
 
 [dev-dependencies]
 tempfile = "3.23.0"

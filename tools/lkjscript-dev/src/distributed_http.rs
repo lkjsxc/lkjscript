@@ -2367,9 +2367,12 @@ mod tests {
         fs::copy(source, &candidate).expect("copy candidate fixture");
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))
             .expect("set candidate mode");
-        let observed =
-            executable_observation(&candidate, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES)
-                .expect("observe fixture");
+        let observed = executable_observation(
+            &candidate,
+            "debug verifier fixture",
+            MAXIMUM_VERIFIER_EXECUTABLE_BYTES,
+        )
+        .expect("observe fixture");
         assert!(observed.executable);
         assert_eq!(observed.mode & 0o7777, 0o755);
         assert_eq!(observed.sha256.len(), 64);
@@ -2381,13 +2384,13 @@ mod tests {
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o644))
             .expect("remove executable mode");
         assert!(
-            executable_observation(&candidate, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,)
+            executable_observation(&candidate, "fixture", MAXIMUM_VERIFIER_EXECUTABLE_BYTES,)
                 .is_err()
         );
         let link = temporary.path().join("candidate-link");
         std::os::unix::fs::symlink(&candidate, &link).expect("create candidate link");
         assert!(
-            executable_observation(&link, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES).is_err()
+            executable_observation(&link, "fixture", MAXIMUM_VERIFIER_EXECUTABLE_BYTES).is_err()
         );
 
         let oversized = temporary.path().join("oversized");

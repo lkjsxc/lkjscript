@@ -7,6 +7,7 @@ use super::target::{self, BuiltCandidate, TargetBuildReceipt, UserlandPolicy};
 use crate::distributed_http;
 use crate::error::DevError;
 use crate::evidence;
+use crate::outbound_http;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
 use crate::service;
 use crate::stateful_http;
@@ -21,7 +22,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ADMISSION_SCHEMA: &str = "lkjscript-target-admission-receipt";
-const ADMISSION_SCHEMA_VERSION: u32 = 1;
+const ADMISSION_SCHEMA_VERSION: u32 = 2;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -220,6 +221,10 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             "transferred copied-binary HTTP oracle passed",
         ),
         fresh(
+            "outbound_http",
+            "transferred copied-binary deployment-bound outbound HTTP oracle passed",
+        ),
+        fresh(
             "stateful_http",
             "transferred first-party-data BBS oracle passed",
         ),
@@ -356,7 +361,12 @@ fn validate_receipt(
         .iter()
         .map(|item| (item.role.as_str(), item.image.requested.as_str()))
         .collect::<Vec<_>>();
-    let expected_oracles = ["distributed_http", "stateful_http", "service_acceptance"];
+    let expected_oracles = [
+        "distributed_http",
+        "outbound_http",
+        "stateful_http",
+        "service_acceptance",
+    ];
     let observed_oracles = receipt
         .oracles
         .iter()
@@ -367,6 +377,7 @@ fn validate_receipt(
         "musl_userland",
         "older_glibc_userland",
         "distributed_http",
+        "outbound_http",
         "stateful_http",
         "service_acceptance",
     ];
@@ -857,6 +868,26 @@ fn run_oracles(
     let distributed =
         distributed_http::read_transferred_receipt(&distributed_receipt, candidate, verifier)?;
 
+    let outbound_root = context.evidence_root.join("outbound-http");
+    let outbound_output = context.invoke(
+        "outbound-http-oracle",
+        vec![
+            verifier.display().to_string(),
+            "outbound-http".to_owned(),
+            "--binary".to_owned(),
+            candidate.display().to_string(),
+            "--evidence-root".to_owned(),
+            outbound_root.display().to_string(),
+            "--machine".to_owned(),
+        ],
+        Expected::Passed,
+        ORACLE_TIMEOUT,
+        false,
+    )?;
+    require_machine_passed("outbound HTTP", &outbound_output)?;
+    let outbound_receipt = outbound_root.join("receipt.json");
+    let outbound = outbound_http::read_transferred_receipt(&outbound_receipt, candidate, verifier)?;
+
     let stateful_root = context.evidence_root.join("stateful-http");
     let stateful_output = context.invoke(
         "stateful-http-oracle",
@@ -921,6 +952,19 @@ fn run_oracles(
             requests: distributed.responses,
             cleanup_complete: distributed.cleanup_complete,
             prerequisite: "none".to_owned(),
+        },
+        OracleObservation {
+            name: "outbound_http".to_owned(),
+            status: AdmissionStatus::Passed,
+            receipt: external_evidence(&outbound_receipt)?,
+            verifier_sha256: outbound.verifier_sha256,
+            candidate_sha256: outbound.candidate_sha256,
+            elapsed_nanoseconds: outbound.elapsed_nanoseconds,
+            commands: outbound.commands,
+            runners: outbound.runners,
+            requests: outbound.requests,
+            cleanup_complete: outbound.cleanup_complete,
+            prerequisite: "http_client_adapter_1".to_owned(),
         },
         OracleObservation {
             name: "stateful_http".to_owned(),
@@ -1403,18 +1447,19 @@ mod tests {
     #[test]
     fn admission_schema_and_required_classifications_are_stable() {
         assert_eq!(ADMISSION_SCHEMA, "lkjscript-target-admission-receipt");
-        assert_eq!(ADMISSION_SCHEMA_VERSION, 1);
+        assert_eq!(ADMISSION_SCHEMA_VERSION, 2);
         assert_eq!(
             [
                 "static_linkage",
                 "musl_userland",
                 "older_glibc_userland",
                 "distributed_http",
+                "outbound_http",
                 "stateful_http",
                 "service_acceptance",
             ]
             .len(),
-            6
+            7
         );
     }
 

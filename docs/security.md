@@ -10,7 +10,8 @@ meaning, deployment author, host OS/filesystem administrator, first-party data-r
 object-store administrator are trusted within their named authority. Packed graph/artifact bytes,
 data-format/revision/head/logical-backup bytes, public change and query requests, continuation
 handles, deployment descriptors, HTTP input, JSON, object responses, queue records, and environment
-values are hostile decoding inputs.
+values are hostile decoding inputs. Outbound DNS answers, certificate chains, HTTP responses, and
+named PEM-root secret bytes are also hostile at their owning validation boundaries.
 
 Accepted lkjscript meaning is validated and resource-bounded but is not isolated as hostile tenant
 code. A process, package digest, repository ID, data-store identity, or runtime task is not an
@@ -46,6 +47,8 @@ filesystems and platforms not covered by retained evidence are not claimed.
 |---|---|---|
 | Deployment artifact substitution | strict relative regular path, symlink-component rejection, artifact bundle checksum/digest validation, exact root target and requirement closure before secrets or readiness | deployment directory and descriptor author are trusted operational authority |
 | Capability confusion | exact interface/operation/alias/limit requirement and deployment grant equality | deployment author chooses appropriate authority |
+| Outbound destination/SSRF expansion | graph receives no URL; one immutable canonical deployment endpoint; whole-set request-time address classification; connect only to validated addresses; public HTTPS or explicit loopback-only plaintext; no redirect/proxy | deployment author and system resolver select the intended exact endpoint; this is not DNSSEC or a general sandbox |
+| Outbound TLS bypass | exact hostname/chain/validity verification against locked WebPKI roots or one bounded named PEM root; no insecure switch, platform trust, trust union, or client certificate | operator protects the selected root secret and endpoint DNS authority |
 | Secret disclosure | environment acquisition into opaque redacted values; no durable graph or artifact secret | OS environment and administrator are trusted |
 | Typed data substitution | nominal/runtime layout digest, envelope checksum, independent production/reference codecs, canonical/trailing/bounds rejection | graph-owned schema and index policy is reviewed application meaning |
 | Data corruption or torn commit | immutable complete revisions, cross-process writer lock, exact-base recheck, data-before-head synchronization, old-or-new fault tests, complete verify | local filesystem and operator honor the supported trusted-host boundary |
@@ -65,7 +68,8 @@ does not own lkjournal routes, spaces/indexes, roles, object keys, or queue tran
 ## Native and test boundaries
 
 First-party Rust forbids `unsafe`. `rustix` supplies safe Linux filesystem/process wrappers;
-Axum/Tokio own HTTP and task mechanics; `object_store` owns local/S3 mechanics; Argon2 and OS
+Axum/Tokio own inbound HTTP and task mechanics; `httparse`, Rustls, Tokio-Rustls, and the locked
+WebPKI root set own outbound HTTP/TLS mechanics; `object_store` owns local/S3 mechanics; Argon2 and OS
 randomness own cryptographic mechanics. The `postgres` crate exists only in contributor differential
 tooling and is absent from the product dependency graph. Locked dependencies may contain unsafe code
 outside the first-party prohibition.
@@ -98,6 +102,11 @@ private root, loopback HTTP, and isolated local data/object roots. It does not g
 Cargo, application helper, raw retained secret, database server, or publication permission. The
 separate publication job receives no verifier and executes no repository code.
 
+Current 0.1.13 source adds outbound acceptance against deterministic local raw HTTP/TLS fixtures,
+including destination classes, certificate trust/hostname/validity, redirect denial, limits,
+timeout, cancellation, malformed protocol, and cleanup. That source evidence is not a public
+release, live-relay observation, privacy guarantee, DNSSEC claim, or general network sandbox.
+
 Immutable v0.1.12 and its independent anonymous exact/latest checks completed the current
 release controls. They
 establish static runtime linkage and only the named Linux/amd64 userland boundary; they do not
@@ -111,13 +120,13 @@ defect; none of its external objects was changed during additive recovery.
 The system does not isolate hostile lkjscript programs, native dependencies, an OS administrator,
 data-root/object-store administrators or co-resident processes. It does not provide
 tenant CPU/RSS isolation, encrypted stores/backups, artifact signatures, authenticated provenance,
-distributed consensus, multi-node publication, cross-authority transactions, certificate
+distributed consensus, multi-node publication, cross-authority transactions, inbound certificate
 management, CSRF middleware, audit-log durability, or production portability beyond retained
 exact Linux x86-64 target and userland evidence.
 
-The HTTP listener is plaintext, and first-party data roots/backups are not encrypted. lkjscript does
-not plan to implement HTTP TLS termination, certificate parsing or management, certificate issuance
-or rotation, ACME, or speculative TLS language and capability hooks. A deployment that requires
-encrypted network transport or storage must use an appropriate external trusted boundary outside
-the current product scope. External protection does not make the runtime a hostile-code sandbox or
-provide multi-tenant isolation.
+The inbound HTTP listener is plaintext, and first-party data roots/backups are not encrypted.
+lkjscript does not implement inbound TLS termination, certificate issuance/rotation, ACME, outbound
+client certificates, insecure trust bypass, a browser trust UI, or a pinning framework. Outbound
+HTTPS authenticates only the exact deployment endpoint under locked public roots or one named PEM
+root; it does not protect inbound transport or local storage and is not a privacy layer. External
+protection does not make the runtime a hostile-code sandbox or provide multi-tenant isolation.

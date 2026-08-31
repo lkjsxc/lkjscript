@@ -9,10 +9,15 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 
 const IDENTITY_SCHEMA: &str = "lkjscript-application-verifier-handoff";
-const IDENTITY_SCHEMA_VERSION: u32 = 2;
+const IDENTITY_SCHEMA_VERSION: u32 = 3;
 pub(super) const EXECUTABLE_NAME: &str = "lkjscript-dev";
 pub(super) const IDENTITY_NAME: &str = "verifier-identity.json";
-const ROLES: [&str; 3] = ["release-verify", "distributed-http", "stateful-http"];
+const ROLES: [&str; 4] = [
+    "release-verify",
+    "distributed-http",
+    "outbound-http",
+    "stateful-http",
+];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -348,10 +353,15 @@ mod tests {
 
     #[test]
     fn verifier_identity_schema_roles_and_tag_are_closed() {
-        assert_eq!(IDENTITY_SCHEMA_VERSION, 2);
+        assert_eq!(IDENTITY_SCHEMA_VERSION, 3);
         assert_eq!(
             ROLES,
-            ["release-verify", "distributed-http", "stateful-http"]
+            [
+                "release-verify",
+                "distributed-http",
+                "outbound-http",
+                "stateful-http"
+            ]
         );
         assert!(validate_tag("v0.1.8").is_ok());
         for rejected in ["0.1.8", "v01.1.8", "v0.1", "v0.1.8-rc"] {

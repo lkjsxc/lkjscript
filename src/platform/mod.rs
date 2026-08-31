@@ -27,6 +27,7 @@ pub mod diagnostic;
 pub mod execution;
 pub mod graph;
 pub mod http;
+pub mod http_client;
 mod intrinsic_contract;
 pub mod json;
 #[allow(
@@ -111,6 +112,10 @@ pub use graph::{
 pub use http::{
     HTTP_ADAPTER_CONTRACT_VERSION, HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest,
     HttpResponse, HttpServerReceipt,
+};
+pub use http_client::{
+    HTTP_CLIENT_ADAPTER_CONTRACT_VERSION, HttpClientAddressPolicy, HttpClientLimits,
+    HttpClientTrust,
 };
 pub use json::{JSON_CONTRACT_VERSION, JsonLimits, decode_strict as decode_strict_json};
 #[cfg(test)]

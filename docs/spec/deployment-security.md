@@ -9,7 +9,9 @@ not own application authentication/authorization policy, semantic identity, or o
 A deployment descriptor is strict JSON, at most 1 MiB and 1,024 grants. It has no public version
 discriminator and names a
 relative component artifact, exact target, optional listener, resident/execution/HTTP/worker/stream
-limits, typed configuration map, secret environment bindings, and grants. Relative paths reject
+limits, typed configuration map, secret environment bindings, and grants. Outbound-client limits
+are owned by each exact `http_client` adapter rather than folded into the inbound HTTP limit record.
+Relative paths reject
 absolute, backslash, empty, `.` and `..` components. Artifact paths and local object roots reject
 symbolic-link components; artifacts must be regular files and local roots must be existing real
 directories. The deployment directory is a trusted operator boundary.
@@ -60,8 +62,13 @@ or application policy, not this adapter.
 ## Adapter lifecycle and trust
 
 Current descriptor adapters are configuration, wall clock, secure randomness, UUID identifier,
-password hash, secret verifier, byte stream, first-party `data`, memory/local/S3 object, and
-first-party `durable_queue_data`. A data grant binds a confined relative root, strict namespace,
+password hash, secret verifier, byte stream, exact-endpoint `http_client`, first-party `data`,
+memory/local/S3 object, and first-party `durable_queue_data`. An HTTP client grant binds one
+canonical immutable endpoint, `public_only` or `loopback_only` address policy, locked WebPKI roots
+or one named PEM-root secret, and separate request-header, response-header/body, DNS, concurrency,
+connection, total, and cleanup limits. Preparation validates endpoint, policy, limits, and trust
+material without network I/O; request-time resolution and connection remain live effects governed
+by [outbound-http-client.md](outbound-http-client.md). A data grant binds a confined relative root, strict namespace,
 sharing domain, authority revision, and independent limits; it has no connection secret, host,
 port, TLS, pool, or network timeout. Service and worker may use separate grants that resolve to the
 same root. Authority revision and descriptor digest identify the exact operational binding. None
@@ -73,9 +80,10 @@ restart re-reads descriptor/artifact/secrets and reconstructs data/object/queue 
 task IDs, random state, locks, and compiled code are disposable.
 
 The trust and denial model is normative in `docs/security.md`. First-party Rust forbids `unsafe`,
-but dependencies and the operator/OS are trusted. The HTTP listener is plaintext; TLS termination,
-certificate management, and ACME are deliberately out of scope. The local data root is neither
-encrypted nor a tenant-isolation boundary. Encrypted network deployments require an external
-trusted transport boundary. This boundary also does not claim credential rotation without restart,
-a hostile-code sandbox, tenant resource isolation, provenance, artifact signatures, replication,
-consensus, or distributed atomicity.
+but dependencies and the operator/OS are trusted. The HTTP listener is plaintext; inbound TLS
+termination, certificate management, and ACME are deliberately out of scope. Outbound HTTPS
+authenticates the exact endpoint under its selected closed trust mode but is not a privacy layer,
+browser trust UI, pinning system, or client-certificate facility. The local data root is neither
+encrypted nor a tenant-isolation boundary. This boundary also does not claim credential rotation
+without restart, a hostile-code sandbox, tenant resource isolation, provenance, artifact
+signatures, replication, consensus, or distributed atomicity.

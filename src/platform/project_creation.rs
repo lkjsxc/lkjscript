@@ -6,13 +6,14 @@ use super::deployment::{
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
-    ComparisonPolicy, DeclarationPayload, DeclarationRecord, DeclarationReference,
-    DeclarationVisibility, DependencyRecord, ExpressionOperation, ExpressionRecord, FieldSelector,
-    FunctionDeclaration, FunctionEffect, KernelSnapshot, Name, OwnerHeader, OwnerKey, OwnerKind,
-    OwnerRecord, PackageId, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
-    PortReference, RecordExpressionField, RequirementRecord, RequirementReference, ResourceLimit,
-    ResourceUnit, SemanticRoot, SemanticRootDigest, SemanticStateDigest, TargetRecord, TextValue,
-    TypeForm, TypeObjectInterner, validate_full,
+    BindingKind, BindingRecord, ComparisonPolicy, DeclarationPayload, DeclarationRecord,
+    DeclarationReference, DeclarationVisibility, DependencyRecord, ExpressionOperation,
+    ExpressionRecord, FieldSelector, FunctionDeclaration, FunctionEffect, KernelSnapshot,
+    LocalValueReference, Name, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
+    ParameterParent, ParameterRecord, PortImplementation, PortRecord, PortReference,
+    RecordExpressionField, RequirementRecord, RequirementReference, ResourceLimit, ResourceUnit,
+    SemanticRoot, SemanticRootDigest, SemanticStateDigest, TargetRecord, TextValue, TypeForm,
+    TypeObjectDigest, TypeObjectInterner, validate_full,
 };
 use super::package::RunnerKind;
 use super::persistent_map::{MapContentDigest, MapRoot, PageDigest};
@@ -20,26 +21,32 @@ use super::publication::{
     GraphRepository, InitialPackageTransport, ReceiptObjectDigest, RevisionObjectDigest,
 };
 use super::semantic_id::{
-    DeclarationId, ExpressionId, ModuleId, ParameterId, PortId, RepositoryId, RequirementId,
-    RevisionId, TargetId,
+    BindingId, DeclarationId, ExpressionId, ModuleId, ParameterId, PortId, RepositoryId,
+    RequirementId, RevisionId, TargetId,
 };
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-2";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 2;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-3";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {
     Minimal,
     Command,
     Http,
+    NostrRelayInfo,
 }
 
 impl ProjectTemplate {
-    pub(crate) const ALL: [Self; 3] = [Self::Minimal, Self::Command, Self::Http];
+    pub(crate) const ALL: [Self; 4] = [
+        Self::Minimal,
+        Self::Command,
+        Self::Http,
+        Self::NostrRelayInfo,
+    ];
 
     pub(crate) fn parse(value: &str) -> Option<Self> {
         Self::ALL
@@ -52,6 +59,7 @@ impl ProjectTemplate {
             Self::Minimal => "minimal",
             Self::Command => "command",
             Self::Http => "http",
+            Self::NostrRelayInfo => "nostr-relay-info",
         }
     }
 
@@ -64,6 +72,9 @@ impl ProjectTemplate {
             Self::Http => {
                 "Create an editable tested HTTP application and loopback starter deployment."
             }
+            Self::NostrRelayInfo => {
+                "Create a tested NIP-11 relay-information proxy with one deployment-bound endpoint."
+            }
         }
     }
 
@@ -72,16 +83,17 @@ impl ProjectTemplate {
             Self::Minimal => "none",
             Self::Command => "command",
             Self::Http => "http",
+            Self::NostrRelayInfo => "http",
         }
     }
 
     pub(crate) const fn emits_deployment(self) -> bool {
-        matches!(self, Self::Http)
+        matches!(self, Self::Http | Self::NostrRelayInfo)
     }
 
     pub(crate) const fn recommended_artifact_output(self) -> Option<&'static str> {
         match self {
-            Self::Http => Some(STARTER_HTTP_ARTIFACT_PATH),
+            Self::Http | Self::NostrRelayInfo => Some(STARTER_HTTP_ARTIFACT_PATH),
             Self::Minimal | Self::Command => None,
         }
     }
@@ -123,6 +135,20 @@ pub(crate) fn create_project(
     create_project_with_hook(destination, package_name, template, |_, _, _| Ok(()))
 }
 
+pub(crate) fn create_project_with_relay(
+    destination: &Path,
+    package_name: &str,
+    relay_url: &str,
+) -> Result<ProjectCreation, Diagnostic> {
+    create_project_with_options(
+        destination,
+        package_name,
+        ProjectTemplate::NostrRelayInfo,
+        Some(relay_url),
+        |_, _, _| Ok(()),
+    )
+}
+
 struct ProjectRecipe {
     snapshot: KernelSnapshot,
     transports: Vec<InitialPackageTransport>,
@@ -149,6 +175,19 @@ fn create_project_with_hook<F>(
     destination: &Path,
     package_name: &str,
     template: ProjectTemplate,
+    hook: F,
+) -> Result<ProjectCreation, Diagnostic>
+where
+    F: FnMut(CreationPoint, &Path, &Path) -> Result<(), Diagnostic>,
+{
+    create_project_with_options(destination, package_name, template, None, hook)
+}
+
+fn create_project_with_options<F>(
+    destination: &Path,
+    package_name: &str,
+    template: ProjectTemplate,
+    relay_url: Option<&str>,
     mut hook: F,
 ) -> Result<ProjectCreation, Diagnostic>
 where
@@ -169,6 +208,18 @@ where
         ProjectTemplate::Minimal => minimal_recipe(repository, package, package_name.clone()),
         ProjectTemplate::Command => command_recipe(repository, package, package_name.clone()),
         ProjectTemplate::Http => http_recipe(repository, package, package_name.clone()),
+        ProjectTemplate::NostrRelayInfo => nostr_relay_info_recipe(
+            repository,
+            package,
+            package_name.clone(),
+            relay_url.ok_or_else(|| {
+                creation_error(
+                    DiagnosticClass::Source,
+                    "new_relay_url_required",
+                    "nostr-relay-info requires one exact relay URL",
+                )
+            })?,
+        ),
     }?;
     validate_auxiliary_inventory(recipe.auxiliary.as_ref())?;
     validate_full(&recipe.snapshot).map_err(|diagnostics| {
@@ -957,6 +1008,877 @@ fn http_recipe(
     })
 }
 
+fn nostr_relay_info_recipe(
+    repository: RepositoryId,
+    package: PackageId,
+    package_name: Name,
+    relay_url: &str,
+) -> Result<ProjectRecipe, Diagnostic> {
+    let relay = super::http_client::normalize_nostr_relay_url(relay_url)?;
+    let standard = super::builtin_standard::BuiltinStandard::load()?;
+    let contract = standard.http_recipe_contract()?;
+    let seed = repository.bytes();
+    let module = ModuleId::migrate(&seed, 0);
+    let content_type_reducer = DeclarationId::migrate(&seed, 0);
+    let route_function = DeclarationId::migrate(&seed, 1);
+    let handler_function = DeclarationId::migrate(&seed, 2);
+    let component = DeclarationId::migrate(&seed, 3);
+    let valid_test = DeclarationId::migrate(&seed, 4);
+    let invalid_test = DeclarationId::migrate(&seed, 5);
+    let reducer_state = ParameterId::migrate(&seed, 0);
+    let reducer_header = ParameterId::migrate(&seed, 1);
+    let route_method = ParameterId::migrate(&seed, 2);
+    let route_path = ParameterId::migrate(&seed, 3);
+    let request_parameter = ParameterId::migrate(&seed, 4);
+    let streams = RequirementId::migrate(&seed, 0);
+    let relay_requirement = RequirementId::migrate(&seed, 1);
+    let remote_binding = BindingId::migrate(&seed, 0);
+    let port = PortId::migrate(&seed, 0);
+    let target = TargetId::migrate(&seed, 0);
+
+    let mut interner = TypeObjectInterner::default();
+    let semantic_http = super::http::semantic_http_types(&mut interner)?;
+    let semantic_client = super::http_client::semantic_http_client_types(&mut interner)?;
+    let bool_type = interner.intern(TypeForm::Bool)?;
+    if contract.text_type != semantic_http.text_type
+        || contract.bytes_type != semantic_http.bytes_type
+        || semantic_client.i64_type != semantic_http.i64_type
+        || semantic_client.bytes_type != semantic_http.bytes_type
+        || semantic_client.text_type != semantic_http.text_type
+        || semantic_client.header_type != semantic_http.header_type
+        || semantic_client.header_list_type != semantic_http.header_list_type
+        || semantic_client.response_type != semantic_http.response_type
+    {
+        return Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_nostr_standard_types",
+            "built-in standard HTTP server and client types disagree with canonical Graph 5 types",
+        ));
+    }
+
+    let local_stream_requirement = RequirementReference {
+        package,
+        requirement: streams,
+    };
+    let local_relay_requirement = RequirementReference {
+        package,
+        requirement: relay_requirement,
+    };
+    let local_route = DeclarationReference {
+        package,
+        declaration: route_function,
+    };
+    let local_reducer = DeclarationReference {
+        package,
+        declaration: content_type_reducer,
+    };
+    let mut owners = BTreeMap::new();
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Module(super::kernel::ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: Name::new("application")?,
+        }),
+    )?;
+    let mut expression_ordinal = 0_u64;
+
+    for (parameter, parent, name, ty) in [
+        (reducer_state, content_type_reducer, "matched", bool_type),
+        (
+            reducer_header,
+            content_type_reducer,
+            "header",
+            semantic_client.header_type,
+        ),
+        (
+            route_method,
+            route_function,
+            "method",
+            semantic_http.text_type,
+        ),
+        (route_path, route_function, "path", semantic_http.text_type),
+        (
+            request_parameter,
+            handler_function,
+            "request",
+            semantic_http.request_type,
+        ),
+    ] {
+        insert_owner(
+            &mut owners,
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+                parent: ParameterParent::Function(parent),
+                name: Name::new(name)?,
+                ty,
+            }),
+        )?;
+    }
+
+    let header_for_name = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(reducer_header),
+        },
+    )?;
+    let header_name = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        header_for_name,
+        "name",
+    )?;
+    let content_type_name =
+        recipe_text(&mut owners, &seed, &mut expression_ordinal, "content-type")?;
+    let name_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.text_equal,
+        Vec::new(),
+        vec![header_name, content_type_name],
+    )?;
+    let header_for_value = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(reducer_header),
+        },
+    )?;
+    let header_value = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        header_for_value,
+        "value",
+    )?;
+    let expected_media = recipe_text(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        "application/nostr+json",
+    )?;
+    let media_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.media_type_is,
+        Vec::new(),
+        vec![header_value, expected_media],
+    )?;
+    let this_header_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bool_and,
+        Vec::new(),
+        vec![name_matches, media_matches],
+    )?;
+    let prior_match = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(reducer_state),
+        },
+    )?;
+    let reducer_body = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bool_or,
+        Vec::new(),
+        vec![prior_match, this_header_matches],
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(content_type_reducer),
+                OwnerKind::PureFunction,
+            ),
+            module,
+            name: Name::new("content-type-is-nostr")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: vec![reducer_state, reducer_header],
+                result: bool_type,
+                effect: FunctionEffect::Pure,
+                body: reducer_body,
+            }),
+        }),
+    )?;
+
+    let route_method_value = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(route_method),
+        },
+    )?;
+    let get_text = recipe_text(&mut owners, &seed, &mut expression_ordinal, "GET")?;
+    let method_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.text_equal,
+        Vec::new(),
+        vec![route_method_value, get_text],
+    )?;
+    let route_path_value = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(route_path),
+        },
+    )?;
+    let relay_path_text = recipe_text(&mut owners, &seed, &mut expression_ordinal, "/relay-info")?;
+    let path_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.text_equal,
+        Vec::new(),
+        vec![route_path_value, relay_path_text],
+    )?;
+    let route_body = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bool_and,
+        Vec::new(),
+        vec![method_matches, path_matches],
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(route_function),
+                OwnerKind::PureFunction,
+            ),
+            module,
+            name: Name::new("is-relay-info-request")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: vec![route_method, route_path],
+                result: bool_type,
+                effect: FunctionEffect::Pure,
+                body: route_body,
+            }),
+        }),
+    )?;
+
+    let accept_name = recipe_text(&mut owners, &seed, &mut expression_ordinal, "accept")?;
+    let accept_value = recipe_bytes(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bytes_from_text,
+        "application/nostr+json",
+    )?;
+    let accept_header = recipe_record(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        vec![("name", accept_name), ("value", accept_value)],
+    )?;
+    let request_headers = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::List {
+            item_type: semantic_client.header_type,
+            items: vec![accept_header],
+        },
+    )?;
+    let remote_call = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::CapabilityCall {
+            requirement: local_relay_requirement,
+            operation: contract.http_client_get,
+            arguments: vec![request_headers],
+        },
+    )?;
+
+    let remote_for_status = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::LexicalBinding(remote_binding),
+        },
+    )?;
+    let remote_status = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        remote_for_status,
+        "status",
+    )?;
+    let status_200 = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::I64 { value: 200 },
+    )?;
+    let status_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.i64_equal,
+        Vec::new(),
+        vec![remote_status, status_200],
+    )?;
+    let remote_for_headers = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::LexicalBinding(remote_binding),
+        },
+    )?;
+    let remote_headers = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        remote_for_headers,
+        "headers",
+    )?;
+    let no_media_match = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Bool { value: false },
+    )?;
+    let reducer_value = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::FunctionValue {
+            function: local_reducer,
+            type_arguments: Vec::new(),
+        },
+    )?;
+    let media_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.list_fold_left,
+        vec![semantic_client.header_type, bool_type],
+        vec![remote_headers, no_media_match, reducer_value],
+    )?;
+    let remote_is_valid = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bool_and,
+        Vec::new(),
+        vec![status_matches, media_matches],
+    )?;
+
+    let remote_for_body = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::LexicalBinding(remote_binding),
+        },
+    )?;
+    let remote_body = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        remote_for_body,
+        "body",
+    )?;
+    let response_content_name =
+        recipe_text(&mut owners, &seed, &mut expression_ordinal, "content-type")?;
+    let response_content_value = recipe_bytes(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bytes_from_text,
+        "application/nostr+json",
+    )?;
+    let response_content_header = recipe_record(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        vec![
+            ("name", response_content_name),
+            ("value", response_content_value),
+        ],
+    )?;
+    let response_headers = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::List {
+            item_type: semantic_http.header_type,
+            items: vec![response_content_header],
+        },
+    )?;
+    let response_200 = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::I64 { value: 200 },
+    )?;
+    let successful_response = recipe_record(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        vec![
+            ("body", remote_body),
+            ("headers", response_headers),
+            ("status", response_200),
+        ],
+    )?;
+    let bad_gateway = recipe_http_response(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bytes_from_text,
+        semantic_http.header_type,
+        502,
+        "bad gateway",
+    )?;
+    let selected_remote = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::If {
+            condition: remote_is_valid,
+            when_true: successful_response,
+            when_false: bad_gateway,
+        },
+    )?;
+    let remote_scope = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Let {
+            bindings: vec![remote_binding],
+            body: selected_remote,
+        },
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Binding(BindingRecord {
+            header: OwnerHeader::new(OwnerKey::Binding(remote_binding), OwnerKind::Binding),
+            name: Name::new("remote-response")?,
+            kind: BindingKind::Let,
+            value: Some(remote_call),
+            declared_type: Some(semantic_client.response_type),
+        }),
+    )?;
+
+    let request_for_method = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(request_parameter),
+        },
+    )?;
+    let request_method = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        request_for_method,
+        "method",
+    )?;
+    let request_for_path = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(request_parameter),
+        },
+    )?;
+    let request_path = recipe_field(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        request_for_path,
+        "path",
+    )?;
+    let route_matches = recipe_call(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        local_route,
+        Vec::new(),
+        vec![request_method, request_path],
+    )?;
+    let not_found = recipe_http_response(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        contract.bytes_from_text,
+        semantic_http.header_type,
+        404,
+        "not found",
+    )?;
+    let handler_body = recipe_expression(
+        &mut owners,
+        &seed,
+        &mut expression_ordinal,
+        ExpressionOperation::If {
+            condition: route_matches,
+            when_true: remote_scope,
+            when_false: not_found,
+        },
+    )?;
+    let mut task_requirements = vec![local_stream_requirement, local_relay_requirement];
+    task_requirements.sort();
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(handler_function),
+                OwnerKind::TaskFunction,
+            ),
+            module,
+            name: Name::new("handle")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: vec![request_parameter],
+                result: semantic_http.response_type,
+                effect: FunctionEffect::Task {
+                    requirements: task_requirements,
+                },
+                body: handler_body,
+            }),
+        }),
+    )?;
+
+    for (id, name, interface, operations, maximum_calls) in [
+        (
+            streams,
+            "streams",
+            contract.byte_stream_interface,
+            contract.byte_stream_operations.clone(),
+            10_000,
+        ),
+        (
+            relay_requirement,
+            "relay",
+            contract.http_client_interface,
+            contract.http_client_operations.clone(),
+            64,
+        ),
+    ] {
+        insert_owner(
+            &mut owners,
+            OwnerRecord::Requirement(RequirementRecord {
+                header: OwnerHeader::new(OwnerKey::Requirement(id), OwnerKind::Requirement),
+                declaration: component,
+                name: Name::new(name)?,
+                interface,
+                operations,
+                limits: vec![ResourceLimit {
+                    name: Name::new("maximum_calls")?,
+                    maximum: maximum_calls,
+                    unit: ResourceUnit::Calls,
+                }],
+            }),
+        )?;
+    }
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Port(PortRecord {
+            header: OwnerHeader::new(OwnerKey::Port(port), OwnerKind::Port),
+            declaration: component,
+            name: Name::new("http")?,
+            function_type: semantic_http.function_type,
+            implementation: PortImplementation::Function(DeclarationReference {
+                package,
+                declaration: handler_function,
+            }),
+        }),
+    )?;
+    let mut component_requirements = vec![streams, relay_requirement];
+    component_requirements.sort();
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(component), OwnerKind::Component),
+            module,
+            name: Name::new("application")?,
+            visibility: DeclarationVisibility::Package,
+            payload: DeclarationPayload::Component {
+                requirements: component_requirements,
+                ports: vec![port],
+            },
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Target(TargetRecord {
+            header: OwnerHeader::new(OwnerKey::Target(target), OwnerKind::Target),
+            name: Name::new(STARTER_HTTP_TARGET)?,
+            component: DeclarationReference {
+                package,
+                declaration: component,
+            },
+            port: PortReference { package, port },
+            runner: RunnerKind::Http,
+        }),
+    )?;
+
+    for (test, name, method, path, expected) in [
+        (
+            valid_test,
+            "relay-info-route-is-exact",
+            "GET",
+            "/relay-info",
+            true,
+        ),
+        (
+            invalid_test,
+            "relay-info-route-rejects-other-method",
+            "POST",
+            "/relay-info",
+            false,
+        ),
+    ] {
+        let method = recipe_text(&mut owners, &seed, &mut expression_ordinal, method)?;
+        let path = recipe_text(&mut owners, &seed, &mut expression_ordinal, path)?;
+        let actual = recipe_call(
+            &mut owners,
+            &seed,
+            &mut expression_ordinal,
+            local_route,
+            Vec::new(),
+            vec![method, path],
+        )?;
+        let expected = recipe_expression(
+            &mut owners,
+            &seed,
+            &mut expression_ordinal,
+            ExpressionOperation::Bool { value: expected },
+        )?;
+        insert_owner(
+            &mut owners,
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(OwnerKey::Declaration(test), OwnerKind::Test),
+                module,
+                name: Name::new(name)?,
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Test {
+                    actual,
+                    expected,
+                    comparison: ComparisonPolicy::Exact,
+                },
+            }),
+        )?;
+    }
+
+    let dependency = DependencyRecord {
+        graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package: standard.package,
+        semantic_revision: standard.semantic_revision,
+        package_revision: standard.package_revision,
+    };
+    let dependency_interfaces = BTreeMap::from([(
+        standard.package_revision,
+        standard
+            .interface_owners
+            .iter()
+            .map(|(owner, value)| (*owner, value.record.clone()))
+            .collect(),
+    )]);
+    let owners_len = owners.len();
+    let descriptor = encode_deployment(&super::deployment::starter_nostr_relay_deployment(
+        &relay.endpoint,
+        relay.address_policy,
+    )?)?;
+    Ok(ProjectRecipe {
+        snapshot: KernelSnapshot {
+            root: SemanticRoot {
+                graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+                repository_id: repository,
+                package_id: package,
+                package_name,
+                owners: placeholder_map(owners_len),
+                dependencies: placeholder_map(1),
+                retirements: placeholder_map(0),
+            },
+            owners,
+            types: interner.into_objects(),
+            dependency_interfaces,
+            dependency_types: standard.interface_types.clone(),
+            blobs: BTreeMap::new(),
+            dependencies: BTreeMap::from([(standard.package, dependency)]),
+            retirements: BTreeMap::new(),
+        },
+        transports: vec![standard.transport()],
+        template: ProjectTemplate::NostrRelayInfo,
+        targets: 1,
+        tests: 2,
+        auxiliary: Some(ProjectAuxiliary { descriptor }),
+    })
+}
+
+fn recipe_expression(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    operation: ExpressionOperation,
+) -> Result<ExpressionId, Diagnostic> {
+    let id = ExpressionId::migrate(seed, *ordinal);
+    *ordinal = ordinal.saturating_add(1);
+    insert_owner(
+        owners,
+        OwnerRecord::Expression(ExpressionRecord::new(id, operation)?),
+    )?;
+    Ok(id)
+}
+
+fn recipe_text(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    value: &str,
+) -> Result<ExpressionId, Diagnostic> {
+    recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::Text {
+            value: TextValue::Inline {
+                text: value.to_owned(),
+            },
+        },
+    )
+}
+
+fn recipe_call(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    function: DeclarationReference,
+    type_arguments: Vec<TypeObjectDigest>,
+    arguments: Vec<ExpressionId>,
+) -> Result<ExpressionId, Diagnostic> {
+    recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::Call {
+            function,
+            type_arguments,
+            arguments,
+        },
+    )
+}
+
+fn recipe_field(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    value: ExpressionId,
+    name: &str,
+) -> Result<ExpressionId, Diagnostic> {
+    recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::Field {
+            value,
+            selector: FieldSelector::Structural(Name::new(name)?),
+        },
+    )
+}
+
+fn recipe_record(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    fields: Vec<(&str, ExpressionId)>,
+) -> Result<ExpressionId, Diagnostic> {
+    recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::Record {
+            nominal_type: None,
+            fields: fields
+                .into_iter()
+                .map(|(name, value)| {
+                    Ok(RecordExpressionField {
+                        selector: FieldSelector::Structural(Name::new(name)?),
+                        value,
+                    })
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?,
+        },
+    )
+}
+
+fn recipe_bytes(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    bytes_from_text: DeclarationReference,
+    value: &str,
+) -> Result<ExpressionId, Diagnostic> {
+    let text = recipe_text(owners, seed, ordinal, value)?;
+    recipe_call(
+        owners,
+        seed,
+        ordinal,
+        bytes_from_text,
+        Vec::new(),
+        vec![text],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn recipe_http_response(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    seed: &[u8],
+    ordinal: &mut u64,
+    bytes_from_text: DeclarationReference,
+    header_type: TypeObjectDigest,
+    status: i64,
+    body: &str,
+) -> Result<ExpressionId, Diagnostic> {
+    let body = recipe_bytes(owners, seed, ordinal, bytes_from_text, body)?;
+    let headers = recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::List {
+            item_type: header_type,
+            items: Vec::new(),
+        },
+    )?;
+    let status = recipe_expression(
+        owners,
+        seed,
+        ordinal,
+        ExpressionOperation::I64 { value: status },
+    )?;
+    recipe_record(
+        owners,
+        seed,
+        ordinal,
+        vec![("body", body), ("headers", headers), ("status", status)],
+    )
+}
+
 fn insert_owner(
     owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
     record: OwnerRecord,
@@ -1226,7 +2148,7 @@ mod tests {
             .expect("prepare normalized command");
         let control = super::super::execution::ExecutionControl::default();
         let checked = prepared.check(&control).expect("check command graph tests");
-        assert_eq!(checked.passed, 12);
+        assert_eq!(checked.passed, 14);
         assert_eq!(checked.failed, 0);
         assert_eq!(checked.differential, "equal");
         let run = prepared
@@ -1291,7 +2213,7 @@ mod tests {
         let checked = prepared
             .check(&super::super::execution::ExecutionControl::default())
             .expect("check HTTP graph tests");
-        assert_eq!(checked.passed, 12);
+        assert_eq!(checked.passed, 14);
         assert_eq!(checked.failed, 0);
         assert_eq!(checked.differential, "equal");
 
@@ -1390,6 +2312,75 @@ mod tests {
                 .code,
             "deployment_grant_duplicate"
         );
+    }
+
+    #[test]
+    fn nostr_relay_info_recipe_binds_one_exact_loopback_client_without_network_readiness() {
+        let temporary = tempfile::TempDir::new().expect("temporary Nostr parent");
+        let destination = temporary.path().join("nostr-relay-info");
+        let created = create_project_with_relay(
+            &destination,
+            "nostr-relay-info",
+            "ws://127.0.0.1:7447/nostr",
+        )
+        .expect("Nostr relay-info project");
+        assert_eq!(created.template, ProjectTemplate::NostrRelayInfo);
+        assert_eq!(created.dependencies, 1);
+        assert_eq!(created.targets, 1);
+        assert_eq!(created.tests, 2);
+        let deployment = created.deployment.expect("starter deployment");
+        let descriptor_bytes = fs::read(&deployment.descriptor).expect("starter descriptor");
+        let descriptor = super::super::deployment::decode_deployment(&descriptor_bytes)
+            .expect("strict starter descriptor");
+        assert_eq!(descriptor.grants.len(), 2);
+        let relay = descriptor
+            .grants
+            .iter()
+            .find(|grant| grant.requirement == "relay")
+            .expect("relay grant");
+        assert!(matches!(
+            &relay.adapter,
+            super::super::deployment::AdapterDescriptor::HttpClient {
+                endpoint,
+                address_policy: super::super::http_client::HttpClientAddressPolicy::LoopbackOnly,
+                trust: super::super::http_client::HttpClientTrust::WebpkiRoots,
+                ..
+            } if endpoint == "http://127.0.0.1:7447/nostr"
+        ));
+
+        let prepared = super::super::normalized_lifecycle::prepare_application(&destination)
+            .expect("prepare Nostr relay-info application");
+        let checked = prepared
+            .check(&super::super::execution::ExecutionControl::default())
+            .expect("check Nostr graph tests");
+        assert_eq!(checked.passed, 15);
+        assert_eq!(checked.failed, 0);
+        assert_eq!(checked.differential, "equal");
+        fs::write(
+            &deployment.recommended_artifact_output,
+            &prepared.artifact_bytes,
+        )
+        .expect("publish test artifact");
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("deployment runtime");
+        let prepared_deployment = super::super::deployment::PreparedDeployment::load(
+            &deployment.descriptor,
+            runtime.handle().clone(),
+        )
+        .expect("prepare Nostr starter deployment without network I/O");
+        assert_eq!(
+            prepared_deployment
+                .observe_redacted()
+                .grants
+                .get("relay")
+                .map(String::as_str),
+            Some("http-client")
+        );
+        prepared_deployment
+            .http_application()
+            .expect("prepare Nostr HTTP runner");
     }
 
     #[test]

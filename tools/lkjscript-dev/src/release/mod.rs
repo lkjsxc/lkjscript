@@ -1186,6 +1186,7 @@ fn inspect_full_verification(
         .ok_or_else(|| DevError::corrupt("full receipt gates are missing"))?;
     let mut service_passed = false;
     let mut distributed_http_passed = false;
+    let mut outbound_http_passed = false;
     for gate in gates {
         let gate = gate
             .as_object()
@@ -1198,6 +1199,9 @@ fn inspect_full_verification(
         if gate.get("name").and_then(Value::as_str) == Some("distributed_http_application") {
             distributed_http_passed = true;
         }
+        if gate.get("name").and_then(Value::as_str) == Some("outbound_http_application") {
+            outbound_http_passed = true;
+        }
     }
     if !service_passed {
         return Err(DevError::corrupt(
@@ -1207,6 +1211,11 @@ fn inspect_full_verification(
     if !distributed_http_passed {
         return Err(DevError::corrupt(
             "full verification receipt lacks fresh passed distributed HTTP acceptance",
+        ));
+    }
+    if !outbound_http_passed {
+        return Err(DevError::corrupt(
+            "full verification receipt lacks fresh passed outbound HTTP acceptance",
         ));
     }
     let (sha256, length) = archive::sha256_file(path)?;
@@ -1936,6 +1945,7 @@ mod tests {
         assert!(build.contains("verifier-upload.outputs.artifact-digest"));
         assert!(build.contains("target/release/lkjscript-dev"));
         assert!(build.contains(".artifacts/lkjscript-dev/distributed-http/*/receipt.json"));
+        assert!(build.contains(".artifacts/lkjscript-dev/outbound-http/*/receipt.json"));
         assert!(build.contains(".artifacts/lkjscript-dev/stateful-http/*/receipt.json"));
         assert!(build.contains("release admit"));
         assert!(build.contains("release verifier prepare"));
@@ -1951,6 +1961,7 @@ mod tests {
         assert!(pre_publication.contains("release verifier verify"));
         assert!(pre_publication.contains("--extract-to"));
         assert!(pre_publication.contains("distributed-http"));
+        assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
         assert!(!pre_publication.contains("request_records =="));
         assert!(pre_publication.contains("--evidence-root"));
@@ -1971,6 +1982,7 @@ mod tests {
         assert!(!publish.contains("cargo "));
         assert!(!publish.contains("target/"));
         assert!(!publish.contains("distributed-http"));
+        assert!(!publish.contains("outbound-http"));
         assert!(!publish.contains("VERIFIER_HANDOFF"));
         assert!(!publish.contains("VERIFIER_EXECUTABLE"));
         assert!(publish.contains("--notes-file"));
@@ -2001,6 +2013,7 @@ mod tests {
         assert!(post_release.contains("release verify"));
         assert!(post_release.contains("release verifier verify"));
         assert!(post_release.contains("distributed-http"));
+        assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
         assert!(!post_release.contains("request_records =="));
         assert_eq!(

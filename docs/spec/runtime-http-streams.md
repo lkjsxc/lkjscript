@@ -65,8 +65,17 @@ data/object/queue publication. Adapter-generated failure responses contain a bou
 
 The in-memory dispatcher constructs the same `HttpRequest`, registers the same body stream, and
 invokes the same prepared port used by the live listener. Tests may replace grants but not handlers.
-Current responses are whole bounded byte values; response streaming, trailers, HTTP/2/3,
-multipart, compression, WebSocket, and outbound HTTP are not part of the current boundary. The listener is
-plaintext. TLS termination, certificate management, and ACME are deliberately out of scope and
-not planned; encrypted deployments require an external trusted transport boundary or a different
-adapter outside the current product scope.
+Current inbound responses are whole bounded byte values; response streaming, trailers, HTTP/2/3,
+multipart, compression, and WebSocket are not part of the current inbound boundary. The listener
+is plaintext. Inbound TLS termination, certificate management, and ACME remain outside the current
+product scope; encrypted inbound deployments require an external trusted transport boundary.
+
+## Outbound HTTP client
+
+The outbound client is a separate deployment adapter and standard interface, not a mode of the
+listener. It performs one whole-response HTTP/1.1 GET to an immutable deployment endpoint. Graph
+meaning supplies only bounded ordered request headers and receives status, ordered headers, and
+bounded whole body bytes. Request-time DNS/address-set validation, outbound TLS trust, transport-
+owned headers, response parsing, redirects, retries, deadlines, cancellation, and cleanup are
+specified in [outbound-http-client.md](outbound-http-client.md). An inbound disconnect cancels its
+owning task and therefore any active outbound request; no partial response is returned as success.
