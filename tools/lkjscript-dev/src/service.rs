@@ -23,7 +23,7 @@ const SERVICE_CONTRACT_VERSION: u32 = 4;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "9bc15d247ff571df09acc3c1002b87015846f46f74f9c57523147ecec1db5d28";
+    "1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
