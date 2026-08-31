@@ -5,8 +5,12 @@ mod runner;
 
 use crate::error::DevError;
 use crate::evidence::{self, PublishedEvidence, VerificationDigest};
-use lkjscript::platform::contributor::{SemanticInventory, semantic_inventory};
-use lkjscript::platform::control::{MAXIMUM_COMPACT_INPUT_BYTES, parse_records, render_record};
+use lkjscript::platform::contributor::{
+    SemanticInventory, compact_change_default_maximum_operations, semantic_inventory,
+};
+use lkjscript::platform::control::{
+    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS, parse_records, render_record,
+};
 use model::{
     AdmissionClassification, ArtifactEvidence, BatchEvidence, BuildEvidence, CandidateIdentity,
     CapabilityIdentity, CapabilitySection, CheckEvidence, CleanupEvidence, CleanupStatus,
@@ -30,10 +34,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAXIMUM_ITEMS: u64 = 1_000_000;
-const MAXIMUM_MODULE_BATCH: u64 = 9_000;
-const MAXIMUM_FUNCTION_BATCH: u64 = 4_000;
 const DEFAULT_ITEMS: u64 = 10_000;
-const DEFAULT_BATCH: u64 = 4_000;
+const DEFAULT_BATCH: u64 = 1_000;
 const DEFAULT_MAXIMUM_WALL_SECONDS: u64 = 7_200;
 const MAXIMUM_WALL_SECONDS: u64 = 86_400;
 const DEFAULT_MAXIMUM_RUN_BYTES: u64 = 64 * 1_073_741_824;
@@ -41,12 +43,10 @@ const MINIMUM_RUN_BYTES: u64 = 16 * 1_048_576;
 const MAXIMUM_RUN_BYTES: u64 = 1_099_511_627_776;
 const READ_LIMIT: &str = "16";
 const READ_BYTES: &str = "131072";
-const _: () = assert!(MAXIMUM_MODULE_BATCH < 10_000);
-const _: () = assert!(MAXIMUM_FUNCTION_BATCH * 2 < 10_000);
 const REQUIRED_OPERATIONS: [&str; 7] = [
     "new", "status", "inspect", "query", "change", "check", "build",
 ];
-const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current safe maxima are 9000 for independent modules and 4000 for function topologies. Receipt schema lkjscript-semantic-scale-receipt contract 2.";
+const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current compact public change budget admits at most 1000 items per batch. Receipt schema lkjscript-semantic-scale-receipt contract 2.";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -90,13 +90,15 @@ impl Topology {
         }
     }
 
-    const fn maximum_batch(self) -> u64 {
-        match self {
-            Self::IndependentModules => MAXIMUM_MODULE_BATCH,
+    fn maximum_batch(self) -> u64 {
+        let public_operations = compact_change_default_maximum_operations();
+        let record_bound = match self {
+            Self::IndependentModules => (MAXIMUM_COMPACT_RECORDS - 1) as u64,
             Self::SmallFunctions | Self::WideModule | Self::DeepChain | Self::WideFanout => {
-                MAXIMUM_FUNCTION_BATCH
+                ((MAXIMUM_COMPACT_RECORDS - 1) / 2) as u64
             }
-        }
+        };
+        public_operations.min(record_bound)
     }
 }
 
@@ -728,7 +730,12 @@ fn construct_small_functions(
         DevError::infrastructure("small-functions module count was not normalized")
     })?;
     let mut module_ids = Vec::with_capacity(modules as usize);
-    for (start, end) in batches(modules, MAXIMUM_MODULE_BATCH.min(options.batch)) {
+    for (start, end) in batches(
+        modules,
+        Topology::IndependentModules
+            .maximum_batch()
+            .min(options.batch),
+    ) {
         let document = module_request(&changes.revision, start, end, "small-functions-modules")?;
         let outcome = changes.apply(
             "small-functions-modules",
@@ -2467,7 +2474,7 @@ mod tests {
         assert!(parse_options(["full"].into_iter().map(OsString::from)).is_err());
         assert!(
             parse_options(
-                ["independent-modules", "--batch", "9001"]
+                ["independent-modules", "--batch", "1001"]
                     .into_iter()
                     .map(OsString::from)
             )
@@ -2475,7 +2482,7 @@ mod tests {
         );
         assert!(
             parse_options(
-                ["small-functions", "--batch", "4001"]
+                ["small-functions", "--batch", "1001"]
                     .into_iter()
                     .map(OsString::from)
             )

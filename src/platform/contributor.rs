@@ -1,5 +1,6 @@
 //! Read-only contributor observations outside the executable's public operation registry.
 
+use super::change::ChangeBudget;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{OwnerKind, RelationEndpoint, extract_relations, validate_full};
 use super::publication::GraphRepository;
@@ -38,6 +39,11 @@ pub struct SemanticInventory {
     pub map_bytes_read: u64,
     pub store_objects_read: u64,
     pub store_bytes_read: u64,
+}
+
+/// The operation admission used when the current compact public request omits a custom budget.
+pub fn compact_change_default_maximum_operations() -> u64 {
+    ChangeBudget::default().authored.maximum_operations
 }
 
 pub fn semantic_inventory(project: &Path) -> Result<SemanticInventory, Diagnostic> {
@@ -132,7 +138,7 @@ fn hash_endpoint(hasher: &mut Hasher, endpoint: RelationEndpoint) {
 
 #[cfg(test)]
 mod tests {
-    use super::semantic_inventory;
+    use super::{compact_change_default_maximum_operations, semantic_inventory};
     use std::path::Path;
 
     #[test]
@@ -148,5 +154,10 @@ mod tests {
             std::fs::read(project.join("HEAD")).expect("standard HEAD after oracle"),
             before
         );
+    }
+
+    #[test]
+    fn compact_change_default_is_the_current_batch_authority() {
+        assert_eq!(compact_change_default_maximum_operations(), 1_000);
     }
 }

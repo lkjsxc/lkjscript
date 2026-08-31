@@ -106,18 +106,25 @@ impl Runner {
                 "public command '{name}' reached its scale wall-time allocation"
             )));
         }
-        if observation.status != ProcessStatus::Passed {
-            return Err(DevError::infrastructure(format!(
-                "public command '{name}' ended as {:?}: {}",
-                observation.status,
-                observation.reason.as_deref().unwrap_or("unknown")
-            )));
-        }
         if observation.stderr.bytes.unwrap_or(0) != 0 {
             let excerpt = process::excerpt(&stderr_path, 512)
                 .unwrap_or_else(|_| "stderr unavailable".to_owned());
             return Err(DevError::infrastructure(format!(
                 "public command '{name}' wrote stderr: {excerpt}"
+            )));
+        }
+        if observation.status == ProcessStatus::Failed {
+            let response = response?;
+            let (records, error) =
+                decode_failure_response(name, &stdout_path.to_string_lossy(), &response)?;
+            self.commands[ordinal as usize].response_records = Some(records);
+            return Err(error);
+        }
+        if observation.status != ProcessStatus::Passed {
+            return Err(DevError::infrastructure(format!(
+                "public command '{name}' ended as {:?}: {}",
+                observation.status,
+                observation.reason.as_deref().unwrap_or("unknown")
             )));
         }
         let response = response?;
@@ -149,6 +156,43 @@ impl Runner {
     pub(crate) fn into_commands(self) -> Vec<CommandEvidence> {
         self.commands
     }
+}
+
+fn decode_failure_response(
+    name: &str,
+    path: &str,
+    response: &[u8],
+) -> Result<(u64, DevError), DevError> {
+    if response.last() != Some(&b'\n') {
+        return Err(DevError::corrupt(format!(
+            "failed public command '{name}' returned an incomplete compact response"
+        )));
+    }
+    let records = parse_records(path, response).map_err(|errors| {
+        let first = errors
+            .first()
+            .map_or("unknown", |error| error.code.as_str());
+        DevError::corrupt(format!(
+            "failed public command '{name}' returned invalid compact records: {first}"
+        ))
+    })?;
+    let result = record(&records, "result")?;
+    if field(result, "status") != Some("failure") {
+        return Err(DevError::corrupt(format!(
+            "failed public command '{name}' omitted its failure result"
+        )));
+    }
+    let diagnostic = record(&records, "diagnostic")?;
+    let class = required_field(diagnostic, "class")?;
+    let code = required_field(diagnostic, "code")?;
+    let message = required_field(diagnostic, "message")?;
+    let detail = format!("public command '{name}' failed with {class}/{code}: {message}");
+    let error = match class {
+        "resource" => DevError::unavailable(detail),
+        "infrastructure" => DevError::infrastructure(detail),
+        _ => DevError::corrupt(detail),
+    };
+    Ok((records.len() as u64, error))
 }
 
 fn decode_response(
@@ -283,7 +327,7 @@ pub(crate) fn directory_bytes(path: &Path) -> Result<u64, DevError> {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_response;
+    use super::{decode_failure_response, decode_response};
 
     #[test]
     fn result_may_follow_work_records_but_is_exact() {
@@ -320,5 +364,18 @@ mod tests {
         .expect_err("truncated response must fail");
         assert_eq!(error.kind(), "corrupt");
         assert!(error.message().contains("incomplete compact response"));
+    }
+
+    #[test]
+    fn public_failure_preserves_resource_class_and_diagnostic_code() {
+        let (records, error) = decode_failure_response(
+            "change-plan",
+            "fixture",
+            b"result status=failure command=change\ndiagnostic class=resource code=change_budget_operations message=bounded\n",
+        )
+        .expect("typed compact failure");
+        assert_eq!(records, 2);
+        assert_eq!(error.kind(), "unavailable");
+        assert!(error.message().contains("change_budget_operations"));
     }
 }
