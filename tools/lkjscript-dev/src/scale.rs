@@ -1,26 +1,55 @@
+#[path = "scale/model.rs"]
+mod model;
+#[path = "scale/runner.rs"]
+mod runner;
+
 use crate::error::DevError;
-use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
-use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::BTreeMap;
+use crate::evidence::{self, PublishedEvidence, VerificationDigest};
+use lkjscript::platform::contributor::{SemanticInventory, semantic_inventory};
+use lkjscript::platform::control::{MAXIMUM_COMPACT_INPUT_BYTES, parse_records, render_record};
+use model::{
+    AdmissionClassification, ArtifactEvidence, BatchEvidence, BuildEvidence, CandidateIdentity,
+    CapabilityIdentity, CapabilitySection, CheckEvidence, CleanupEvidence, CleanupStatus,
+    CompilationEvidence, FailureEvidence, FileAreaEvidence, HostObservation, Lifecycle,
+    LogicalEvidence, ObservationEvidence, OperationIdentity, OracleEvidence, PublicReadEvidence,
+    ReceiptStatus, RenameEvidence, SCALE_CONTRACT_VERSION, SCALE_SCHEMA, ScaleReceipt,
+    ScenarioEvidence, SemanticCounts, SourceIdentity, ToolchainIdentity,
+};
+use runner::{Invocation, Runner, bool_field, directory_bytes, record, required_field, u64_field};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::fs::{self, File, OpenOptions};
+use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SCALE_CONTRACT_VERSION: u32 = 1;
-const PUBLIC_CHANGE_CONTRACT_VERSION: u16 = 3;
-const MAXIMUM_BATCH: usize = 10_000;
-const MAXIMUM_ITEMS: usize = 1_000_000;
-const MAXIMUM_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
-const MAXIMUM_STDERR_BYTES: u64 = 1024 * 1024;
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(3_600);
+const MAXIMUM_ITEMS: u64 = 1_000_000;
+const MAXIMUM_MODULE_BATCH: u64 = 9_000;
+const MAXIMUM_FUNCTION_BATCH: u64 = 4_000;
+const DEFAULT_ITEMS: u64 = 10_000;
+const DEFAULT_BATCH: u64 = 4_000;
+const DEFAULT_MAXIMUM_WALL_SECONDS: u64 = 7_200;
+const MAXIMUM_WALL_SECONDS: u64 = 86_400;
+const DEFAULT_MAXIMUM_RUN_BYTES: u64 = 64 * 1_073_741_824;
+const MINIMUM_RUN_BYTES: u64 = 16 * 1_048_576;
+const MAXIMUM_RUN_BYTES: u64 = 1_099_511_627_776;
+const READ_LIMIT: &str = "16";
+const READ_BYTES: &str = "131072";
+const _: () = assert!(MAXIMUM_MODULE_BATCH < 10_000);
+const _: () = assert!(MAXIMUM_FUNCTION_BATCH * 2 < 10_000);
+const REQUIRED_OPERATIONS: [&str; 7] = [
+    "new", "status", "inspect", "query", "change", "check", "build",
+];
+const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current safe maxima are 9000 for independent modules and 4000 for function topologies. Receipt schema lkjscript-semantic-scale-receipt contract 2.";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Topology {
     IndependentModules,
     SmallFunctions,
@@ -41,7 +70,7 @@ impl Topology {
         }
     }
 
-    fn cli_name(self) -> &'static str {
+    const fn name(self) -> &'static str {
         match self {
             Self::IndependentModules => "independent-modules",
             Self::SmallFunctions => "small-functions",
@@ -51,13 +80,22 @@ impl Topology {
         }
     }
 
-    fn semantic_shape(self) -> &'static str {
+    const fn semantic_shape(self) -> &'static str {
         match self {
             Self::IndependentModules => "many_independent_modules",
             Self::SmallFunctions => "many_small_pure_functions_distributed_across_modules",
             Self::WideModule => "one_module_with_many_small_pure_functions",
-            Self::DeepChain => "one_module_with_a_deep_direct_call_chain",
+            Self::DeepChain => "one_module_with_a_direct_call_chain",
             Self::WideFanout => "one_module_with_many_direct_callers_of_one_root",
+        }
+    }
+
+    const fn maximum_batch(self) -> u64 {
+        match self {
+            Self::IndependentModules => MAXIMUM_MODULE_BATCH,
+            Self::SmallFunctions | Self::WideModule | Self::DeepChain | Self::WideFanout => {
+                MAXIMUM_FUNCTION_BATCH
+            }
         }
     }
 }
@@ -65,605 +103,447 @@ impl Topology {
 #[derive(Clone, Debug)]
 struct Options {
     topology: Topology,
-    items: usize,
-    batch: usize,
-    modules: Option<usize>,
+    items: u64,
+    batch: u64,
+    modules: Option<u64>,
+    lifecycle: Lifecycle,
     binary: PathBuf,
+    evidence_root: Option<PathBuf>,
     retain: Option<PathBuf>,
+    maximum_wall_seconds: u64,
+    maximum_run_bytes: u64,
+    minimum_available_memory_bytes: u64,
+    minimum_available_disk_bytes: u64,
     machine: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum ScaleStatus {
-    Passed,
-    Failed,
+#[derive(Clone, Debug)]
+struct RequestDocument {
+    bytes: Vec<u8>,
+    records: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ScaleReceipt {
-    contract_version: u32,
-    status: ScaleStatus,
-    topology: Topology,
-    semantic_shape: String,
-    parameters: ScaleParameters,
-    started_unix_nanoseconds: u128,
-    completed_unix_nanoseconds: u128,
-    elapsed_nanoseconds: u64,
-    project_retained: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    binary: Option<FileProof>,
-    commands: Vec<CommandEvidence>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    result: Option<ScaleResult>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    failure: Option<Failure>,
+#[derive(Default)]
+struct RequestBuilder {
+    bytes: Vec<u8>,
+    records: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ScaleParameters {
-    requested_items: usize,
-    batch_size: usize,
-    requested_modules: Option<usize>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Failure {
-    class: String,
-    message: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct CommandEvidence {
-    name: String,
-    command: Vec<String>,
-    process: ProcessObservation,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_digest: Option<VerificationDigest>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ScaleResult {
-    final_revision: String,
-    generated_modules: usize,
-    generated_functions: usize,
-    call_depth: usize,
-    caller_fanout: usize,
-    base_modules: usize,
-    measured_local_modules: usize,
-    total_modules: usize,
-    creation: Timing,
-    apply_batches: Vec<BatchMeasurement>,
-    transaction_request_bytes: u64,
-    local_create: LocalMutation,
-    local_rename: LocalMutation,
-    orient: OrientMeasurement,
-    exact_find_cold_index: FindMeasurement,
-    exact_find: FindMeasurement,
-    exact_show: ShowMeasurement,
-    deep_doctor: DoctorMeasurement,
-    build: BuildMeasurement,
-    backup: BackupMeasurement,
-    canonical_store_bytes: u64,
-    store_bytes_with_indexes: u64,
-    store_inventory: BTreeMap<String, AreaMeasurement>,
-    platform: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Timing {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct BatchMeasurement {
-    kind: String,
-    start: usize,
-    end: usize,
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    revision: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct LocalMutation {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    revision: String,
-    validation: ValidationMeasurement,
-    store_delta: BTreeMap<String, AreaDelta>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ValidationMeasurement {
-    profile: String,
-    graph_valid: bool,
-    full_oracle_equal: bool,
-    modules_checked: u64,
-    declarations_checked: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct OrientMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    returned_items: usize,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct FindMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    work: u64,
-    matches: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ShowMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    id: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct DoctorMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    valid: bool,
-    deep: bool,
-    modules_checked: u64,
-    revisions_checked: u64,
-    roots_checked: u64,
-    receipts_checked: u64,
-    rebuilt_indexes: u64,
-    revision: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct BuildMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    artifact_bytes: u64,
-    artifact_digest: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct BackupMeasurement {
-    elapsed_nanoseconds: u64,
-    response_bytes: u64,
-    backup_bytes: u64,
-    backup_digest: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct AreaMeasurement {
-    files: u64,
-    bytes: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct AreaDelta {
-    files: i64,
-    bytes: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct CliEnvelope {
-    ok: bool,
-    status: String,
-    result: Option<Value>,
-    error: Option<Value>,
-}
-
-struct Invocation {
-    result: Value,
-    timing: Timing,
-}
-
-struct Runner {
-    repository: PathBuf,
-    evidence_directory: PathBuf,
-    ordinal: usize,
-    commands: Vec<CommandEvidence>,
-}
-
-impl Runner {
-    fn new(repository: &Path, evidence_directory: &Path) -> Self {
-        Self {
-            repository: repository.to_path_buf(),
-            evidence_directory: evidence_directory.to_path_buf(),
-            ordinal: 0,
-            commands: Vec::new(),
-        }
+impl RequestBuilder {
+    fn request(base: &str, idempotency: &str, intent: &str) -> Result<Self, DevError> {
+        let mut builder = Self::default();
+        builder.push(
+            "request",
+            &[
+                ("base", base),
+                ("idempotency", idempotency),
+                ("intent", intent),
+            ],
+        )?;
+        Ok(builder)
     }
 
-    fn invoke(
-        &mut self,
-        name: &str,
-        binary: &Path,
-        arguments: Vec<String>,
-    ) -> Result<Invocation, DevError> {
-        let ordinal = self.ordinal;
-        self.ordinal = self
-            .ordinal
+    fn push(&mut self, operation: &str, fields: &[(&str, &str)]) -> Result<(), DevError> {
+        let rendered = render_record(operation, fields).map_err(diagnostic_error)?;
+        let required = self
+            .bytes
+            .len()
+            .checked_add(rendered.len())
+            .ok_or_else(|| DevError::infrastructure("scale request byte count overflow"))?;
+        if required > MAXIMUM_COMPACT_INPUT_BYTES {
+            return Err(DevError::usage(format!(
+                "scale batch requires {required} compact bytes, exceeding the current {MAXIMUM_COMPACT_INPUT_BYTES}-byte input bound"
+            )));
+        }
+        self.bytes.extend_from_slice(rendered.as_bytes());
+        self.records = self
+            .records
             .checked_add(1)
-            .ok_or_else(|| DevError::infrastructure("scale command ordinal overflow"))?;
-        let mut command = vec![binary.to_string_lossy().into_owned()];
-        command.extend(arguments);
-        let stdout_path = self
-            .evidence_directory
-            .join(format!("command-{ordinal:06}-{name}.stdout.log"));
-        let stderr_path = self
-            .evidence_directory
-            .join(format!("command-{ordinal:06}-{name}.stderr.log"));
-        let observation = process::run(
-            &ProcessSpec {
-                command: command.clone(),
-                cwd: self.repository.clone(),
-                environment: process::environment(),
-                timeout: COMMAND_TIMEOUT,
-                maximum_stdout_bytes: MAXIMUM_STDOUT_BYTES,
-                maximum_stderr_bytes: MAXIMUM_STDERR_BYTES,
-                stdout_path: stdout_path.clone(),
-                stderr_path: stderr_path.clone(),
-                unavailable_exit_code: None,
-            },
-            &self.repository,
-        );
-        let response = process::read_bounded(&stdout_path, MAXIMUM_STDOUT_BYTES);
-        let response_digest = response
-            .as_ref()
-            .ok()
-            .map(|bytes| VerificationDigest::of(bytes));
-        self.commands.push(CommandEvidence {
-            name: name.to_owned(),
-            command,
-            process: observation.clone(),
-            response_digest,
-        });
-        if observation.status != ProcessStatus::Passed {
-            return Err(DevError::infrastructure(format!(
-                "public CLI command '{name}' ended as {:?}: {}",
-                observation.status,
-                observation.reason.as_deref().unwrap_or("unknown")
-            )));
-        }
-        if observation.stderr.bytes.unwrap_or(0) != 0 {
-            let excerpt = process::excerpt(&stderr_path, 512)
-                .unwrap_or_else(|_| "stderr unavailable".to_owned());
-            return Err(DevError::infrastructure(format!(
-                "public CLI command '{name}' wrote stderr: {excerpt}"
-            )));
-        }
-        let response = response?;
-        let envelope: CliEnvelope = serde_json::from_slice(&response).map_err(|error| {
-            DevError::corrupt(format!(
-                "public CLI command '{name}' returned invalid JSON: {error}"
+            .ok_or_else(|| DevError::infrastructure("scale request record count overflow"))?;
+        Ok(())
+    }
+
+    fn finish(self) -> Result<RequestDocument, DevError> {
+        let parsed = parse_records("<scale-request>", &self.bytes).map_err(|diagnostics| {
+            let code = diagnostics
+                .first()
+                .map_or("unknown", |diagnostic| diagnostic.code.as_str());
+            DevError::infrastructure(format!(
+                "generated scale request failed compact validation: {code}"
             ))
         })?;
-        if !envelope.ok {
-            let failure = envelope
-                .error
-                .as_ref()
-                .map(compact_value)
-                .unwrap_or_else(|| envelope.status.clone());
-            return Err(DevError::infrastructure(format!(
-                "public CLI command '{name}' failed as '{}': {failure}",
-                envelope.status
-            )));
+        if parsed.len() as u64 != self.records {
+            return Err(DevError::infrastructure(
+                "generated scale request record count changed during validation",
+            ));
         }
-        let result = envelope.result.ok_or_else(|| {
-            DevError::corrupt(format!("public CLI command '{name}' omitted result"))
-        })?;
-        Ok(Invocation {
-            result,
-            timing: Timing {
-                elapsed_nanoseconds: observation.elapsed_nanoseconds,
-                response_bytes: response.len() as u64,
-            },
+        Ok(RequestDocument {
+            bytes: self.bytes,
+            records: self.records,
         })
     }
 }
 
-#[derive(Serialize)]
-struct ChangeRequest {
-    contract_version: u16,
-    base_revision: String,
-    idempotency_key: String,
-    preconditions: Vec<Value>,
-    changes: Vec<ScaleChange>,
-    budget: ChangeBudget,
-    intent: String,
-}
-
-#[derive(Serialize)]
-struct ChangeBudget {
-    maximum_operations: usize,
-    maximum_work: u64,
-    maximum_affected_owners: u64,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "change", rename_all = "snake_case")]
-enum ScaleChange {
-    CreateModule {
-        #[serde(rename = "as")]
-        symbol: String,
-        name: String,
-    },
-    CreateFunction {
-        #[serde(rename = "as")]
-        symbol: String,
-        module: String,
-        name: String,
-        result: UnitType,
-        body: ScaleExpression,
-        exported: bool,
-    },
-    RenameModule {
-        module: String,
-        new_name: String,
-    },
-}
-
-#[derive(Serialize)]
-struct UnitType {
-    #[serde(rename = "type")]
-    kind: &'static str,
-}
-
-impl UnitType {
-    fn unit() -> Self {
-        Self { kind: "unit" }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(untagged)]
-enum ScaleExpression {
-    Unit { unit: bool },
-    Call { call: String },
-}
-
-struct ApplyResult {
-    revision: String,
+struct ApplyOutcome {
     allocated: BTreeMap<String, String>,
-    validation: ValidationMeasurement,
-    timing: Timing,
-}
-
-struct Generation {
-    generated_modules: usize,
-    generated_functions: usize,
-    call_depth: usize,
-    caller_fanout: usize,
-    batches: Vec<BatchMeasurement>,
-    request_bytes: u64,
+    base_revision: String,
+    result_revision: String,
 }
 
 struct ChangeContext<'a> {
-    runner: &'a mut Runner,
-    binary: &'a Path,
+    repository: &'a Path,
+    evidence_root: &'a Path,
     project: &'a Path,
+    binary: &'a Path,
+    runner: &'a mut Runner,
+    logical: &'a mut LogicalEvidence,
     revision: String,
-    request_ordinal: usize,
-    request_bytes: u64,
-    batches: Vec<BatchMeasurement>,
+    request_ordinal: u64,
 }
 
 impl ChangeContext<'_> {
     fn apply(
         &mut self,
         kind: &str,
-        start: usize,
-        end: usize,
-        changes: Vec<ScaleChange>,
-        record_generation: bool,
-    ) -> Result<ApplyResult, DevError> {
-        let request = ChangeRequest {
-            contract_version: PUBLIC_CHANGE_CONTRACT_VERSION,
-            base_revision: self.revision.clone(),
-            idempotency_key: format!("scale-{kind}-{start}-{end}-{}", self.request_ordinal),
-            preconditions: Vec::new(),
-            budget: ChangeBudget {
-                maximum_operations: changes.len(),
-                maximum_work: 10_000_000,
-                maximum_affected_owners: 100_000,
-            },
-            changes,
-            intent: format!("Deterministic public CLI scale fixture: {kind}"),
-        };
+        start: u64,
+        end: u64,
+        logical_items: u64,
+        document: RequestDocument,
+        construction: bool,
+    ) -> Result<ApplyOutcome, DevError> {
+        self.runner.admit_resources()?;
+        let requests = self.evidence_root.join("requests");
+        fs::create_dir_all(&requests).map_err(|error| {
+            DevError::infrastructure(format!(
+                "create scale request directory '{}': {error}",
+                requests.display()
+            ))
+        })?;
+        let request_path = requests.join(format!(
+            "{:06}-{}-{start}-{end}.lkjc",
+            self.request_ordinal, kind
+        ));
         self.request_ordinal = self
             .request_ordinal
             .checked_add(1)
             .ok_or_else(|| DevError::infrastructure("scale request ordinal overflow"))?;
-        let encoded = serde_json::to_vec(&request).map_err(|error| {
-            DevError::infrastructure(format!("encode scale change request: {error}"))
-        })?;
-        let request_path = self.project.join(format!(
-            ".lkjscript-dev-scale-request-{:06}.json",
-            self.request_ordinal
-        ));
-        evidence::publish(&request_path, &encoded)?;
-        let invocation = self.runner.invoke(
-            kind,
+        let published = evidence::publish(&request_path, &document.bytes)?;
+        let plan = self.runner.invoke(
+            &format!("{kind}-plan"),
             self.binary,
-            vec![
-                "--project".to_owned(),
-                self.project.to_string_lossy().into_owned(),
-                "change".to_owned(),
-                "--request-file".to_owned(),
-                request_path.to_string_lossy().into_owned(),
-                "--commit".to_owned(),
-            ],
-        );
-        let removal = fs::remove_file(&request_path).map_err(|error| {
-            DevError::infrastructure(format!(
-                "remove scale request '{}': {error}",
-                request_path.display()
-            ))
-        });
-        let invocation = match (invocation, removal) {
-            (Ok(invocation), Ok(())) => invocation,
-            (Err(error), _) => return Err(error),
-            (Ok(_), Err(error)) => return Err(error),
-        };
-        let revision = string_at(&invocation.result, &["published_revision"])?;
-        let allocated = allocated_identities(&invocation.result)?;
-        let validation = validation_at(&invocation.result)?;
-        if record_generation {
-            self.request_bytes = self
-                .request_bytes
-                .checked_add(encoded.len() as u64)
-                .ok_or_else(|| DevError::infrastructure("scale request byte count overflow"))?;
-            self.batches.push(BatchMeasurement {
-                kind: kind.to_owned(),
-                start,
-                end,
-                elapsed_nanoseconds: invocation.timing.elapsed_nanoseconds,
-                response_bytes: invocation.timing.response_bytes,
-                revision: revision.clone(),
-            });
+            project_arguments(
+                self.project,
+                &[
+                    "change",
+                    "plan",
+                    "--input-file",
+                    &request_path.to_string_lossy(),
+                ],
+            ),
+            "change.plan",
+            "prepared",
+        )?;
+        let plan_revision = record(&plan.records, "revision")?;
+        let plan_base = required_field(plan_revision, "base")?.to_owned();
+        let plan_result = required_field(plan_revision, "result")?.to_owned();
+        if plan_base != self.revision {
+            return Err(DevError::corrupt(format!(
+                "reviewed batch base {plan_base} differs from current {}",
+                self.revision
+            )));
         }
-        self.revision.clone_from(&revision);
-        Ok(ApplyResult {
-            revision,
-            allocated,
-            validation,
-            timing: invocation.timing,
+        let token = required_field(record(&plan.records, "plan")?, "token")?.to_owned();
+        let planned_identities = identities(&plan.records)?;
+        let compiler_units = u64_field(record(&plan.records, "validation")?, "compiler-units")?;
+        let apply = self.runner.invoke(
+            &format!("{kind}-apply"),
+            self.binary,
+            project_arguments(
+                self.project,
+                &[
+                    "change",
+                    "apply",
+                    "--input-file",
+                    &request_path.to_string_lossy(),
+                    "--plan",
+                    &token,
+                ],
+            ),
+            "change.apply",
+            "accepted",
+        )?;
+        let applied_revision = record(&apply.records, "revision")?;
+        let apply_base = required_field(applied_revision, "base")?;
+        let apply_result = required_field(applied_revision, "result")?;
+        if apply_base != plan_base || apply_result != plan_result {
+            return Err(DevError::corrupt(
+                "reviewed plan and accepted apply revisions disagree",
+            ));
+        }
+        let applied_identities = identities(&apply.records)?;
+        if planned_identities != applied_identities {
+            return Err(DevError::corrupt(
+                "reviewed plan and accepted apply allocations disagree",
+            ));
+        }
+        let identity_bytes = serde_json::to_vec(&applied_identities).map_err(|error| {
+            DevError::infrastructure(format!("encode scale allocation evidence: {error}"))
+        })?;
+        self.logical.plan_batches = self.logical.plan_batches.saturating_add(1);
+        self.logical.apply_batches = self.logical.apply_batches.saturating_add(1);
+        if construction {
+            self.logical.construction_batches = self.logical.construction_batches.saturating_add(1);
+        }
+        self.logical.accepted_revisions.push(plan_result.clone());
+        self.logical.batches.push(BatchEvidence {
+            kind: kind.to_owned(),
+            start,
+            end,
+            logical_items,
+            request_records: document.records,
+            request_bytes: published.bytes,
+            request_digest: published.digest,
+            request_path: evidence::relative(self.repository, &request_path),
+            plan_command: plan.ordinal,
+            apply_command: apply.ordinal,
+            base_revision: plan_base.clone(),
+            result_revision: plan_result.clone(),
+            plan_token: token,
+            allocated_identities: applied_identities.len() as u64,
+            identity_digest: VerificationDigest::of(&identity_bytes),
+            compiler_units,
+        });
+        self.revision.clone_from(&plan_result);
+        Ok(ApplyOutcome {
+            allocated: applied_identities,
+            base_revision: plan_base,
+            result_revision: plan_result,
         })
     }
 }
 
-enum Project {
-    Temporary(tempfile::TempDir),
-    Retained(PathBuf),
+struct GeneratedSelectors {
+    first_module: String,
+    first_module_name: String,
+    context_owner: String,
 }
 
-impl Project {
-    fn create(retain: Option<&Path>) -> Result<Self, DevError> {
-        if let Some(path) = retain {
-            let metadata = fs::symlink_metadata(path).map_err(|error| {
-                DevError::usage(format!(
-                    "inspect retained project '{}': {error}",
-                    path.display()
-                ))
-            })?;
-            if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                return Err(DevError::usage(format!(
-                    "retained project '{}' must be a non-symlink directory",
-                    path.display()
-                )));
-            }
-            if fs::read_dir(path)
-                .map_err(|error| {
-                    DevError::usage(format!(
-                        "read retained project '{}': {error}",
-                        path.display()
-                    ))
-                })?
-                .next()
-                .is_some()
-            {
-                return Err(DevError::usage(format!(
-                    "retained project '{}' is not empty",
-                    path.display()
-                )));
-            }
-            return Ok(Self::Retained(path.to_path_buf()));
-        }
-        tempfile::Builder::new()
-            .prefix("lkjscript-scale-")
-            .tempdir()
-            .map(Self::Temporary)
-            .map_err(|error| DevError::infrastructure(format!("create scale project: {error}")))
-    }
-
-    fn path(&self) -> &Path {
-        match self {
-            Self::Temporary(directory) => directory.path(),
-            Self::Retained(path) => path,
-        }
-    }
+enum RunCompletion {
+    Completed,
+    NotRun(String),
 }
 
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
-    let options = parse(arguments)?;
+    let arguments = arguments.collect::<Vec<_>>();
+    if arguments.len() == 1
+        && arguments[0]
+            .to_str()
+            .is_some_and(|value| matches!(value, "help" | "--help" | "-h"))
+    {
+        println!("{HELP}");
+        return Ok(0);
+    }
+    let options = parse_options(arguments.into_iter())?;
     let repository = repository_root()?;
-    let evidence_directory = new_evidence_directory(&repository)?;
+    let evidence_root = prepare_evidence_root(&repository, options.evidence_root.as_deref())?;
+    let project = options
+        .retain
+        .clone()
+        .unwrap_or_else(|| evidence_root.join("project"));
+    validate_project_destination(&project)?;
+    let scenario = scenario(&options)?;
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let mut runner = Runner::new(&repository, &evidence_directory);
-    let mut binary_proof = None;
-    let result = (|| {
-        let binary = resolve_binary(&repository, &options.binary)?;
-        binary_proof = Some(evidence::proof(
+    let host = observe_host(&repository);
+    let mut runner = Runner::new(
+        &repository,
+        &evidence_root,
+        started,
+        Duration::from_secs(options.maximum_wall_seconds),
+        options.maximum_run_bytes,
+    );
+    let mut source = None;
+    let mut toolchain = None;
+    let mut candidate = None;
+    let mut capabilities = None;
+    let mut logical = LogicalEvidence::default();
+    let mut limitations = vec![
+        "wall time, CPU, RSS, filesystem, and byte totals are observations of this exact host and input, not service-level objectives".to_owned(),
+        "child CPU and peak RSS come from process sampling; in-process request generation and typed-oracle CPU are not separately available".to_owned(),
+        "the typed oracle reconstructs the accepted GraphRepository revision and does not call the production compact-result formatter".to_owned(),
+    ];
+    if options.lifecycle == Lifecycle::Capacity {
+        limitations.push(
+            "capacity lifecycle omits rename, check, and build; it is not full compiler/artifact admission"
+                .to_owned(),
+        );
+    }
+    let mut not_run_reason = None;
+    let run_result = (|| -> Result<RunCompletion, DevError> {
+        source = Some(source_identity(&repository)?);
+        toolchain = Some(toolchain_identity(&repository)?);
+        let copied = copy_candidate(&repository, &evidence_root, &options.binary)?;
+        let binary = PathBuf::from(&copied.executed_path);
+        candidate = Some(copied);
+        let capability_invocation = runner.invoke(
+            "capabilities",
             &binary,
-            binary.to_string_lossy().into_owned(),
-        )?);
-        let project = Project::create(options.retain.as_deref())?;
-        run_scale(&options, &binary, project.path(), &mut runner)
+            vec!["capabilities".to_owned()],
+            "capabilities",
+            "success",
+        )?;
+        let operation_invocation = runner.invoke(
+            "capabilities-operations",
+            &binary,
+            vec![
+                "capabilities".to_owned(),
+                "--section".to_owned(),
+                "operations".to_owned(),
+            ],
+            "capabilities.section",
+            "success",
+        )?;
+        let discovered = capability_identity(&capability_invocation, &operation_invocation)?;
+        require_current_operations(&discovered)?;
+        capabilities = Some(discovered);
+        if let Some(reason) = preflight_reason(&options, &host) {
+            if options.lifecycle == Lifecycle::Capacity {
+                not_run_reason = Some(reason.clone());
+                return Ok(RunCompletion::NotRun(reason));
+            }
+            return Err(DevError::unavailable(reason));
+        }
+        run_scale(
+            &options,
+            &repository,
+            &evidence_root,
+            &project,
+            &binary,
+            &mut runner,
+            &mut logical,
+        )?;
+        Ok(RunCompletion::Completed)
     })();
-    let (status, scale_result, failure) = match result {
-        Ok(result) => (ScaleStatus::Passed, Some(result), None),
-        Err(error) => (
-            ScaleStatus::Failed,
+
+    if !logical.complete && project.join("HEAD").is_file() {
+        let _ = complete_partial_oracle(&project, &scenario.requested, &mut logical);
+    }
+    let repository_area = repository_area(&project).ok();
+    let derived_area = area_if_present(&project.join("derived")).ok().flatten();
+    let artifact_area = area_if_present(&evidence_root.join("artifacts"))
+        .ok()
+        .flatten();
+    let total_run_bytes = directory_bytes(&evidence_root).ok();
+    let cleanup = cleanup_project(&project, options.retain.is_some());
+
+    let (mut status, mut admission, mut failure) = match run_result {
+        Ok(RunCompletion::Completed) => (
+            ReceiptStatus::Passed,
+            AdmissionClassification::Completed,
             None,
-            Some(Failure {
+        ),
+        Ok(RunCompletion::NotRun(reason)) => (
+            ReceiptStatus::Passed,
+            AdmissionClassification::NotRunWithReason,
+            Some(FailureEvidence {
+                class: "environment".to_owned(),
+                message: reason,
+            }),
+        ),
+        Err(error) if error.kind() == "unavailable" => (
+            if options.lifecycle == Lifecycle::Capacity {
+                ReceiptStatus::Passed
+            } else {
+                ReceiptStatus::Failed
+            },
+            AdmissionClassification::EnvironmentLimit,
+            Some(FailureEvidence {
+                class: error.kind().to_owned(),
+                message: error.message().to_owned(),
+            }),
+        ),
+        Err(error) => (
+            ReceiptStatus::Failed,
+            AdmissionClassification::Failed,
+            Some(FailureEvidence {
                 class: error.kind().to_owned(),
                 message: error.message().to_owned(),
             }),
         ),
     };
+    if cleanup.status == CleanupStatus::Failed {
+        status = ReceiptStatus::Failed;
+        admission = AdmissionClassification::Failed;
+        failure = Some(FailureEvidence {
+            class: "infrastructure".to_owned(),
+            message: format!("scale project cleanup failed: {}", cleanup.detail),
+        });
+    }
+    if admission != AdmissionClassification::Completed {
+        logical.complete = false;
+    }
+    if admission == AdmissionClassification::NotRunWithReason && not_run_reason.is_none() {
+        status = ReceiptStatus::Failed;
+        admission = AdmissionClassification::Failed;
+        failure = Some(FailureEvidence {
+            class: "corrupt".to_owned(),
+            message: "not-run classification omitted its exact reason".to_owned(),
+        });
+    }
+    let commands = runner.into_commands();
+    let child_cpu_nanoseconds =
+        sum_optional(commands.iter().map(|item| item.process.cpu_nanoseconds));
+    let maximum_child_peak_rss_kib = commands
+        .iter()
+        .filter_map(|item| item.process.peak_rss_kib)
+        .max();
     let receipt = ScaleReceipt {
+        schema: SCALE_SCHEMA.to_owned(),
         contract_version: SCALE_CONTRACT_VERSION,
         status,
-        topology: options.topology,
-        semantic_shape: options.topology.semantic_shape().to_owned(),
-        parameters: ScaleParameters {
-            requested_items: options.items,
-            batch_size: options.batch,
-            requested_modules: options.modules,
+        admission,
+        source,
+        toolchain,
+        candidate,
+        capabilities,
+        scenario,
+        logical,
+        commands,
+        observations: ObservationEvidence {
+            started_unix_nanoseconds: started_wall,
+            completed_unix_nanoseconds: unix_nanoseconds()?,
+            elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+            host,
+            child_cpu_nanoseconds,
+            maximum_child_peak_rss_kib,
+            harness_peak_rss_kib: process_peak_rss_kib(),
+            repository: repository_area,
+            derived: derived_area,
+            artifacts: artifact_area,
+            total_run_bytes,
         },
-        started_unix_nanoseconds: started_wall,
-        completed_unix_nanoseconds: unix_nanoseconds()?,
-        elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
-        project_retained: options.retain.is_some(),
-        binary: binary_proof,
-        commands: runner.commands,
-        result: scale_result,
+        cleanup,
+        limitations,
         failure,
     };
-    let path = evidence_directory.join("receipt.json");
-    let published = evidence::publish_json(&path, &receipt)?;
+    let published = evidence::publish_json(&evidence_root.join("receipt.json"), &receipt)?;
     print_summary(&repository, &options, &receipt, &published)?;
-    Ok(if status == ScaleStatus::Passed { 0 } else { 1 })
+    Ok(if receipt.status == ReceiptStatus::Passed {
+        0
+    } else {
+        1
+    })
 }
 
 fn run_scale(
     options: &Options,
-    binary: &Path,
+    repository: &Path,
+    evidence_root: &Path,
     project: &Path,
+    binary: &Path,
     runner: &mut Runner,
-) -> Result<ScaleResult, DevError> {
+    logical: &mut LogicalEvidence,
+) -> Result<(), DevError> {
     let created = runner.invoke(
         "new",
         binary,
@@ -675,765 +555,1109 @@ fn run_scale(
             "--name".to_owned(),
             "scale".to_owned(),
         ],
+        "new",
+        "success",
     )?;
-    let revision = string_at(&created.result, &["revision"])?;
-    let mut context = ChangeContext {
-        runner,
-        binary,
+    let created_revision = required_field(record(&created.records, "revision")?, "id")?.to_owned();
+    logical.starting_revision = Some(created_revision.clone());
+    logical.repository =
+        Some(required_field(record(&created.records, "repository")?, "id")?.to_owned());
+    logical.package = Some(required_field(record(&created.records, "package")?, "id")?.to_owned());
+    logical.semantic_state =
+        Some(required_field(record(&created.records, "state")?, "digest")?.to_owned());
+
+    let mut changes = ChangeContext {
+        repository,
+        evidence_root,
         project,
-        revision,
+        binary,
+        runner,
+        logical,
+        revision: created_revision,
         request_ordinal: 0,
-        request_bytes: 0,
-        batches: Vec::new(),
     };
-    let generation = generate(options, &mut context)?;
-
-    let store = project.join(".lkjscript/meaning");
-    let before_local_create = store_inventory(&store)?;
-    let local_create = context.apply(
-        "local-create",
-        0,
-        1,
-        vec![ScaleChange::CreateModule {
-            symbol: "$local-module".to_owned(),
-            name: "scale.localedit".to_owned(),
-        }],
-        false,
-    )?;
-    let local_module = local_create
-        .allocated
-        .get("$local-module")
-        .cloned()
-        .ok_or_else(|| DevError::corrupt("local module identity is absent"))?;
-    let after_local_create = store_inventory(&store)?;
-    let local_rename = context.apply(
-        "local-rename",
-        0,
-        1,
-        vec![ScaleChange::RenameModule {
-            module: local_module.clone(),
-            new_name: "scale.renamedlocaledit".to_owned(),
-        }],
-        false,
-    )?;
-    let after_local_rename = store_inventory(&store)?;
-
-    let orient = context.runner.invoke(
-        "orient",
-        binary,
-        project_arguments(project, &["inspect", "project", "--limit", "10"]),
-    )?;
-    let total_modules = usize_at(&orient.result, &["module_count"])?;
-    let expected_nonbase = generation
-        .generated_modules
-        .checked_add(1)
-        .ok_or_else(|| DevError::infrastructure("generated module count overflow"))?;
-    let base_modules = total_modules.checked_sub(expected_nonbase).ok_or_else(|| {
-        DevError::corrupt("public project module count is smaller than generated topology")
-    })?;
-    let find_cold = context.runner.invoke(
-        "find-cold",
-        binary,
-        project_arguments(
-            project,
-            &[
-                "query",
-                "find",
-                "scale.renamedlocaledit",
-                "--exact",
-                "--limit",
-                "10",
-            ],
-        ),
-    )?;
-    let find = context.runner.invoke(
-        "find",
-        binary,
-        project_arguments(
-            project,
-            &[
-                "query",
-                "find",
-                "scale.renamedlocaledit",
-                "--exact",
-                "--limit",
-                "10",
-            ],
-        ),
-    )?;
-    let show = context.runner.invoke(
-        "show",
-        binary,
-        project_arguments(project, &["inspect", "owner", &local_module]),
-    )?;
-    let doctor = context.runner.invoke(
-        "doctor",
-        binary,
-        project_arguments(project, &["doctor", "--deep"]),
-    )?;
-    let artifact_path = project.join("scale.lkja");
-    let build = context.runner.invoke(
-        "build",
-        binary,
-        project_arguments(
-            project,
-            &["build", "--output", &artifact_path.to_string_lossy()],
-        ),
-    )?;
-    let backup_path = project.join("scale.lkjb");
-    let backup = context.runner.invoke(
-        "backup",
-        binary,
-        project_arguments(
-            project,
-            &["backup", "--output", &backup_path.to_string_lossy()],
-        ),
-    )?;
-    let final_inventory = store_inventory(&store)?;
-    Ok(ScaleResult {
-        final_revision: local_rename.revision.clone(),
-        generated_modules: generation.generated_modules,
-        generated_functions: generation.generated_functions,
-        call_depth: generation.call_depth,
-        caller_fanout: generation.caller_fanout,
-        base_modules,
-        measured_local_modules: 1,
-        total_modules,
-        creation: created.timing,
-        apply_batches: generation.batches,
-        transaction_request_bytes: generation.request_bytes,
-        local_create: LocalMutation {
-            elapsed_nanoseconds: local_create.timing.elapsed_nanoseconds,
-            response_bytes: local_create.timing.response_bytes,
-            revision: local_create.revision,
-            validation: local_create.validation,
-            store_delta: inventory_delta(&before_local_create, &after_local_create)?,
-        },
-        local_rename: LocalMutation {
-            elapsed_nanoseconds: local_rename.timing.elapsed_nanoseconds,
-            response_bytes: local_rename.timing.response_bytes,
-            revision: local_rename.revision,
-            validation: local_rename.validation,
-            store_delta: inventory_delta(&after_local_create, &after_local_rename)?,
-        },
-        orient: OrientMeasurement {
-            elapsed_nanoseconds: orient.timing.elapsed_nanoseconds,
-            response_bytes: orient.timing.response_bytes,
-            returned_items: array_len_at(&orient.result, &["modules"])?,
-        },
-        exact_find_cold_index: find_measurement(find_cold)?,
-        exact_find: find_measurement(find)?,
-        exact_show: ShowMeasurement {
-            elapsed_nanoseconds: show.timing.elapsed_nanoseconds,
-            response_bytes: show.timing.response_bytes,
-            id: string_at(&show.result, &["id"])?,
-        },
-        deep_doctor: doctor_measurement(doctor)?,
-        build: BuildMeasurement {
-            elapsed_nanoseconds: build.timing.elapsed_nanoseconds,
-            response_bytes: build.timing.response_bytes,
-            artifact_bytes: regular_file_bytes(&artifact_path)?,
-            artifact_digest: string_at(&build.result, &["receipt", "artifact_digest"])?,
-        },
-        backup: BackupMeasurement {
-            elapsed_nanoseconds: backup.timing.elapsed_nanoseconds,
-            response_bytes: backup.timing.response_bytes,
-            backup_bytes: payload_bytes(&backup_path)?,
-            backup_digest: string_at(&backup.result, &["receipt", "digest"])?,
-        },
-        canonical_store_bytes: byte_count(&store, false)?,
-        store_bytes_with_indexes: byte_count(&store, true)?,
-        store_inventory: final_inventory,
-        platform: format!("{} {}", platform_name(), std::env::consts::ARCH),
-    })
-}
-
-fn generate(options: &Options, context: &mut ChangeContext<'_>) -> Result<Generation, DevError> {
-    let (generated_modules, generated_functions, call_depth, caller_fanout) = match options.topology
-    {
-        Topology::IndependentModules => {
-            create_modules(
-                context,
-                options.items,
-                options.batch,
-                "scale.module",
-                "modules",
-            )?;
-            (options.items, 0, 0, 0)
-        }
-        Topology::SmallFunctions => {
-            let modules = options
-                .modules
-                .ok_or_else(|| DevError::usage("small-functions requires a module count"))?;
-            let module_ids = create_modules(
-                context,
-                modules,
-                options.batch,
-                "scale.functions.module",
-                "function-modules",
-            )?;
-            create_unit_functions(
-                context,
-                options.items,
-                options.batch,
-                &module_ids,
-                "small-functions",
-            )?;
-            (modules, options.items, 1, 0)
-        }
-        Topology::WideModule => {
-            let modules = create_modules(context, 1, options.batch, "scale.wide", "wide-module")?;
-            create_unit_functions(
-                context,
-                options.items,
-                options.batch,
-                &modules,
-                "wide-functions",
-            )?;
-            (1, options.items, 1, 0)
-        }
-        Topology::DeepChain => {
-            let modules = create_modules(context, 1, options.batch, "scale.chain", "chain-module")?;
-            create_chain(context, options.items, options.batch, &modules[0])?;
-            (1, options.items, options.items, 0)
-        }
-        Topology::WideFanout => {
-            let modules =
-                create_modules(context, 1, options.batch, "scale.fanout", "fanout-module")?;
-            create_fanout(context, options.items, options.batch, &modules[0])?;
-            (1, options.items, 1, options.items.saturating_sub(1))
-        }
-    };
-    Ok(Generation {
-        generated_modules,
-        generated_functions,
-        call_depth,
-        caller_fanout,
-        batches: std::mem::take(&mut context.batches),
-        request_bytes: context.request_bytes,
-    })
-}
-
-fn create_modules(
-    context: &mut ChangeContext<'_>,
-    count: usize,
-    batch: usize,
-    prefix: &str,
-    kind: &str,
-) -> Result<Vec<String>, DevError> {
-    let mut identities = Vec::with_capacity(count);
-    for start in (0..count).step_by(batch) {
-        let end = start.saturating_add(batch).min(count);
-        let changes = (start..end)
-            .map(|ordinal| ScaleChange::CreateModule {
-                symbol: format!("$module-{ordinal}"),
-                name: format!("{prefix}{ordinal:06}"),
-            })
-            .collect();
-        let applied = context.apply(kind, start, end, changes, true)?;
-        for ordinal in start..end {
-            identities.push(required_allocated(
-                &applied.allocated,
-                &format!("$module-{ordinal}"),
-            )?);
-        }
+    let mut selectors = construct_topology(options, &mut changes)?;
+    if options.lifecycle == Lifecycle::Full {
+        let before = selectors.first_module_name.clone();
+        let after = format!("{before}_renamed");
+        let mut request = RequestBuilder::request(
+            &changes.revision,
+            "scale-rename",
+            "scale local rename admission",
+        )?;
+        request.push(
+            "rename.owner",
+            &[("owner", &selectors.first_module), ("name", &after)],
+        )?;
+        let outcome = changes.apply("rename", 0, 1, 1, request.finish()?, false)?;
+        changes.logical.rename = Some(RenameEvidence {
+            owner: selectors.first_module.clone(),
+            before,
+            after: after.clone(),
+            base_revision: outcome.base_revision,
+            result_revision: outcome.result_revision,
+        });
+        selectors.first_module_name = after;
     }
-    Ok(identities)
-}
+    let final_revision = changes.revision.clone();
+    changes.logical.final_revision = Some(final_revision.clone());
+    changes.logical.public_reads = Some(public_reads(
+        changes.project,
+        changes.binary,
+        changes.runner,
+        &selectors,
+        &final_revision,
+        &scenario(options)?.requested,
+    )?);
 
-fn create_unit_functions(
-    context: &mut ChangeContext<'_>,
-    count: usize,
-    batch: usize,
-    modules: &[String],
-    kind: &str,
-) -> Result<(), DevError> {
-    if modules.is_empty() {
-        return Err(DevError::infrastructure("function topology has no modules"));
-    }
-    for start in (0..count).step_by(batch) {
-        let end = start.saturating_add(batch).min(count);
-        let changes = (start..end)
-            .map(|ordinal| ScaleChange::CreateFunction {
-                symbol: format!("$function-{ordinal}"),
-                module: modules[ordinal % modules.len()].clone(),
-                name: format!("f{ordinal:06}"),
-                result: UnitType::unit(),
-                body: ScaleExpression::Unit { unit: true },
-                exported: false,
-            })
-            .collect();
-        context.apply(kind, start, end, changes, true)?;
-    }
-    Ok(())
-}
-
-fn create_chain(
-    context: &mut ChangeContext<'_>,
-    count: usize,
-    batch: usize,
-    module: &str,
-) -> Result<(), DevError> {
-    let mut previous: Option<String> = None;
-    for start in (0..count).step_by(batch) {
-        let end = start.saturating_add(batch).min(count);
-        let mut changes = Vec::with_capacity(end - start);
-        for ordinal in start..end {
-            let body = if ordinal == 0 {
-                ScaleExpression::Unit { unit: true }
-            } else if ordinal == start {
-                ScaleExpression::Call {
-                    call: previous.clone().ok_or_else(|| {
-                        DevError::infrastructure("deep chain lost its previous function")
-                    })?,
-                }
-            } else {
-                ScaleExpression::Call {
-                    call: format!("$function-{}", ordinal - 1),
-                }
-            };
-            changes.push(ScaleChange::CreateFunction {
-                symbol: format!("$function-{ordinal}"),
-                module: module.to_owned(),
-                name: format!("f{ordinal:06}"),
-                result: UnitType::unit(),
-                body,
-                exported: false,
-            });
-        }
-        let applied = context.apply("deep-chain", start, end, changes, true)?;
-        previous = Some(required_allocated(
-            &applied.allocated,
-            &format!("$function-{}", end - 1),
+    if options.lifecycle == Lifecycle::Full {
+        changes.logical.check = Some(run_check(
+            changes.project,
+            changes.binary,
+            changes.runner,
+            &final_revision,
         )?);
+        changes.logical.cache_reset_before_clean_build =
+            Some(reset_compiler_cache(changes.project)?);
+        let artifacts = changes.evidence_root.join("artifacts");
+        fs::create_dir_all(&artifacts).map_err(|error| {
+            DevError::infrastructure(format!(
+                "create scale artifact directory '{}': {error}",
+                artifacts.display()
+            ))
+        })?;
+        let clean = run_build(
+            "clean",
+            &artifacts.join("clean.lkja"),
+            changes.project,
+            changes.binary,
+            changes.runner,
+            repository,
+            &final_revision,
+        )?;
+        if clean.compilation.cache != "clean" {
+            return Err(DevError::corrupt(
+                "forced clean scale build did not report a clean compilation",
+            ));
+        }
+        let exact = run_build(
+            "exact-current",
+            &artifacts.join("exact-current.lkja"),
+            changes.project,
+            changes.binary,
+            changes.runner,
+            repository,
+            &final_revision,
+        )?;
+        if exact.compilation.cache != "exact-current" {
+            return Err(DevError::corrupt(
+                "second scale build did not report exact-current compilation",
+            ));
+        }
+        let equal = clean.artifact == exact.artifact
+            && clean.sha256 == exact.sha256
+            && files_equal(
+                &artifacts.join("clean.lkja"),
+                &artifacts.join("exact-current.lkja"),
+            )?;
+        if !equal {
+            return Err(DevError::corrupt(
+                "clean and exact-current scale artifacts disagree",
+            ));
+        }
+        changes.logical.clean_exact_artifacts_equal = Some(true);
+        changes.logical.builds = vec![clean, exact];
     }
+    attach_oracle(
+        changes.project,
+        &scenario(options)?.requested,
+        changes.logical,
+    )?;
+    changes.logical.shape_digest = Some(shape_digest(options, changes.logical)?);
+    changes.logical.complete = true;
     Ok(())
 }
 
-fn create_fanout(
-    context: &mut ChangeContext<'_>,
-    count: usize,
-    batch: usize,
-    module: &str,
-) -> Result<(), DevError> {
-    let root = context.apply(
-        "fanout-root",
+fn construct_topology(
+    options: &Options,
+    changes: &mut ChangeContext<'_>,
+) -> Result<GeneratedSelectors, DevError> {
+    match options.topology {
+        Topology::IndependentModules => construct_independent_modules(options, changes),
+        Topology::SmallFunctions => construct_small_functions(options, changes),
+        Topology::WideModule => construct_function_graph(options, changes, FunctionShape::Unit),
+        Topology::DeepChain => construct_function_graph(options, changes, FunctionShape::Chain),
+        Topology::WideFanout => construct_function_graph(options, changes, FunctionShape::Fanout),
+    }
+}
+
+fn construct_independent_modules(
+    options: &Options,
+    changes: &mut ChangeContext<'_>,
+) -> Result<GeneratedSelectors, DevError> {
+    let mut first_module = None;
+    for (start, end) in batches(options.items, options.batch) {
+        let document = module_request(&changes.revision, start, end, "independent")?;
+        let outcome = changes.apply(
+            "independent-modules",
+            start,
+            end,
+            end - start,
+            document,
+            true,
+        )?;
+        if start == 0 {
+            first_module = outcome.allocated.get("$m0000000").cloned();
+        }
+    }
+    let first_module = first_module.ok_or_else(|| {
+        DevError::corrupt("independent-module construction omitted its first allocation")
+    })?;
+    Ok(GeneratedSelectors {
+        first_module: first_module.clone(),
+        first_module_name: module_name(0),
+        context_owner: first_module,
+    })
+}
+
+fn construct_small_functions(
+    options: &Options,
+    changes: &mut ChangeContext<'_>,
+) -> Result<GeneratedSelectors, DevError> {
+    let modules = options.modules.ok_or_else(|| {
+        DevError::infrastructure("small-functions module count was not normalized")
+    })?;
+    let mut module_ids = Vec::with_capacity(modules as usize);
+    for (start, end) in batches(modules, MAXIMUM_MODULE_BATCH.min(options.batch)) {
+        let document = module_request(&changes.revision, start, end, "small-functions-modules")?;
+        let outcome = changes.apply(
+            "small-functions-modules",
+            start,
+            end,
+            end - start,
+            document,
+            true,
+        )?;
+        for index in start..end {
+            let symbol = module_symbol(index);
+            module_ids.push(outcome.allocated.get(&symbol).cloned().ok_or_else(|| {
+                DevError::corrupt(format!("module batch omitted allocation {symbol}"))
+            })?);
+        }
+    }
+    let mut first_function = None;
+    for (start, end) in batches(options.items, options.batch) {
+        let document = function_request(
+            &changes.revision,
+            start,
+            end,
+            &module_ids,
+            FunctionShape::Unit,
+            None,
+        )?;
+        let outcome = changes.apply("small-functions", start, end, end - start, document, true)?;
+        if start == 0 {
+            first_function = outcome.allocated.get("$f0000000").cloned();
+        }
+    }
+    Ok(GeneratedSelectors {
+        first_module: module_ids[0].clone(),
+        first_module_name: module_name(0),
+        context_owner: first_function.ok_or_else(|| {
+            DevError::corrupt("small-function construction omitted its first function")
+        })?,
+    })
+}
+
+#[derive(Clone, Copy)]
+enum FunctionShape {
+    Unit,
+    Chain,
+    Fanout,
+}
+
+fn construct_function_graph(
+    options: &Options,
+    changes: &mut ChangeContext<'_>,
+    shape: FunctionShape,
+) -> Result<GeneratedSelectors, DevError> {
+    let module = changes.apply(
+        "function-module",
         0,
         1,
-        vec![ScaleChange::CreateFunction {
-            symbol: "$function-0".to_owned(),
-            module: module.to_owned(),
-            name: "f000000".to_owned(),
-            result: UnitType::unit(),
-            body: ScaleExpression::Unit { unit: true },
-            exported: false,
-        }],
+        1,
+        module_request(&changes.revision, 0, 1, "function-module")?,
         true,
     )?;
-    let root = required_allocated(&root.allocated, "$function-0")?;
-    for start in (1..count).step_by(batch) {
-        let end = start.saturating_add(batch).min(count);
-        let changes = (start..end)
-            .map(|ordinal| ScaleChange::CreateFunction {
-                symbol: format!("$function-{ordinal}"),
-                module: module.to_owned(),
-                name: format!("f{ordinal:06}"),
-                result: UnitType::unit(),
-                body: ScaleExpression::Call { call: root.clone() },
-                exported: false,
-            })
-            .collect();
-        context.apply("wide-fanout", start, end, changes, true)?;
-    }
-    Ok(())
-}
-
-fn validation_at(value: &Value) -> Result<ValidationMeasurement, DevError> {
-    Ok(ValidationMeasurement {
-        profile: string_at(value, &["receipt", "validation", "profile"])?,
-        graph_valid: bool_at(value, &["receipt", "validation", "graph_valid"])?,
-        full_oracle_equal: bool_at(value, &["receipt", "validation", "full_oracle_equal"])?,
-        modules_checked: u64_at(value, &["receipt", "validation", "modules_checked"])?,
-        declarations_checked: u64_at(value, &["receipt", "validation", "declarations_checked"])?,
-    })
-}
-
-fn find_measurement(invocation: Invocation) -> Result<FindMeasurement, DevError> {
-    Ok(FindMeasurement {
-        elapsed_nanoseconds: invocation.timing.elapsed_nanoseconds,
-        response_bytes: invocation.timing.response_bytes,
-        work: u64_at(&invocation.result, &["work"])?,
-        matches: u64_at(&invocation.result, &["total_items"])?,
-    })
-}
-
-fn doctor_measurement(invocation: Invocation) -> Result<DoctorMeasurement, DevError> {
-    Ok(DoctorMeasurement {
-        elapsed_nanoseconds: invocation.timing.elapsed_nanoseconds,
-        response_bytes: invocation.timing.response_bytes,
-        valid: bool_at(&invocation.result, &["valid"])?,
-        deep: bool_at(&invocation.result, &["deep"])?,
-        modules_checked: u64_at(&invocation.result, &["modules_checked"])?,
-        revisions_checked: u64_at(&invocation.result, &["revisions_checked"])?,
-        roots_checked: u64_at(&invocation.result, &["roots_checked"])?,
-        receipts_checked: u64_at(&invocation.result, &["receipts_checked"])?,
-        rebuilt_indexes: u64_at(&invocation.result, &["rebuilt_indexes"])?,
-        revision: string_at(&invocation.result, &["revision"])?,
-    })
-}
-
-fn allocated_identities(value: &Value) -> Result<BTreeMap<String, String>, DevError> {
-    let object = at(value, &["allocated_identities"])?
-        .as_object()
-        .ok_or_else(|| DevError::corrupt("allocated_identities is not an object"))?;
-    object
-        .iter()
-        .map(|(symbol, value)| string_at(value, &["id"]).map(|identity| (symbol.clone(), identity)))
-        .collect()
-}
-
-fn required_allocated(
-    allocated: &BTreeMap<String, String>,
-    symbol: &str,
-) -> Result<String, DevError> {
-    allocated
-        .get(symbol)
+    let module = module
+        .allocated
+        .get("$m0000000")
         .cloned()
-        .ok_or_else(|| DevError::corrupt(format!("allocated identity '{symbol}' is absent")))
-}
-
-fn at<'a>(value: &'a Value, path: &[&str]) -> Result<&'a Value, DevError> {
-    let mut current = value;
-    for field in path {
-        current = current.get(*field).ok_or_else(|| {
-            DevError::corrupt(format!("public CLI result omitted '{}'", path.join(".")))
-        })?;
+        .ok_or_else(|| DevError::corrupt("function topology omitted its module allocation"))?;
+    let module_ids = [module.clone()];
+    let mut first_function = None;
+    let mut previous_function = None;
+    for (start, end) in batches(options.items, options.batch) {
+        let external_target = match shape {
+            FunctionShape::Unit => None,
+            FunctionShape::Chain => previous_function.as_deref(),
+            FunctionShape::Fanout => first_function.as_deref(),
+        };
+        let document = function_request(
+            &changes.revision,
+            start,
+            end,
+            &module_ids,
+            shape,
+            external_target,
+        )?;
+        let outcome = changes.apply(
+            options.topology.name(),
+            start,
+            end,
+            end - start,
+            document,
+            true,
+        )?;
+        if start == 0 {
+            first_function = outcome.allocated.get("$f0000000").cloned();
+        }
+        previous_function = outcome.allocated.get(&function_symbol(end - 1)).cloned();
     }
-    Ok(current)
-}
-
-fn string_at(value: &Value, path: &[&str]) -> Result<String, DevError> {
-    at(value, path)?
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| DevError::corrupt(format!("'{}' is not text", path.join("."))))
-}
-
-fn u64_at(value: &Value, path: &[&str]) -> Result<u64, DevError> {
-    at(value, path)?.as_u64().ok_or_else(|| {
-        DevError::corrupt(format!("'{}' is not an unsigned integer", path.join(".")))
+    Ok(GeneratedSelectors {
+        first_module: module,
+        first_module_name: module_name(0),
+        context_owner: first_function.ok_or_else(|| {
+            DevError::corrupt("function topology omitted its first function allocation")
+        })?,
     })
 }
 
-fn usize_at(value: &Value, path: &[&str]) -> Result<usize, DevError> {
-    usize::try_from(u64_at(value, path)?)
-        .map_err(|_| DevError::corrupt(format!("'{}' does not fit usize", path.join("."))))
-}
-
-fn bool_at(value: &Value, path: &[&str]) -> Result<bool, DevError> {
-    at(value, path)?
-        .as_bool()
-        .ok_or_else(|| DevError::corrupt(format!("'{}' is not a boolean", path.join("."))))
-}
-
-fn array_len_at(value: &Value, path: &[&str]) -> Result<usize, DevError> {
-    at(value, path)?
-        .as_array()
-        .map(Vec::len)
-        .ok_or_else(|| DevError::corrupt(format!("'{}' is not an array", path.join("."))))
-}
-
-fn compact_value(value: &Value) -> String {
-    let mut encoded = serde_json::to_string(value).unwrap_or_else(|_| "invalid_error".to_owned());
-    encoded.truncate(2_048);
-    encoded
-}
-
-fn project_arguments(project: &Path, command: &[&str]) -> Vec<String> {
-    let mut arguments = vec![
-        "--project".to_owned(),
-        project.to_string_lossy().into_owned(),
-    ];
-    arguments.extend(command.iter().map(|value| (*value).to_owned()));
-    arguments
-}
-
-fn store_inventory(root: &Path) -> Result<BTreeMap<String, AreaMeasurement>, DevError> {
-    let mut inventory: BTreeMap<String, AreaMeasurement> = BTreeMap::new();
-    visit_files(root, root, &mut |relative, metadata| {
-        if relative.file_name().and_then(|value| value.to_str()) == Some("LOCK") {
-            return Ok(());
-        }
-        let area = relative
-            .components()
-            .next()
-            .and_then(|component| component.as_os_str().to_str())
-            .ok_or_else(|| DevError::infrastructure("store path has no portable area"))?;
-        let entry = inventory.entry(area.to_owned()).or_default();
-        entry.files = entry
-            .files
-            .checked_add(1)
-            .ok_or_else(|| DevError::infrastructure("store file count overflow"))?;
-        entry.bytes = entry
-            .bytes
-            .checked_add(metadata.len())
-            .ok_or_else(|| DevError::infrastructure("store byte count overflow"))?;
-        Ok(())
-    })?;
-    Ok(inventory)
-}
-
-fn inventory_delta(
-    before: &BTreeMap<String, AreaMeasurement>,
-    after: &BTreeMap<String, AreaMeasurement>,
-) -> Result<BTreeMap<String, AreaDelta>, DevError> {
-    let mut areas = before
-        .keys()
-        .chain(after.keys())
-        .cloned()
-        .collect::<Vec<_>>();
-    areas.sort();
-    areas.dedup();
-    let mut delta = BTreeMap::new();
-    for area in areas {
-        let old = before.get(&area).cloned().unwrap_or_default();
-        let new = after.get(&area).cloned().unwrap_or_default();
-        if old == new {
-            continue;
-        }
-        delta.insert(
-            area,
-            AreaDelta {
-                files: signed_delta(new.files, old.files)?,
-                bytes: signed_delta(new.bytes, old.bytes)?,
-            },
-        );
+fn module_request(
+    revision: &str,
+    start: u64,
+    end: u64,
+    intent: &str,
+) -> Result<RequestDocument, DevError> {
+    let mut request = RequestBuilder::request(
+        revision,
+        &format!("scale-{intent}-{start}-{end}"),
+        &format!("scale {intent} {start} through {end}"),
+    )?;
+    for index in start..end {
+        let symbol = module_symbol(index);
+        let name = module_name(index);
+        request.push("create.module", &[("as", &symbol), ("name", &name)])?;
     }
-    Ok(delta)
+    request.finish()
 }
 
-fn signed_delta(new: u64, old: u64) -> Result<i64, DevError> {
-    let new = i64::try_from(new)
-        .map_err(|_| DevError::infrastructure("scale observation exceeds i64"))?;
-    let old = i64::try_from(old)
-        .map_err(|_| DevError::infrastructure("scale observation exceeds i64"))?;
-    new.checked_sub(old)
-        .ok_or_else(|| DevError::infrastructure("scale delta overflow"))
-}
-
-fn byte_count(root: &Path, include_indexes: bool) -> Result<u64, DevError> {
-    let mut total = 0_u64;
-    visit_files(root, root, &mut |relative, metadata| {
-        if relative.file_name().and_then(|value| value.to_str()) == Some("LOCK") {
-            return Ok(());
+fn function_request(
+    revision: &str,
+    start: u64,
+    end: u64,
+    modules: &[String],
+    shape: FunctionShape,
+    external_target: Option<&str>,
+) -> Result<RequestDocument, DevError> {
+    let mut request = RequestBuilder::request(
+        revision,
+        &format!("scale-functions-{start}-{end}"),
+        &format!("scale functions {start} through {end}"),
+    )?;
+    for index in start..end {
+        let body = body_symbol(index);
+        let function = function_symbol(index);
+        let module = &modules[index as usize % modules.len()];
+        match shape {
+            FunctionShape::Unit => request.push("expression.unit", &[("as", &body)])?,
+            FunctionShape::Chain if index == 0 => {
+                request.push("expression.unit", &[("as", &body)])?;
+            }
+            FunctionShape::Chain => {
+                let target = if index == start {
+                    external_target.ok_or_else(|| {
+                        DevError::corrupt("deep-chain batch omitted its previous function")
+                    })?
+                } else {
+                    // Local symbols are request-wide and may be referenced before the owner is
+                    // lowered; allocation is canonicalized before semantic validation.
+                    &function_symbol(index - 1)
+                };
+                request.push("expression.call", &[("as", &body), ("function", target)])?;
+            }
+            FunctionShape::Fanout if index == 0 => {
+                request.push("expression.unit", &[("as", &body)])?;
+            }
+            FunctionShape::Fanout => {
+                let target = external_target.unwrap_or("$f0000000");
+                request.push("expression.call", &[("as", &body), ("function", target)])?;
+            }
         }
-        let area = relative
-            .components()
-            .next()
-            .and_then(|component| component.as_os_str().to_str());
-        if !include_indexes && matches!(area, Some("indexes" | "drafts")) {
-            return Ok(());
-        }
-        total = total
-            .checked_add(metadata.len())
-            .ok_or_else(|| DevError::infrastructure("store byte count overflow"))?;
-        Ok(())
-    })?;
-    Ok(total)
+        let name = function_name(index);
+        request.push(
+            "create.function",
+            &[
+                ("as", &function),
+                ("module", module),
+                ("name", &name),
+                ("visibility", "private"),
+                ("result", "unit"),
+                ("effect", "pure"),
+                ("body", &body),
+            ],
+        )?;
+    }
+    request.finish()
 }
 
-fn payload_bytes(path: &Path) -> Result<u64, DevError> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| {
-        DevError::infrastructure(format!("inspect payload '{}': {error}", path.display()))
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err(DevError::infrastructure(format!(
-            "payload '{}' is a symlink",
-            path.display()
+fn module_symbol(index: u64) -> String {
+    format!("$m{index:07}")
+}
+
+fn module_name(index: u64) -> String {
+    format!("m{index:07}")
+}
+
+fn function_symbol(index: u64) -> String {
+    format!("$f{index:07}")
+}
+
+fn body_symbol(index: u64) -> String {
+    format!("$b{index:07}")
+}
+
+fn function_name(index: u64) -> String {
+    format!("f{index:07}")
+}
+
+fn batches(total: u64, batch: u64) -> impl Iterator<Item = (u64, u64)> {
+    (0..total).step_by(batch as usize).map(move |start| {
+        let end = start.saturating_add(batch).min(total);
+        (start, end)
+    })
+}
+
+fn public_reads(
+    project: &Path,
+    binary: &Path,
+    runner: &mut Runner,
+    selectors: &GeneratedSelectors,
+    revision: &str,
+    requested: &SemanticCounts,
+) -> Result<PublicReadEvidence, DevError> {
+    let status = runner.invoke(
+        "status",
+        binary,
+        project_arguments(project, &["status"]),
+        "status",
+        "success",
+    )?;
+    let status_revision = required_field(record(&status.records, "revision")?, "id")?;
+    let status_owners = u64_field(record(&status.records, "summary")?, "owners")?;
+    require_revision("status", revision, status_revision)?;
+    if status_owners != requested.owners {
+        return Err(DevError::corrupt(format!(
+            "status reports {status_owners} owners; expected {}",
+            requested.owners
         )));
     }
-    if metadata.is_file() {
-        return Ok(metadata.len());
+
+    let inspected = runner.invoke(
+        "inspect-owner",
+        binary,
+        project_arguments(
+            project,
+            &["inspect", "owner", "module", &selectors.first_module],
+        ),
+        "inspect.owner",
+        "success",
+    )?;
+    require_observed_revision("inspect", revision, &inspected.records)?;
+    let inspected_owner = record(&inspected.records, "owner")?;
+    let inspected_id = required_field(inspected_owner, "id")?.to_owned();
+    let inspected_kind = required_field(inspected_owner, "kind")?.to_owned();
+    if inspected_id != selectors.first_module || inspected_kind != "module" {
+        return Err(DevError::corrupt(
+            "exact owner inspection returned a different owner",
+        ));
     }
-    if !metadata.is_dir() {
-        return Err(DevError::infrastructure(format!(
-            "payload '{}' is not a file or directory",
-            path.display()
-        )));
+
+    let owners = runner.invoke(
+        "query-owners",
+        binary,
+        project_arguments(
+            project,
+            &[
+                "query", "owners", "--limit", READ_LIMIT, "--bytes", READ_BYTES,
+            ],
+        ),
+        "query.owners",
+        "success",
+    )?;
+    require_observed_revision("owner query", revision, &owners.records)?;
+    let owner_summary = record(&owners.records, "summary")?;
+    let owner_query_returned = u64_field(owner_summary, "returned")?;
+    let owner_query_visited = u64_field(owner_summary, "visited")?;
+    let owner_query_truncated = bool_field(owner_summary, "truncated")?;
+    if owner_query_returned == 0 || owner_query_returned > READ_LIMIT.parse().unwrap_or(16) {
+        return Err(DevError::corrupt(
+            "bounded owner query returned an invalid item count",
+        ));
     }
-    let mut total = 0_u64;
-    visit_files(path, path, &mut |_, metadata| {
-        total = total
-            .checked_add(metadata.len())
-            .ok_or_else(|| DevError::infrastructure("payload byte count overflow"))?;
-        Ok(())
-    })?;
-    Ok(total)
+
+    let found = runner.invoke(
+        "query-find-module",
+        binary,
+        project_arguments(
+            project,
+            &["query", "find", "module", &selectors.first_module_name],
+        ),
+        "query.find",
+        "success",
+    )?;
+    require_observed_revision("name query", revision, &found.records)?;
+    let found_owner = required_field(record(&found.records, "owner")?, "id")?.to_owned();
+    if found_owner != selectors.first_module {
+        return Err(DevError::corrupt(
+            "exact public name query returned a different module",
+        ));
+    }
+
+    let context = runner.invoke(
+        "query-context",
+        binary,
+        project_arguments(
+            project,
+            &[
+                "query",
+                "context",
+                &selectors.context_owner,
+                "--direction",
+                "both",
+                "--depth",
+                "1",
+                "--limit",
+                READ_LIMIT,
+                "--bytes",
+                READ_BYTES,
+            ],
+        ),
+        "query.context",
+        "success",
+    )?;
+    require_observed_revision("context query", revision, &context.records)?;
+    let context_summary = record(&context.records, "summary")?;
+    let context_returned = u64_field(context_summary, "returned")?;
+    if context_returned == 0 {
+        return Err(DevError::corrupt(
+            "bounded context query returned no observation",
+        ));
+    }
+    Ok(PublicReadEvidence {
+        revision: revision.to_owned(),
+        status_owners,
+        inspected_owner: inspected_id,
+        inspected_kind,
+        owner_query_returned,
+        owner_query_visited,
+        owner_query_truncated,
+        name_query_owner: found_owner,
+        context_owner: selectors.context_owner.clone(),
+        context_returned,
+        context_total_owners: u64_field(context_summary, "total-owners")?,
+        context_total_relations: u64_field(context_summary, "total-relations")?,
+        context_truncated: bool_field(context_summary, "truncated")?,
+    })
 }
 
-fn regular_file_bytes(path: &Path) -> Result<u64, DevError> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| {
-        DevError::infrastructure(format!("inspect output '{}': {error}", path.display()))
-    })?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(DevError::infrastructure(format!(
-            "output '{}' is not a regular file",
-            path.display()
-        )));
+fn run_check(
+    project: &Path,
+    binary: &Path,
+    runner: &mut Runner,
+    revision: &str,
+) -> Result<CheckEvidence, DevError> {
+    let checked = runner.invoke(
+        "check",
+        binary,
+        project_arguments(project, &["check"]),
+        "check",
+        "success",
+    )?;
+    let authority = record(&checked.records, "authority")?;
+    require_revision("check", revision, required_field(authority, "revision")?)?;
+    let tests = record(&checked.records, "tests")?;
+    let tests_failed = u64_field(tests, "failed")?;
+    if tests_failed != 0 || required_field(tests, "differential")? != "equal" {
+        return Err(DevError::corrupt("scale check did not pass exactly"));
     }
-    Ok(metadata.len())
+    Ok(CheckEvidence {
+        command: checked.ordinal,
+        revision: revision.to_owned(),
+        compilation: compilation_evidence(record(&checked.records, "compilation")?)?,
+        artifact: artifact_evidence(record(&checked.records, "artifact")?)?,
+        tests_passed: u64_field(tests, "passed")?,
+        tests_failed,
+        differential: required_field(tests, "differential")?.to_owned(),
+    })
 }
 
-fn visit_files(
-    root: &Path,
-    directory: &Path,
-    visitor: &mut impl FnMut(&Path, &fs::Metadata) -> Result<(), DevError>,
-) -> Result<(), DevError> {
-    for entry in fs::read_dir(directory).map_err(|error| {
-        DevError::infrastructure(format!("read directory '{}': {error}", directory.display()))
-    })? {
-        let entry = entry
-            .map_err(|error| DevError::infrastructure(format!("read directory entry: {error}")))?;
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path).map_err(|error| {
-            DevError::infrastructure(format!("inspect path '{}': {error}", path.display()))
-        })?;
-        if metadata.file_type().is_symlink() {
+fn run_build(
+    mode: &str,
+    output: &Path,
+    project: &Path,
+    binary: &Path,
+    runner: &mut Runner,
+    repository: &Path,
+    revision: &str,
+) -> Result<BuildEvidence, DevError> {
+    if fs::symlink_metadata(output).is_ok() {
+        return Err(DevError::infrastructure(format!(
+            "scale build output '{}' already exists",
+            output.display()
+        )));
+    }
+    let built = runner.invoke(
+        &format!("build-{mode}"),
+        binary,
+        project_arguments(project, &["build", "--output", &output.to_string_lossy()]),
+        "build",
+        "success",
+    )?;
+    require_revision(
+        "build",
+        revision,
+        required_field(record(&built.records, "authority")?, "revision")?,
+    )?;
+    let output_record = record(&built.records, "output")?;
+    let output_bytes = u64_field(output_record, "bytes")?;
+    let proof = evidence::proof(output, evidence::relative(repository, output))?;
+    if proof.bytes != Some(output_bytes) {
+        return Err(DevError::corrupt(
+            "build response and artifact file byte counts disagree",
+        ));
+    }
+    Ok(BuildEvidence {
+        mode: mode.to_owned(),
+        command: built.ordinal,
+        revision: revision.to_owned(),
+        compilation: compilation_evidence(record(&built.records, "compilation")?)?,
+        artifact: artifact_evidence(record(&built.records, "artifact")?)?,
+        output: proof,
+        sha256: sha256_file(output)?,
+    })
+}
+
+fn compilation_evidence(
+    value: &lkjscript::platform::control::CompactRecord,
+) -> Result<CompilationEvidence, DevError> {
+    Ok(CompilationEvidence {
+        cache: required_field(value, "cache")?.to_owned(),
+        manifest: required_field(value, "manifest")?.to_owned(),
+        compiled: u64_field(value, "compiled")?,
+        reused: u64_field(value, "reused")?,
+        removed: u64_field(value, "removed")?,
+    })
+}
+
+fn artifact_evidence(
+    value: &lkjscript::platform::control::CompactRecord,
+) -> Result<ArtifactEvidence, DevError> {
+    Ok(ArtifactEvidence {
+        manifest: required_field(value, "manifest")?.to_owned(),
+        bundle: required_field(value, "bundle")?.to_owned(),
+        bytes: u64_field(value, "bytes")?,
+        packages: u64_field(value, "packages")?,
+        closure_objects: u64_field(value, "closure-objects")?,
+        compiler_units: u64_field(value, "compiler-units")?,
+    })
+}
+
+fn reset_compiler_cache(project: &Path) -> Result<bool, DevError> {
+    let cache = project.join("derived/compiler");
+    let metadata = match fs::symlink_metadata(&cache) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
             return Err(DevError::infrastructure(format!(
-                "refusing scale inventory symlink '{}'",
-                path.display()
+                "inspect compiler cache '{}': {error}",
+                cache.display()
             )));
         }
-        if metadata.is_dir() {
-            visit_files(root, &path, visitor)?;
-        } else if metadata.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|_| DevError::infrastructure("scale inventory path escaped its root"))?;
-            visitor(relative, &metadata)?;
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::infrastructure(format!(
+            "compiler cache '{}' is not a regular directory",
+            cache.display()
+        )));
+    }
+    fs::remove_dir_all(&cache).map_err(|error| {
+        DevError::infrastructure(format!(
+            "remove compiler cache '{}': {error}",
+            cache.display()
+        ))
+    })?;
+    Ok(true)
+}
+
+fn attach_oracle(
+    project: &Path,
+    requested: &SemanticCounts,
+    logical: &mut LogicalEvidence,
+) -> Result<(), DevError> {
+    let inventory = semantic_inventory(project).map_err(diagnostic_error)?;
+    let observed = SemanticCounts {
+        owners: inventory.owners,
+        modules: inventory.modules,
+        functions: inventory.functions,
+        relations: inventory.relations,
+    };
+    let revision_equal = logical.final_revision.as_deref() == Some(inventory.revision.as_str());
+    let public_equal = logical.public_reads.as_ref().is_some_and(|public| {
+        public.revision == inventory.revision && public.status_owners == inventory.owners
+    });
+    let requested_equal = &observed == requested;
+    logical.oracle = Some(oracle_evidence(inventory));
+    logical.observed = Some(observed);
+    logical.public_oracle_equal = Some(revision_equal && public_equal && requested_equal);
+    if !revision_equal || !public_equal || !requested_equal {
+        return Err(DevError::corrupt(
+            "public scale observations and typed repository oracle disagree",
+        ));
+    }
+    Ok(())
+}
+
+fn complete_partial_oracle(
+    project: &Path,
+    requested: &SemanticCounts,
+    logical: &mut LogicalEvidence,
+) -> Result<(), DevError> {
+    let inventory = semantic_inventory(project).map_err(diagnostic_error)?;
+    logical.final_revision = Some(inventory.revision.clone());
+    logical.observed = Some(SemanticCounts {
+        owners: inventory.owners,
+        modules: inventory.modules,
+        functions: inventory.functions,
+        relations: inventory.relations,
+    });
+    logical.public_oracle_equal = Some(false);
+    logical.oracle = Some(oracle_evidence(inventory));
+    let _ = requested;
+    Ok(())
+}
+
+fn oracle_evidence(inventory: SemanticInventory) -> OracleEvidence {
+    OracleEvidence {
+        revision: inventory.revision,
+        owners: inventory.owners,
+        modules: inventory.modules,
+        functions: inventory.functions,
+        relations: inventory.relations,
+        types: inventory.types,
+        dependencies: inventory.dependencies,
+        retirements: inventory.retirements,
+        owner_kinds: inventory.owner_kinds,
+        owner_identity_digest: VerificationDigest::of(inventory.owner_identity_digest.as_bytes()),
+        relation_digest: VerificationDigest::of(inventory.relation_digest.as_bytes()),
+        validation_owner_records: inventory.validation_owner_records,
+        validation_type_objects: inventory.validation_type_objects,
+        validation_expression_records: inventory.validation_expression_records,
+        validation_relation_edges: inventory.validation_relation_edges,
+        validation_work: inventory.validation_work,
+        map_pages_read: inventory.map_pages_read,
+        map_bytes_read: inventory.map_bytes_read,
+        store_objects_read: inventory.store_objects_read,
+        store_bytes_read: inventory.store_bytes_read,
+    }
+}
+
+fn shape_digest(
+    options: &Options,
+    logical: &LogicalEvidence,
+) -> Result<VerificationDigest, DevError> {
+    #[derive(Serialize)]
+    struct CheckShape<'a> {
+        cache: &'a str,
+        compiled: u64,
+        reused: u64,
+        removed: u64,
+        artifact_bytes: u64,
+        packages: u64,
+        closure_objects: u64,
+        compiler_units: u64,
+        tests_passed: u64,
+        tests_failed: u64,
+        differential: &'a str,
+    }
+
+    #[derive(Serialize)]
+    struct Shape<'a> {
+        topology: &'a str,
+        items: u64,
+        modules: Option<u64>,
+        lifecycle: &'a str,
+        construction_batches: u64,
+        plan_batches: u64,
+        apply_batches: u64,
+        batch_shapes: Vec<(&'a str, u64, u64, u64, u64, u64)>,
+        rename: bool,
+        public_counts: Option<(u64, u64, u64, bool, u64, u64, bool)>,
+        check: Option<CheckShape<'a>>,
+        artifacts_equal: Option<bool>,
+        observed: &'a Option<SemanticCounts>,
+        public_oracle_equal: Option<bool>,
+    }
+    let shape = Shape {
+        topology: options.topology.name(),
+        items: options.items,
+        modules: options.modules,
+        lifecycle: options.lifecycle.name(),
+        construction_batches: logical.construction_batches,
+        plan_batches: logical.plan_batches,
+        apply_batches: logical.apply_batches,
+        batch_shapes: logical
+            .batches
+            .iter()
+            .map(|batch| {
+                (
+                    batch.kind.as_str(),
+                    batch.start,
+                    batch.end,
+                    batch.logical_items,
+                    batch.request_records,
+                    batch.compiler_units,
+                )
+            })
+            .collect(),
+        rename: logical.rename.is_some(),
+        public_counts: logical.public_reads.as_ref().map(|public| {
+            (
+                public.status_owners,
+                public.owner_query_returned,
+                public.owner_query_visited,
+                public.owner_query_truncated,
+                public.context_total_owners,
+                public.context_total_relations,
+                public.context_truncated,
+            )
+        }),
+        check: logical.check.as_ref().map(|check| CheckShape {
+            cache: &check.compilation.cache,
+            compiled: check.compilation.compiled,
+            reused: check.compilation.reused,
+            removed: check.compilation.removed,
+            artifact_bytes: check.artifact.bytes,
+            packages: check.artifact.packages,
+            closure_objects: check.artifact.closure_objects,
+            compiler_units: check.artifact.compiler_units,
+            tests_passed: check.tests_passed,
+            tests_failed: check.tests_failed,
+            differential: &check.differential,
+        }),
+        artifacts_equal: logical.clean_exact_artifacts_equal,
+        observed: &logical.observed,
+        public_oracle_equal: logical.public_oracle_equal,
+    };
+    let bytes = serde_json::to_vec(&shape).map_err(|error| {
+        DevError::infrastructure(format!("encode deterministic scale shape: {error}"))
+    })?;
+    Ok(VerificationDigest::of(&bytes))
+}
+
+fn capability_identity(
+    invocation: &Invocation,
+    operation_invocation: &Invocation,
+) -> Result<CapabilityIdentity, DevError> {
+    let product = record(&invocation.records, "product")?;
+    let capabilities = record(&invocation.records, "capabilities")?;
+    let mut sections = BTreeMap::new();
+    for section in invocation
+        .records
+        .iter()
+        .filter(|value| value.operation == "section")
+    {
+        let name = required_field(section, "name")?.to_owned();
+        let previous = sections.insert(
+            name.clone(),
+            CapabilitySection {
+                digest: required_field(section, "digest")?.to_owned(),
+                records: u64_field(section, "records")?,
+                bytes: u64_field(section, "bytes")?,
+            },
+        );
+        if previous.is_some() {
+            return Err(DevError::corrupt(format!(
+                "capabilities repeated section '{name}'"
+            )));
+        }
+    }
+    let operations = operation_invocation
+        .records
+        .iter()
+        .filter(|value| value.operation == "operation")
+        .map(|value| -> Result<OperationIdentity, DevError> {
+            Ok(OperationIdentity {
+                name: required_field(value, "name")?.to_owned(),
+                usage: required_field(value, "usage")?.to_owned(),
+                request_model: required_field(value, "request-model")?.to_owned(),
+                response_model: required_field(value, "response-model")?.to_owned(),
+                authority_effect: required_field(value, "authority-effect")?.to_owned(),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let operation_product = record(&operation_invocation.records, "product")?;
+    let operation_capabilities = record(&operation_invocation.records, "capabilities")?;
+    if required_field(operation_product, "name")? != required_field(product, "name")?
+        || required_field(operation_product, "version")? != required_field(product, "version")?
+        || required_field(operation_capabilities, "digest")?
+            != required_field(capabilities, "digest")?
+    {
+        return Err(DevError::corrupt(
+            "capabilities operation contracts disagree with the discovered product identity",
+        ));
+    }
+    if sections.is_empty() || operations.is_empty() {
+        return Err(DevError::corrupt(
+            "capabilities omitted its finite sections or operations",
+        ));
+    }
+    Ok(CapabilityIdentity {
+        product_name: required_field(product, "name")?.to_owned(),
+        product_version: required_field(product, "version")?.to_owned(),
+        digest: required_field(capabilities, "digest")?.to_owned(),
+        sections,
+        operations,
+    })
+}
+
+fn require_current_operations(capabilities: &CapabilityIdentity) -> Result<(), DevError> {
+    let operations = capabilities
+        .operations
+        .iter()
+        .map(|operation| operation.name.as_str())
+        .collect::<BTreeSet<_>>();
+    for required in REQUIRED_OPERATIONS {
+        if !operations.contains(required) {
+            return Err(DevError::corrupt(format!(
+                "candidate capabilities omit required current operation '{required}'"
+            )));
+        }
+    }
+    for predecessor in ["doctor", "backup"] {
+        if operations.contains(predecessor) {
+            return Err(DevError::corrupt(format!(
+                "candidate exposes removed top-level operation '{predecessor}'"
+            )));
         }
     }
     Ok(())
 }
 
-fn resolve_binary(repository: &Path, configured: &Path) -> Result<PathBuf, DevError> {
-    let candidate = if configured.is_absolute() {
-        configured.to_path_buf()
-    } else {
-        repository.join(configured)
+fn scenario(options: &Options) -> Result<ScenarioEvidence, DevError> {
+    let functions = match options.topology {
+        Topology::IndependentModules => 0,
+        _ => options.items,
     };
-    let binary = candidate.canonicalize().map_err(|error| {
-        DevError::usage(format!("resolve binary '{}': {error}", candidate.display()))
-    })?;
-    let metadata = fs::metadata(&binary).map_err(|error| {
-        DevError::usage(format!("inspect binary '{}': {error}", binary.display()))
-    })?;
-    if !metadata.is_file() {
-        return Err(DevError::usage(format!(
-            "binary '{}' is not a regular file",
-            binary.display()
-        )));
-    }
-    Ok(binary)
+    let modules = match options.topology {
+        Topology::IndependentModules => options.items,
+        Topology::SmallFunctions => options.modules.ok_or_else(|| {
+            DevError::infrastructure("small-functions modules were not normalized")
+        })?,
+        _ => 1,
+    };
+    let expression_owners = functions;
+    let owners = modules
+        .checked_add(functions)
+        .and_then(|value| value.checked_add(expression_owners))
+        .ok_or_else(|| DevError::usage("requested scale owner count overflows"))?;
+    let base_relations = functions
+        .checked_mul(2)
+        .ok_or_else(|| DevError::usage("requested scale relation count overflows"))?;
+    let relations = match options.topology {
+        Topology::DeepChain | Topology::WideFanout => base_relations
+            .checked_add(functions.saturating_sub(1))
+            .ok_or_else(|| DevError::usage("requested scale relation count overflows"))?,
+        _ => base_relations,
+    };
+    Ok(ScenarioEvidence {
+        topology: options.topology.name().to_owned(),
+        semantic_shape: options.topology.semantic_shape().to_owned(),
+        lifecycle: options.lifecycle,
+        requested_items: options.items,
+        batch_size: options.batch,
+        requested_modules: options.modules,
+        requested: SemanticCounts {
+            owners,
+            modules,
+            functions,
+            relations,
+        },
+        maximum_wall_seconds: options.maximum_wall_seconds,
+        maximum_run_bytes: options.maximum_run_bytes,
+        minimum_available_memory_bytes: options.minimum_available_memory_bytes,
+        minimum_available_disk_bytes: options.minimum_available_disk_bytes,
+    })
 }
 
-fn new_evidence_directory(repository: &Path) -> Result<PathBuf, DevError> {
-    let root = repository.join(".artifacts/lkjscript-dev/scale");
-    fs::create_dir_all(&root).map_err(|error| {
-        DevError::infrastructure(format!(
-            "create scale evidence root '{}': {error}",
-            root.display()
-        ))
-    })?;
-    let ordinal = RUN_ORDINAL.fetch_add(1, Ordering::Relaxed);
-    let path = root.join(format!(
-        "{}-{}-{ordinal}",
-        unix_nanoseconds()?,
-        std::process::id()
-    ));
-    fs::create_dir(&path).map_err(|error| {
-        DevError::infrastructure(format!(
-            "create scale evidence '{}': {error}",
-            path.display()
-        ))
-    })?;
-    Ok(path)
-}
-
-fn parse(mut arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
+fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
+    let mut arguments = arguments;
     let topology = crate::next_utf8(&mut arguments, "scale topology")?
-        .ok_or_else(|| DevError::usage("scale topology is required"))?;
+        .ok_or_else(|| DevError::usage("scale requires a topology"))?;
     let topology = Topology::parse(&topology)?;
-    let mut items = 10_000_usize;
-    let mut batch = 10_000_usize;
+    let mut items = None;
+    let mut batch = None;
     let mut modules = None;
-    let mut binary = PathBuf::from("target/release/lkjscript");
+    let mut lifecycle = None;
+    let mut binary = None;
+    let mut evidence_root = None;
     let mut retain = None;
+    let mut maximum_wall_seconds = None;
+    let mut maximum_run_bytes = None;
+    let mut minimum_available_memory_bytes = None;
+    let mut minimum_available_disk_bytes = None;
     let mut machine = false;
     while let Some(argument) = crate::next_utf8(&mut arguments, "scale option")? {
         match argument.as_str() {
-            "--items" => items = parse_usize(&mut arguments, "--items")?,
-            "--batch" => batch = parse_usize(&mut arguments, "--batch")?,
-            "--modules" => modules = Some(parse_usize(&mut arguments, "--modules")?),
-            "--binary" => {
-                binary = PathBuf::from(required_value(&mut arguments, "--binary")?);
+            "--items" if items.is_none() => {
+                items = Some(parse_u64(
+                    &required_value(&mut arguments, "--items")?,
+                    "--items",
+                )?);
             }
-            "--retain" => {
+            "--batch" if batch.is_none() => {
+                batch = Some(parse_u64(
+                    &required_value(&mut arguments, "--batch")?,
+                    "--batch",
+                )?);
+            }
+            "--modules" if modules.is_none() => {
+                modules = Some(parse_u64(
+                    &required_value(&mut arguments, "--modules")?,
+                    "--modules",
+                )?);
+            }
+            "--lifecycle" if lifecycle.is_none() => {
+                lifecycle = Some(
+                    match required_value(&mut arguments, "--lifecycle")?.as_str() {
+                        "full" => Lifecycle::Full,
+                        "capacity" => Lifecycle::Capacity,
+                        value => {
+                            return Err(DevError::usage(format!(
+                                "unknown scale lifecycle '{value}'"
+                            )));
+                        }
+                    },
+                );
+            }
+            "--binary" if binary.is_none() => {
+                binary = Some(PathBuf::from(required_value(&mut arguments, "--binary")?));
+            }
+            "--evidence-root" if evidence_root.is_none() => {
+                evidence_root = Some(PathBuf::from(required_value(
+                    &mut arguments,
+                    "--evidence-root",
+                )?));
+            }
+            "--retain" if retain.is_none() => {
                 retain = Some(PathBuf::from(required_value(&mut arguments, "--retain")?));
             }
+            "--maximum-wall-seconds" if maximum_wall_seconds.is_none() => {
+                maximum_wall_seconds = Some(parse_u64(
+                    &required_value(&mut arguments, "--maximum-wall-seconds")?,
+                    "--maximum-wall-seconds",
+                )?);
+            }
+            "--maximum-run-bytes" if maximum_run_bytes.is_none() => {
+                maximum_run_bytes = Some(parse_u64(
+                    &required_value(&mut arguments, "--maximum-run-bytes")?,
+                    "--maximum-run-bytes",
+                )?);
+            }
+            "--minimum-available-memory-bytes" if minimum_available_memory_bytes.is_none() => {
+                minimum_available_memory_bytes = Some(parse_u64(
+                    &required_value(&mut arguments, "--minimum-available-memory-bytes")?,
+                    "--minimum-available-memory-bytes",
+                )?);
+            }
+            "--minimum-available-disk-bytes" if minimum_available_disk_bytes.is_none() => {
+                minimum_available_disk_bytes = Some(parse_u64(
+                    &required_value(&mut arguments, "--minimum-available-disk-bytes")?,
+                    "--minimum-available-disk-bytes",
+                )?);
+            }
             "--machine" if !machine => machine = true,
-            value => {
+            _ => {
                 return Err(DevError::usage(format!(
-                    "unknown or duplicate scale option '{value}'"
+                    "unknown or duplicate scale option '{argument}'"
                 )));
             }
         }
     }
-    if items == 0 || items > MAXIMUM_ITEMS {
+    let items = items.unwrap_or(DEFAULT_ITEMS);
+    if !(1..=MAXIMUM_ITEMS).contains(&items) {
         return Err(DevError::usage(format!(
-            "--items must be between 1 and {MAXIMUM_ITEMS}"
+            "--items must be 1 through {MAXIMUM_ITEMS}"
         )));
     }
-    if batch == 0 || batch > MAXIMUM_BATCH {
+    let maximum_batch = topology.maximum_batch();
+    let batch = batch.unwrap_or(DEFAULT_BATCH.min(maximum_batch));
+    if batch == 0 || batch > maximum_batch {
         return Err(DevError::usage(format!(
-            "--batch must be between 1 and {MAXIMUM_BATCH}"
+            "--batch for {} must be 1 through {maximum_batch}",
+            topology.name()
         )));
     }
-    match (topology, modules) {
-        (Topology::SmallFunctions, None) => modules = Some(items.min(64)),
-        (Topology::SmallFunctions, Some(0)) => {
-            return Err(DevError::usage("--modules must be at least 1"));
+    let modules = match topology {
+        Topology::SmallFunctions => {
+            let modules = modules.unwrap_or(items.min(100));
+            if modules == 0 || modules > items {
+                return Err(DevError::usage(
+                    "--modules for small-functions must be 1 through --items",
+                ));
+            }
+            Some(modules)
         }
-        (Topology::SmallFunctions, Some(value)) if value > MAXIMUM_ITEMS => {
-            return Err(DevError::usage(format!(
-                "--modules must not exceed {MAXIMUM_ITEMS}"
-            )));
+        _ if modules.is_some() => {
+            return Err(DevError::usage(
+                "--modules is valid only for small-functions",
+            ));
         }
-        (Topology::SmallFunctions, Some(_)) => {}
-        (_, Some(_)) => {
-            return Err(DevError::usage("--modules applies only to small-functions"));
-        }
-        (_, None) => {}
+        _ => None,
+    };
+    let maximum_wall_seconds = maximum_wall_seconds.unwrap_or(DEFAULT_MAXIMUM_WALL_SECONDS);
+    if maximum_wall_seconds == 0 || maximum_wall_seconds > MAXIMUM_WALL_SECONDS {
+        return Err(DevError::usage(format!(
+            "--maximum-wall-seconds must be 1 through {MAXIMUM_WALL_SECONDS}"
+        )));
+    }
+    let maximum_run_bytes = maximum_run_bytes.unwrap_or(DEFAULT_MAXIMUM_RUN_BYTES);
+    if !(MINIMUM_RUN_BYTES..=MAXIMUM_RUN_BYTES).contains(&maximum_run_bytes) {
+        return Err(DevError::usage(format!(
+            "--maximum-run-bytes must be {MINIMUM_RUN_BYTES} through {MAXIMUM_RUN_BYTES}"
+        )));
     }
     Ok(Options {
         topology,
         items,
         batch,
         modules,
-        binary,
+        lifecycle: lifecycle.unwrap_or(Lifecycle::Full),
+        binary: binary.unwrap_or_else(|| PathBuf::from("target/debug/lkjscript")),
+        evidence_root,
         retain,
+        maximum_wall_seconds,
+        maximum_run_bytes,
+        minimum_available_memory_bytes: minimum_available_memory_bytes.unwrap_or(0),
+        minimum_available_disk_bytes: minimum_available_disk_bytes.unwrap_or(0),
         machine,
     })
 }
 
-fn parse_usize(
-    arguments: &mut impl Iterator<Item = OsString>,
-    option: &str,
-) -> Result<usize, DevError> {
-    let value = required_value(arguments, option)?;
+fn parse_u64(value: &str, option: &str) -> Result<u64, DevError> {
     value
         .parse()
-        .map_err(|_| DevError::usage(format!("{option} must be an unsigned integer")))
+        .map_err(|_| DevError::usage(format!("{option} requires an unsigned integer")))
 }
 
 fn required_value(
@@ -1444,60 +1668,630 @@ fn required_value(
         .ok_or_else(|| DevError::usage(format!("{option} requires a value")))
 }
 
-fn print_summary(
+fn prepare_evidence_root(
     repository: &Path,
-    options: &Options,
-    receipt: &ScaleReceipt,
-    published: &PublishedEvidence,
-) -> Result<(), DevError> {
-    #[derive(Serialize)]
-    struct Summary<'a> {
-        contract_version: u32,
-        status: ScaleStatus,
-        topology: &'a str,
-        requested_items: usize,
-        elapsed_nanoseconds: u64,
-        receipt: String,
-        receipt_bytes: u64,
-        receipt_digest: &'a VerificationDigest,
-        failure: &'a Option<Failure>,
-    }
-    let summary = Summary {
-        contract_version: receipt.contract_version,
-        status: receipt.status,
-        topology: options.topology.cli_name(),
-        requested_items: options.items,
-        elapsed_nanoseconds: receipt.elapsed_nanoseconds,
-        receipt: evidence::relative(repository, &published.path),
-        receipt_bytes: published.bytes,
-        receipt_digest: &published.digest,
-        failure: &receipt.failure,
-    };
-    if options.machine {
-        println!(
-            "{}",
-            serde_json::to_string(&summary).map_err(|error| {
-                DevError::infrastructure(format!("encode compact scale summary: {error}"))
-            })?
-        );
-    } else {
-        println!(
-            "scale {:?}: topology={} items={} elapsed={:.3}s receipt={} digest={}",
-            receipt.status,
-            options.topology.cli_name(),
-            options.items,
-            receipt.elapsed_nanoseconds as f64 / 1_000_000_000.0,
-            summary.receipt,
-            summary.receipt_digest,
-        );
-        if let Some(failure) = &receipt.failure {
-            println!(
-                "failure: class={} message={}",
-                failure.class, failure.message
-            );
+    configured: Option<&Path>,
+) -> Result<PathBuf, DevError> {
+    let artifact_root = repository.join(".artifacts");
+    fs::create_dir_all(&artifact_root).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create artifact root '{}': {error}",
+            artifact_root.display()
+        ))
+    })?;
+    let artifact_root = artifact_root.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!(
+            "resolve artifact root '{}': {error}",
+            artifact_root.display()
+        ))
+    })?;
+    let path = match configured {
+        Some(path) => path.to_path_buf(),
+        None => {
+            let parent = artifact_root.join("lkjscript-dev/scale");
+            fs::create_dir_all(&parent).map_err(|error| {
+                DevError::infrastructure(format!(
+                    "create default scale root '{}': {error}",
+                    parent.display()
+                ))
+            })?;
+            parent.join(format!(
+                "{}-{}-{}",
+                unix_nanoseconds()?,
+                std::process::id(),
+                RUN_ORDINAL.fetch_add(1, Ordering::Relaxed)
+            ))
         }
+    };
+    if !path.is_absolute() || has_parent_component(&path) {
+        return Err(DevError::usage(
+            "--evidence-root must be an absolute normalized path",
+        ));
+    }
+    if fs::symlink_metadata(&path).is_ok() {
+        return Err(DevError::usage(format!(
+            "scale evidence root '{}' must be absent",
+            path.display()
+        )));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| DevError::usage("scale evidence root has no parent"))?;
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        DevError::usage(format!(
+            "resolve scale evidence parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if !canonical_parent.starts_with(&artifact_root) {
+        return Err(DevError::usage(format!(
+            "scale evidence root '{}' must be below '{}',",
+            path.display(),
+            artifact_root.display()
+        )));
+    }
+    fs::create_dir(&path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create scale evidence root '{}': {error}",
+            path.display()
+        ))
+    })?;
+    Ok(path)
+}
+
+fn validate_project_destination(path: &Path) -> Result<(), DevError> {
+    if !path.is_absolute() || has_parent_component(path) || path.file_name().is_none() {
+        return Err(DevError::usage(
+            "scale project destination must be an absolute normalized child path",
+        ));
+    }
+    if fs::symlink_metadata(path).is_ok() {
+        return Err(DevError::usage(format!(
+            "scale project destination '{}' must be absent",
+            path.display()
+        )));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| DevError::usage("scale project destination has no parent"))?;
+    let metadata = fs::symlink_metadata(parent).map_err(|error| {
+        DevError::usage(format!(
+            "inspect scale project parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::usage(format!(
+            "scale project parent '{}' must be a regular directory",
+            parent.display()
+        )));
     }
     Ok(())
+}
+
+fn has_parent_component(path: &Path) -> bool {
+    path.components()
+        .any(|component| component == Component::ParentDir)
+}
+
+fn copy_candidate(
+    repository: &Path,
+    evidence_root: &Path,
+    configured: &Path,
+) -> Result<CandidateIdentity, DevError> {
+    let source = if configured.is_absolute() {
+        configured.to_path_buf()
+    } else {
+        repository.join(configured)
+    };
+    let metadata = fs::symlink_metadata(&source).map_err(|error| {
+        DevError::usage(format!(
+            "inspect scale candidate '{}': {error}",
+            source.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(DevError::usage(format!(
+            "scale candidate '{}' must be a regular non-symlink file",
+            source.display()
+        )));
+    }
+    #[cfg(unix)]
+    if metadata.permissions().mode() & 0o111 == 0 {
+        return Err(DevError::usage(format!(
+            "scale candidate '{}' is not executable",
+            source.display()
+        )));
+    }
+    let destination_directory = evidence_root.join("candidate");
+    fs::create_dir(&destination_directory).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create candidate directory '{}': {error}",
+            destination_directory.display()
+        ))
+    })?;
+    let destination = destination_directory.join("lkjscript");
+    let mut input = File::open(&source).map_err(|error| {
+        DevError::infrastructure(format!(
+            "open scale candidate '{}': {error}",
+            source.display()
+        ))
+    })?;
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o755);
+    let mut output = options.open(&destination).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create copied scale candidate '{}': {error}",
+            destination.display()
+        ))
+    })?;
+    let copied = std::io::copy(&mut input, &mut output).map_err(|error| {
+        DevError::infrastructure(format!(
+            "copy scale candidate to '{}': {error}",
+            destination.display()
+        ))
+    })?;
+    output.sync_all().map_err(|error| {
+        DevError::infrastructure(format!(
+            "synchronize copied scale candidate '{}': {error}",
+            destination.display()
+        ))
+    })?;
+    if copied != metadata.len() {
+        return Err(DevError::infrastructure(
+            "scale candidate changed while it was copied",
+        ));
+    }
+    let verification = evidence::proof(&destination, evidence::relative(repository, &destination))?;
+    Ok(CandidateIdentity {
+        configured_path: configured.to_string_lossy().into_owned(),
+        executed_path: destination.to_string_lossy().into_owned(),
+        bytes: copied,
+        sha256: sha256_file(&destination)?,
+        verification,
+    })
+}
+
+fn source_identity(repository: &Path) -> Result<SourceIdentity, DevError> {
+    let status = git_bytes(
+        repository,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+    )?;
+    let upstream = optional_git_output(
+        repository,
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{upstream}",
+        ],
+    );
+    let (ahead, behind) = match upstream.as_deref() {
+        Some(upstream) => {
+            let counts = git_output(
+                repository,
+                &[
+                    "rev-list",
+                    "--left-right",
+                    "--count",
+                    &format!("HEAD...{upstream}"),
+                ],
+            )?;
+            let mut fields = counts.split_whitespace();
+            let ahead = fields.next().and_then(|value| value.parse().ok());
+            let behind = fields.next().and_then(|value| value.parse().ok());
+            if fields.next().is_some() || ahead.is_none() || behind.is_none() {
+                return Err(DevError::infrastructure(
+                    "git divergence output was not two unsigned counts",
+                ));
+            }
+            (ahead, behind)
+        }
+        None => (None, None),
+    };
+    Ok(SourceIdentity {
+        branch: git_output(repository, &["rev-parse", "--abbrev-ref", "HEAD"])?,
+        commit: git_output(repository, &["rev-parse", "HEAD"])?,
+        tree: git_output(repository, &["rev-parse", "HEAD^{tree}"])?,
+        upstream,
+        ahead,
+        behind,
+        worktree_clean: status.is_empty(),
+        worktree_status_bytes: status.len() as u64,
+        worktree_status_digest: VerificationDigest::of(&status),
+    })
+}
+
+fn toolchain_identity(repository: &Path) -> Result<ToolchainIdentity, DevError> {
+    Ok(ToolchainIdentity {
+        rustc: strict_command_output(repository, "rustc", &["--version"])?,
+        cargo: strict_command_output(repository, "cargo", &["--version"])?,
+        channel_file: evidence::proof(
+            &repository.join("rust-toolchain.toml"),
+            "rust-toolchain.toml".to_owned(),
+        )?,
+    })
+}
+
+fn preflight_reason(options: &Options, host: &HostObservation) -> Option<String> {
+    if options.minimum_available_memory_bytes > 0 {
+        match host.memory_available_bytes {
+            Some(bytes) if bytes < options.minimum_available_memory_bytes => {
+                return Some(format!(
+                    "available memory {bytes} bytes is below the requested {}-byte preflight floor",
+                    options.minimum_available_memory_bytes
+                ));
+            }
+            None => {
+                return Some(
+                    "available memory could not be observed for the requested preflight floor"
+                        .to_owned(),
+                );
+            }
+            _ => {}
+        }
+    }
+    if options.minimum_available_disk_bytes > 0 {
+        match host.disk_available_bytes {
+            Some(bytes) if bytes < options.minimum_available_disk_bytes => {
+                return Some(format!(
+                    "available filesystem space {bytes} bytes is below the requested {}-byte preflight floor",
+                    options.minimum_available_disk_bytes
+                ));
+            }
+            None => {
+                return Some(
+                    "available filesystem space could not be observed for the requested preflight floor"
+                        .to_owned(),
+                );
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn observe_host(path: &Path) -> HostObservation {
+    let kernel = command_output("uname", &["-srvo"]);
+    let logical_cpus = std::thread::available_parallelism()
+        .ok()
+        .map(|value| value.get() as u64);
+    let memory = fs::read_to_string("/proc/meminfo").ok();
+    let memory_total_bytes = memory
+        .as_deref()
+        .and_then(|value| memory_bytes(value, "MemTotal:"));
+    let memory_available_bytes = memory
+        .as_deref()
+        .and_then(|value| memory_bytes(value, "MemAvailable:"));
+    let disk = command_output(
+        "df",
+        &["-B1", "--output=fstype,size,avail", &path.to_string_lossy()],
+    );
+    let disk_fields = disk
+        .as_deref()
+        .and_then(|value| value.lines().nth(1))
+        .map(|line| line.split_whitespace().collect::<Vec<_>>());
+    let filesystem = disk_fields
+        .as_ref()
+        .and_then(|fields| fields.first())
+        .map(|value| (*value).to_owned());
+    let disk_total_bytes = disk_fields
+        .as_ref()
+        .and_then(|fields| fields.get(1))
+        .and_then(|value| value.parse().ok());
+    let disk_available_bytes = disk_fields
+        .as_ref()
+        .and_then(|fields| fields.get(2))
+        .and_then(|value| value.parse().ok());
+    let mut unavailable_dimensions = Vec::new();
+    for (name, unavailable) in [
+        ("kernel", kernel.is_none()),
+        ("logical_cpus", logical_cpus.is_none()),
+        ("memory_total_bytes", memory_total_bytes.is_none()),
+        ("memory_available_bytes", memory_available_bytes.is_none()),
+        ("filesystem", filesystem.is_none()),
+        ("disk_total_bytes", disk_total_bytes.is_none()),
+        ("disk_available_bytes", disk_available_bytes.is_none()),
+    ] {
+        if unavailable {
+            unavailable_dimensions.push(name.to_owned());
+        }
+    }
+    HostObservation {
+        operating_system: std::env::consts::OS.to_owned(),
+        architecture: std::env::consts::ARCH.to_owned(),
+        kernel,
+        logical_cpus,
+        memory_total_bytes,
+        memory_available_bytes,
+        filesystem,
+        disk_total_bytes,
+        disk_available_bytes,
+        unavailable_dimensions,
+    }
+}
+
+fn memory_bytes(contents: &str, label: &str) -> Option<u64> {
+    contents.lines().find_map(|line| {
+        let value = line.strip_prefix(label)?.split_whitespace().next()?;
+        value.parse::<u64>().ok()?.checked_mul(1_024)
+    })
+}
+
+fn repository_area(project: &Path) -> Result<FileAreaEvidence, DevError> {
+    let mut area = FileAreaEvidence::default();
+    let mut entries = fs::read_dir(project)
+        .map_err(|error| {
+            DevError::infrastructure(format!(
+                "read scale project '{}': {error}",
+                project.display()
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| DevError::infrastructure(format!("read scale project entry: {error}")))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        if entry.file_name() == "derived" {
+            continue;
+        }
+        add_area(&entry.path(), &mut area)?;
+    }
+    Ok(area)
+}
+
+fn area_if_present(path: &Path) -> Result<Option<FileAreaEvidence>, DevError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => {
+            let mut area = FileAreaEvidence::default();
+            add_area(path, &mut area)?;
+            Ok(Some(area))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(DevError::infrastructure(format!(
+            "inspect scale area '{}': {error}",
+            path.display()
+        ))),
+    }
+}
+
+fn add_area(path: &Path, area: &mut FileAreaEvidence) -> Result<(), DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!("inspect scale area '{}': {error}", path.display()))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(DevError::infrastructure(format!(
+            "scale area '{}' contains a symlink",
+            path.display()
+        )));
+    }
+    if metadata.is_file() {
+        area.files = area.files.saturating_add(1);
+        area.bytes = area.bytes.saturating_add(metadata.len());
+        return Ok(());
+    }
+    if !metadata.is_dir() {
+        return Err(DevError::infrastructure(format!(
+            "scale area '{}' contains an unsupported entry",
+            path.display()
+        )));
+    }
+    let mut entries = fs::read_dir(path)
+        .map_err(|error| {
+            DevError::infrastructure(format!(
+                "read scale area directory '{}': {error}",
+                path.display()
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| DevError::infrastructure(format!("read scale area entry: {error}")))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        add_area(&entry.path(), area)?;
+    }
+    Ok(())
+}
+
+fn cleanup_project(project: &Path, retain: bool) -> CleanupEvidence {
+    let label = project.to_string_lossy().into_owned();
+    let metadata = match fs::symlink_metadata(project) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return CleanupEvidence {
+                status: CleanupStatus::NotCreated,
+                project_path: label,
+                detail: "project destination was never created".to_owned(),
+            };
+        }
+        Err(error) => {
+            return CleanupEvidence {
+                status: CleanupStatus::Failed,
+                project_path: label,
+                detail: format!("inspect project before cleanup: {error}"),
+            };
+        }
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return CleanupEvidence {
+            status: CleanupStatus::Failed,
+            project_path: label,
+            detail: "project destination became a non-directory or symlink".to_owned(),
+        };
+    }
+    if retain {
+        return CleanupEvidence {
+            status: CleanupStatus::Retained,
+            project_path: label,
+            detail: "project retained by explicit --retain request".to_owned(),
+        };
+    }
+    match fs::remove_dir_all(project) {
+        Ok(()) => CleanupEvidence {
+            status: CleanupStatus::Removed,
+            project_path: label,
+            detail: "campaign-owned temporary project removed".to_owned(),
+        },
+        Err(error) => CleanupEvidence {
+            status: CleanupStatus::Failed,
+            project_path: label,
+            detail: format!("remove campaign-owned temporary project: {error}"),
+        },
+    }
+}
+
+fn identities(
+    records: &[lkjscript::platform::control::CompactRecord],
+) -> Result<BTreeMap<String, String>, DevError> {
+    let mut identities = BTreeMap::new();
+    for value in records.iter().filter(|value| value.operation == "identity") {
+        let symbol = required_field(value, "symbol")?.to_owned();
+        let id = required_field(value, "id")?.to_owned();
+        if identities.insert(symbol.clone(), id).is_some() {
+            return Err(DevError::corrupt(format!(
+                "compact response repeated allocation '{symbol}'"
+            )));
+        }
+    }
+    Ok(identities)
+}
+
+fn project_arguments(project: &Path, suffix: &[&str]) -> Vec<String> {
+    let mut arguments = vec![
+        "--project".to_owned(),
+        project.to_string_lossy().into_owned(),
+    ];
+    arguments.extend(suffix.iter().map(|value| (*value).to_owned()));
+    arguments
+}
+
+fn require_observed_revision(
+    operation: &str,
+    expected: &str,
+    records: &[lkjscript::platform::control::CompactRecord],
+) -> Result<(), DevError> {
+    require_revision(
+        operation,
+        expected,
+        required_field(record(records, "revision")?, "observed")?,
+    )
+}
+
+fn require_revision(operation: &str, expected: &str, observed: &str) -> Result<(), DevError> {
+    if expected != observed {
+        return Err(DevError::corrupt(format!(
+            "{operation} observed revision {observed}; expected {expected}"
+        )));
+    }
+    Ok(())
+}
+
+fn files_equal(left: &Path, right: &Path) -> Result<bool, DevError> {
+    let left_metadata = fs::symlink_metadata(left).map_err(|error| {
+        DevError::infrastructure(format!("inspect artifact '{}': {error}", left.display()))
+    })?;
+    let right_metadata = fs::symlink_metadata(right).map_err(|error| {
+        DevError::infrastructure(format!("inspect artifact '{}': {error}", right.display()))
+    })?;
+    if left_metadata.file_type().is_symlink()
+        || right_metadata.file_type().is_symlink()
+        || !left_metadata.is_file()
+        || !right_metadata.is_file()
+        || left_metadata.len() != right_metadata.len()
+    {
+        return Ok(false);
+    }
+    let mut left_file = File::open(left).map_err(|error| {
+        DevError::infrastructure(format!("open artifact '{}': {error}", left.display()))
+    })?;
+    let mut right_file = File::open(right).map_err(|error| {
+        DevError::infrastructure(format!("open artifact '{}': {error}", right.display()))
+    })?;
+    let mut left_buffer = [0_u8; 64 * 1024];
+    let mut right_buffer = [0_u8; 64 * 1024];
+    loop {
+        let left_read = left_file.read(&mut left_buffer).map_err(|error| {
+            DevError::infrastructure(format!("read artifact '{}': {error}", left.display()))
+        })?;
+        let right_read = right_file.read(&mut right_buffer).map_err(|error| {
+            DevError::infrastructure(format!("read artifact '{}': {error}", right.display()))
+        })?;
+        if left_read != right_read || left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            return Ok(true);
+        }
+    }
+}
+
+fn sha256_file(path: &Path) -> Result<String, DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect SHA-256 input '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(DevError::infrastructure(format!(
+            "SHA-256 input '{}' is not a regular file",
+            path.display()
+        )));
+    }
+    let mut input = File::open(path).map_err(|error| {
+        DevError::infrastructure(format!("open SHA-256 input '{}': {error}", path.display()))
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut observed = 0_u64;
+    loop {
+        let read = input.read(&mut buffer).map_err(|error| {
+            DevError::infrastructure(format!("read SHA-256 input '{}': {error}", path.display()))
+        })?;
+        if read == 0 {
+            break;
+        }
+        observed = observed.saturating_add(read as u64);
+        hasher.update(&buffer[..read]);
+    }
+    if observed != metadata.len() {
+        return Err(DevError::infrastructure(format!(
+            "SHA-256 input '{}' changed while read",
+            path.display()
+        )));
+    }
+    Ok(lower_hex(&hasher.finalize()))
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        output.push(char::from(HEX[usize::from(byte >> 4)]));
+        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    output
+}
+
+fn sum_optional(values: impl Iterator<Item = Option<u64>>) -> Option<u64> {
+    let values = values.collect::<Vec<_>>();
+    if values.is_empty() || values.iter().any(Option::is_none) {
+        return None;
+    }
+    Some(
+        values
+            .into_iter()
+            .flatten()
+            .fold(0_u64, u64::saturating_add),
+    )
+}
+
+fn process_peak_rss_kib() -> Option<u64> {
+    let status = fs::read_to_string("/proc/self/status").ok()?;
+    status.lines().find_map(|line| {
+        let value = line.strip_prefix("VmHWM:")?.split_whitespace().next()?;
+        value.parse().ok()
+    })
 }
 
 fn repository_root() -> Result<PathBuf, DevError> {
@@ -1508,12 +2302,84 @@ fn repository_root() -> Result<PathBuf, DevError> {
         .ok_or_else(|| DevError::infrastructure("resolve repository root"))
 }
 
-fn platform_name() -> &'static str {
-    match std::env::consts::OS {
-        "linux" => "Linux",
-        "macos" => "macOS",
-        "windows" => "Windows",
-        value => value,
+fn git_output(repository: &Path, arguments: &[&str]) -> Result<String, DevError> {
+    let bytes = git_bytes(repository, arguments)?;
+    String::from_utf8(bytes)
+        .map(|value| value.trim().to_owned())
+        .map_err(|_| DevError::infrastructure("git output is not UTF-8"))
+}
+
+fn git_bytes(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, DevError> {
+    let output = Command::new("git")
+        .args(arguments)
+        .current_dir(repository)
+        .output()
+        .map_err(|error| DevError::infrastructure(format!("run git: {error}")))?;
+    if !output.status.success() || !output.stderr.is_empty() {
+        return Err(DevError::infrastructure(format!(
+            "git {} failed: {}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    Ok(output.stdout)
+}
+
+fn optional_git_output(repository: &Path, arguments: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .args(arguments)
+        .current_dir(repository)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|value| value.trim().to_owned())
+}
+
+fn strict_command_output(
+    repository: &Path,
+    program: &str,
+    arguments: &[&str],
+) -> Result<String, DevError> {
+    let output = Command::new(program)
+        .args(arguments)
+        .current_dir(repository)
+        .output()
+        .map_err(|error| DevError::infrastructure(format!("run {program}: {error}")))?;
+    if !output.status.success() || !output.stderr.is_empty() {
+        return Err(DevError::infrastructure(format!(
+            "{program} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    String::from_utf8(output.stdout)
+        .map(|value| value.trim().to_owned())
+        .map_err(|_| DevError::infrastructure(format!("{program} output is not UTF-8")))
+}
+
+fn command_output(program: &str, arguments: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(arguments).output().ok()?;
+    if !output.status.success() || !output.stderr.is_empty() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|value| value.trim().to_owned())
+}
+
+fn diagnostic_error(diagnostic: lkjscript::platform::diagnostic::Diagnostic) -> DevError {
+    let message = format!("{}: {}", diagnostic.code, diagnostic.message);
+    match diagnostic.class {
+        lkjscript::platform::diagnostic::DiagnosticClass::Infrastructure => {
+            DevError::infrastructure(message)
+        }
+        lkjscript::platform::diagnostic::DiagnosticClass::Resource => {
+            DevError::unavailable(message)
+        }
+        _ => DevError::corrupt(message),
     }
 }
 
@@ -1528,105 +2394,214 @@ fn duration_nanoseconds(duration: Duration) -> u64 {
     u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
 }
 
+fn print_summary(
+    repository: &Path,
+    options: &Options,
+    receipt: &ScaleReceipt,
+    published: &PublishedEvidence,
+) -> Result<(), DevError> {
+    #[derive(Serialize)]
+    struct Summary<'a> {
+        schema: &'static str,
+        contract_version: u32,
+        status: ReceiptStatus,
+        admission: AdmissionClassification,
+        topology: &'a str,
+        lifecycle: &'a str,
+        receipt: String,
+        receipt_bytes: u64,
+        receipt_digest: &'a VerificationDigest,
+    }
+    let summary = Summary {
+        schema: SCALE_SCHEMA,
+        contract_version: receipt.contract_version,
+        status: receipt.status,
+        admission: receipt.admission,
+        topology: options.topology.name(),
+        lifecycle: options.lifecycle.name(),
+        receipt: evidence::relative(repository, &published.path),
+        receipt_bytes: published.bytes,
+        receipt_digest: &published.digest,
+    };
+    if options.machine {
+        println!(
+            "{}",
+            serde_json::to_string(&summary).map_err(|error| {
+                DevError::infrastructure(format!("encode scale summary: {error}"))
+            })?
+        );
+    } else {
+        println!(
+            "scale {:?}: topology={} lifecycle={} admission={:?} receipt={} digest={}",
+            summary.status,
+            summary.topology,
+            summary.lifecycle,
+            summary.admission,
+            summary.receipt,
+            summary.receipt_digest
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scale::model::ScaleReceipt;
+
+    fn options(values: &[&str]) -> Options {
+        parse_options(values.iter().copied().map(OsString::from)).expect("valid scale options")
+    }
 
     #[test]
-    fn topology_names_are_closed_and_truthful() {
-        assert_eq!(
-            Topology::parse("deep-chain").expect("deep chain"),
-            Topology::DeepChain
+    fn topology_grammar_and_current_batch_bounds_are_closed() {
+        for topology in [
+            "independent-modules",
+            "small-functions",
+            "wide-module",
+            "deep-chain",
+            "wide-fanout",
+        ] {
+            assert_eq!(options(&[topology, "--items", "1"]).items, 1);
+        }
+        assert!(parse_options(["full"].into_iter().map(OsString::from)).is_err());
+        assert!(
+            parse_options(
+                ["independent-modules", "--batch", "9001"]
+                    .into_iter()
+                    .map(OsString::from)
+            )
+            .is_err()
         );
-        assert!(Topology::parse("dependency-chain").is_err());
-        assert!(Topology::DeepChain.semantic_shape().contains("call_chain"));
-        assert!(Topology::WideFanout.semantic_shape().contains("callers"));
+        assert!(
+            parse_options(
+                ["small-functions", "--batch", "4001"]
+                    .into_iter()
+                    .map(OsString::from)
+            )
+            .is_err()
+        );
+        assert!(HELP.contains("contract 2"));
     }
 
     #[test]
-    fn typed_requests_encode_unit_and_call_bodies_without_private_apis() {
-        let request = ChangeRequest {
-            contract_version: PUBLIC_CHANGE_CONTRACT_VERSION,
-            base_revision: "rev_test".to_owned(),
-            idempotency_key: "test".to_owned(),
-            preconditions: Vec::new(),
-            changes: vec![
-                ScaleChange::CreateFunction {
-                    symbol: "$root".to_owned(),
-                    module: "mod_test".to_owned(),
-                    name: "root".to_owned(),
-                    result: UnitType::unit(),
-                    body: ScaleExpression::Unit { unit: true },
-                    exported: false,
-                },
-                ScaleChange::CreateFunction {
-                    symbol: "$caller".to_owned(),
-                    module: "mod_test".to_owned(),
-                    name: "caller".to_owned(),
-                    result: UnitType::unit(),
-                    body: ScaleExpression::Call {
-                        call: "$root".to_owned(),
-                    },
-                    exported: false,
-                },
-            ],
-            budget: ChangeBudget {
-                maximum_operations: 2,
-                maximum_work: 10,
-                maximum_affected_owners: 10,
-            },
-            intent: "test".to_owned(),
-        };
-        let value = serde_json::to_value(request).expect("typed public request");
-        assert_eq!(value["changes"][0]["body"]["unit"], true);
-        assert_eq!(value["changes"][1]["body"]["call"], "$root");
+    fn scenario_counts_bind_every_retained_topology() {
+        let independent = scenario(&options(&["independent-modules", "--items", "4"]))
+            .expect("independent scenario");
+        assert_eq!(independent.requested.owners, 4);
+        assert_eq!(independent.requested.relations, 0);
+        let small = scenario(&options(&[
+            "small-functions",
+            "--items",
+            "5",
+            "--modules",
+            "2",
+        ]))
+        .expect("small-functions scenario");
+        assert_eq!(small.requested.owners, 12);
+        assert_eq!(small.requested.modules, 2);
+        assert_eq!(small.requested.functions, 5);
+        assert_eq!(small.requested.relations, 10);
+        let wide =
+            scenario(&options(&["wide-module", "--items", "5"])).expect("wide-module scenario");
+        assert_eq!(wide.requested.owners, 11);
+        assert_eq!(wide.requested.relations, 10);
+        for topology in ["deep-chain", "wide-fanout"] {
+            let graph = scenario(&options(&[topology, "--items", "5"]))
+                .expect("relational function scenario");
+            assert_eq!(graph.requested.owners, 11);
+            assert_eq!(graph.requested.relations, 14);
+        }
     }
 
     #[test]
-    fn inventory_delta_preserves_independent_file_and_byte_units() {
-        let before =
-            BTreeMap::from([("objects".to_owned(), AreaMeasurement { files: 2, bytes: 9 })]);
-        let after = BTreeMap::from([(
-            "objects".to_owned(),
-            AreaMeasurement {
-                files: 3,
-                bytes: 14,
-            },
-        )]);
-        let delta = inventory_delta(&before, &after).expect("inventory delta");
-        assert_eq!(delta["objects"].files, 1);
-        assert_eq!(delta["objects"].bytes, 5);
+    fn compact_requests_are_deterministic_and_within_public_record_bounds() {
+        let revision = format!("rev_{}", "0".repeat(64));
+        let modules_a = module_request(&revision, 0, 20, "fixture").expect("module request");
+        let modules_b = module_request(&revision, 0, 20, "fixture").expect("module repeat");
+        assert_eq!(modules_a.bytes, modules_b.bytes);
+        assert_eq!(modules_a.records, 21);
+        let functions = function_request(
+            &revision,
+            0,
+            20,
+            &[format!("mod_{}", "1".repeat(32))],
+            FunctionShape::Unit,
+            None,
+        )
+        .expect("function request");
+        assert_eq!(functions.records, 41);
+        let parsed = parse_records("fixture", &functions.bytes).expect("current compact request");
+        assert_eq!(parsed.len() as u64, functions.records);
+        assert_eq!(parsed[0].operation, "request");
     }
 
     #[test]
-    fn retained_scale_receipt_is_strictly_typed() {
-        let receipt = ScaleReceipt {
-            contract_version: SCALE_CONTRACT_VERSION,
-            status: ScaleStatus::Failed,
-            topology: Topology::WideModule,
-            semantic_shape: Topology::WideModule.semantic_shape().to_owned(),
-            parameters: ScaleParameters {
-                requested_items: 1,
-                batch_size: 1,
-                requested_modules: None,
-            },
-            started_unix_nanoseconds: 1,
-            completed_unix_nanoseconds: 2,
-            elapsed_nanoseconds: 1,
-            project_retained: false,
-            binary: None,
-            commands: Vec::new(),
-            result: None,
-            failure: Some(Failure {
-                class: "infrastructure".to_owned(),
-                message: "fixture".to_owned(),
+    fn logical_shape_digest_excludes_fresh_authority_identities() {
+        let mut left = LogicalEvidence {
+            starting_revision: Some("rev_left_start".to_owned()),
+            final_revision: Some("rev_left_final".to_owned()),
+            repository: Some("repo_left".to_owned()),
+            package: Some("pkg_left".to_owned()),
+            semantic_state: Some("state_left".to_owned()),
+            construction_batches: 2,
+            plan_batches: 2,
+            apply_batches: 2,
+            observed: Some(SemanticCounts {
+                owners: 3,
+                modules: 1,
+                functions: 1,
+                relations: 2,
             }),
+            public_oracle_equal: Some(true),
+            ..LogicalEvidence::default()
         };
-        let mut value = serde_json::to_value(&receipt).expect("typed scale receipt");
-        let decoded: ScaleReceipt =
-            serde_json::from_value(value.clone()).expect("decode typed scale receipt");
-        assert_eq!(decoded.status, ScaleStatus::Failed);
-        value["unknown"] = Value::Bool(true);
-        assert!(serde_json::from_value::<ScaleReceipt>(value).is_err());
+        let mut right = left.clone();
+        right.starting_revision = Some("rev_right_start".to_owned());
+        right.final_revision = Some("rev_right_final".to_owned());
+        right.repository = Some("repo_right".to_owned());
+        right.package = Some("pkg_right".to_owned());
+        right.semantic_state = Some("state_right".to_owned());
+        left.accepted_revisions.push("rev_left_batch".to_owned());
+        right.accepted_revisions.push("rev_right_batch".to_owned());
+        assert_eq!(
+            shape_digest(&options(&["small-functions", "--items", "1"]), &left)
+                .expect("left shape"),
+            shape_digest(&options(&["small-functions", "--items", "1"]), &right)
+                .expect("right shape")
+        );
+    }
+
+    #[test]
+    fn receipt_contract_is_two_and_rejects_unknown_fields() {
+        assert_eq!(SCALE_CONTRACT_VERSION, 2);
+        assert_eq!(SCALE_SCHEMA, "lkjscript-semantic-scale-receipt");
+        assert!(
+            serde_json::from_str::<ScaleReceipt>(r#"{"unexpected":true}"#).is_err(),
+            "strict contract-2 decoding must reject foreign receipt fields"
+        );
+    }
+
+    #[test]
+    fn predecessor_scale_vocabulary_is_absent_from_the_production_module() {
+        let source = include_str!("scale.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production scale module");
+        for forbidden in [
+            ["PUBLIC_CHANGE_", "CONTRACT_VERSION"].concat(),
+            ["Cli", "Envelope"].concat(),
+            ["\"--", "commit\""].concat(),
+            ["\"inspect\", \"", "project\""].concat(),
+            ["\"--", "exact\""].concat(),
+            ["\"doctor\", \"--", "deep\""].concat(),
+            ["&[\"backup\", \"--", "output\""].concat(),
+        ] {
+            assert!(
+                !production.contains(&forbidden),
+                "removed scale vocabulary returned: {forbidden}"
+            );
+        }
     }
 }
