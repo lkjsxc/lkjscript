@@ -1,4 +1,4 @@
-//! Current Graph 5 accepted-history contract facts.
+//! Current Graph 6 accepted-history contract facts.
 
 pub const REVISION_CONTRACT_IDENTITY: &str = "lkjscript-revision-7";
 pub const REVISION_CONTRACT_VERSION: u16 = 7;

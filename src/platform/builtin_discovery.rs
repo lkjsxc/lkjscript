@@ -480,6 +480,10 @@ fn append_child_detail(
             common.extend([
                 ("name".to_owned(), parameter.name.as_str().to_owned()),
                 (
+                    "use".to_owned(),
+                    parameter_use_name(parameter.use_mode).to_owned(),
+                ),
+                (
                     "type-path".to_owned(),
                     format!("parameter.{}", parameter.name),
                 ),
@@ -625,6 +629,12 @@ fn append_type(
                 format!("{}/{}", declaration.package, declaration.declaration),
             ));
         }
+        TypeForm::CapabilityResource { interface } => {
+            fields.push((
+                "interface".to_owned(),
+                format!("{}/{}", interface.package, interface.declaration),
+            ));
+        }
         TypeForm::StructuralRecord { fields: structural } => {
             fields.push(("fields".to_owned(), structural.len().to_string()));
         }
@@ -713,7 +723,8 @@ fn append_type(
         | TypeForm::StaticText
         | TypeForm::Secret
         | TypeForm::TypeParameter { .. }
-        | TypeForm::Named { .. } => {}
+        | TypeForm::Named { .. }
+        | TypeForm::CapabilityResource { .. } => {}
     }
     Ok(())
 }
@@ -781,6 +792,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::Secret => "secret",
         TypeForm::TypeParameter { .. } => "parameter",
         TypeForm::Named { .. } => "named",
+        TypeForm::CapabilityResource { .. } => "capability-resource",
         TypeForm::StructuralRecord { .. } => "structural-record",
         TypeForm::List { .. } => "list",
         TypeForm::Map { .. } => "map",
@@ -788,6 +800,14 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::Result { .. } => "result",
         TypeForm::Stream { .. } => "stream",
         TypeForm::Function { .. } => "function",
+    }
+}
+
+fn parameter_use_name(value: crate::platform::kernel::ParameterUse) -> &'static str {
+    match value {
+        crate::platform::kernel::ParameterUse::Unrestricted => "unrestricted",
+        crate::platform::kernel::ParameterUse::Borrow => "borrow",
+        crate::platform::kernel::ParameterUse::Consume => "consume",
     }
 }
 

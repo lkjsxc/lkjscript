@@ -1,4 +1,4 @@
-//! Derived, implementation-free package interface records for exact Graph 5 dependencies.
+//! Derived, implementation-free package interface records for exact Graph 6 dependencies.
 //!
 //! These records are not accepted program authority. They are deterministic projections of one
 //! validated package revision. Exact dependency bindings select one storage-independent package
@@ -31,10 +31,10 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-3";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 3;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF03";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v3";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-4";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 4;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF04";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v4";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -901,7 +901,25 @@ fn validate_interface_type_reference(
                 ));
             }
         }
+        TypeForm::CapabilityResource { interface } if interface.package == package => {
+            let key = OwnerKey::Declaration(interface.declaration);
+            let Some(value) = owners.get(&key) else {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "package_interface_resource_interface_missing",
+                    "capability resource names a local interface absent from the package interface",
+                ));
+            };
+            if value.kind() != OwnerKind::Interface {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "package_interface_resource_interface_kind",
+                    "capability resource reference does not name an interface",
+                ));
+            }
+        }
         TypeForm::Named { .. }
+        | TypeForm::CapabilityResource { .. }
         | TypeForm::Unit
         | TypeForm::Bool
         | TypeForm::I64

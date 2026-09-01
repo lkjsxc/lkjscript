@@ -8,11 +8,11 @@ use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AnnotationClass, DeclarationVisibility, DocumentationClass, ExternalVisibility, Idempotency,
-    ResourceUnit,
+    ParameterUse, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR05";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR06";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -749,7 +749,8 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.authored_type(&value.ty, definitions, 1)
+        self.authored_type(&value.ty, definitions, 1)?;
+        self.parameter_use(value.use_mode)
     }
 
     fn function_effect(
@@ -797,6 +798,10 @@ impl Writer {
                 self.tag(9)?;
                 self.declaration_reference(declaration, definitions)
             }
+            AuthoredType::CapabilityResource { interface } => {
+                self.tag(17)?;
+                self.declaration_reference(interface, definitions)
+            }
             AuthoredType::StructuralRecord { fields } => {
                 self.tag(10)?;
                 self.list(fields, |writer, value| {
@@ -834,6 +839,14 @@ impl Writer {
                 self.authored_type(result, definitions, next)
             }
         }
+    }
+
+    fn parameter_use(&mut self, value: ParameterUse) -> Result<(), Diagnostic> {
+        self.tag(match value {
+            ParameterUse::Unrestricted => 1,
+            ParameterUse::Borrow => 2,
+            ParameterUse::Consume => 3,
+        })
     }
 
     fn type_parameter_reference(
@@ -1415,6 +1428,7 @@ mod tests {
                         symbol: parameter_symbol.to_owned(),
                         name: Name::new("value").unwrap(),
                         ty: AuthoredType::Text {},
+                        use_mode: ParameterUse::Unrestricted,
                     }],
                     result: AuthoredType::Text {},
                     effect: AuthoredFunctionEffect::Pure {},
@@ -1442,7 +1456,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "74215ac970a6a25fde4bd736f47ee376f9c991b3928f4fb5dbfa9b2f35e88d8c"
+            "8a09b2b164bafecbf4a1c4f572e1c57cf0741271dacc50ddb8d51aaed9ff9995"
         );
     }
 

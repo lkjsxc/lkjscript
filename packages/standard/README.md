@@ -11,16 +11,22 @@ closed semantic-validator/runtime intrinsic inventory before publication or exec
 interfaces own typed operations, failure behavior, idempotency, possible visibility, and limits;
 deployment grants select concrete adapters later.
 
+The current package also owns exact-interface affine capability resources and canonical operation
+parameter use. `DurableQueue` has nine operations: claim and heartbeat return the nominal
+absent/live `QueueLeaseState`; `lease-info` borrows its live resource; heartbeat, complete, and fail
+consume. `QueueLeaseInfo` exposes job ID, attempt number, lease deadline, and payload without raw
+attempt or worker transition authority.
+
 Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_805f3ec96b7907e8ad6ac63d53bdab63aee81d671a39b4ff6cd35604f97bd44f`;
-- package revision: `package_revision_48cfe9aceb123da0d8a6fc30b034e89599cdc8235cf6b72085d2225b281cefc9`;
-- package transport: `package_transport_629e6035e974334ecb79431860bb0678d4946aaf67817baa53f5d15d89a816d6`;
-- artifact manifest: `artifact_manifest_025419b2248bacf0c01cbc9ad6928aecc4aed4364c5dc7262814e19f361f42e8`;
-- artifact bundle: `artifact_bundle_a9752a09c5be017c3415e73637e6785ab921116b0ed776c4846cc64c16bb3de8`;
-- 427 live semantic owners, 81 compiler units, and 13 graph tests.
+- semantic revision: `rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261`;
+- package revision: `package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705`;
+- package transport: `package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9`;
+- artifact manifest: `artifact_manifest_a44c48ac71f99688c22b1fb3a39f9bafe36792e3a697546d8bd2e06644bcc55f`;
+- artifact bundle: `artifact_bundle_bbdebe268c69488400dbd99d6da9056b6fa436e250910d8674ea64c431c03a05`;
+- 431 live semantic owners, 83 compiler units, and 13 graph tests.
 
 Inspect and reproduce it from the repository root:
 

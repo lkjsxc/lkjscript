@@ -1032,6 +1032,7 @@ fn local_summary(
         OwnerRecord::Parameter(record) => {
             presentation.piece(1, &record.name)?;
             interface.piece(1, &record.ty)?;
+            interface.piece(2, &record.use_mode)?;
         }
         OwnerRecord::Binding(record) => {
             presentation.piece(1, &record.name)?;

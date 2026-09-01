@@ -146,10 +146,11 @@ and durable-queue cutover without contacting a live relay or deploying an applic
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
-no predecessor tag, release, or asset. Current source and public latest own product snapshot 0.1.14,
-CLI 16, and compact-change records 8. Project creation 3, deployment 3, registry 4,
-HTTP-client-adapter 1, data-store, logical-backup, and all unrelated identities remain independently
-owned.
+no predecessor tag, release, or asset. Current source is unreleased product snapshot 0.1.15 with
+the current graph and affine public authoring; public latest remains immutable snapshot 0.1.14.
+Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
+1, and all other unchanged identities remain independently owned. The source/public split is an
+explicit later publication candidate, not a release in this campaign.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
@@ -175,16 +176,16 @@ cursor exists.
 | Layer | Primary code | Owns | Does not own |
 |---|---|---|---|
 | Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
-| Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
+| Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, exact-interface resource/use meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, runtime handles, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, relation, and bounded local-context reads with logical continuations | mutable cursors, query indexes, repair, or full owner bodies |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
-| Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
+| Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
 | Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, WebSocket, or application response policy |
-| Operational data | `platform/data.rs`, normalized data adapter, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, one durable queue backend | program meaning, object bytes, deployment policy, or remote database service |
+| Operational data | `platform/data.rs`, normalized data/queue adapters, `platform/queue.rs`, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, private queue attempt tuples and one durable queue backend | program meaning, public raw lease authority, object bytes, deployment policy, or remote database service |
 | Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
@@ -217,6 +218,39 @@ objects, or `HEAD` bindings are corruption.
 Package transports stored under `PACKAGE-TRANSPORTS` are exact immutable dependency inputs selected
 by accepted dependency records. They are not a second package authoring format. The maintained
 standard and `lkjournal` roots contain only this typed meaning graph layout.
+
+## Affine capability-resource path
+
+One exact-interface right remains linked across semantic, derived, and operational boundaries:
+
+```text
+CapabilityResource<Interface> + parameter use
+                 │ exact requirement provenance
+                 ▼
+ language-order affine validator + disjoint finite oracle
+                 │ borrow / consume decisions
+                 ▼
+ compiler-unit 2 / bytecode 2 local loads
+                 │ strict current-artifact shape and use validation
+                 ▼
+ task resource scope: scope + kind + interface + requirement
+                 │ reserve before effect; commit or release
+                 ▼
+ DurableQueue adapter ── private JobLease tuple ── queue-data-1 engine
+```
+
+Accepted meaning owns the resource type, acquiring requirement, and borrow/consume protocol. The
+compiler and artifact are derived carriers. A normalized resource entry is the sole live runtime
+right; ordinary values cannot recreate it. The queue engine may retain private job, attempt, and
+worker fields because operational queue state is a separate authority, but those fields never
+re-enter graph values or public adapter signatures. A resource-bearing nominal variant moves as a
+whole and transfers its one direct payload only to the selected match arm.
+
+Claim and heartbeat reserve scope capacity before performing a possibly visible queue effect.
+Empty, stale, failed, or cancelled outcomes release the reservation; success commits a live handle.
+Borrow leaves the entry live, while consume removes it before calling the adapter. Task cleanup
+drops only local entries and never performs an implicit queue transition. This ordering prevents
+avoidable post-effect allocation loss without claiming exactly-once work.
 
 ## Publication and derived cache handoff
 
@@ -332,7 +366,8 @@ order, duplicates, foreign bindings, missing relocation owners, corrupt objects,
 and configured count/byte exhaustion before execution.
 
 `NormalizedProgram` maps exact semantic owners and compiler operands to dense process-local
-indexes. These indexes and runtime handles are replaceable and never become semantic identity.
+indexes. Compiler local-load operands preserve unrestricted, borrow, and consume. These indexes and
+runtime handles are replaceable and never become semantic identity.
 Pure commands and graph tests execute once in bytecode and once in the independently implemented
 reference interpreter with shared explicit limits; disagreement is failure. Live effects are not
 duplicated for differential acceptance.
@@ -378,9 +413,12 @@ stops admission, drains/cancels bounded work, and records adapter cleanup exactl
 
 The service harness freshly builds `lkjournal`, requires byte equality with the checked-in bundle,
 then stages only a copied binary, the bundle, descriptors, configuration/secrets, one shared local
-data root, and a local object directory. It snapshots canonical graph authority before and after
-the live HTTP/worker/restart/backup/restore workflow. No deployment path opens or advances accepted
-semantic `HEAD`.
+data root, and a local object directory. It injects two create-new operational fixtures through the
+unchanged queue-data contract, runs two maintained worker processes, and independently scans the
+bounded primary state after shutdown. This proves retry/fail and expired-lease replacement alongside
+normal completion, renewal-path execution, restart, failed readiness, backup/restore, and cleanup.
+It snapshots canonical graph authority before and after the live workflow. No deployment path opens
+or advances accepted semantic `HEAD`.
 
 The independent `distributed_http_application` product gate has no database or container
 dependency. It copies one candidate executable to a fresh root outside the checkout, creates and

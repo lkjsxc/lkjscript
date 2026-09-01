@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 5 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 6 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -232,7 +232,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 5 authority",
+                        "selected target is absent from canonical Graph 6 authority",
                     ));
                 }
             };
@@ -256,7 +256,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 5 authority",
+                        "selected target port is absent from canonical Graph 6 authority",
                     ));
                 }
             };
@@ -357,7 +357,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: 0,
                 canonical_objects_read: 0,
                 canonical_bytes_read: 0,
-                production_tier: "graph5_reference_records_1",
+                production_tier: "graph6_reference_records_1",
             },
         };
         match operation(&mut state) {

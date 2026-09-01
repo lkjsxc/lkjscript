@@ -89,15 +89,15 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-4";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 4;
-pub const CLI_CONTRACT_VERSION: u16 = 16;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-5";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 5;
+pub const CLI_CONTRACT_VERSION: u16 = 17;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v4";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v4";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v5";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v5";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -375,7 +375,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN05", "LKJTYP05", "LKJSMR01", "LKJDEP05", "LKJRET05"],
+            magic_values: &["LKJOWN06", "LKJTYP06", "LKJSMR01", "LKJDEP06", "LKJRET06"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -498,7 +498,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM05"],
+            magic_values: &["LKJSUM06"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -521,7 +521,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT02"],
+            magic_values: &["LKJWIT03"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -532,7 +532,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 5,
+            version: 6,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -558,7 +558,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR05", "LKJABG01"],
+            magic_values: &["LKJACR06", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -622,7 +622,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF03"],
+            magic_values: &["LKJPIF04"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -676,7 +676,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN01"],
+            magic_values: &["LKJCUN02"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -698,7 +698,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF10"],
+            magic_values: &["LKJAMF11"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -712,7 +712,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART10", "LKJAEN10"],
+            magic_values: &["LKJART11", "LKJAEN11"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -798,14 +798,14 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::QueueAdapter,
             "durable queue adapter",
-            "lkjscript-queue-adapter-1",
+            "lkjscript-queue-adapter-2",
             DURABLE_QUEUE_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::ResidentRuntime,
             "normalized artifact resident runtime",
-            "lkjscript-resident-runtime-1",
+            "lkjscript-resident-runtime-2",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -2617,6 +2617,138 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "A task function requires a capability absent from its component closure.",
             "Add a matching component requirement with every operation used by the function.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_parameter_use",
+            DiagnosticClass::Semantic,
+            "A direct capability-resource operation parameter is not explicitly borrowed or consumed.",
+            "Set use=borrow for observation or use=consume for an ownership-ending transition.",
+        ),
+        diagnostic(
+            "kernel_affine_nonresource_parameter_use",
+            DiagnosticClass::Semantic,
+            "A nonresource parameter declares affine borrow or consume behavior.",
+            "Use unrestricted for ordinary values or change the parameter to one direct capability-resource type.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_container",
+            DiagnosticClass::Semantic,
+            "A capability resource appears in a forbidden record, collection, stream, result, option, or function container.",
+            "Keep it direct or in one nominal variant case.",
+        ),
+        diagnostic(
+            "kernel_affine_function_parameter",
+            DiagnosticClass::Semantic,
+            "A function parameter contains a capability resource.",
+            "Keep resources task-local; resource transfer across function boundaries is not supported.",
+        ),
+        diagnostic(
+            "kernel_affine_function_result",
+            DiagnosticClass::Semantic,
+            "A function result contains a capability resource.",
+            "Consume or drop the resource within its acquiring task instead of returning it.",
+        ),
+        diagnostic(
+            "kernel_affine_record_field",
+            DiagnosticClass::Semantic,
+            "A record field contains a capability resource.",
+            "Keep the resource direct or place it in the single live case of a nominal variant.",
+        ),
+        diagnostic(
+            "kernel_affine_variant_payload",
+            DiagnosticClass::Semantic,
+            "A nominal variant resource payload is indirect or otherwise malformed.",
+            "Use at most one case whose payload is the direct exact-interface capability-resource type.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_fabricated",
+            DiagnosticClass::Semantic,
+            "A resource use does not name a live owner acquired from an exact requirement call.",
+            "Use the lexical binding produced by the acquiring capability operation.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_copy",
+            DiagnosticClass::Semantic,
+            "A live capability-resource binding is used as an ordinary copyable value.",
+            "Pass it only to an explicit borrow or consume parameter, or transfer it through the supported variant match.",
+        ),
+        diagnostic(
+            "kernel_affine_use_after_consume",
+            DiagnosticClass::Semantic,
+            "A capability-resource binding is used after an earlier consume transition.",
+            "Remove the later use or bind the fresh resource returned by a renewing operation.",
+        ),
+        diagnostic(
+            "kernel_affine_foreign_requirement",
+            DiagnosticClass::Semantic,
+            "A resource is used through a requirement different from the exact requirement that acquired it.",
+            "Use the acquiring requirement for every borrow and consume transition.",
+        ),
+        diagnostic(
+            "kernel_affine_foreign_authority",
+            DiagnosticClass::Semantic,
+            "A resource argument disagrees with the exact operation requirement or interface.",
+            "Use a resource acquired from the same exact requirement and interface.",
+        ),
+        diagnostic(
+            "kernel_affine_branch_join",
+            DiagnosticClass::Semantic,
+            "Reachable branches do not preserve identical live ownership and provenance.",
+            "Consume the resource on every branch or preserve the same owner on every branch.",
+        ),
+        diagnostic(
+            "normalized_resource_limit",
+            DiagnosticClass::Resource,
+            "A task cannot reserve another live runtime resource before an external effect.",
+            "Reduce concurrent live handles or raise the deployment-owned task resource limit where supported.",
+        ),
+        diagnostic(
+            "normalized_resource_foreign_scope",
+            DiagnosticClass::Capability,
+            "A runtime resource handle belongs to another task scope.",
+            "Use only handles acquired by the current task invocation.",
+        ),
+        diagnostic(
+            "normalized_resource_kind",
+            DiagnosticClass::Capability,
+            "A runtime resource handle has the wrong closed resource kind.",
+            "Preserve the exact typed handle produced by the acquiring operation.",
+        ),
+        diagnostic(
+            "normalized_resource_authority",
+            DiagnosticClass::Capability,
+            "A runtime resource handle belongs to another exact capability requirement.",
+            "Route the handle through the requirement that acquired it.",
+        ),
+        diagnostic(
+            "normalized_resource_interface",
+            DiagnosticClass::Capability,
+            "A runtime resource handle belongs to another exact capability interface.",
+            "Preserve the exact interface-bound handle produced by acquisition.",
+        ),
+        diagnostic(
+            "normalized_resource_closed",
+            DiagnosticClass::Capability,
+            "A runtime resource handle is absent, uncommitted, or already consumed.",
+            "Do not retry the closed local right; reacquire through a new capability operation when appropriate.",
+        ),
+        diagnostic(
+            "normalized_resource_reservation_lost",
+            DiagnosticClass::Infrastructure,
+            "A pre-effect queue-lease reservation disappeared before successor authority installation.",
+            "Preserve the candidate and runtime evidence and use a verified executable.",
+        ),
+        diagnostic(
+            "normalized_queue_signature",
+            DiagnosticClass::Capability,
+            "A durable-queue artifact operation does not have the exact current resource signature.",
+            "Rebuild from the current standard package and reject predecessor queue interfaces.",
+        ),
+        diagnostic(
+            "normalized_queue_lease_state_case",
+            DiagnosticClass::Capability,
+            "QueueLeaseState does not contain exactly the supported absent and live resource cases.",
+            "Use the exact current built-in DurableQueue package interface.",
         ),
         DiagnosticDescriptor {
             code: "control_response_byte_budget",
@@ -4644,6 +4776,7 @@ fn validate_compact_change_inventory(
             ("add.case", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
+            ("add.parameter", "use"),
         ];
         if !field.required && !optional.contains(&(field.operation, field.name)) {
             return Err(format!(
@@ -4656,6 +4789,7 @@ fn validate_compact_change_inventory(
         ("add.case", "payload"),
         ("add.parameter", "function"),
         ("add.parameter", "operation"),
+        ("add.parameter", "use"),
     ] {
         if !fields
             .iter()

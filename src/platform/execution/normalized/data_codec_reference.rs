@@ -319,6 +319,7 @@ fn read_value(
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
         TypeForm::Secret => Err(unsupported("Secret")),
+        TypeForm::CapabilityResource { .. } => Err(unsupported("CapabilityResource")),
         TypeForm::Stream { .. } => Err(unsupported("Stream")),
         TypeForm::Function { .. } => Err(unsupported("Function")),
         TypeForm::TypeParameter { .. } => Err(unsupported("unresolved type parameter")),
@@ -458,6 +459,9 @@ fn describe_type(
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),
+        TypeForm::CapabilityResource { .. } => {
+            return Err(unsupported("CapabilityResource"));
+        }
         TypeForm::Stream { .. } => return Err(unsupported("Stream")),
         TypeForm::Function { .. } => return Err(unsupported("Function")),
         TypeForm::TypeParameter { .. } => {

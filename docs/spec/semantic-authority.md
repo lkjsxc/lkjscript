@@ -8,8 +8,9 @@ are not product versions.
 
 An accepted lkjscript program is exactly one complete validated typed meaning graph revision selected by
 the repository's atomic `HEAD`. The graph owns package metadata, typed semantic owners, interned
-types, exact references, namespaces, relations, dependencies, components, ports, targets, tests,
-documentation, annotations, and retirements.
+types including exact-interface capability resources, parameter-use modes, exact references,
+namespaces, relations, dependencies, components, ports, targets, tests, documentation, annotations,
+and retirements.
 
 Source text, compact authored records, request-local symbols, logical plans, package transports,
 indexes, witnesses, compiler caches, artifacts, generated documentation, deployment descriptors,
@@ -31,7 +32,8 @@ iteration, authored spelling, physical page layout, pack boundaries, and reposit
 The complete reconstruction oracle verifies:
 
 - ownership, reachability, uniqueness, namespaces, visibility, and retirements;
-- type structure, generic substitution, expressions, bindings, and function effects;
+- type structure, generic substitution, expressions, bindings, function effects, affine resource
+  provenance, borrow/consume order, branch joins, and escape;
 - exact local and dependency references and package interfaces;
 - components, requirements, ports, targets, tests, and comparison policy; and
 - forward/reverse relation witnesses and validation evidence against canonical meaning.

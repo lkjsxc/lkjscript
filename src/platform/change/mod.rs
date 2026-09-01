@@ -1,8 +1,8 @@
-//! Private Graph 5 generic semantic-change substrate.
+//! Private Graph 6 generic semantic-change substrate.
 
 #![allow(
     unused_imports,
-    reason = "private change exports become crate consumers at the Graph 5 repository cutover"
+    reason = "private change exports become crate consumers at the Graph 6 repository cutover"
 )]
 
 mod authority;

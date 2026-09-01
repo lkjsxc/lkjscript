@@ -200,6 +200,14 @@ transactions. Nested shapes use ordered flat fragment records and explicit paren
 edges. Request-local labels are notation only; normalized authored intent owns stable allocation
 and request commitment.
 
+`type.capability-resource as=@TYPE interface=INTERFACE` authors one exact-interface resource type.
+`add.parameter ... use=unrestricted|borrow|consume` authors canonical operation-parameter use;
+omission means unrestricted and is valid only for an ordinary nonresource parameter. Function
+parameters cannot use borrow/consume or contain resources. Resource operation parameters require
+explicit borrow or consume. Direct and input-file records lower to identical intent. Unknown
+predecessor type/use spellings, omitted resource use, unrestricted resources, and borrow/consume on
+ordinary values reject before plan publication.
+
 The higher-order slice has exactly three public spellings: `add.type-parameter` adds one ordered
 stable parameter to a pure function; `expression.function-value` names one exact pure function and
 receives all ordered `type.argument` children; and `expression.invoke` receives one function-valued

@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 5 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 6 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -16,8 +16,8 @@ use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseReference, DeclarationPayload, DeclarationRecord,
     DeclarationReference, ExpressionOperation, ExpressionRecord, FieldReference, FieldSelector,
     FunctionEffect, LocalValueReference, OperationReference, OwnerKey, OwnerRecord, PackageId,
-    ParameterParent, PortImplementation, PortReference, RequirementReference, TextValue,
-    TypeObjectDigest,
+    PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation, PortReference,
+    RequirementReference, TextValue, TypeForm, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, ExpressionId, FieldId, OperationId, ParameterId, PortId,
@@ -329,6 +329,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             compiled_parameters.push(CompiledParameter {
                 parameter: *parameter,
                 ty: self.tables.ty(parameter_record.ty)?,
+                use_mode: parameter_record.use_mode,
             });
         }
         let task_requirements = match effect {
@@ -379,6 +380,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             parameters.push(CompiledParameter {
                 parameter: *parameter,
                 ty: self.tables.ty(parameter_record.ty)?,
+                use_mode: parameter_record.use_mode,
             });
         }
         Ok(CompiledOperationLayout {
@@ -576,6 +578,139 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             )),
         }
     }
+
+    fn exact_operation(
+        &mut self,
+        reference: OperationReference,
+    ) -> Result<crate::platform::kernel::OperationRecord, Diagnostic> {
+        if reference.package == self.package {
+            return match self.required_owner(
+                OwnerKey::Operation(reference.operation),
+                "capability call references a missing local operation",
+            )? {
+                OwnerRecord::Operation(record) => Ok(record),
+                _ => Err(compiler_corrupt(
+                    "compiler_capability_operation_kind",
+                    "capability operation identity names another owner kind",
+                )),
+            };
+        }
+        match self.exact_package_interface_owner(
+            reference.package,
+            OwnerKey::Operation(reference.operation),
+        )? {
+            PackageInterfaceRecord::Operation(record) => Ok(record),
+            _ => Err(compiler_corrupt(
+                "compiler_capability_operation_kind",
+                "dependency capability operation identity names another owner kind",
+            )),
+        }
+    }
+
+    fn exact_parameter(
+        &mut self,
+        package: PackageId,
+        parameter: ParameterId,
+    ) -> Result<crate::platform::kernel::ParameterRecord, Diagnostic> {
+        if package == self.package {
+            return match self.required_owner(
+                OwnerKey::Parameter(parameter),
+                "capability operation references a missing local parameter",
+            )? {
+                OwnerRecord::Parameter(record) => Ok(record),
+                _ => Err(compiler_corrupt(
+                    "compiler_capability_parameter_kind",
+                    "capability parameter identity names another owner kind",
+                )),
+            };
+        }
+        match self.exact_package_interface_owner(package, OwnerKey::Parameter(parameter))? {
+            PackageInterfaceRecord::Parameter(record) => Ok(record),
+            _ => Err(compiler_corrupt(
+                "compiler_capability_parameter_kind",
+                "dependency capability parameter identity names another owner kind",
+            )),
+        }
+    }
+
+    fn exact_case(
+        &mut self,
+        reference: CaseReference,
+    ) -> Result<crate::platform::kernel::CaseRecord, Diagnostic> {
+        if reference.package == self.package {
+            return match self.required_owner(
+                OwnerKey::Case(reference.case),
+                "variant expression references a missing local case",
+            )? {
+                OwnerRecord::Case(record) => Ok(record),
+                _ => Err(compiler_corrupt(
+                    "compiler_variant_case_kind",
+                    "variant case identity names another owner kind",
+                )),
+            };
+        }
+        match self
+            .exact_package_interface_owner(reference.package, OwnerKey::Case(reference.case))?
+        {
+            PackageInterfaceRecord::Case(record) => Ok(record),
+            _ => Err(compiler_corrupt(
+                "compiler_variant_case_kind",
+                "dependency variant case identity names another owner kind",
+            )),
+        }
+    }
+
+    fn exact_package_interface_owner(
+        &mut self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<PackageInterfaceRecord, Diagnostic> {
+        let dependency = self.canonical.read_dependency(package)?;
+        self.work.canonical.add(dependency.work);
+        let dependency = dependency.value.ok_or_else(|| {
+            compiler_corrupt(
+                "compiler_dependency_missing",
+                "exact compiler reference names an unbound dependency package",
+            )
+        })?;
+        let read = self
+            .canonical
+            .read_package_interface_owner(&dependency, owner)?;
+        self.work.canonical.add(read.work);
+        self.work.owner_records_read = self.work.owner_records_read.saturating_add(1);
+        read.value.ok_or_else(|| {
+            compiler_corrupt(
+                "compiler_dependency_owner_missing",
+                "exact dependency interface owner is missing",
+            )
+        })
+    }
+
+    fn operation_parameter_uses(
+        &mut self,
+        operation: OperationReference,
+    ) -> Result<Vec<ParameterUse>, Diagnostic> {
+        let record = self.exact_operation(operation)?;
+        record
+            .parameters
+            .into_iter()
+            .map(|parameter| {
+                self.exact_parameter(operation.package, parameter)
+                    .map(|record| record.use_mode)
+            })
+            .collect()
+    }
+
+    fn case_payload_is_resource(&mut self, reference: CaseReference) -> Result<bool, Diagnostic> {
+        let Some(payload) = self.exact_case(reference)?.payload else {
+            return Ok(false);
+        };
+        let read = self.canonical.read_type_object(payload)?;
+        self.work.canonical.add(read.work);
+        Ok(read
+            .value
+            .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. })))
+    }
 }
 
 struct CodeCompiler<'a, 'b, B: ?Sized> {
@@ -607,6 +742,15 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
     }
 
     fn expression(&mut self, expression: ExpressionId, depth: usize) -> Result<(), Diagnostic> {
+        self.expression_with_use(expression, depth, ParameterUse::Unrestricted)
+    }
+
+    fn expression_with_use(
+        &mut self,
+        expression: ExpressionId,
+        depth: usize,
+        use_mode: ParameterUse,
+    ) -> Result<(), Diagnostic> {
         if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(compiler_error(
                 DiagnosticClass::Resource,
@@ -650,7 +794,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 "expression record identity changed during exact lowering",
             ));
         }
-        let result = self.operation(operation, depth + 1);
+        let result = self.operation(operation, depth + 1, use_mode);
         self.active.remove(&expression);
         result
     }
@@ -659,6 +803,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
         &mut self,
         operation: ExpressionOperation,
         depth: usize,
+        use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
             ExpressionOperation::Unit {} => {
@@ -685,7 +830,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "validated exact local reference is outside the compiled lexical scope",
                     )
                 })?;
-                self.push(CompiledInstruction::LoadLocal(local))?;
+                self.push(CompiledInstruction::LoadLocal { local, use_mode })?;
             }
             ExpressionOperation::Constant { declaration } => {
                 let function = self.unit.tables.declaration(declaration)?;
@@ -803,9 +948,18 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 })?;
             }
             ExpressionOperation::Variant { case, payload } => {
+                let resource_payload = self.unit.case_payload_is_resource(case)?;
                 let case = self.unit.tables.case(case)?;
                 if let Some(payload) = payload {
-                    self.expression(payload, depth)?;
+                    self.expression_with_use(
+                        payload,
+                        depth,
+                        if resource_payload {
+                            ParameterUse::Consume
+                        } else {
+                            ParameterUse::Unrestricted
+                        },
+                    )?;
                 }
                 self.push(CompiledInstruction::Variant {
                     case,
@@ -847,7 +1001,20 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 })?;
             }
             ExpressionOperation::Match { value, arms } => {
-                self.expression(value, depth)?;
+                let resource_match = arms.iter().try_fold(false, |observed, arm| {
+                    self.unit
+                        .case_payload_is_resource(arm.case)
+                        .map(|resource| observed || resource)
+                })?;
+                self.expression_with_use(
+                    value,
+                    depth,
+                    if resource_match {
+                        ParameterUse::Consume
+                    } else {
+                        ParameterUse::Unrestricted
+                    },
+                )?;
                 let switch = self.push(CompiledInstruction::SwitchVariant(Vec::new()))?;
                 let mut compiled_arms = Vec::with_capacity(arms.len());
                 let mut exits = Vec::with_capacity(arms.len());
@@ -884,11 +1051,18 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 operation,
                 arguments,
             } => {
+                let parameter_uses = self.unit.operation_parameter_uses(operation)?;
+                if parameter_uses.len() != arguments.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_capability_argument_count",
+                        "capability arguments disagree with the exact operation parameters",
+                    ));
+                }
                 let requirement = self.unit.tables.requirement(requirement)?;
                 let operation = self.unit.tables.operation(operation)?;
                 let argument_count = u32_count("capability arguments", arguments.len())?;
-                for argument in arguments {
-                    self.expression(argument, depth)?;
+                for (argument, use_mode) in arguments.into_iter().zip(parameter_uses) {
+                    self.expression_with_use(argument, depth, use_mode)?;
                 }
                 self.push(CompiledInstruction::Perform {
                     requirement,

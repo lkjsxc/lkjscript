@@ -29,20 +29,34 @@ Failed planning or apply leaves accepted authority unchanged.
 
 ## Interfaces and operations
 
-An interface owns stable operation identities, input parameters, output type, failure contract,
-and semantic limits. A capability relation records the exact use site, requirement, interface, and
-operation. Rename does not change identity. Interface evolution exposes requirements, callers,
-components, grants, adapters, tests, targets, and artifacts through impact queries.
+An interface owns stable operation identities, input parameters, canonical parameter-use modes,
+output type, failure contract, and semantic limits. Ordinary parameters are unrestricted. A direct
+`CapabilityResource<Interface>` parameter is explicitly borrow or consume, and its interface must
+be the operation's exact owning interface. A capability relation records the exact use site,
+requirement, interface, and operation. Resource types additionally retain an exact interface
+relation, so interface evolution reaches requirements, callers, components, grants, adapters,
+tests, targets, package interfaces, compilation, and artifacts through impact queries. Rename does
+not change identity.
 
 Closed external functions are pure or explicitly task-bound compiler/runtime intrinsics. Unknown
 or forged intrinsic names reject during semantic validation; there is no ambient host call escape.
 
 ## Resources and visibility
 
-Every live resource has exact acquisition, owner task, allowed operation, close, cancellation,
-timeout, and cleanup semantics. Handles are runtime-only and cannot serialize into graph authority,
-artifacts as values, backups, queues, objects, or logs. Streams use bounded chunks and backpressure.
-Data transactions and queue leases are lexical/task-owned.
+Every live resource has exact acquisition, owner task, interface, acquiring requirement, allowed
+operation, close, cancellation, timeout, and cleanup semantics. Exact-interface capability
+resources are acquired only by a call through that same requirement. Borrow preserves the local
+right; consume removes it before the external operation. A foreign requirement, interface, scope,
+kind, closed slot, duplicate consume, or post-consume use rejects. Handles are runtime-only and
+cannot serialize into accepted literals, graph data, artifacts as values, caches, backups, queue
+payloads, objects, or logs. Streams use bounded chunks and backpressure. Data transactions and
+queue leases are lexical/task-owned.
+
+The compiler records borrow/consume on local loads. Strict artifact loading and normalized
+execution recheck the semantic parameter modes and resource shape, so hostile derived input cannot
+restore a copied transition right. Resource-bearing variants move as one outer value; matching
+transfers the direct payload only to the selected arm. Task cleanup drops local handles without
+implicitly completing, failing, cancelling, or otherwise mutating an external queue lease.
 
 Operations that may have committed externally before visibility loss return the distinct possible
 visibility class. Callers may retry only where the graph-owned idempotency contract permits it.

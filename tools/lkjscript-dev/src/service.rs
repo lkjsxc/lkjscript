@@ -3,6 +3,10 @@ use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
+use lkjscript::platform::data::{
+    DataCommitOutcome, DataExpectation, DataKey, DataKeyPart, DataLimits, DataScanDirection,
+    DataStore, DataTransaction,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -19,11 +23,22 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 4;
+const SERVICE_CONTRACT_VERSION: u32 = 5;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
+const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
+const QUEUE_NAMESPACE: &str = "lkjournal-queue";
+const QUEUE_JOB_SPACE: &str = "__queue.jobs";
+const QUEUE_IDEMPOTENCY_SPACE: &str = "__queue.idempotency";
+const QUEUE_CLAIM_SPACE: &str = "__queue.claim";
+const QUEUE_SCHEMA_SPACE: &str = "__queue.schema";
+const QUEUE_JOB_MAGIC: &[u8; 8] = b"LKJQJOB1";
+const QUEUE_JOB_CHECKSUM_DOMAIN: &str = "lkjscript.queue.data-job.v1";
+const QUEUE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.queue.data-schema.v1";
+const ORACLE_RETRY_JOB: &str = "affine-oracle-retry";
+const ORACLE_STALE_JOB: &str = "affine-oracle-stale";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f";
+    "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -180,6 +195,7 @@ struct ServiceResult {
     history_entries: u64,
     object_bytes: u64,
     worker_productive_iterations: u64,
+    queue_observation: QueueObservation,
     data_backup: FileProof,
     restart_read_equal: bool,
     restored_read_equal: bool,
@@ -188,6 +204,71 @@ struct ServiceResult {
     initialization_transport: InitializationTransport,
     initialization_observation: InitializationObservation,
     request_elapsed_nanoseconds: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct QueueObservation {
+    data_contract: String,
+    records_scanned: u64,
+    workers_started: u64,
+    productive_iterations: u64,
+    completed_jobs: u64,
+    retry_job_state: String,
+    retry_job_attempts: u32,
+    retry_error_class: String,
+    stale_job_state: String,
+    stale_job_attempts: u32,
+    stale_replacement_observed: bool,
+    transition_authority_cleared: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum QueueJobState {
+    Ready,
+    Leased,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl QueueJobState {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Leased => "leased",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct QueueFixtureJob {
+    job_id: String,
+    idempotency_key: String,
+    payload: Vec<u8>,
+    state: QueueJobState,
+    available_at: i64,
+    created_at: i64,
+    attempt_count: u32,
+    attempt_id: Option<String>,
+    worker_id: Option<String>,
+    lease_until: Option<i64>,
+    result: Option<Vec<u8>>,
+    last_error_class: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct ObservedQueueJob {
+    job_id: String,
+    state: QueueJobState,
+    attempt_count: u32,
+    attempt_id: Option<String>,
+    worker_id: Option<String>,
+    lease_until: Option<i64>,
+    last_error_class: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -410,7 +491,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-10 service bundle",
+        "maintained artifact-11 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -452,6 +533,21 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.history_entries == 0
         || result.object_bytes == 0
         || result.worker_productive_iterations == 0
+        || result.queue_observation.data_contract != QUEUE_DATA_CONTRACT
+        || result.queue_observation.records_scanned < 2
+        || result.queue_observation.workers_started != 2
+        || result.queue_observation.productive_iterations != result.worker_productive_iterations
+        || result.queue_observation.completed_jobs == 0
+        || !matches!(
+            result.queue_observation.retry_job_state.as_str(),
+            "ready" | "failed"
+        )
+        || result.queue_observation.retry_job_attempts == 0
+        || result.queue_observation.retry_error_class != "empty-payload"
+        || result.queue_observation.stale_job_state != "completed"
+        || result.queue_observation.stale_job_attempts < 2
+        || !result.queue_observation.stale_replacement_observed
+        || !result.queue_observation.transition_authority_cleared
         || !result.restart_read_equal
         || !result.restored_read_equal
         || !result.corrupt_backup_rejected
@@ -498,7 +594,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-10 service bundle",
+            "maintained artifact-11 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1001,7 +1097,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-10 build",
+        "service readiness disagrees with the exact fresh artifact-11 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -1277,8 +1373,10 @@ fn run_acceptance(
     )?;
     context.retain(&object_path)?;
 
-    let worker_index = context.start_runner(
-        "worker",
+    inject_queue_oracle_fixtures(&data_root)?;
+
+    let worker_a_index = context.start_runner(
+        "worker-a",
         vec![
             binary.to_string_lossy().into_owned(),
             "worker".to_owned(),
@@ -1288,22 +1386,52 @@ fn run_acceptance(
         &context.run_directory.clone(),
         runner_environment.clone(),
     )?;
-    let worker_ready = context.runner_ready(worker_index)?;
+    let worker_a_ready = context.runner_ready(worker_a_index)?;
     require(
-        worker_ready.artifact_digest == artifact_identity.artifact_bundle
-            && worker_ready.target == "work"
-            && worker_ready.runner == "worker",
+        worker_a_ready.artifact_digest == artifact_identity.artifact_bundle
+            && worker_a_ready.target == "work"
+            && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-10 build",
+        "worker readiness disagrees with the exact fresh artifact-11 build",
     )?;
-    thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(1)));
-    let worker_stopped = context.stop_runner(worker_index)?;
-    let productive_iterations = worker_stopped.productive_iterations.unwrap_or(0);
+    let worker_b_index = context.start_runner(
+        "worker-b",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "worker".to_owned(),
+            "--deployment".to_owned(),
+            "worker.json".to_owned(),
+        ],
+        &context.run_directory.clone(),
+        runner_environment.clone(),
+    )?;
+    let worker_b_ready = context.runner_ready(worker_b_index)?;
     require(
-        productive_iterations >= 1,
-        "worker_productivity",
-        "worker reported no productive work",
+        worker_b_ready.artifact_digest == artifact_identity.artifact_bundle
+            && worker_b_ready.target == "work"
+            && worker_b_ready.runner == "worker",
+        "second_worker_artifact_identity",
+        "second worker readiness disagrees with the exact fresh artifact-11 build",
     )?;
+    thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
+    let worker_a_stopped = context.stop_runner(worker_a_index)?;
+    let worker_b_stopped = context.stop_runner(worker_b_index)?;
+    let productive_iterations = worker_a_stopped
+        .productive_iterations
+        .unwrap_or(0)
+        .checked_add(worker_b_stopped.productive_iterations.unwrap_or(0))
+        .ok_or_else(|| {
+            ServiceFailure::failed(
+                "worker_productivity_overflow",
+                "combined worker productivity overflowed u64",
+            )
+        })?;
+    require(
+        productive_iterations >= 2,
+        "worker_productivity",
+        "two-worker acceptance reported insufficient productive work",
+    )?;
+    let queue_observation = observe_queue_oracle(&data_root, productive_iterations)?;
     context.stop_runner(service_index)?;
 
     let restart_index = context.start_runner(
@@ -1446,7 +1574,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-10 bundle identity",
+        "restored service readiness changed the exact artifact-11 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -1468,7 +1596,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 5 authority inventory",
+        "service acceptance changed the maintained Graph 6 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -1483,6 +1611,7 @@ fn run_acceptance(
         history_entries: 2,
         object_bytes: object_payload.len() as u64,
         worker_productive_iterations: productive_iterations,
+        queue_observation,
         data_backup: backup_proof,
         restart_read_equal: true,
         restored_read_equal: true,
@@ -1492,6 +1621,534 @@ fn run_acceptance(
         initialization_observation,
         request_elapsed_nanoseconds: timings,
     })
+}
+
+fn inject_queue_oracle_fixtures(data_root: &Path) -> Result<(), ServiceFailure> {
+    let store = DataStore::open(data_root, QUEUE_NAMESPACE, DataLimits::default())
+        .map_err(|error| ServiceFailure::infrastructure("queue_oracle_open", error))?;
+    let fixtures = [
+        QueueFixtureJob {
+            job_id: ORACLE_STALE_JOB.to_owned(),
+            idempotency_key: "affine-oracle-stale-key".to_owned(),
+            payload: b"stale-replacement".to_vec(),
+            state: QueueJobState::Leased,
+            available_at: 0,
+            created_at: -2,
+            attempt_count: 1,
+            attempt_id: Some("affine-oracle-stale:1".to_owned()),
+            worker_id: Some("departed-worker".to_owned()),
+            lease_until: Some(0),
+            result: None,
+            last_error_class: None,
+        },
+        QueueFixtureJob {
+            job_id: ORACLE_RETRY_JOB.to_owned(),
+            idempotency_key: "affine-oracle-retry-key".to_owned(),
+            payload: Vec::new(),
+            state: QueueJobState::Ready,
+            available_at: 0,
+            created_at: -1,
+            attempt_count: 0,
+            attempt_id: None,
+            worker_id: None,
+            lease_until: None,
+            result: None,
+            last_error_class: None,
+        },
+    ];
+    for _ in 0..32 {
+        let mut transaction = store
+            .begin()
+            .map_err(|error| ServiceFailure::infrastructure("queue_oracle_begin", error))?;
+        let schema = transaction
+            .schema_read(QUEUE_SCHEMA_SPACE)
+            .map_err(|error| ServiceFailure::infrastructure("queue_oracle_schema", error))?;
+        require(
+            schema.is_some_and(|schema| {
+                schema.identity == QUEUE_DATA_CONTRACT
+                    && schema.digest == queue_schema_digest(QUEUE_DATA_CONTRACT)
+            }),
+            "queue_oracle_schema",
+            "maintained queue namespace does not own the unchanged queue-data contract",
+        )?;
+        for fixture in &fixtures {
+            put_queue_oracle_fixture(&store, &mut transaction, fixture)?;
+        }
+        match transaction
+            .commit()
+            .map_err(|error| ServiceFailure::infrastructure("queue_oracle_commit", error))?
+        {
+            DataCommitOutcome::Committed { .. } => return Ok(()),
+            DataCommitOutcome::Conflict { .. } => continue,
+            DataCommitOutcome::Unchanged { .. } => {
+                return Err(ServiceFailure::failed(
+                    "queue_oracle_unchanged",
+                    "queue oracle fixture transaction did not publish its create-new records",
+                ));
+            }
+        }
+    }
+    Err(ServiceFailure::failed(
+        "queue_oracle_conflict",
+        "queue oracle fixture transaction exhausted bounded exact-base retries",
+    ))
+}
+
+fn put_queue_oracle_fixture(
+    store: &DataStore,
+    transaction: &mut DataTransaction,
+    job: &QueueFixtureJob,
+) -> Result<(), ServiceFailure> {
+    let job_key = queue_text_key(store, &job.job_id)?;
+    let idempotency_key = queue_text_key(store, &job.idempotency_key)?;
+    let claim_key = queue_claim_key(store, job)?;
+    let primary_inserted = transaction
+        .put(
+            QUEUE_JOB_SPACE,
+            &job_key,
+            encode_queue_job(job)?,
+            DataExpectation::Missing,
+        )
+        .map_err(|error| ServiceFailure::infrastructure("queue_oracle_primary", error))?;
+    let idempotency_inserted = transaction
+        .put(
+            QUEUE_IDEMPOTENCY_SPACE,
+            &idempotency_key,
+            job.job_id.as_bytes().to_vec(),
+            DataExpectation::Missing,
+        )
+        .map_err(|error| ServiceFailure::infrastructure("queue_oracle_idempotency", error))?;
+    let claim_inserted = transaction
+        .put(
+            QUEUE_CLAIM_SPACE,
+            &claim_key,
+            Vec::new(),
+            DataExpectation::Missing,
+        )
+        .map_err(|error| ServiceFailure::infrastructure("queue_oracle_claim", error))?;
+    require(
+        primary_inserted && idempotency_inserted && claim_inserted,
+        "queue_oracle_create_new",
+        "queue oracle fixture identity already exists",
+    )
+}
+
+fn observe_queue_oracle(
+    data_root: &Path,
+    productive_iterations: u64,
+) -> Result<QueueObservation, ServiceFailure> {
+    let store = DataStore::open(data_root, QUEUE_NAMESPACE, DataLimits::default())
+        .map_err(|error| ServiceFailure::infrastructure("queue_observer_open", error))?;
+    let transaction = store
+        .begin()
+        .map_err(|error| ServiceFailure::infrastructure("queue_observer_begin", error))?;
+    let page = transaction
+        .scan(
+            QUEUE_JOB_SPACE,
+            &[],
+            DataScanDirection::Forward,
+            10_000,
+            16 * 1_048_576,
+            1_000_000,
+            None,
+        )
+        .map_err(|error| ServiceFailure::infrastructure("queue_observer_scan", error))?;
+    require(
+        page.continuation.is_none(),
+        "queue_observer_continuation",
+        "bounded maintained queue observation unexpectedly requires continuation",
+    )?;
+    let mut retry = None;
+    let mut stale = None;
+    let mut completed_jobs = 0_u64;
+    let mut transition_authority_cleared = true;
+    for item in &page.items {
+        let job = decode_queue_job(&item.value)?;
+        let [DataKeyPart::Text(key_job_id)] = item.key.parts() else {
+            return Err(ServiceFailure::failed(
+                "queue_observer_primary_key",
+                "queue primary record has a foreign key shape",
+            ));
+        };
+        require(
+            key_job_id == &job.job_id,
+            "queue_observer_primary_identity",
+            "queue primary key disagrees with its encoded job identity",
+        )?;
+        if job.state == QueueJobState::Completed {
+            completed_jobs = completed_jobs.checked_add(1).ok_or_else(|| {
+                ServiceFailure::failed(
+                    "queue_observer_count_overflow",
+                    "completed queue observation count overflowed u64",
+                )
+            })?;
+        }
+        transition_authority_cleared &= job.state != QueueJobState::Leased
+            && job.attempt_id.is_none()
+            && job.worker_id.is_none()
+            && job.lease_until.is_none();
+        if job.job_id == ORACLE_RETRY_JOB {
+            require(
+                retry.replace(job).is_none(),
+                "queue_observer_retry_duplicate",
+                "queue observation contains duplicate retry fixture identity",
+            )?;
+        } else if job.job_id == ORACLE_STALE_JOB {
+            require(
+                stale.replace(job).is_none(),
+                "queue_observer_stale_duplicate",
+                "queue observation contains duplicate stale fixture identity",
+            )?;
+        }
+    }
+    let retry = retry.ok_or_else(|| {
+        ServiceFailure::failed(
+            "queue_observer_retry_absent",
+            "maintained worker did not retain the retry/fail fixture",
+        )
+    })?;
+    let stale = stale.ok_or_else(|| {
+        ServiceFailure::failed(
+            "queue_observer_stale_absent",
+            "maintained worker did not retain the stale-replacement fixture",
+        )
+    })?;
+    require(
+        matches!(retry.state, QueueJobState::Ready | QueueJobState::Failed)
+            && retry.attempt_count >= 1
+            && retry.last_error_class.as_deref() == Some("empty-payload"),
+        "queue_observer_retry",
+        "maintained worker did not consume a live lease through its retry/fail path",
+    )?;
+    require(
+        stale.state == QueueJobState::Completed && stale.attempt_count >= 2,
+        "queue_observer_stale_replacement",
+        "maintained workers did not replace and complete the expired lease",
+    )?;
+    require(
+        transition_authority_cleared,
+        "queue_observer_transition_authority",
+        "stopped workers left raw queue transition authority in a primary record",
+    )?;
+    Ok(QueueObservation {
+        data_contract: QUEUE_DATA_CONTRACT.to_owned(),
+        records_scanned: page.items.len() as u64,
+        workers_started: 2,
+        productive_iterations,
+        completed_jobs,
+        retry_job_state: retry.state.name().to_owned(),
+        retry_job_attempts: retry.attempt_count,
+        retry_error_class: retry.last_error_class.unwrap_or_default(),
+        stale_job_state: stale.state.name().to_owned(),
+        stale_job_attempts: stale.attempt_count,
+        stale_replacement_observed: true,
+        transition_authority_cleared: true,
+    })
+}
+
+fn queue_text_key(store: &DataStore, value: &str) -> Result<DataKey, ServiceFailure> {
+    DataKey::new(vec![DataKeyPart::Text(value.to_owned())], store.limits())
+        .map_err(|error| ServiceFailure::infrastructure("queue_oracle_key", error))
+}
+
+fn queue_claim_key(store: &DataStore, job: &QueueFixtureJob) -> Result<DataKey, ServiceFailure> {
+    let claim_at = match job.state {
+        QueueJobState::Ready => job.available_at,
+        QueueJobState::Leased => job.lease_until.ok_or_else(|| {
+            ServiceFailure::failed(
+                "queue_oracle_lease_deadline",
+                "leased queue oracle fixture has no deadline",
+            )
+        })?,
+        QueueJobState::Completed | QueueJobState::Failed | QueueJobState::Cancelled => {
+            return Err(ServiceFailure::failed(
+                "queue_oracle_terminal_claim",
+                "terminal queue oracle fixture cannot own a claim index",
+            ));
+        }
+    };
+    DataKey::new(
+        vec![
+            DataKeyPart::I64(claim_at),
+            DataKeyPart::I64(job.created_at),
+            DataKeyPart::Text(job.job_id.clone()),
+        ],
+        store.limits(),
+    )
+    .map_err(|error| ServiceFailure::infrastructure("queue_oracle_claim_key", error))
+}
+
+fn encode_queue_job(job: &QueueFixtureJob) -> Result<Vec<u8>, ServiceFailure> {
+    let mut output = Vec::new();
+    output.extend_from_slice(QUEUE_JOB_MAGIC);
+    push_queue_text(&mut output, &job.job_id)?;
+    push_queue_text(&mut output, &job.idempotency_key)?;
+    push_queue_blob(&mut output, &job.payload)?;
+    output.push(match job.state {
+        QueueJobState::Ready => 0,
+        QueueJobState::Leased => 1,
+        QueueJobState::Completed => 2,
+        QueueJobState::Failed => 3,
+        QueueJobState::Cancelled => 4,
+    });
+    output.extend_from_slice(&job.available_at.to_be_bytes());
+    output.extend_from_slice(&job.created_at.to_be_bytes());
+    output.extend_from_slice(&job.attempt_count.to_be_bytes());
+    push_queue_optional_text(&mut output, job.attempt_id.as_deref())?;
+    push_queue_optional_text(&mut output, job.worker_id.as_deref())?;
+    push_queue_optional_i64(&mut output, job.lease_until);
+    push_queue_optional_blob(&mut output, job.result.as_deref())?;
+    push_queue_optional_text(&mut output, job.last_error_class.as_deref())?;
+    output.extend_from_slice(&queue_digest(QUEUE_JOB_CHECKSUM_DOMAIN, &output));
+    Ok(output)
+}
+
+fn decode_queue_job(bytes: &[u8]) -> Result<ObservedQueueJob, ServiceFailure> {
+    let payload_length = bytes.len().checked_sub(32).ok_or_else(|| {
+        ServiceFailure::failed(
+            "queue_observer_truncated",
+            "queue primary record is shorter than its checksum",
+        )
+    })?;
+    let (payload, checksum) = bytes.split_at(payload_length);
+    require(
+        queue_digest(QUEUE_JOB_CHECKSUM_DOMAIN, payload).as_slice() == checksum,
+        "queue_observer_checksum",
+        "queue primary record checksum is corrupt",
+    )?;
+    let mut cursor = QueueCursor::new(payload);
+    require(
+        cursor.take(QUEUE_JOB_MAGIC.len())? == QUEUE_JOB_MAGIC,
+        "queue_observer_magic",
+        "queue primary record has a foreign magic value",
+    )?;
+    let job_id = cursor.text(512)?;
+    let _idempotency_key = cursor.text(512)?;
+    let _payload = cursor.blob(1_048_576)?;
+    let state = match cursor.u8()? {
+        0 => QueueJobState::Ready,
+        1 => QueueJobState::Leased,
+        2 => QueueJobState::Completed,
+        3 => QueueJobState::Failed,
+        4 => QueueJobState::Cancelled,
+        _ => {
+            return Err(ServiceFailure::failed(
+                "queue_observer_state",
+                "queue primary record has a foreign state",
+            ));
+        }
+    };
+    let _available_at = cursor.i64()?;
+    let _created_at = cursor.i64()?;
+    let attempt_count = cursor.u32()?;
+    let attempt_id = cursor.optional_text(512)?;
+    let worker_id = cursor.optional_text(512)?;
+    let lease_until = cursor.optional_i64()?;
+    let _result = cursor.optional_blob(1_048_576)?;
+    let last_error_class = cursor.optional_text(128)?;
+    cursor.finish()?;
+    let owns_transition_authority =
+        attempt_id.is_some() && worker_id.is_some() && lease_until.is_some();
+    require(
+        (state == QueueJobState::Leased) == owns_transition_authority,
+        "queue_observer_lease_shape",
+        "queue primary state disagrees with its raw lease fields",
+    )?;
+    Ok(ObservedQueueJob {
+        job_id,
+        state,
+        attempt_count,
+        attempt_id,
+        worker_id,
+        lease_until,
+        last_error_class,
+    })
+}
+
+fn queue_schema_digest(identity: &str) -> Vec<u8> {
+    let mut hasher = blake3::Hasher::new_derive_key(QUEUE_SCHEMA_DIGEST_DOMAIN);
+    hasher.update(&(identity.len() as u64).to_be_bytes());
+    hasher.update(identity.as_bytes());
+    hasher.finalize().as_bytes().to_vec()
+}
+
+fn queue_digest(domain: &'static str, bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key(domain);
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    *hasher.finalize().as_bytes()
+}
+
+fn push_queue_text(output: &mut Vec<u8>, value: &str) -> Result<(), ServiceFailure> {
+    push_queue_blob(output, value.as_bytes())
+}
+
+fn push_queue_blob(output: &mut Vec<u8>, value: &[u8]) -> Result<(), ServiceFailure> {
+    let length = u32::try_from(value.len()).map_err(|_| {
+        ServiceFailure::failed(
+            "queue_oracle_field_length",
+            "queue oracle fixture field exceeds u32",
+        )
+    })?;
+    output.extend_from_slice(&length.to_be_bytes());
+    output.extend_from_slice(value);
+    Ok(())
+}
+
+fn push_queue_optional_text(
+    output: &mut Vec<u8>,
+    value: Option<&str>,
+) -> Result<(), ServiceFailure> {
+    match value {
+        Some(value) => {
+            output.push(1);
+            push_queue_text(output, value)
+        }
+        None => {
+            output.push(0);
+            Ok(())
+        }
+    }
+}
+
+fn push_queue_optional_blob(
+    output: &mut Vec<u8>,
+    value: Option<&[u8]>,
+) -> Result<(), ServiceFailure> {
+    match value {
+        Some(value) => {
+            output.push(1);
+            push_queue_blob(output, value)
+        }
+        None => {
+            output.push(0);
+            Ok(())
+        }
+    }
+}
+
+fn push_queue_optional_i64(output: &mut Vec<u8>, value: Option<i64>) {
+    match value {
+        Some(value) => {
+            output.push(1);
+            output.extend_from_slice(&value.to_be_bytes());
+        }
+        None => output.push(0),
+    }
+}
+
+struct QueueCursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> QueueCursor<'a> {
+    const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn take(&mut self, length: usize) -> Result<&'a [u8], ServiceFailure> {
+        let end = self.offset.checked_add(length).ok_or_else(|| {
+            ServiceFailure::failed(
+                "queue_observer_offset",
+                "queue primary record offset overflowed usize",
+            )
+        })?;
+        let value = self.bytes.get(self.offset..end).ok_or_else(|| {
+            ServiceFailure::failed(
+                "queue_observer_truncated",
+                "queue primary record is truncated",
+            )
+        })?;
+        self.offset = end;
+        Ok(value)
+    }
+
+    fn u8(&mut self) -> Result<u8, ServiceFailure> {
+        self.take(1)?.first().copied().ok_or_else(|| {
+            ServiceFailure::failed(
+                "queue_observer_truncated",
+                "queue primary record is truncated",
+            )
+        })
+    }
+
+    fn u32(&mut self) -> Result<u32, ServiceFailure> {
+        let bytes = self.take(4)?;
+        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn i64(&mut self) -> Result<i64, ServiceFailure> {
+        let bytes = self.take(8)?;
+        Ok(i64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]))
+    }
+
+    fn blob(&mut self, maximum: usize) -> Result<Vec<u8>, ServiceFailure> {
+        let length = usize::try_from(self.u32()?).map_err(|_| {
+            ServiceFailure::failed(
+                "queue_observer_field_length",
+                "queue primary record field length is unsupported",
+            )
+        })?;
+        require(
+            length <= maximum,
+            "queue_observer_field_limit",
+            "queue primary record field exceeds its exact byte limit",
+        )?;
+        Ok(self.take(length)?.to_vec())
+    }
+
+    fn text(&mut self, maximum: usize) -> Result<String, ServiceFailure> {
+        String::from_utf8(self.blob(maximum)?).map_err(|_| {
+            ServiceFailure::failed(
+                "queue_observer_utf8",
+                "queue primary record text is not UTF-8",
+            )
+        })
+    }
+
+    fn optional_text(&mut self, maximum: usize) -> Result<Option<String>, ServiceFailure> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => self.text(maximum).map(Some),
+            _ => Err(ServiceFailure::failed(
+                "queue_observer_option_tag",
+                "queue primary record has a noncanonical option tag",
+            )),
+        }
+    }
+
+    fn optional_blob(&mut self, maximum: usize) -> Result<Option<Vec<u8>>, ServiceFailure> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => self.blob(maximum).map(Some),
+            _ => Err(ServiceFailure::failed(
+                "queue_observer_option_tag",
+                "queue primary record has a noncanonical option tag",
+            )),
+        }
+    }
+
+    fn optional_i64(&mut self) -> Result<Option<i64>, ServiceFailure> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => self.i64().map(Some),
+            _ => Err(ServiceFailure::failed(
+                "queue_observer_option_tag",
+                "queue primary record has a noncanonical option tag",
+            )),
+        }
+    }
+
+    fn finish(self) -> Result<(), ServiceFailure> {
+        require(
+            self.offset == self.bytes.len(),
+            "queue_observer_trailing",
+            "queue primary record contains trailing bytes",
+        )
+    }
 }
 
 fn http_request(
@@ -1723,7 +2380,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-10 bundle",
+            "maintained deployment descriptor does not bind the current artifact-11 bundle",
         ));
     }
     if let Some(port) = port {
@@ -2240,7 +2897,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 4);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 5);
     }
 
     #[test]

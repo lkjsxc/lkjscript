@@ -313,6 +313,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             parent: ParameterParent::Function(callee),
             name: name("input"),
             ty: unit_type,
+            use_mode: ParameterUse::Unrestricted,
         }),
     );
     insert(
@@ -607,7 +608,7 @@ fn normalized_prototype_passes_full_oracle() {
 }
 
 #[test]
-fn graph_five_permits_a_structurally_empty_package() {
+fn graph_six_permits_a_structurally_empty_package() {
     let snapshot = KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
@@ -626,7 +627,7 @@ fn graph_five_permits_a_structurally_empty_package() {
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     };
-    let report = validate_full(&snapshot).expect("empty package is valid Graph 5 authority");
+    let report = validate_full(&snapshot).expect("empty package is valid Graph 6 authority");
     assert_eq!(report.owners_checked, 0);
     assert_eq!(report.relation_edges, 0);
 }
@@ -974,7 +975,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "af82a19f63d597907f81070cab6ff78290b9bfa2c52cb6e9af35cafb378df767"
+        "c039ea2a13f1e3f3b10180745be3e48898bc98ce4b950841c05d80f75652acc9"
     );
 }
 

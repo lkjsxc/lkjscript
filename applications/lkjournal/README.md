@@ -12,18 +12,18 @@ Its stable modules are:
 - `service` (`mod_50e2d3318b93f572dad082bd4f42c526`) for routes, strict JSON schemas,
   authorization, data spaces/indexes/schema transitions, rendering, object reconciliation, and
   enqueue policy; and
-- `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) for queue claim and exact-attempt
-  completion meaning.
+- `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) for affine queue claim, metadata
+  borrow, renewal, completion, and retry/failure meaning.
 
 Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_1eb8825f79e542273c7df08e98720878b503f51c3cdbd91f5954d081f07aa203`;
-- semantic state: `semantic_state_e2e3834a0a3f0f415f01eb6dc8ee9c8ff0e0c6e60725e51ad68202a9c576fb2a`;
-- artifact manifest: `artifact_manifest_d604b351f90292393f1ffce2b28c550592cea46f6d2c20b370489669d2498536`;
-- artifact bundle: `artifact_bundle_eba2a6963dcda9338039f1e9b53660d021e3615fec57b02de1e07561619759c7`;
-- 1,559 live root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704`;
+- semantic state: `semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1`;
+- artifact manifest: `artifact_manifest_7d151920e0160b901fc29a3b1c22c3915738d7ca30c83e412a49fff97447ee5b`;
+- artifact bundle: `artifact_bundle_8c37417848ff93b9ffc752b4415ba841b7e3b1059a38a04d6d6cc0759df4106a`;
+- 1,579 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
 
@@ -52,9 +52,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 822,515-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 832,550-byte
 artifact bundle above (SHA-256
-`1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f`). `serve` resolves target
+`12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after first-party data/queue/object preflight. It does not discover this typed
@@ -82,6 +82,11 @@ namespaces. Actor, session, resource, immutable-snapshot, object-metadata, looku
 explicit graph-owned spaces/indexes with canonical typed values. Object bytes remain under the
 local/S3 object capability. Live effects run once through the production VM and never through
 differential replay.
+
+The worker receives only `QueueLeaseState`. It matches the live case, borrows `QueueLeaseInfo` for
+job/payload policy, consumes through heartbeat, matches the renewed state, and consumes through
+complete or fail. Attempt and worker transition identity never enter application values. Dropping a
+local handle does not implicitly change durable queue state.
 
 ## Routes
 
@@ -120,12 +125,14 @@ cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 The acceptance tool first builds through the public command and requires byte equality with the
 checked-in bundle. It stages only the copied binary, artifact, descriptors, configuration/secrets,
 one initialized shared data root, and a local object directory; it snapshots canonical typed
-meaning authority before and after. It exercises initialization, login, actor isolation,
-resource/history/object reconciliation, durable claim/completion/stale attempts, restart,
-failed-startup/no-readiness, logical backup, absent-root restore, post-restore equality, shutdown,
-and cleanup. Bounded evidence is retained under `.artifacts/lkjscript-dev/service/`. This product
-and service workflow has no container, database server, connection secret, or host database-library
-prerequisite.
+meaning authority before and after. Two worker processes exercise claim/info/renew/complete,
+retry/fail, expired-lease replacement, cancellation, and task cleanup. An independent bounded
+queue-data observer records attempt advancement, terminal state, and cleared private transition
+fields. The same run covers initialization, login, actor isolation, resource/history/object
+reconciliation, restart, failed-startup/no-readiness, logical backup, absent-root restore,
+post-restore equality, shutdown, and cleanup. Bounded evidence is retained under
+`.artifacts/lkjscript-dev/service/`. This product and service workflow has no container, database
+server, connection secret, or host database-library prerequisite.
 
 Contributor-only `lkjscript-dev data-oracle` separately uses an exact PostgreSQL 16.15 image for
 neutral migration and differential/resource evidence. That tool is not a deployment provider,

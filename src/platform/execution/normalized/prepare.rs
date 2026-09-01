@@ -15,9 +15,9 @@ use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
     ExternalVisibility, FieldReference, Idempotency, ImplementationName, Name, OperationReference,
-    OwnerKey, OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit,
-    SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
-    decode_type_object, encode_type_object,
+    OwnerKey, OwnerRecord, PackageId, ParameterUse, PortReference, RequirementReference,
+    ResourceLimit, SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject,
+    TypeObjectDigest, decode_type_object, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
@@ -74,7 +74,10 @@ pub enum NormalizedInstruction {
     I64(i64),
     Text(Arc<str>),
     StaticText(Arc<str>),
-    LoadLocal(u32),
+    LoadLocal {
+        local: u32,
+        use_mode: ParameterUse,
+    },
     StoreLocal(u32),
     Drop,
     JumpIfFalse(u32),
@@ -163,6 +166,7 @@ pub struct NormalizedParameter {
     pub parameter: ParameterId,
     pub name: Name,
     pub ty: TypeObjectDigest,
+    pub use_mode: ParameterUse,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1210,6 +1214,7 @@ fn normalized_parameter(
         parameter,
         name: record.name.clone(),
         ty: record.ty,
+        use_mode: record.use_mode,
     })
 }
 
@@ -1241,7 +1246,12 @@ fn translate_code(
                     &mut work.store,
                 )?)
             }
-            CompiledInstruction::LoadLocal(local) => NormalizedInstruction::LoadLocal(*local),
+            CompiledInstruction::LoadLocal { local, use_mode } => {
+                NormalizedInstruction::LoadLocal {
+                    local: *local,
+                    use_mode: *use_mode,
+                }
+            }
             CompiledInstruction::StoreLocal(local) => NormalizedInstruction::StoreLocal(*local),
             CompiledInstruction::Drop => NormalizedInstruction::Drop,
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),

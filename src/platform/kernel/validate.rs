@@ -1,11 +1,12 @@
-//! Implementation-disjoint full validator for normalized Graph 5 authority.
+//! Implementation-disjoint full validator for normalized Graph 6 authority.
 
+use super::affine::validate_affine_meaning;
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference, TextValue};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
 use super::owner::{
-    BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent,
+    BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent, ParameterUse,
     PortImplementation,
 };
 use super::owner_namespace;
@@ -114,6 +115,189 @@ struct FullValidator<'a> {
     binding_containers: BTreeMap<BindingId, Vec<BindingContainer>>,
 }
 
+fn snapshot_type_is_direct_resource(snapshot: &KernelSnapshot, digest: TypeObjectDigest) -> bool {
+    snapshot
+        .types
+        .get(&digest)
+        .or_else(|| snapshot.dependency_types.get(&digest))
+        .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. }))
+}
+
+fn snapshot_type_contains_resource(snapshot: &KernelSnapshot, digest: TypeObjectDigest) -> bool {
+    fn visit(
+        snapshot: &KernelSnapshot,
+        digest: TypeObjectDigest,
+        active_types: &mut BTreeSet<TypeObjectDigest>,
+        active_declarations: &mut BTreeSet<(
+            PackageId,
+            crate::platform::semantic_id::DeclarationId,
+        )>,
+    ) -> bool {
+        if !active_types.insert(digest) {
+            return false;
+        }
+        let result = match snapshot
+            .types
+            .get(&digest)
+            .or_else(|| snapshot.dependency_types.get(&digest))
+            .map(|object| &object.form)
+        {
+            Some(TypeForm::CapabilityResource { .. }) => true,
+            Some(TypeForm::Named { declaration }) => {
+                let key = (declaration.package, declaration.declaration);
+                if !active_declarations.insert(key) {
+                    false
+                } else {
+                    let result = snapshot_named_member_types(snapshot, *declaration)
+                        .into_iter()
+                        .any(|member| visit(snapshot, member, active_types, active_declarations));
+                    active_declarations.remove(&key);
+                    result
+                }
+            }
+            Some(object) => object_child_digests(object)
+                .into_iter()
+                .any(|child| visit(snapshot, child, active_types, active_declarations)),
+            None => false,
+        };
+        active_types.remove(&digest);
+        result
+    }
+
+    visit(snapshot, digest, &mut BTreeSet::new(), &mut BTreeSet::new())
+}
+
+fn snapshot_resource_interface(
+    snapshot: &KernelSnapshot,
+    digest: TypeObjectDigest,
+) -> Option<super::DeclarationReference> {
+    fn visit(
+        snapshot: &KernelSnapshot,
+        digest: TypeObjectDigest,
+        observed: &mut BTreeSet<TypeObjectDigest>,
+        interfaces: &mut BTreeSet<super::DeclarationReference>,
+    ) {
+        if !observed.insert(digest) {
+            return;
+        }
+        let Some(form) = snapshot
+            .types
+            .get(&digest)
+            .or_else(|| snapshot.dependency_types.get(&digest))
+            .map(|object| &object.form)
+        else {
+            return;
+        };
+        match form {
+            TypeForm::CapabilityResource { interface } => {
+                interfaces.insert(*interface);
+            }
+            TypeForm::Named { declaration } => {
+                for child in snapshot_named_member_types(snapshot, *declaration) {
+                    visit(snapshot, child, observed, interfaces);
+                }
+            }
+            _ => {
+                for child in object_child_digests(form) {
+                    visit(snapshot, child, observed, interfaces);
+                }
+            }
+        }
+    }
+
+    let mut interfaces = BTreeSet::new();
+    visit(snapshot, digest, &mut BTreeSet::new(), &mut interfaces);
+    let mut values = interfaces.into_iter();
+    let first = values.next()?;
+    values.next().is_none().then_some(first)
+}
+
+fn object_child_digests(form: &TypeForm) -> Vec<TypeObjectDigest> {
+    match form {
+        TypeForm::StructuralRecord { fields } => fields.iter().map(|field| field.ty).collect(),
+        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+            vec![*item]
+        }
+        TypeForm::Map { key, value }
+        | TypeForm::Result {
+            ok: key,
+            error: value,
+        } => vec![*key, *value],
+        TypeForm::Function { parameters, result } => {
+            let mut values = parameters.clone();
+            values.push(*result);
+            values
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn snapshot_named_member_types(
+    snapshot: &KernelSnapshot,
+    declaration: super::DeclarationReference,
+) -> Vec<TypeObjectDigest> {
+    if declaration.package == snapshot.root.package_id {
+        let Some(OwnerRecord::Declaration(record)) = snapshot
+            .owners
+            .get(&OwnerKey::Declaration(declaration.declaration))
+        else {
+            return Vec::new();
+        };
+        return match &record.payload {
+            DeclarationPayload::Record { fields } => fields
+                .iter()
+                .filter_map(
+                    |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
+                        Some(OwnerRecord::Field(record)) => Some(record.ty),
+                        _ => None,
+                    },
+                )
+                .collect(),
+            DeclarationPayload::Variant { cases } => cases
+                .iter()
+                .filter_map(|case| match snapshot.owners.get(&OwnerKey::Case(*case)) {
+                    Some(OwnerRecord::Case(record)) => record.payload,
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+    }
+    let Some(owners) = snapshot
+        .dependencies
+        .get(&declaration.package)
+        .and_then(|dependency| {
+            snapshot
+                .dependency_interfaces
+                .get(&dependency.package_revision)
+        })
+    else {
+        return Vec::new();
+    };
+    let Some(PackageInterfaceRecord::Declaration(record)) =
+        owners.get(&OwnerKey::Declaration(declaration.declaration))
+    else {
+        return Vec::new();
+    };
+    match &record.payload {
+        super::PackageInterfaceDeclarationPayload::Record { fields } => fields
+            .iter()
+            .filter_map(|field| match owners.get(&OwnerKey::Field(*field)) {
+                Some(PackageInterfaceRecord::Field(record)) => Some(record.ty),
+                _ => None,
+            })
+            .collect(),
+        super::PackageInterfaceDeclarationPayload::Variant { cases } => cases
+            .iter()
+            .filter_map(|case| match owners.get(&OwnerKey::Case(*case)) {
+                Some(PackageInterfaceRecord::Case(record)) => record.payload,
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 impl FullValidator<'_> {
     fn validate(&mut self) {
         self.validate_root_and_records();
@@ -124,9 +308,13 @@ impl FullValidator<'_> {
         self.validate_owner_structure();
         self.validate_expressions();
         self.validate_types();
+        self.validate_resource_shapes();
         self.validate_references();
         if self.diagnostics.is_empty() {
             validate_expression_meaning(self.snapshot, &mut self.diagnostics, &mut self.work);
+        }
+        if self.diagnostics.is_empty() {
+            validate_affine_meaning(self.snapshot, &mut self.diagnostics, &mut self.work);
         }
         self.validate_relations();
     }
@@ -521,7 +709,225 @@ impl FullValidator<'_> {
                 &[OwnerKind::Record, OwnerKind::Variant],
                 "named type",
             ),
+            TypeForm::CapabilityResource { interface } => self.require_exact_kind(
+                interface.package,
+                OwnerKey::Declaration(interface.declaration),
+                &[OwnerKind::Interface],
+                "capability resource interface",
+            ),
             _ => {}
+        }
+    }
+
+    fn validate_resource_shapes(&mut self) {
+        let types = self
+            .snapshot
+            .types
+            .iter()
+            .map(|(digest, object)| (*digest, object.clone()))
+            .collect::<Vec<_>>();
+        for (digest, object) in types {
+            if !self.consume_work() {
+                return;
+            }
+            let forbidden = match &object.form {
+                TypeForm::StructuralRecord { fields } => fields
+                    .iter()
+                    .any(|field| snapshot_type_contains_resource(self.snapshot, field.ty)),
+                TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+                    snapshot_type_contains_resource(self.snapshot, *item)
+                }
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => {
+                    snapshot_type_contains_resource(self.snapshot, *key)
+                        || snapshot_type_contains_resource(self.snapshot, *value)
+                }
+                TypeForm::Function { parameters, result } => {
+                    parameters
+                        .iter()
+                        .any(|parameter| snapshot_type_contains_resource(self.snapshot, *parameter))
+                        || snapshot_type_contains_resource(self.snapshot, *result)
+                }
+                _ => false,
+            };
+            if forbidden {
+                self.error(
+                    "kernel_affine_resource_container",
+                    format!(
+                        "type object {digest} places a capability resource in a forbidden structural, collection, stream, result, option, or function container"
+                    ),
+                );
+            }
+        }
+
+        let owners = self
+            .snapshot
+            .owners
+            .iter()
+            .map(|(owner, record)| (*owner, record.clone()))
+            .collect::<Vec<_>>();
+        for (owner, record) in owners {
+            if !self.consume_work() {
+                return;
+            }
+            match record {
+                OwnerRecord::Parameter(parameter) => {
+                    let contains = snapshot_type_contains_resource(self.snapshot, parameter.ty);
+                    let direct = snapshot_type_is_direct_resource(self.snapshot, parameter.ty);
+                    match parameter.parent {
+                        ParameterParent::Function(_) => {
+                            if contains {
+                                self.error(
+                                    "kernel_affine_function_parameter",
+                                    format!(
+                                        "function parameter {owner:?} cannot contain a capability resource"
+                                    ),
+                                );
+                            }
+                            if parameter.use_mode != ParameterUse::Unrestricted {
+                                self.error(
+                                    "kernel_affine_function_parameter_use",
+                                    format!("function parameter {owner:?} must be unrestricted"),
+                                );
+                            }
+                        }
+                        ParameterParent::Operation(_) => {
+                            if direct {
+                                if parameter.use_mode == ParameterUse::Unrestricted {
+                                    self.error(
+                                        "kernel_affine_resource_parameter_use",
+                                        format!(
+                                            "resource operation parameter {owner:?} must explicitly borrow or consume"
+                                        ),
+                                    );
+                                }
+                            } else {
+                                if contains {
+                                    self.error(
+                                        "kernel_affine_operation_parameter_container",
+                                        format!(
+                                            "operation parameter {owner:?} may contain a resource only as the direct parameter type"
+                                        ),
+                                    );
+                                }
+                                if parameter.use_mode != ParameterUse::Unrestricted {
+                                    self.error(
+                                        "kernel_affine_nonresource_parameter_use",
+                                        format!(
+                                            "nonresource operation parameter {owner:?} must be unrestricted"
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                OwnerRecord::Field(field) => {
+                    if snapshot_type_contains_resource(self.snapshot, field.ty) {
+                        self.error(
+                            "kernel_affine_record_field",
+                            format!("record field {owner:?} cannot contain a capability resource"),
+                        );
+                    }
+                }
+                OwnerRecord::Case(case) => {
+                    if let Some(payload) = case.payload
+                        && snapshot_type_contains_resource(self.snapshot, payload)
+                        && !snapshot_type_is_direct_resource(self.snapshot, payload)
+                    {
+                        self.error(
+                            "kernel_affine_variant_payload",
+                            format!(
+                                "variant case {owner:?} may carry only one direct capability resource"
+                            ),
+                        );
+                    }
+                }
+                OwnerRecord::Operation(operation) => {
+                    if let Some(interface) =
+                        snapshot_resource_interface(self.snapshot, operation.result)
+                        && (interface.package != self.snapshot.root.package_id
+                            || interface.declaration != operation.declaration)
+                    {
+                        self.error(
+                            "kernel_affine_operation_result_interface",
+                            format!(
+                                "resource result of operation {owner:?} is not bound to its exact owning interface"
+                            ),
+                        );
+                    }
+                }
+                OwnerRecord::Declaration(declaration) => match declaration.payload {
+                    DeclarationPayload::Variant { cases } => {
+                        let resource_cases = cases
+                            .iter()
+                            .filter(|case| {
+                                self.snapshot
+                                    .owners
+                                    .get(&OwnerKey::Case(**case))
+                                    .and_then(|record| match record {
+                                        OwnerRecord::Case(record) => record.payload,
+                                        _ => None,
+                                    })
+                                    .is_some_and(|payload| {
+                                        snapshot_type_is_direct_resource(self.snapshot, payload)
+                                    })
+                            })
+                            .count();
+                        if resource_cases > 1 {
+                            self.error(
+                                "kernel_affine_variant_resource_count",
+                                format!(
+                                    "variant declaration {owner:?} contains more than one direct resource payload"
+                                ),
+                            );
+                        }
+                    }
+                    DeclarationPayload::External(signature) => {
+                        if snapshot_type_contains_resource(self.snapshot, signature.result) {
+                            self.error(
+                                "kernel_affine_external_result",
+                                format!(
+                                    "external declaration {owner:?} cannot return a capability resource"
+                                ),
+                            );
+                        }
+                    }
+                    DeclarationPayload::Function(function) => {
+                        if snapshot_type_contains_resource(self.snapshot, function.result) {
+                            self.error(
+                                "kernel_affine_function_result",
+                                format!(
+                                    "function declaration {owner:?} cannot return a capability resource"
+                                ),
+                            );
+                        }
+                    }
+                    DeclarationPayload::Constant { ty, .. }
+                        if snapshot_type_contains_resource(self.snapshot, ty) =>
+                    {
+                        self.error(
+                            "kernel_affine_constant",
+                            format!(
+                                "constant declaration {owner:?} cannot contain a capability resource"
+                            ),
+                        );
+                    }
+                    _ => {}
+                },
+                OwnerRecord::Port(port)
+                    if snapshot_type_contains_resource(self.snapshot, port.function_type) =>
+                {
+                    self.error(
+                        "kernel_affine_port_signature",
+                        format!("port {owner:?} cannot transfer a capability resource"),
+                    );
+                }
+                _ => {}
+            }
         }
     }
 

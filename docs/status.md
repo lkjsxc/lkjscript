@@ -13,23 +13,23 @@ closure selected by `HEAD`. No maintained project contains a predecessor `.lkjsc
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_805f3ec96b7907e8ad6ac63d53bdab63aee81d671a39b4ff6cd35604f97bd44f`; state `semantic_state_7d089c26bd03b9bfd72638895bc78baa77f3dd74e100efdfd18b4a731942f281` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_1eb8825f79e542273c7df08e98720878b503f51c3cdbd91f5954d081f07aa203`; state `semantic_state_e2e3834a0a3f0f415f01eb6dc8ee9c8ff0e0c6e60725e51ad68202a9c576fb2a` |
-| built-in standard dependency | package revision `package_revision_48cfe9aceb123da0d8a6fc30b034e89599cdc8235cf6b72085d2225b281cefc9`; transport `package_transport_629e6035e974334ecb79431860bb0678d4946aaf67817baa53f5d15d89a816d6`; artifact manifest `artifact_manifest_025419b2248bacf0c01cbc9ad6928aecc4aed4364c5dc7262814e19f361f42e8` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261`; state `semantic_state_36f5b103cf76423d2edb48aafc708d543d878ca1c656b5775ebc6ad8bc531a69` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704`; state `semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1` |
+| built-in standard dependency | package revision `package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705`; transport `package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9`; artifact manifest `artifact_manifest_a44c48ac71f99688c22b1fb3a39f9bafe36792e3a697546d8bd2e06644bcc55f` |
 
-The standard package owns 427 live semantic owners, 81 compiler units, and 13 graph tests. Its
-current artifact has 808 closure objects and 253,276 bytes. `lkjournal` owns 1,559 live semantic
-owners and one exact standard dependency; its two-package artifact has 141 compiler units, 2,763
-closure objects, and 822,515 bytes. Its complete dependency closure runs 18 graph tests. Both
+The standard package owns 431 live semantic owners, 83 compiler units, and 13 graph tests. Its
+current artifact has 817 closure objects and 256,500 bytes. `lkjournal` owns 1,579 live semantic
+owners and one exact standard dependency; its two-package artifact has 143 compiler units, 2,794
+closure objects, and 832,550 bytes. Its complete dependency closure runs 18 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 88,618 bytes | `b863a95f62cf05fc8a9d6abe9c728c987c0d9b88b3d9d3d98cfda117a9140350` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 253,276 bytes | `1cfeb8545e045e86682950c1ba7fa2b63346ba349e4ca70d39645dce6a78a1a7` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 822,515 bytes | `1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f` |
+| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 89,720 bytes | `14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 256,500 bytes | `fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 832,550 bytes | `12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -94,19 +94,30 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source and immutable public latest own product snapshot 0.1.14. CLI 16 and compact-change
-records 8 expose public exact dependency and topology authoring; project creation remains 3 because
-the resulting recipes, receipt model, deployment inventory, and one-rename atomicity are unchanged.
-Deployment 3, registry 4, `http_client_adapter` 1, and unrelated graph, data, queue, object,
-artifact, compiler, and runtime contract numbers remain independently owned. Graph, package,
-artifact, deployment, and operational-data identities remain separate. Publication changed only
-derived distribution state; no deployment or live-relay contact occurred. The source and public
-executable expose exactly
+Current source is unreleased product snapshot 0.1.15; immutable public latest remains supported
+snapshot `v0.1.14`. The current source graph owns exact-interface affine resources and
+parameter-use meaning, and current CLI and compact authoring expose those forms. Only graph,
+witness/summary/validator, package-interface, compiler/bytecode/artifact, resident-runtime,
+queue-adapter, registry, and contributor service-receipt owners advance with their changed encoding
+or behavior. Project creation, deployment, HTTP client, data-store, logical-backup, queue-data,
+object, HTTP, and release contracts remain unchanged.
+Graph, package, artifact, deployment, and operational-data identities remain separate. This source
+campaign performed no release publication, deployment, hosted-data mutation, or live-relay contact.
+Both source and the released predecessor retain the same closed operation names:
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`adcc89421a83ab1758a2a585bb1973161ead50314309d2165cafda0498418d4e` computed by the executable.
+`855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b` in current source.
+
+Source `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
+exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
+borrow, and consume. Validation follows language order, retains exact requirement provenance,
+permits ordered borrows and one consume, and rejects fabrication, aliases, use after consume,
+foreign authority, branch disagreement, function transfer, and aggregate or durable escape before
+publication. Compiler units, artifact loading, and the normalized VM retain and recheck moves.
+Resources are task-local, non-equal, non-serializable, droppable, and absent from literals,
+constants, tests, caches, queue payloads, object bytes, and operational backups.
 
 `data initialize|verify|backup|restore` owns operational lifecycle for one local
 `lkjscript-data-store-1` root and `lkjscript-data-backup-1` logical backup. Initialize and restore
@@ -252,6 +263,22 @@ capability bindings. `data` and `durable_queue_data` may share one confined loca
 separately validated grants and namespaces. Adapter preparation is all-or-nothing, and repeated
 shutdown reuses one recorded cleanup outcome.
 
+The current source standard `DurableQueue` exposes exactly nine operations. Claim and heartbeat
+return nominal `QueueLeaseState` (`absent` or `live(CapabilityResource<DurableQueue>)`);
+`lease-info` borrows and returns only job ID, attempt number, lease-until time, and payload;
+heartbeat, complete, and fail consume. Private attempt and worker strings no longer cross the
+graph/runtime adapter boundary. Handle capacity is reserved before claim or renewal effects and a
+successful renewal commits a fresh handle. Foreign, closed, wrong-kind, wrong-interface,
+wrong-requirement, exhausted, duplicate, and stale paths reject or return the exact typed queue
+outcome without leaking a right. The physical queue-data and backup formats are unchanged.
+
+Maintained `lkjournal` now claims, matches the live case, borrows info for application policy,
+consumes through heartbeat, matches the renewed state, and consumes through complete or fail. Its
+fresh service oracle runs two workers and independently observes expired-lease replacement,
+retry/fail, terminal completion, cleared raw transition fields, restart, failed readiness,
+backup/absent-root restore, graceful cancellation, and zero task/cleanup leftovers while graph
+authority remains byte-identical.
+
 `HttpClient.get` receives only an ordered bounded header list and returns status, ordered headers,
 and whole body bytes. One exact deployment grant owns the endpoint and transport policy. Public
 destinations require HTTPS; explicit plaintext is loopback-only. Request-time bounded resolution
@@ -294,6 +321,10 @@ sandbox or multi-tenant isolation boundary.
   values, invocation, interface/external creation, operation parameters, dependency replacement,
   and requirement rebinding. Expression-backed ports, dependency removal, general package
   resolution, and additional runners remain private or absent.
+- Affine resources are lexical and task-local. They may be dropped and may cross only the direct
+  payload of one nominal variant; resource-valued function signatures, calls, ports, closures,
+  aggregates, partial moves, general linear must-use values, and additional resource protocols are
+  absent.
 - Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
   budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
   registry data.
@@ -319,6 +350,10 @@ sandbox or multi-tenant isolation boundary.
 
 The contributor-only `lkjscript-dev check` harness owns gate dependencies, exact input
 fingerprints, fresh/reused classification, bounded child logs, required outputs, and receipts.
+The current affine queue source closure, including independent semantic-flow, copied-binary
+authoring, maintained asset, two-worker service, predecessor-rejection, and exact static-target
+observations, is bound by
+[`202609011246-affine-durable-queue-lease.json`](evidence/202609011246-affine-durable-queue-lease.json).
 The semantic lifecycle campaign record [202608270014](campaigns/202608270014.md) names its exact
 focused, product, full, and service results. The public binary campaign record
 [202608271521](campaigns/202608271521.md) and its

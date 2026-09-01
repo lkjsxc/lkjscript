@@ -7,7 +7,8 @@ use super::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits, OwnerKey,
-    OwnerRecord, PackageId, TypeObject, TypeObjectDigest, validate_expression_roots_with_limits,
+    OwnerRecord, PackageId, TypeObject, TypeObjectDigest, validate_affine_roots_with_limits,
+    validate_expression_roots_with_limits,
 };
 use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
 use std::collections::{BTreeMap, BTreeSet};
@@ -142,7 +143,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
     }
     let exhaustion = validate_expression_roots_with_limits(
         overlay,
-        live_semantic_roots,
+        live_semantic_roots.iter().copied(),
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
@@ -159,6 +160,38 @@ pub(crate) fn validate_incremental_frontier_with_admission<
                 "change_budget_validation_expression_steps",
                 format!(
                     "semantic validation exceeds the declared {}-expression-step budget",
+                    admission.maximum_expression_steps
+                ),
+            ),
+            ExpressionValidationExhaustion::Diagnostics => (
+                "change_budget_validation_diagnostics",
+                format!(
+                    "semantic validation exceeds the declared {}-diagnostic budget",
+                    admission.maximum_diagnostics
+                ),
+            ),
+        };
+        return Err(vec![validation_budget_error(code, message)]);
+    }
+    let exhaustion = validate_affine_roots_with_limits(
+        overlay,
+        live_semantic_roots,
+        &mut diagnostics,
+        &mut work,
+        ExpressionValidationLimits {
+            maximum_steps: usize::try_from(admission.maximum_expression_steps)
+                .unwrap_or(usize::MAX),
+            maximum_diagnostics: usize::try_from(admission.maximum_diagnostics)
+                .unwrap_or(usize::MAX),
+        },
+    );
+    structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
+    if let Err(exhaustion) = exhaustion {
+        let (code, message) = match exhaustion {
+            ExpressionValidationExhaustion::Steps => (
+                "change_budget_validation_affine_steps",
+                format!(
+                    "affine validation exceeds the declared {}-expression-step budget",
                     admission.maximum_expression_steps
                 ),
             ),

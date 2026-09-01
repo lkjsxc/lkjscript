@@ -1,4 +1,4 @@
-//! Exact Graph 5 byte-stream capability over task-owned opaque handles.
+//! Exact Graph 6 byte-stream capability over task-owned opaque handles.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -296,6 +296,7 @@ mod tests {
         let handle = scope
             .register_byte_stream(
                 requirement,
+                interface,
                 registry
                     .register_memory(b"stream".to_vec())
                     .expect("memory stream"),
@@ -381,6 +382,7 @@ mod tests {
         let handle = scope
             .register_byte_stream(
                 requirement,
+                interface,
                 registry
                     .register_memory(b"whole".to_vec())
                     .expect("memory stream"),

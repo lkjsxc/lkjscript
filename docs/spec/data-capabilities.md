@@ -122,14 +122,41 @@ namespace of the same first-party root and has its own queue limits. Service and
 the root through separately validated grants without sharing task handles or gaining program
 authoring authority.
 
-Operations are initialize, enqueue, claim, heartbeat, complete, fail/retry, cancel, and inspect.
-Enqueue is exact-idempotent by job and idempotency identity. Ready order is availability time then
-job identity. Claim assigns one nonreused attempt identity and finite lease. Heartbeat, complete,
-and fail require the exact job, attempt, worker, and live lease. Lease loss or replacement makes a
-stale completion return false without publication. Completion is single-success; retry timing and
-terminal attempt policy are explicit application inputs. Cancellation makes future stale
-publication harmless. Restart reconstructs all durable job and attempt facts from the ordered
-store.
+The exact standard `DurableQueue` interface has nine operations:
+
+- unchanged `initialize`, `enqueue`, `cancel`, and `inspect`;
+- `claim(worker-id, now-milliseconds, lease-milliseconds) -> QueueLeaseState`;
+- `lease-info(lease borrow) -> QueueLeaseInfo`;
+- `heartbeat(lease consume, now-milliseconds, lease-milliseconds) -> QueueLeaseState`;
+- `complete(lease consume, now-milliseconds, result) -> Bool`; and
+- `fail(lease consume, now-milliseconds, retry, retry-at-milliseconds, error-class) -> Bool`.
+
+`QueueLeaseState` is the nominal `absent | live(CapabilityResource<DurableQueue>)` variant used by
+both claim and heartbeat. `QueueLeaseInfo` is an unrestricted nominal record containing job ID,
+attempt number, lease-until time, and payload. It reports acquisition metadata, not a liveness
+probe, and deliberately omits attempt and worker identity. Those raw fields remain private to the
+runtime resource entry and queue engine; they are not graph transition authority.
+
+Enqueue is exact-idempotent by job and idempotency identity. Ready order is availability time,
+creation time, then job identity. Claim assigns one nonreused attempt identity and finite lease.
+`lease-info` borrows. Heartbeat consumes the old handle and returns a fresh live handle or absent;
+complete and fail consume on every reached result, including stale, cancellation, and possible
+visibility. A stale transition returns absent or false without recreating the old right.
+Completion is single-success; retry timing and terminal attempt policy are explicit application
+inputs. Cancellation makes future stale publication harmless. Restart reconstructs all durable job
+and attempt facts from the ordered store.
+
+The task resource scope reserves bounded handle capacity and identity before claim or heartbeat can
+mutate queue state. Empty, stale, failed, or cancelled effects release that reservation; successful
+effects commit it without avoidable post-effect allocation. Each handle is bound to its exact task
+scope, resource kind, interface, and acquiring requirement. Borrow preserves it, consume closes it,
+and scope cleanup drops only local authority. Possible visibility is nonretrying and preserves no
+exactly-once claim.
+
+The physical `lkjscript-durable-queue-data-1` primary/index encoding is unchanged. It still stores
+private job, attempt, and worker fields needed by the engine, so existing operational roots and
+logical backups require no migration. Predecessor graph signatures that return a list lease record
+or accept raw job/attempt/worker transition tokens are not current input and reject.
 
 The queue does not promise exactly-once delivery or atomicity with an independently executed object
 effect. No memory or PostgreSQL production backend, hidden fallback, or provider selector remains.

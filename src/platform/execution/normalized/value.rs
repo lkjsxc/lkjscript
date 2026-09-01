@@ -1,4 +1,4 @@
-//! Runtime-only dense values for normalized Graph 5 execution.
+//! Runtime-only dense values for normalized Graph 6 execution.
 
 use super::resource::NormalizedResourceHandle;
 use crate::platform::kernel::{Name, TypeObjectDigest};

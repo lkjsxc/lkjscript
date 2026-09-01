@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 5 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 6 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -40,17 +40,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-10";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-10";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 10;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF10";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART10";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN10";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-11";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-11";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 11;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF11";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART11";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN11";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v10";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v10";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v10";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v10";
+    "lkjscript.artifact-manifest-envelope.v11";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v11";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v11";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v11";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -1005,6 +1005,7 @@ pub(crate) enum RuntimeOwnerExpectation {
     Parameter {
         parent: ParameterParent,
         ty: TypeObjectDigest,
+        use_mode: crate::platform::kernel::ParameterUse,
     },
     Requirement {
         declaration: DeclarationId,
@@ -1076,9 +1077,14 @@ impl RuntimeOwnerExpectation {
                     && record.idempotency == *idempotency
                     && record.external_visibility == *external_visibility
             }
-            (Self::Parameter { parent, ty }, OwnerRecord::Parameter(record)) => {
-                record.parent == *parent && record.ty == *ty
-            }
+            (
+                Self::Parameter {
+                    parent,
+                    ty,
+                    use_mode,
+                },
+                OwnerRecord::Parameter(record),
+            ) => record.parent == *parent && record.ty == *ty && record.use_mode == *use_mode,
             (
                 Self::Requirement {
                     declaration,
@@ -1403,6 +1409,7 @@ fn insert_parameter_expectation(
         RuntimeOwnerExpectation::Parameter {
             parent,
             ty: table_value(&unit.tables.types, parameter.ty, "runtime parameter type")?,
+            use_mode: parameter.use_mode,
         },
     )
 }

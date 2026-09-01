@@ -1,4 +1,4 @@
-//! Exact normalized transaction records over Graph 5 canonical map bindings.
+//! Exact normalized transaction records over Graph 6 canonical map bindings.
 
 use super::contract::{
     MAXIMUM_INLINE_HISTORY_EDITS, MAXIMUM_TRANSACTION_BYTES, TRANSACTION_CONTRACT_VERSION,

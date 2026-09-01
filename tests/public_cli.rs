@@ -774,7 +774,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 100);
+    assert_eq!(operation_fields.len(), 101);
     assert_eq!(
         operation_fields
             .iter()
@@ -790,6 +790,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.case", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
+            ("add.parameter", "use"),
         ]
     );
     let field_forms = change_section
@@ -797,7 +798,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 24);
+    assert_eq!(field_forms.len(), 25);
     for (name, syntax) in [
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("runner_kind", "command|http"),
@@ -3239,6 +3240,399 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
         current_revision_at(&copied_binary, temporary.path(), &project),
         accepted
     );
+}
+
+#[test]
+fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_authority() {
+    let temporary = tempfile::TempDir::new().expect("isolated affine-resource workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("app");
+
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "command",
+            "--name",
+            "affine-resource",
+        ],
+    );
+    let initial_revision = compact_field(compact_record(&created, "revision"), "id")
+        .expect("created revision")
+        .to_owned();
+    let application = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "module",
+            "application",
+        ],
+    );
+    let authored_package = compact_field(compact_record(&application, "project"), "package")
+        .expect("authored package")
+        .to_owned();
+    let application = compact_field(compact_record(&application, "owner"), "id")
+        .expect("application module")
+        .to_owned();
+
+    let request = format!(
+        "request base={initial_revision} idempotency=public-affine-resource-1 intent=author-affine-resource\n\
+         type.capability-resource as=@lease interface=$lease_interface\n\
+         type.function as=@task_port result=unit\n\
+         create.interface as=$lease_interface module={application} name=LeaseAuthority visibility=private\n\
+         add.operation as=$acquire interface=$lease_interface name=acquire result=@lease idempotency=non-idempotent external-visibility=possible\n\
+         add.operation as=$observe interface=$lease_interface name=observe result=unit idempotency=idempotent external-visibility=none\n\
+         add.parameter as=$observed_lease operation=$observe name=lease type=@lease use=borrow\n\
+         add.operation as=$finish interface=$lease_interface name=finish result=unit idempotency=non-idempotent external-visibility=possible\n\
+         add.parameter as=$finished_lease operation=$finish name=lease type=@lease use=consume\n\
+         create.component as=$component module={application} name=AffineComponent visibility=private\n\
+         add.requirement as=$lease_requirement component=$component name=lease-authority interface=$lease_interface\n\
+         requirement.operation parent=$lease_requirement index=0 operation=$acquire\n\
+         requirement.operation parent=$lease_requirement index=1 operation=$observe\n\
+         requirement.operation parent=$lease_requirement index=2 operation=$finish\n\
+         expression.capability-call as=$acquired requirement=$lease_requirement operation=$acquire\n\
+         expression.local as=$borrow_local value=$lease_binding\n\
+         expression.capability-call as=$observed requirement=$lease_requirement operation=$observe\n\
+         expression.argument parent=$observed index=0 expression=$borrow_local\n\
+         expression.local as=$consume_local value=$lease_binding\n\
+         expression.capability-call as=$finished requirement=$lease_requirement operation=$finish\n\
+         expression.argument parent=$finished index=0 expression=$consume_local\n\
+         expression.sequence as=$steps\n\
+         expression.argument parent=$steps index=0 expression=$observed\n\
+         expression.argument parent=$steps index=1 expression=$finished\n\
+         expression.let as=$task_body body=$steps\n\
+         expression.binding parent=$task_body index=0 as=$lease_binding name=lease value=$acquired type=@lease\n\
+         create.function as=$task module={application} name=affine-task visibility=private result=unit effect=task body=$task_body\n\
+         effect.requirement parent=$task index=0 requirement=$lease_requirement\n\
+         add.port as=$port component=$component name=run type=@task_port function=$task\n"
+    );
+    let request_path = temporary.path().join("affine-resource.lkjc");
+    std::fs::write(&request_path, &request).expect("write affine-resource request");
+    let inline_planned = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &request,
+        ],
+    );
+    let plan_arguments = [
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+    ];
+    let planned = compact_success_at(&copied_binary, temporary.path(), &plan_arguments);
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
+        .expect("affine-resource review token")
+        .to_owned();
+    assert_eq!(
+        compact_field(compact_record(&inline_planned, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    assert_eq!(
+        inline_planned
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| (compact_field(record, "symbol"), compact_field(record, "id")))
+            .collect::<Vec<_>>(),
+        planned
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| (compact_field(record, "symbol"), compact_field(record, "id")))
+            .collect::<Vec<_>>()
+    );
+    let planned_again = compact_success_at(&copied_binary, temporary.path(), &plan_arguments);
+    assert_eq!(
+        compact_field(compact_record(&planned_again, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    let identities = planned
+        .iter()
+        .filter(|record| record.operation == "identity")
+        .filter_map(|record| {
+            Some((
+                compact_field(record, "symbol")?,
+                compact_field(record, "id")?.to_owned(),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for expected in [
+        "$lease_interface",
+        "$observed_lease",
+        "$finished_lease",
+        "$lease_requirement",
+        "$lease_binding",
+        "$task",
+        "$port",
+    ] {
+        assert!(identities.contains_key(expected), "missing {expected}");
+    }
+
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&request_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted affine revision")
+        .to_owned();
+    assert_ne!(accepted, initial_revision);
+
+    let durable_queue = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "package",
+            "builtin",
+            "query",
+            "owners",
+            "--kind",
+            "interface",
+            "--name",
+            "DurableQueue",
+        ],
+    );
+    let durable_queue = compact_field(compact_record(&durable_queue, "owner"), "id")
+        .expect("DurableQueue interface")
+        .to_owned();
+    let discovered = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "package",
+            "builtin",
+            "inspect",
+            "owner",
+            "interface",
+            &durable_queue,
+        ],
+    );
+    assert!(discovered.iter().any(|record| {
+        record.operation == "parameter"
+            && compact_field(record, "name") == Some("lease")
+            && compact_field(record, "use") == Some("borrow")
+    }));
+    assert!(discovered.iter().any(|record| {
+        record.operation == "parameter"
+            && compact_field(record, "name") == Some("lease")
+            && compact_field(record, "use") == Some("consume")
+    }));
+    assert!(discovered.iter().any(|record| {
+        record.operation == "type"
+            && compact_field(record, "form") == Some("capability-resource")
+            && compact_field(record, "interface").is_some()
+    }));
+
+    let checked = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&checked, "tests"), "failed"),
+        Some("0")
+    );
+    let artifact = temporary.path().join("affine-resource.lkja");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&artifact),
+        ],
+    );
+    assert!(artifact.is_file());
+
+    let accepted_inventory = content_inventory(&project);
+    let lease_interface = &identities["$lease_interface"];
+    let observe = &identities["$observe"];
+    for (name, body, code) in [
+        (
+            "predecessor-resource-form",
+            format!(
+                "type.resource as=@old interface={lease_interface}\n\
+                 add.parameter as=$old operation={observe} name=old type=@old"
+            ),
+            "change_type_form_unknown",
+        ),
+        (
+            "predecessor-shared-use",
+            format!("add.parameter as=$old operation={observe} name=old type=unit use=shared"),
+            "change_parameter_use",
+        ),
+        (
+            "implicit-resource-use",
+            format!(
+                "type.capability-resource as=@lease interface={lease_interface}\n\
+                 add.parameter as=$old operation={observe} name=old type=@lease"
+            ),
+            "kernel_affine_resource_parameter_use",
+        ),
+    ] {
+        let rejection = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
+            .expect("write affine rejection request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&rejection),
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(code)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), accepted_inventory, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            accepted,
+            "{name}"
+        );
+    }
+
+    let acquire = format!("{authored_package}/{}", identities["$acquire"]);
+    let observe = format!("{authored_package}/{}", identities["$observe"]);
+    let finish = format!("{authored_package}/{}", identities["$finish"]);
+    let requirement = format!("{authored_package}/{}", identities["$lease_requirement"]);
+    let component = &identities["$component"];
+    let affine_rejections = [
+        (
+            "duplicate-consume",
+            format!(
+                "type.capability-resource as=@bad_lease interface={lease_interface}\n\
+                 expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}\n\
+                 expression.local as=$bad_first_local value=$bad_binding\n\
+                 expression.capability-call as=$bad_first requirement={requirement} operation={finish}\n\
+                 expression.argument parent=$bad_first index=0 expression=$bad_first_local\n\
+                 expression.local as=$bad_second_local value=$bad_binding\n\
+                 expression.capability-call as=$bad_second requirement={requirement} operation={finish}\n\
+                 expression.argument parent=$bad_second index=0 expression=$bad_second_local\n\
+                 expression.sequence as=$bad_steps\n\
+                 expression.argument parent=$bad_steps index=0 expression=$bad_first\n\
+                 expression.argument parent=$bad_steps index=1 expression=$bad_second\n\
+                 expression.let as=$bad_body body=$bad_steps\n\
+                 expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease\n\
+                 create.function as=$bad_task module={application} name=duplicate-consume visibility=private result=unit effect=task body=$bad_body\n\
+                 effect.requirement parent=$bad_task index=0 requirement={requirement}"
+            ),
+            "kernel_affine_use_after_consume",
+        ),
+        (
+            "post-consume-borrow",
+            format!(
+                "type.capability-resource as=@bad_lease interface={lease_interface}\n\
+                 expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}\n\
+                 expression.local as=$bad_consume_local value=$bad_binding\n\
+                 expression.capability-call as=$bad_finished requirement={requirement} operation={finish}\n\
+                 expression.argument parent=$bad_finished index=0 expression=$bad_consume_local\n\
+                 expression.local as=$bad_borrow_local value=$bad_binding\n\
+                 expression.capability-call as=$bad_observed requirement={requirement} operation={observe}\n\
+                 expression.argument parent=$bad_observed index=0 expression=$bad_borrow_local\n\
+                 expression.sequence as=$bad_steps\n\
+                 expression.argument parent=$bad_steps index=0 expression=$bad_finished\n\
+                 expression.argument parent=$bad_steps index=1 expression=$bad_observed\n\
+                 expression.let as=$bad_body body=$bad_steps\n\
+                 expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease\n\
+                 create.function as=$bad_task module={application} name=post-consume-borrow visibility=private result=unit effect=task body=$bad_body\n\
+                 effect.requirement parent=$bad_task index=0 requirement={requirement}"
+            ),
+            "kernel_affine_use_after_consume",
+        ),
+        (
+            "foreign-requirement",
+            format!(
+                "type.capability-resource as=@bad_lease interface={lease_interface}\n\
+                 add.requirement as=$foreign_requirement component={component} name=foreign-lease interface={lease_interface}\n\
+                 requirement.operation parent=$foreign_requirement index=0 operation={finish}\n\
+                 expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}\n\
+                 expression.local as=$bad_local value=$bad_binding\n\
+                 expression.capability-call as=$bad_finished requirement=$foreign_requirement operation={finish}\n\
+                 expression.argument parent=$bad_finished index=0 expression=$bad_local\n\
+                 expression.let as=$bad_body body=$bad_finished\n\
+                 expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease\n\
+                 create.function as=$bad_task module={application} name=foreign-requirement visibility=private result=unit effect=task body=$bad_body\n\
+                 effect.requirement parent=$bad_task index=0 requirement={requirement}\n\
+                 effect.requirement parent=$bad_task index=1 requirement=$foreign_requirement"
+            ),
+            "kernel_affine_foreign_requirement",
+        ),
+        (
+            "resource-list-containment",
+            format!(
+                "type.capability-resource as=@bad_lease interface={lease_interface}\n\
+                 type.list as=@bad_list item=@bad_lease\n\
+                 expression.unit as=$bad_body\n\
+                 create.function as=$bad_function module={application} name=resource-list-escape visibility=private result=unit effect=pure body=$bad_body\n\
+                 add.parameter as=$bad_parameter function=$bad_function name=leases type=@bad_list"
+            ),
+            "kernel_affine_function_parameter",
+        ),
+    ];
+    for (name, body, code) in affine_rejections {
+        let rejection = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
+            .expect("write affine-flow rejection request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&rejection),
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(code)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), accepted_inventory, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            accepted,
+            "{name}"
+        );
+    }
 }
 
 #[test]

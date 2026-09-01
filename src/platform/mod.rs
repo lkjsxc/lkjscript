@@ -131,7 +131,7 @@ pub use meaning::{
 };
 pub use object::{OBJECT_ADAPTER_CONTRACT_VERSION, ObjectLimits, S3Config, S3Credentials};
 pub use package::{Dependency, ModuleLocator, PackageDescriptor, PackageId, RunnerKind, Target};
-pub use queue::{DURABLE_QUEUE_CONTRACT_VERSION, JobLease, JobSnapshot, JobState, QueueLimits};
+pub use queue::{DURABLE_QUEUE_CONTRACT_VERSION, JobSnapshot, JobState, QueueLimits};
 pub use revision::{
     AffectedOwner, ParentRevision, ReceiptStatus, RevisionCore, RevisionRecord, SemanticHead,
     TransactionReceipt, ValidationFacts,

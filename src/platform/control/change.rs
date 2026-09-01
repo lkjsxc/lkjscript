@@ -16,7 +16,7 @@ use crate::platform::change::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
     DeclarationVisibility, ExternalVisibility, Idempotency, ImplementationName, Name,
-    NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ResourceUnit,
+    NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ParameterUse, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-8";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 8;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-6";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 6;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-9";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 9;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-7";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 7;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -146,11 +146,12 @@ pub(crate) enum CompactChangeFieldForm {
     OperationSelector,
     Idempotency,
     ExternalVisibility,
+    ParameterUse,
     ImplementationName,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 24] = [
+    pub(crate) const ALL: [Self; 25] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -174,6 +175,7 @@ impl CompactChangeFieldForm {
         Self::OperationSelector,
         Self::Idempotency,
         Self::ExternalVisibility,
+        Self::ParameterUse,
         Self::ImplementationName,
     ];
 
@@ -202,6 +204,7 @@ impl CompactChangeFieldForm {
             Self::OperationSelector => "operation_selector",
             Self::Idempotency => "idempotency",
             Self::ExternalVisibility => "external_visibility",
+            Self::ParameterUse => "parameter_use",
             Self::ImplementationName => "implementation_name",
         }
     }
@@ -231,6 +234,7 @@ impl CompactChangeFieldForm {
             Self::OperationSelector => "$NAME|op_HEX",
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
+            Self::ParameterUse => "unrestricted|borrow|consume",
             Self::ImplementationName => "dot.separated.name",
         }
     }
@@ -712,6 +716,11 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 required: true,
                 form: FieldForm::TypeReference,
             },
+            CompactChangeOperationField {
+                name: "use",
+                required: false,
+                form: FieldForm::ParameterUse,
+            },
         ],
         direct: None,
     },
@@ -1064,6 +1073,7 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "secret",
     "parameter",
     "named",
+    "capability-resource",
     "structural-record",
     "list",
     "map",
@@ -1167,6 +1177,18 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
     CompactFormField {
         form: "named",
         name: "declaration",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "capability-resource",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "capability-resource",
+        name: "interface",
         required: true,
         syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
     },
@@ -2073,6 +2095,10 @@ impl Decoder {
         let base = parse_field::<RevisionId>(&request, "base")?;
         let idempotency_key = optional(&request, "idempotency").map(str::to_owned);
         let intent = optional(&request, "intent").map(str::to_owned);
+        let type_labels = self.types.keys().cloned().collect::<Vec<_>>();
+        for label in type_labels {
+            let _ = self.decode_type(&label)?;
+        }
         if self.changes.is_empty() {
             return Err(record_error(
                 &request,
@@ -2412,6 +2438,10 @@ impl Decoder {
                         symbol: symbol(record, "as")?,
                         name: parse_name(record, "name")?,
                         ty: self.decode_type(required(record, "type")?)?,
+                        use_mode: optional(record, "use")
+                            .map(|_| parse_parameter_use(record, "use"))
+                            .transpose()?
+                            .unwrap_or_default(),
                     },
                 })
             }
@@ -2661,6 +2691,12 @@ impl Decoder {
                 check_fields(&record, &["as", "declaration"])?;
                 AuthoredType::Named {
                     declaration: parse_declaration_reference(&record, "declaration")?,
+                }
+            }
+            "type.capability-resource" => {
+                check_fields(&record, &["as", "interface"])?;
+                AuthoredType::CapabilityResource {
+                    interface: parse_declaration_reference(&record, "interface")?,
                 }
             }
             "type.structural-record" => {
@@ -3433,6 +3469,23 @@ fn parse_external_visibility(
             field_name,
             "change_external_visibility",
             format!("external visibility must be none or possible; observed '{value}'"),
+        )),
+    }
+}
+
+fn parse_parameter_use(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<ParameterUse, Diagnostic> {
+    match required(record, field_name)? {
+        "unrestricted" => Ok(ParameterUse::Unrestricted),
+        "borrow" => Ok(ParameterUse::Borrow),
+        "consume" => Ok(ParameterUse::Consume),
+        value => Err(field_error(
+            record,
+            field_name,
+            "change_parameter_use",
+            format!("parameter use must be unrestricted, borrow, or consume; observed '{value}'"),
         )),
     }
 }

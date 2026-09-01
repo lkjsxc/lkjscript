@@ -15,6 +15,12 @@ Every pure command and graph-owned test used for acceptance requires production/
 before comparing the expected value. Skipped, unavailable, cancelled, exhausted, or unrun work is
 not a pass. Live effects are not duplicated for differential evidence.
 
+Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
+share bounded snapshot decoding but cannot share production provenance, transfer, consume, or
+branch-merge logic or encoded expected results. It must agree on both maintained graphs and on
+fabrication, unrestricted resource parameters, borrow/consume, duplicate and post-consume use,
+foreign requirement, branch mismatch, function escape, and forbidden containment mutations.
+
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
 predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
@@ -61,6 +67,11 @@ Verification must prove:
 - stale and competing semantic publication accepts at most one exact base result; and
 - predecessor markers and removed commands never enter alternate dispatch.
 
+A copied executable must also discover and inspect exact-interface resource types and parameter-use
+modes, normalize direct and input-file affine requests identically, accept a publicly authored
+acquire/borrow/consume task, and reject predecessor type/use spellings and raw queue transition
+signatures with an unchanged complete authority inventory.
+
 Test names and retained evidence must map these properties to exact mechanisms. An internal unit
 fixture alone is not copied-binary or maintained-consumer completion.
 
@@ -74,12 +85,16 @@ or lifecycle evidence.
 Service verification freshly builds `lkjournal` through the public binary, requires byte equality
 with the checked-in artifact bundle, and copies the bundle plus deployment descriptors to an
 isolated run. It initializes one first-party data root shared by separately validated service and
-worker grants, validates exact bundle/manifest/root/revision/state identity, launches
-`serve`/`worker`, and exercises login, actor isolation, resource/history/object reconciliation,
-durable claim/completion/stale-attempt behavior, restart, backup, absent-root restore, failed startup
-without readiness, and cleanup. It must audit that no project marker or repository path is opened
-and that canonical typed meaning authority is unchanged before/after. This required product/service
-gate has no database server, container, connection secret, or host database-library prerequisite.
+worker grants, validates exact bundle/manifest/root/revision/state identity, launches `serve` and
+two `worker` processes, and exercises login, actor isolation, resource/history/object
+reconciliation, claim/info/renew/complete, retry/fail, expired-lease replacement, restart, backup,
+absent-root restore, failed startup without readiness, cancellation, and cleanup. A bounded
+independent operational observer decodes the unchanged queue-data format without calling the queue
+engine and records attempt advancement, final state, cleared raw transition fields, productive
+iterations, and clean task shutdown. It must audit that no project marker or repository path is
+opened and that canonical typed meaning authority is unchanged before/after. This required
+product/service gate has no database server, container, connection secret, or host database-library
+prerequisite.
 
 ## Exact release-target admission
 

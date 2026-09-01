@@ -1,4 +1,4 @@
-//! Exact Graph 5 binding for the deployment-owned outbound HTTP client.
+//! Exact Graph 6 binding for the deployment-owned outbound HTTP client.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

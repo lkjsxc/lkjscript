@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, watch};
 
-pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = 1;
+pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_CONCURRENT_TASKS: usize = 4_096;
 pub const MAXIMUM_QUEUED_TASKS: usize = 65_536;
 pub const MAXIMUM_OPERATIONAL_MILLISECONDS: u64 = 3_600_000;

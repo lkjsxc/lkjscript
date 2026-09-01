@@ -1,4 +1,4 @@
-//! Typed additions and contract updates for existing Graph 5 owners.
+//! Typed additions and contract updates for existing Graph 6 owners.
 
 use super::*;
 use crate::platform::kernel::{
@@ -253,6 +253,7 @@ fn lower_add_operation<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
             parent: ParameterParent::Operation(operation_id),
             name: parameter.name.clone(),
             ty,
+            use_mode: parameter.use_mode,
         }))?;
     }
     let result = lowerer.lower_type(&operation.result)?;
@@ -363,6 +364,7 @@ fn lower_add_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
         parent,
         name: parameter.name.clone(),
         ty,
+        use_mode: parameter.use_mode,
     }))
 }
 

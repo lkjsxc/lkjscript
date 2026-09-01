@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 5 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 6 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -14,7 +14,9 @@ use super::value::{
 };
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
-use crate::platform::kernel::{DeclarationReference, ImplementationName, Name, TypeObjectDigest};
+use crate::platform::kernel::{
+    DeclarationReference, ImplementationName, Name, ParameterUse, TypeForm, TypeObjectDigest,
+};
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -265,7 +267,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph5_dense_bytecode_1",
+                production_tier: "graph6_dense_bytecode_2",
             },
         };
         let result = (|| {
@@ -339,6 +341,12 @@ struct ActiveTransaction {
     transaction: Box<dyn NormalizedCapabilityTransaction>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AffineValueShape {
+    Direct,
+    Variant,
+}
+
 struct Machine<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
@@ -392,18 +400,38 @@ impl Machine<'_> {
                 NormalizedInstruction::StaticText(value) => {
                     self.push(NormalizedValue::StaticText(value))?
                 }
-                NormalizedInstruction::LoadLocal(local) => {
-                    let value = self
-                        .frames
-                        .last()
-                        .and_then(|frame| frame.locals.get(local as usize))
-                        .and_then(Clone::clone)
-                        .ok_or_else(|| {
-                            runtime_error(
-                                "normalized_local_uninitialized",
-                                "normalized code read an uninitialized local",
-                            )
-                        })?;
+                NormalizedInstruction::LoadLocal { local, use_mode } => {
+                    let value = match use_mode {
+                        ParameterUse::Consume => self
+                            .frames
+                            .last_mut()
+                            .and_then(|frame| frame.locals.get_mut(local as usize))
+                            .and_then(Option::take),
+                        ParameterUse::Unrestricted | ParameterUse::Borrow => self
+                            .frames
+                            .last()
+                            .and_then(|frame| frame.locals.get(local as usize))
+                            .and_then(Clone::clone),
+                    }
+                    .ok_or_else(|| {
+                        runtime_error(
+                            "normalized_local_uninitialized",
+                            "normalized code read an uninitialized or consumed local",
+                        )
+                    })?;
+                    let contains_resource = value_contains_affine_resource(&value);
+                    let affine_shape = self.affine_value_shape(&value);
+                    let valid = match use_mode {
+                        ParameterUse::Unrestricted => affine_shape.is_none() && !contains_resource,
+                        ParameterUse::Borrow => affine_shape == Some(AffineValueShape::Direct),
+                        ParameterUse::Consume => affine_shape.is_some(),
+                    };
+                    if !valid {
+                        return Err(runtime_error(
+                            "normalized_local_resource_use",
+                            "normalized bytecode local-use mode disagrees with its runtime resource value",
+                        ));
+                    }
                     self.push(value)?;
                 }
                 NormalizedInstruction::StoreLocal(local) => {
@@ -702,6 +730,32 @@ impl Machine<'_> {
                     self.push(result)?;
                 }
             }
+        }
+    }
+
+    fn affine_value_shape(&self, value: &NormalizedValue) -> Option<AffineValueShape> {
+        match value {
+            NormalizedValue::Resource(handle) if handle.is_affine_capability() => {
+                Some(AffineValueShape::Direct)
+            }
+            NormalizedValue::Variant { layout, .. }
+                if self
+                    .program
+                    .variants
+                    .get(layout.0 as usize)
+                    .is_some_and(|variant| {
+                        variant.cases.iter().any(|case| {
+                            case.payload.is_some_and(|payload| {
+                                self.program.types.get(&payload).is_some_and(|object| {
+                                    matches!(object.form, TypeForm::CapabilityResource { .. })
+                                })
+                            })
+                        })
+                    }) =>
+            {
+                Some(AffineValueShape::Variant)
+            }
+            _ => None,
         }
     }
 
@@ -1950,6 +2004,30 @@ fn equal_sequences(
         }
     }
     Ok(true)
+}
+
+fn value_contains_affine_resource(value: &NormalizedValue) -> bool {
+    match value {
+        NormalizedValue::Resource(handle) => handle.is_affine_capability(),
+        NormalizedValue::Variant { payload, .. } => payload
+            .as_deref()
+            .is_some_and(value_contains_affine_resource),
+        NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+            fields.iter().any(value_contains_affine_resource)
+        }
+        NormalizedValue::Record(NormalizedRecord::Structural { fields }) => fields
+            .iter()
+            .any(|(_, value)| value_contains_affine_resource(value)),
+        NormalizedValue::List(items) => items.iter().any(value_contains_affine_resource),
+        NormalizedValue::Map(entries) => entries.values().any(value_contains_affine_resource),
+        NormalizedValue::Unit
+        | NormalizedValue::Bool(_)
+        | NormalizedValue::I64(_)
+        | NormalizedValue::Bytes(_)
+        | NormalizedValue::Text(_)
+        | NormalizedValue::StaticText(_)
+        | NormalizedValue::Function { .. } => false,
+    }
 }
 
 fn binary_i64(

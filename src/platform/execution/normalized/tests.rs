@@ -91,15 +91,15 @@ fn prepare_repository(
 ) -> (tempfile::TempDir, GraphRepository, NormalizedProgram) {
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
-        .expect("Graph 5 repository");
+        .expect("Graph 6 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
     )
     .expect("normalized compilation");
     let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("Graph 5 artifact");
-    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 5 artifact");
+        .expect("Graph 6 artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 6 artifact");
     let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
     (temporary, created.repository, program)
 }
@@ -669,6 +669,7 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
                         parent,
                         name: Name::new(name).unwrap(),
                         ty,
+                        use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
                     }),
                 )
                 .is_none()
@@ -1572,7 +1573,7 @@ fn transaction_result_snapshot() -> crate::platform::kernel::KernelSnapshot {
 }
 
 #[test]
-fn strict_graph5_artifact_prepares_only_dense_runtime_bindings() {
+fn strict_graph6_artifact_prepares_only_dense_runtime_bindings() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let caller = snapshot
         .owners
@@ -1783,6 +1784,7 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
     let handle = resources
         .register_byte_stream(
             authority,
+            program.requirements[0].interface,
             registry
                 .register_memory(b"runtime-only".to_vec())
                 .expect("memory stream"),
@@ -2537,7 +2539,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph5_dense_bytecode_1");
+    assert_eq!(observation.production_tier, "graph6_dense_bytecode_2");
 }
 
 #[test]
@@ -2746,7 +2748,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph5_reference_records_1"
+        "graph6_reference_records_1"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -2827,7 +2829,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
 }
 
 #[test]
-fn every_graph5_expression_form_executes_equally_in_both_tiers() {
+fn every_graph6_expression_form_executes_equally_in_both_tiers() {
     let snapshot = transaction_result_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();
@@ -2854,7 +2856,7 @@ fn every_graph5_expression_form_executes_equally_in_both_tiers() {
 }
 
 #[test]
-fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
+fn both_graph6_execution_tiers_commit_and_rollback_exact_transactions() {
     let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();

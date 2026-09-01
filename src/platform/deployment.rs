@@ -1,4 +1,4 @@
-//! Strict standalone artifact-10 deployment and normalized resident execution.
+//! Strict standalone artifact-11 deployment and normalized resident execution.
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
 use super::configuration::{

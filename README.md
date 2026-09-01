@@ -14,13 +14,21 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source and the immutable supported release are product snapshot 0.1.14. They include public
-exact built-in dependency, component, requirement, function-backed port, and command/HTTP target
-authoring. All four built-in recipes lower through that same typed authored-operation engine without
-changing their resulting meaning or atomic project-creation contract. The release also includes one
-deployment-bound outbound `HttpClient.get` capability and a closed `nostr-relay-info` recipe proved
-against deterministic loopback raw HTTP/TLS/DNS fixtures. No deployment, live relay, WebSocket, or
-NIP-01 event flow is claimed here.
+Current source is unreleased product snapshot 0.1.15; the immutable supported release remains
+`v0.1.14`. Both include public exact built-in dependency, component, requirement, function-backed
+port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
+authored-operation engine without changing their resulting meaning or atomic project-creation
+contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
+a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
+No deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
+
+Source 0.1.15 adds exact-interface affine capability resources. Public compact records expose
+`type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
+fabrication, aliases, foreign authority, branch disagreement, escape, and use after consume before
+publication. The maintained standard queue now returns an absent/live resource variant, exposes
+metadata only through `lease-info` borrow, and consumes leases through renewal, completion, or
+failure. Raw attempt/worker transition tokens are no longer graph or adapter inputs. The queue data
+and backup formats remain unchanged. These source changes are not part of immutable `v0.1.14`.
 
 The current source and immutable v0.1.14 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
@@ -391,6 +399,12 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 `state/data`; object bytes remain beneath `state/objects`. The HTTP listener is plaintext and the
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
+
+In source 0.1.15 the worker claims `QueueLeaseState`, matches its live resource, borrows
+`QueueLeaseInfo`, then consumes the lease through heartbeat and the renewed lease through complete
+or fail. A handle is bound to the exact worker task, resource kind, `DurableQueue` interface, and
+`jobs` requirement. Dropping it performs no implicit queue transition, and no application code
+threads attempt or worker transition identity.
 
 ## Public surface and compatibility
 

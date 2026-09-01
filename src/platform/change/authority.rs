@@ -1,4 +1,4 @@
-//! Exact Graph 5 semantic-root and validation-certificate staging over generic immutable storage.
+//! Exact Graph 6 semantic-root and validation-certificate staging over generic immutable storage.
 
 use super::{
     CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedChangeAnalysis, WitnessBaseRead,

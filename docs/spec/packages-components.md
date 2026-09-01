@@ -19,6 +19,11 @@ public interface binding. The dependency's package transport carries the complet
 meaning and exact transitive selection required to install that binding. It is immutable transport,
 not editable source or an alternate package repository.
 
+Public package interfaces retain exact-interface capability-resource types and operation parameter
+use modes. Resource interface references must resolve inside the exact dependency closure and
+participate in interface identity. A missing, foreign, wrong-kind, or predecessor resource/use
+shape rejects before a dependent graph can be accepted.
+
 Dependency resolution is closed and deterministic. The current released application lifecycle
 accepts either no dependencies or the one exact built-in standard dependency. Missing, extra,
 foreign, stale, truncated, duplicate, noncanonical, or interface-inconsistent closure rejects
@@ -94,11 +99,18 @@ Artifacts contain semantic requirements but never deployment grants, credentials
 host paths, or accepted repository visibility. An artifact is a derived executable input, not a
 writer of typed meaning authority.
 
+Compiler units preserve unrestricted/borrow/consume local-load decisions. Artifact metadata retains
+the exact resource type, interface, operation parameter use, and requirement closure, but never a
+live handle or private queue attempt tuple. Strict decoding rejects predecessor compiler,
+bytecode, artifact, or package-interface forms before normalized execution.
+
 ## Preparation, execution, and deployment
 
 `NormalizedProgram` maps exact artifact owners and compiler operands to compact process-local
-indexes. These dense indexes are replaceable and do not become stable identities. Pure command and
-test execution must agree with the canonical repository reference interpreter.
+indexes. These dense indexes are replaceable and do not become stable identities. Runtime resource
+entries are additionally bound to one task scope, exact kind, interface, and acquiring requirement;
+they cannot be reconstructed from ordinary values. Pure command and test execution must agree with
+the canonical repository reference interpreter.
 
 A deployment descriptor is external operational authority. It selects an exact artifact and target,
 binds requirement aliases to generic adapters and secret/configuration sources, and sets resource

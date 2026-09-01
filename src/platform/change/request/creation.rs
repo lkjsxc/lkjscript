@@ -1,4 +1,4 @@
-//! Typed Graph 5 declaration, type-object, and expression authoring builders.
+//! Typed Graph 6 declaration, type-object, and expression authoring builders.
 
 mod declarations;
 mod mutation;
@@ -27,7 +27,7 @@ use crate::platform::kernel::{
     DeclarationVisibility, ExpressionOperation, ExpressionRecord, FieldReference, FieldSelector,
     FunctionDeclaration, FunctionEffect, LocalValueReference, MapExpressionEntry,
     MatchExpressionArm, Name, OperationReference, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
-    ParameterParent, ParameterRecord, RecordExpressionField, RequirementReference,
+    ParameterParent, ParameterRecord, ParameterUse, RecordExpressionField, RequirementReference,
     StructuralTypeField, TextValue, TypeForm, TypeObjectDigest, TypeParameterRecord,
 };
 use crate::platform::semantic_id::{
@@ -46,6 +46,7 @@ pub struct AuthoredParameter {
     pub symbol: String,
     pub name: Name,
     pub ty: AuthoredType,
+    pub use_mode: ParameterUse,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -70,6 +71,9 @@ pub enum AuthoredType {
     },
     Named {
         declaration: AuthoredDeclarationReference,
+    },
+    CapabilityResource {
+        interface: AuthoredDeclarationReference,
     },
     StructuralRecord {
         fields: Vec<AuthoredStructuralTypeField>,
@@ -476,6 +480,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             parent: ParameterParent::Function(declaration),
             name: parameter.name.clone(),
             ty,
+            use_mode: parameter.use_mode,
         }))?;
     }
     let result = lowerer.lower_type(result)?;
@@ -545,6 +550,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             },
             AuthoredType::Named { declaration } => TypeForm::Named {
                 declaration: self.lower_declaration_reference(declaration)?,
+            },
+            AuthoredType::CapabilityResource { interface } => TypeForm::CapabilityResource {
+                interface: self.lower_declaration_reference(interface)?,
             },
             AuthoredType::StructuralRecord { fields } => {
                 let mut lowered = Vec::with_capacity(fields.len());

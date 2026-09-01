@@ -1,4 +1,4 @@
-//! Content-addressed, structural Graph 5 type objects.
+//! Content-addressed, structural Graph 6 type objects.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN};
 use super::digest::TypeObjectDigest;
@@ -59,6 +59,7 @@ impl TypeObject {
             | TypeForm::Secret
             | TypeForm::TypeParameter { .. }
             | TypeForm::Named { .. }
+            | TypeForm::CapabilityResource { .. }
             | TypeForm::List { .. }
             | TypeForm::Map { .. }
             | TypeForm::Option { .. }
@@ -94,7 +95,8 @@ impl TypeObject {
             | TypeForm::StaticText
             | TypeForm::Secret
             | TypeForm::TypeParameter { .. }
-            | TypeForm::Named { .. } => Vec::new(),
+            | TypeForm::Named { .. }
+            | TypeForm::CapabilityResource { .. } => Vec::new(),
         }
     }
 }
@@ -114,6 +116,9 @@ pub enum TypeForm {
     },
     Named {
         declaration: DeclarationReference,
+    },
+    CapabilityResource {
+        interface: DeclarationReference,
     },
     StructuralRecord {
         fields: Vec<StructuralTypeField>,
@@ -243,7 +248,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(type_error(
             "kernel_type_child_count",
-            format!("{label} count {count} is outside the Graph 5 bound"),
+            format!("{label} count {count} is outside the Graph 6 bound"),
         ));
     }
     Ok(())

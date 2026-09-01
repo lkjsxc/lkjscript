@@ -1,4 +1,4 @@
-//! Strict typed JSON conversion at normalized Graph 5 runner boundaries.
+//! Strict typed JSON conversion at normalized Graph 6 runner boundaries.
 
 use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{
@@ -182,6 +182,7 @@ fn from_json(
             Ok(NormalizedValue::Map(Arc::new(output)))
         }
         TypeForm::Secret
+        | TypeForm::CapabilityResource { .. }
         | TypeForm::Stream { .. }
         | TypeForm::Function { .. }
         | TypeForm::TypeParameter { .. } => Err(type_error(
@@ -417,9 +418,16 @@ fn to_json(
                 .collect::<Result<Vec<_>, Diagnostic>>()?;
             Ok(JsonValue::Array(entries))
         }
-        (_, TypeForm::Secret | TypeForm::Stream { .. } | TypeForm::Function { .. }) => Err(
-            type_error(path, "live or callable values cannot be encoded as JSON"),
-        ),
+        (
+            _,
+            TypeForm::Secret
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::Stream { .. }
+            | TypeForm::Function { .. },
+        ) => Err(type_error(
+            path,
+            "live or callable values cannot be encoded as JSON",
+        )),
         (_, TypeForm::TypeParameter { .. }) => Err(type_error(
             path,
             "unresolved generic values cannot be encoded as JSON",

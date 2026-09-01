@@ -4,7 +4,7 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, ExternalVisibility,
     FieldReference, Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerKind,
-    PackageId, PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
+    PackageId, ParameterUse, PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{ParameterId, TypeParameterId};
@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-1";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 1;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-1";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 1;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN01";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v1";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v1";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-2";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 2;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-2";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 2;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN02";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v2";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v2";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -183,6 +183,7 @@ pub struct CompiledSignature {
 pub struct CompiledParameter {
     pub parameter: ParameterId,
     pub ty: u32,
+    pub use_mode: ParameterUse,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -241,7 +242,10 @@ pub enum CompiledInstruction {
     I64(i64),
     Text(u32),
     StaticText(u32),
-    LoadLocal(u32),
+    LoadLocal {
+        local: u32,
+        use_mode: ParameterUse,
+    },
     StoreLocal(u32),
     Drop,
     JumpIfFalse(u32),
@@ -427,7 +431,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 5 inline bound",
+                        "compiled inline text exceeds the Graph 6 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -712,7 +716,7 @@ impl CompiledInstruction {
             Self::Text(index) | Self::StaticText(index) => {
                 require_index("text constant", *index, tables.texts.len())
             }
-            Self::LoadLocal(local) | Self::StoreLocal(local) => {
+            Self::LoadLocal { local, .. } | Self::StoreLocal(local) => {
                 require_index("local", *local, code.local_count as usize)
             }
             Self::JumpIfFalse(target) | Self::Jump(target) => {
@@ -967,7 +971,7 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         | CompiledInstruction::I64(_)
         | CompiledInstruction::Text(_)
         | CompiledInstruction::StaticText(_)
-        | CompiledInstruction::LoadLocal(_)
+        | CompiledInstruction::LoadLocal { .. }
         | CompiledInstruction::FunctionValue { .. } => (0, 1),
         CompiledInstruction::StoreLocal(_) | CompiledInstruction::Drop => (1, 0),
         CompiledInstruction::JumpIfFalse(_) => (1, 0),

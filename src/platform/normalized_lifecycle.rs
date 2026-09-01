@@ -1,4 +1,4 @@
-//! Shared Graph 5 compiler, linker, artifact-loader, and dense-runtime preparation.
+//! Shared Graph 6 compiler, linker, artifact-loader, and dense-runtime preparation.
 
 use super::builtin_standard::BuiltinStandard;
 use super::compiler::{
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn maintained_application_clean_build_matches_its_owned_artifact() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
-        let repository = GraphRepository::open(&root).expect("open maintained Graph 5 lkjournal");
+        let repository = GraphRepository::open(&root).expect("open maintained Graph 6 lkjournal");
         let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline)
             .expect("clean compile maintained lkjournal");
         let standard = BuiltinStandard::load().expect("load exact built-in standard");

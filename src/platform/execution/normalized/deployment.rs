@@ -1,4 +1,4 @@
-//! Exact deployment preparation for normalized Graph 5 capability adapters.
+//! Exact deployment preparation for normalized Graph 6 capability adapters.
 
 use super::byte_stream::{NormalizedByteStreamAdapter, NormalizedByteStreamOperation};
 use super::capability::{
@@ -491,10 +491,10 @@ impl NormalizedPreparedDeployment {
         resources: &NormalizedResourceScope,
         bytes: Vec<u8>,
     ) -> Result<NormalizedValue, ExecutionError> {
-        self.require_stream_grant(requirement)?;
+        let interface = self.require_stream_grant(requirement)?;
         let lease = self.streams.register_memory(bytes)?;
         resources
-            .register_byte_stream(requirement, lease)
+            .register_byte_stream(requirement, interface, lease)
             .map(NormalizedValue::Resource)
     }
 
@@ -504,30 +504,25 @@ impl NormalizedPreparedDeployment {
         resources: &NormalizedResourceScope,
         maximum_total_bytes: u64,
     ) -> Result<(NormalizedValue, ByteStreamProducer), ExecutionError> {
-        self.require_stream_grant(requirement)?;
+        let interface = self.require_stream_grant(requirement)?;
         let (lease, producer) = self.streams.register_pipe_with_limit(maximum_total_bytes)?;
-        let handle = resources.register_byte_stream(requirement, lease)?;
+        let handle = resources.register_byte_stream(requirement, interface, lease)?;
         Ok((NormalizedValue::Resource(handle), producer))
     }
 
     fn require_stream_grant(
         &self,
         requirement: RequirementReference,
-    ) -> Result<(), ExecutionError> {
-        if self
-            .observation
-            .grants
-            .get(&requirement)
-            .is_some_and(|grant| grant.adapter_kind == NormalizedAdapterKind::ByteStream)
-        {
-            Ok(())
-        } else {
-            Err(ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "normalized_stream_grant",
-                "deployment has no byte-stream adapter for the exact requirement",
-            ))
-        }
+    ) -> Result<DeclarationReference, ExecutionError> {
+        self.capabilities
+            .exact_interface(requirement, NormalizedAdapterKind::ByteStream)
+            .ok_or_else(|| {
+                ExecutionError::new(
+                    ExecutionFailureClass::Capability,
+                    "normalized_stream_grant",
+                    "deployment has no byte-stream adapter for the exact requirement",
+                )
+            })
     }
 
     #[cfg(test)]

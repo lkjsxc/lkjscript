@@ -1,4 +1,4 @@
-//! Revision-pinned, bounded reads over accepted Graph 5 authority and its committed witness.
+//! Revision-pinned, bounded reads over accepted Graph 6 authority and its committed witness.
 
 use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
@@ -555,7 +555,7 @@ fn logical_plan_evidence(
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
-/// Packs are append-only in the current Graph 5 store, so a later HEAD publication cannot alter
+/// Packs are append-only in the current Graph 6 store, so a later HEAD publication cannot alter
 /// any object visible through this view. Future physical deletion must add an explicit lease
 /// before it may coexist with these views.
 #[derive(Debug)]
@@ -936,7 +936,7 @@ impl RepositoryView {
         Ok(self.read(value, work))
     }
 
-    /// Reconstructs the complete logical Graph 5 view for independent full validation and
+    /// Reconstructs the complete logical Graph 6 view for independent full validation and
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {

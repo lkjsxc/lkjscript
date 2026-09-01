@@ -19,7 +19,8 @@ The closed current type surface is:
 
 - `Unit`, `Bool`, checked signed `I64`, immutable `Bytes`, UTF-8 `Text`, and compile-time
   `StaticText`;
-- opaque `Secret` and typed live `Resource` handles;
+- opaque `Secret`, typed live `Resource` handles, and exact-interface
+  `CapabilityResource<Interface>` values;
 - nominal records and variants plus structural adapter records;
 - homogeneous lists and deterministic ordered maps;
 - option and result;
@@ -36,6 +37,28 @@ items.
 Live resources, secrets, streams, database transactions, queue leases, and runtime handles never
 enter durable graph values. A durable literal has one canonical typed encoding and an owning
 decoder bound.
+
+## Affine capability resources
+
+`CapabilityResource<Interface>` is canonical graph type meaning bound to one exact interface
+reference. It is task-local, runtime-only, non-equal, non-serializable, and cannot be fabricated by
+a literal, constant, decoder, external, pure function, callback, or constructor. Only an exact
+requirement capability call whose result has the same exact interface may acquire one. The runtime
+value retains that acquiring requirement as authority.
+
+Every operation parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`.
+Nonresource parameters must be unrestricted. A direct capability-resource parameter must be an
+explicit borrow or consume. Function parameters and results containing resources reject; resource
+transfer across graph function, generic-function, port, or capture boundaries is not implemented.
+
+Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
+owner and preserves it. A consume moves that owner; every later use on a reachable path rejects
+before publication. Dropping an unconsumed resource is allowed. A nominal variant may contain one
+direct resource payload: matching consumes the outer owner and makes the payload live only in the
+selected arm. A join retains an owner only when every reachable arm retains the same provenance.
+Records, structural records, lists, maps, options, results, streams, function values, constants,
+tests, and nested nominal values cannot contain a resource. Partial moves, affine containers,
+resource polymorphism, closures, and general linear must-use semantics are absent.
 
 ## Declarations, effects, and capabilities
 
@@ -137,8 +160,9 @@ external failures become typed operation results.
 
 Acceptance checks namespace uniqueness, visibility, imports/exports, stable identity shape,
 generic parameter scope/substitution/recursion, type agreement, effect closure, capability
-membership, component requirements and ports, target bindings, test types, expression/binding
-shape, canonical relations, and exact dependency closure.
+membership, exact resource provenance and language-order borrow/consume flow, branch joins and
+escape, component requirements and ports, target bindings, test types, expression/binding shape,
+canonical relations, and exact dependency closure.
 
 A precondition-free transaction may prepare locally when it contains only eligible pure-function
 body replacements, only independent empty-module creations, only module renames, or only

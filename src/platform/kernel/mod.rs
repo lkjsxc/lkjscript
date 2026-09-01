@@ -1,4 +1,4 @@
-//! Current Graph 5 semantic kernel behind the typed process boundary.
+//! Current Graph 6 semantic kernel behind the typed process boundary.
 //!
 //! These normalized records and complete oracles own current program meaning. The module remains
 //! crate-private so Rust representation is not elevated into the public language contract.
@@ -8,6 +8,9 @@
     reason = "closed kernel exports include independent test oracles and future typed adapters"
 )]
 
+mod affine;
+#[cfg(test)]
+mod affine_reference;
 mod codec;
 pub mod contract;
 mod digest;
@@ -27,6 +30,7 @@ mod state;
 mod type_object;
 mod validate;
 
+pub(crate) use affine::validate_affine_roots_with_limits;
 pub use codec::{
     DEPENDENCY_BINDING_BYTES, OWNER_BINDING_BYTES, RETIREMENT_BINDING_BYTES, decode_dependency,
     decode_dependency_binding, decode_owner, decode_owner_binding, decode_retirement,

@@ -1,4 +1,4 @@
-//! Current Graph 5 immutable-store contract facts.
+//! Current Graph 6 immutable-store contract facts.
 
 pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store-1";
 pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack-1";
@@ -38,10 +38,10 @@ pub const DRAFT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.draft-object.v5";
 pub const CONFLICT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.conflict-object.v5";
 pub const COMPILER_UNIT_DIGEST_DOMAIN: &str = "lkjscript.compiler-unit.v1";
 pub const COMPILATION_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.compilation-manifest-object.v1";
-pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v10";
+pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v11";
 pub const BACKUP_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.backup-manifest.v5";
 pub const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.backup-segment.v5";
-pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v3";
+pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v4";
 pub const MAP_PAGE_DIGEST_DOMAIN: &str =
     crate::platform::contract::registry::MAP_PAGE_DIGEST_DOMAIN;
 

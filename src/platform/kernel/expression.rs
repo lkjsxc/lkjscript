@@ -1,4 +1,4 @@
-//! Stable-ID Graph 5 expression records.
+//! Stable-ID Graph 6 expression records.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_INLINE_TEXT_BYTES};
 use super::digest::{BlobObjectDigest, TypeObjectDigest};
@@ -353,7 +353,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(expression_error(
             "kernel_expression_child_count",
-            format!("{label} count {count} is outside the Graph 5 bound"),
+            format!("{label} count {count} is outside the Graph 6 bound"),
         ));
     }
     Ok(())

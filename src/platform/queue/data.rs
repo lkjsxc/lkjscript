@@ -243,6 +243,7 @@ impl DataQueue {
             Ok(Some(JobLease {
                 job_id: job.job_id.clone(),
                 attempt_id,
+                worker_id: worker_id.to_owned(),
                 payload: job.payload.clone(),
                 attempt_number: job.attempt_count,
                 lease_until_milliseconds: lease_until,

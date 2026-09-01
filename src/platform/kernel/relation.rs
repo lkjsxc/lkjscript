@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 5 records.
+//! Single deterministic relation extractor for Graph 6 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -793,6 +793,15 @@ where
                     RelationKind::NamedTypeUse,
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
+                )?;
+            }
+            TypeForm::CapabilityResource { interface } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::CapabilityInterface,
+                    interface.package,
+                    OwnerKey::Declaration(interface.declaration),
                 )?;
             }
             _ => pending.extend(object.child_types()),

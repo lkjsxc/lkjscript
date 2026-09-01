@@ -1,4 +1,4 @@
-//! Exact deployment-grant binding for normalized Graph 5 requirements.
+//! Exact deployment-grant binding for normalized Graph 6 requirements.
 
 use super::prepare::NormalizedProgram;
 use super::resource::NormalizedResourceScope;
@@ -249,6 +249,17 @@ struct BoundNormalizedCapability {
 }
 
 impl NormalizedCapabilities {
+    pub(crate) fn exact_interface(
+        &self,
+        requirement: RequirementReference,
+        kind: NormalizedAdapterKind,
+    ) -> Option<DeclarationReference> {
+        self.exact_bindings
+            .get(&requirement)
+            .filter(|binding| binding.descriptor.adapter_kind == kind)
+            .map(|binding| binding.descriptor.interface)
+    }
+
     pub fn bind(
         program: &NormalizedProgram,
         component: super::value::ComponentIndex,

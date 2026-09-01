@@ -69,8 +69,11 @@ const FORBIDDEN: &[&str] = &[
     "lkjscript-deployment-",
     "lkjscript-artifact-",
     "artifact-10",
+    "artifact-11",
     "graph 5",
     "graph5",
+    "graph 6",
+    "graph6",
     "cli contract",
     "contract registry",
     "executable registry",
@@ -507,9 +510,11 @@ mod tests {
         assert!(violations.is_empty());
         for forbidden in [
             "Graph 5",
+            "Graph 6",
             "CLI contract 13",
             "lkjscript-cli-13",
             "artifact-10",
+            "artifact-11",
             "lkjscript-deployment-1",
             "lkjscript-change-records-6",
             "lkjscript-contract-registry-3",

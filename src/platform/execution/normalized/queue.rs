@@ -1,15 +1,16 @@
-//! Exact artifact-10 durable-queue codec over the representation-neutral queue engine.
+//! Exact durable-queue capability adapter over the representation-neutral queue engine.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
-use super::resource::NormalizedResourceScope;
-use super::value::{NormalizedRecord, NormalizedValue};
+use super::resource::{NormalizedResourceHandle, NormalizedResourceScope, QueueLeaseInfo};
+use super::value::{NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
-    DeclarationReference, ExternalVisibility, Name, OperationReference, TypeForm, TypeObjectDigest,
+    DeclarationReference, ExternalVisibility, Name, OperationReference, ParameterUse, TypeForm,
+    TypeObjectDigest,
 };
-use crate::platform::queue::{DurableQueueEngine, JobLease, JobSnapshot};
+use crate::platform::queue::{DurableQueueEngine, JobSnapshot};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -21,6 +22,7 @@ enum QueueOperation {
     Initialize,
     Enqueue,
     Claim,
+    LeaseInfo,
     Heartbeat,
     Complete,
     Fail,
@@ -29,8 +31,7 @@ enum QueueOperation {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum LeaseField {
-    AttemptId,
+enum LeaseInfoField {
     AttemptNumber,
     JobId,
     LeaseUntilMilliseconds,
@@ -49,8 +50,16 @@ enum SnapshotField {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct StructuralCodec<T> {
+struct RecordCodec<T> {
+    layout: Option<RecordLayoutIndex>,
     fields: Arc<[(Name, T)]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LeaseStateCodec {
+    layout: VariantLayoutIndex,
+    absent_case: u32,
+    live_case: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -59,8 +68,9 @@ pub(crate) struct NormalizedDurableQueueAdapter {
     interface: DeclarationReference,
     operations: BTreeMap<OperationReference, QueueOperation>,
     exact_operations: BTreeSet<OperationReference>,
-    lease: Option<StructuralCodec<LeaseField>>,
-    snapshot: Option<StructuralCodec<SnapshotField>>,
+    lease_state: Option<LeaseStateCodec>,
+    lease_info: Option<RecordCodec<LeaseInfoField>>,
+    snapshot: Option<RecordCodec<SnapshotField>>,
     engine: DurableQueueEngine,
 }
 
@@ -78,8 +88,10 @@ impl NormalizedDurableQueueAdapter {
             ));
         }
         require_standard_interface(requirement.interface)?;
+        let resource = Shape::Resource(requirement.interface);
         let mut operations = BTreeMap::new();
-        let mut lease = None;
+        let mut lease_state = None;
+        let mut lease_info = None;
         let mut snapshot = None;
         for index in requirement.operations.iter().copied() {
             let operation = program.operations.get(index.0 as usize).ok_or_else(|| {
@@ -98,11 +110,11 @@ impl NormalizedDurableQueueAdapter {
                         program,
                         operation,
                         &[
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::Bytes,
-                            Shape::I64,
-                            Shape::I64,
+                            ordinary(Shape::Text),
+                            ordinary(Shape::Text),
+                            ordinary(Shape::Bytes),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::I64),
                         ],
                         Shape::Bool,
                     )?;
@@ -112,27 +124,46 @@ impl NormalizedDurableQueueAdapter {
                     signature(
                         program,
                         operation,
-                        &[Shape::Text, Shape::I64, Shape::I64],
-                        Shape::List,
+                        &[
+                            ordinary(Shape::Text),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::I64),
+                        ],
+                        Shape::NamedVariant,
                     )?;
-                    lease = Some(StructuralCodec::lease(
-                        program,
-                        list_item(program, operation.result)?,
-                    )?);
+                    merge_lease_state(
+                        &mut lease_state,
+                        LeaseStateCodec::prepare(program, operation.result, requirement.interface)?,
+                    )?;
                     QueueOperation::Claim
+                }
+                "lease-info" => {
+                    signature(
+                        program,
+                        operation,
+                        &[(resource, ParameterUse::Borrow)],
+                        Shape::NamedRecord,
+                    )?;
+                    merge_lease_info(
+                        &mut lease_info,
+                        RecordCodec::lease_info(program, operation.result)?,
+                    )?;
+                    QueueOperation::LeaseInfo
                 }
                 "heartbeat" => {
                     signature(
                         program,
                         operation,
                         &[
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::I64,
-                            Shape::I64,
+                            (resource, ParameterUse::Consume),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::I64),
                         ],
-                        Shape::Bool,
+                        Shape::NamedVariant,
+                    )?;
+                    merge_lease_state(
+                        &mut lease_state,
+                        LeaseStateCodec::prepare(program, operation.result, requirement.interface)?,
                     )?;
                     QueueOperation::Heartbeat
                 }
@@ -141,11 +172,9 @@ impl NormalizedDurableQueueAdapter {
                         program,
                         operation,
                         &[
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::I64,
-                            Shape::Bytes,
+                            (resource, ParameterUse::Consume),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::Bytes),
                         ],
                         Shape::Bool,
                     )?;
@@ -156,25 +185,28 @@ impl NormalizedDurableQueueAdapter {
                         program,
                         operation,
                         &[
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::Text,
-                            Shape::I64,
-                            Shape::Bool,
-                            Shape::I64,
-                            Shape::Text,
+                            (resource, ParameterUse::Consume),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::Bool),
+                            ordinary(Shape::I64),
+                            ordinary(Shape::Text),
                         ],
                         Shape::Bool,
                     )?;
                     QueueOperation::Fail
                 }
                 "cancel" => {
-                    signature(program, operation, &[Shape::Text, Shape::I64], Shape::Bool)?;
+                    signature(
+                        program,
+                        operation,
+                        &[ordinary(Shape::Text), ordinary(Shape::I64)],
+                        Shape::Bool,
+                    )?;
                     QueueOperation::Cancel
                 }
                 "inspect" => {
-                    signature(program, operation, &[Shape::Text], Shape::List)?;
-                    snapshot = Some(StructuralCodec::snapshot(
+                    signature(program, operation, &[ordinary(Shape::Text)], Shape::List)?;
+                    snapshot = Some(RecordCodec::snapshot(
                         program,
                         list_item(program, operation.result)?,
                     )?);
@@ -203,7 +235,8 @@ impl NormalizedDurableQueueAdapter {
             interface: requirement.interface,
             operations,
             exact_operations,
-            lease,
+            lease_state,
+            lease_info,
             snapshot,
             engine,
         })
@@ -230,6 +263,15 @@ impl NormalizedDurableQueueAdapter {
                 )
             })
     }
+
+    fn lease_state(&self) -> Result<&LeaseStateCodec, ExecutionError> {
+        self.lease_state.as_ref().ok_or_else(|| {
+            queue_runtime(
+                "normalized_queue_lease_state_codec",
+                "queue operation has no prepared exact lease-state codec",
+            )
+        })
+    }
 }
 
 impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
@@ -249,7 +291,7 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
-        _resources: &NormalizedResourceScope,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -291,72 +333,88 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
                 let [
                     NormalizedValue::Text(worker_id),
                     NormalizedValue::I64(now),
-                    NormalizedValue::I64(lease),
+                    NormalizedValue::I64(lease_duration),
                 ] = arguments.as_slice()
                 else {
                     return Err(queue_argument(
                         "claim expects worker id, current time, and lease duration",
                     ));
                 };
-                let lease = self
-                    .engine
-                    .claim(worker_id, *now, *lease, control, possible)?;
-                let codec = self.lease.as_ref().ok_or_else(|| {
-                    queue_runtime(
-                        "normalized_queue_lease_codec",
-                        "claim has no prepared exact lease codec",
-                    )
-                })?;
-                Ok(NormalizedValue::List(Arc::new(
-                    lease
-                        .into_iter()
-                        .map(|lease| codec.encode_lease(lease))
-                        .collect(),
-                )))
+                let reservation =
+                    resources.reserve_queue_lease(policy.requirement, self.interface)?;
+                let lease =
+                    self.engine
+                        .claim(worker_id, *now, *lease_duration, control, possible)?;
+                match lease {
+                    Some(lease) => {
+                        let handle = reservation.commit(lease)?;
+                        Ok(self.lease_state()?.live(handle))
+                    }
+                    None => Ok(self.lease_state()?.absent()),
+                }
+            }
+            QueueOperation::LeaseInfo => {
+                let [NormalizedValue::Resource(handle)] = arguments.as_slice() else {
+                    return Err(queue_argument("lease-info expects one queue lease"));
+                };
+                let info =
+                    resources.borrow_queue_lease(policy.requirement, self.interface, *handle)?;
+                self.lease_info
+                    .as_ref()
+                    .ok_or_else(|| {
+                        queue_runtime(
+                            "normalized_queue_lease_info_codec",
+                            "lease-info has no prepared exact result codec",
+                        )
+                    })?
+                    .encode_lease_info(info)
             }
             QueueOperation::Heartbeat => {
                 let [
-                    NormalizedValue::Text(job_id),
-                    NormalizedValue::Text(attempt_id),
-                    NormalizedValue::Text(worker_id),
+                    NormalizedValue::Resource(handle),
                     NormalizedValue::I64(now),
-                    NormalizedValue::I64(lease),
+                    NormalizedValue::I64(lease_duration),
                 ] = arguments.as_slice()
                 else {
                     return Err(queue_argument(
-                        "heartbeat expects job id, attempt id, worker id, current time, and lease duration",
+                        "heartbeat expects a queue lease, current time, and lease duration",
                     ));
                 };
-                self.engine
-                    .heartbeat(
-                        job_id, attempt_id, worker_id, *now, *lease, control, possible,
-                    )
-                    .map(NormalizedValue::Bool)
+                let reservation =
+                    resources.reserve_queue_lease(policy.requirement, self.interface)?;
+                let lease =
+                    resources.consume_queue_lease(policy.requirement, self.interface, *handle)?;
+                let renewed =
+                    self.engine
+                        .heartbeat_lease(lease, *now, *lease_duration, control, possible)?;
+                match renewed {
+                    Some(renewed) => {
+                        let handle = reservation.commit(renewed)?;
+                        Ok(self.lease_state()?.live(handle))
+                    }
+                    None => Ok(self.lease_state()?.absent()),
+                }
             }
             QueueOperation::Complete => {
                 let [
-                    NormalizedValue::Text(job_id),
-                    NormalizedValue::Text(attempt_id),
-                    NormalizedValue::Text(worker_id),
+                    NormalizedValue::Resource(handle),
                     NormalizedValue::I64(now),
                     NormalizedValue::Bytes(result),
                 ] = arguments.as_slice()
                 else {
                     return Err(queue_argument(
-                        "complete expects job id, attempt id, worker id, current time, and result",
+                        "complete expects a queue lease, current time, and result",
                     ));
                 };
+                let lease =
+                    resources.consume_queue_lease(policy.requirement, self.interface, *handle)?;
                 self.engine
-                    .complete(
-                        job_id, attempt_id, worker_id, *now, result, control, possible,
-                    )
+                    .complete_lease(lease, *now, result, control, possible)
                     .map(NormalizedValue::Bool)
             }
             QueueOperation::Fail => {
                 let [
-                    NormalizedValue::Text(job_id),
-                    NormalizedValue::Text(attempt_id),
-                    NormalizedValue::Text(worker_id),
+                    NormalizedValue::Resource(handle),
                     NormalizedValue::I64(now),
                     NormalizedValue::Bool(retry),
                     NormalizedValue::I64(retry_at),
@@ -364,14 +422,14 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
                 ] = arguments.as_slice()
                 else {
                     return Err(queue_argument(
-                        "fail expects job id, attempt id, worker id, current time, retry decision, retry time, and error class",
+                        "fail expects a queue lease, current time, retry decision, retry time, and error class",
                     ));
                 };
+                let lease =
+                    resources.consume_queue_lease(policy.requirement, self.interface, *handle)?;
                 self.engine
-                    .fail(
-                        job_id,
-                        attempt_id,
-                        worker_id,
+                    .fail_lease(
+                        lease,
                         *now,
                         *retry,
                         *retry_at,
@@ -417,49 +475,158 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
     }
 }
 
-impl StructuralCodec<LeaseField> {
-    fn lease(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<Self, Diagnostic> {
-        let expected = BTreeMap::from([
-            ("attempt_id", (LeaseField::AttemptId, Shape::Text)),
-            ("attempt_number", (LeaseField::AttemptNumber, Shape::I64)),
-            ("job_id", (LeaseField::JobId, Shape::Text)),
-            (
-                "lease_until_milliseconds",
-                (LeaseField::LeaseUntilMilliseconds, Shape::I64),
-            ),
-            ("payload", (LeaseField::Payload, Shape::Bytes)),
-        ]);
-        Self::prepare(program, ty, &expected, "queue lease")
+impl LeaseStateCodec {
+    fn prepare(
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+        interface: DeclarationReference,
+    ) -> Result<Self, Diagnostic> {
+        let declaration = named_declaration(program, ty, "queue lease state")?;
+        let (layout, variant) = program
+            .variants
+            .iter()
+            .enumerate()
+            .find(|(_, layout)| layout.declaration == declaration)
+            .ok_or_else(|| {
+                queue_diagnostic(
+                    "normalized_queue_lease_state_layout",
+                    "queue lease state has no exact nominal variant layout",
+                )
+            })?;
+        if variant.cases.len() != 2 {
+            return Err(queue_diagnostic(
+                "normalized_queue_lease_state_cases",
+                "queue lease state must contain exactly absent and live cases",
+            ));
+        }
+        let mut absent_case = None;
+        let mut live_case = None;
+        for (tag, case) in variant.cases.iter().enumerate() {
+            let tag = u32::try_from(tag).map_err(|_| {
+                queue_diagnostic(
+                    "normalized_queue_lease_state_tag",
+                    "queue lease state case index exceeds the runtime bound",
+                )
+            })?;
+            match case.name.as_str() {
+                "absent" if case.payload.is_none() => absent_case = Some(tag),
+                "live"
+                    if case
+                        .payload
+                        .is_some_and(|payload| matches_resource(program, payload, interface)) =>
+                {
+                    live_case = Some(tag);
+                }
+                _ => {
+                    return Err(queue_diagnostic(
+                        "normalized_queue_lease_state_case",
+                        "queue lease state has a foreign exact case or payload",
+                    ));
+                }
+            }
+        }
+        Ok(Self {
+            layout: RecordIndex::variant(layout)?,
+            absent_case: absent_case.ok_or_else(|| {
+                queue_diagnostic(
+                    "normalized_queue_lease_state_absent",
+                    "queue lease state omits its absent case",
+                )
+            })?,
+            live_case: live_case.ok_or_else(|| {
+                queue_diagnostic(
+                    "normalized_queue_lease_state_live",
+                    "queue lease state omits its live resource case",
+                )
+            })?,
+        })
     }
 
-    fn encode_lease(&self, lease: JobLease) -> NormalizedValue {
-        NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(
-                self.fields
-                    .iter()
-                    .map(|(name, field)| {
-                        let value = match field {
-                            LeaseField::AttemptId => {
-                                NormalizedValue::text(lease.attempt_id.clone())
-                            }
-                            LeaseField::AttemptNumber => {
-                                NormalizedValue::I64(i64::from(lease.attempt_number))
-                            }
-                            LeaseField::JobId => NormalizedValue::text(lease.job_id.clone()),
-                            LeaseField::LeaseUntilMilliseconds => {
-                                NormalizedValue::I64(lease.lease_until_milliseconds)
-                            }
-                            LeaseField::Payload => NormalizedValue::bytes(lease.payload.clone()),
-                        };
-                        (name.clone(), value)
-                    })
-                    .collect(),
-            ),
+    fn absent(&self) -> NormalizedValue {
+        NormalizedValue::Variant {
+            layout: self.layout,
+            case: self.absent_case,
+            payload: None,
+        }
+    }
+
+    fn live(&self, handle: NormalizedResourceHandle) -> NormalizedValue {
+        NormalizedValue::Variant {
+            layout: self.layout,
+            case: self.live_case,
+            payload: Some(Box::new(NormalizedValue::Resource(handle))),
+        }
+    }
+}
+
+struct RecordIndex;
+
+impl RecordIndex {
+    fn record(index: usize) -> Result<RecordLayoutIndex, Diagnostic> {
+        u32::try_from(index).map(RecordLayoutIndex).map_err(|_| {
+            queue_diagnostic(
+                "normalized_queue_record_layout_index",
+                "queue record layout exceeds the runtime bound",
+            )
+        })
+    }
+
+    fn variant(index: usize) -> Result<VariantLayoutIndex, Diagnostic> {
+        u32::try_from(index).map(VariantLayoutIndex).map_err(|_| {
+            queue_diagnostic(
+                "normalized_queue_variant_layout_index",
+                "queue variant layout exceeds the runtime bound",
+            )
         })
     }
 }
 
-impl StructuralCodec<SnapshotField> {
+impl RecordCodec<LeaseInfoField> {
+    fn lease_info(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<Self, Diagnostic> {
+        let expected = BTreeMap::from([
+            (
+                "attempt-number",
+                (LeaseInfoField::AttemptNumber, Shape::I64),
+            ),
+            ("job-id", (LeaseInfoField::JobId, Shape::Text)),
+            (
+                "lease-until-milliseconds",
+                (LeaseInfoField::LeaseUntilMilliseconds, Shape::I64),
+            ),
+            ("payload", (LeaseInfoField::Payload, Shape::Bytes)),
+        ]);
+        Self::nominal(program, ty, &expected, "queue lease info")
+    }
+
+    fn encode_lease_info(&self, info: QueueLeaseInfo) -> Result<NormalizedValue, ExecutionError> {
+        let layout = self.layout.ok_or_else(|| {
+            queue_runtime(
+                "normalized_queue_lease_info_layout",
+                "queue lease info has no nominal runtime layout",
+            )
+        })?;
+        Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
+            layout,
+            fields: Arc::new(
+                self.fields
+                    .iter()
+                    .map(|(_, field)| match field {
+                        LeaseInfoField::AttemptNumber => {
+                            NormalizedValue::I64(i64::from(info.attempt_number))
+                        }
+                        LeaseInfoField::JobId => NormalizedValue::text(info.job_id.clone()),
+                        LeaseInfoField::LeaseUntilMilliseconds => {
+                            NormalizedValue::I64(info.lease_until_milliseconds)
+                        }
+                        LeaseInfoField::Payload => NormalizedValue::bytes(info.payload.clone()),
+                    })
+                    .collect(),
+            ),
+        }))
+    }
+}
+
+impl RecordCodec<SnapshotField> {
     fn snapshot(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<Self, Diagnostic> {
         let expected = BTreeMap::from([
             ("attempt_count", (SnapshotField::AttemptCount, Shape::I64)),
@@ -479,7 +646,7 @@ impl StructuralCodec<SnapshotField> {
             ("result", (SnapshotField::Result, Shape::Bytes)),
             ("state", (SnapshotField::State, Shape::Text)),
         ]);
-        Self::prepare(program, ty, &expected, "queue snapshot")
+        Self::structural(program, ty, &expected, "queue snapshot")
     }
 
     fn encode_snapshot(&self, snapshot: JobSnapshot) -> NormalizedValue {
@@ -515,14 +682,56 @@ impl StructuralCodec<SnapshotField> {
     }
 }
 
-impl<T: Copy> StructuralCodec<T> {
-    fn prepare(
+impl<T: Copy> RecordCodec<T> {
+    fn nominal(
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+        expected: &BTreeMap<&str, (T, Shape)>,
+        label: &str,
+    ) -> Result<Self, Diagnostic> {
+        let declaration = named_declaration(program, ty, label)?;
+        let (layout, record) = program
+            .records
+            .iter()
+            .enumerate()
+            .find(|(_, layout)| layout.declaration == declaration)
+            .ok_or_else(|| {
+                queue_diagnostic(
+                    "normalized_queue_record_layout",
+                    format!("{label} has no exact nominal record layout"),
+                )
+            })?;
+        let fields = record
+            .fields
+            .iter()
+            .map(|field| (field.name.clone(), field.ty))
+            .collect();
+        Self::prepare(
+            program,
+            Some(RecordIndex::record(layout)?),
+            fields,
+            expected,
+            label,
+        )
+    }
+
+    fn structural(
         program: &NormalizedProgram,
         ty: TypeObjectDigest,
         expected: &BTreeMap<&str, (T, Shape)>,
         label: &str,
     ) -> Result<Self, Diagnostic> {
         let fields = structural_fields(program, ty)?;
+        Self::prepare(program, None, fields, expected, label)
+    }
+
+    fn prepare(
+        program: &NormalizedProgram,
+        layout: Option<RecordLayoutIndex>,
+        fields: Vec<(Name, TypeObjectDigest)>,
+        expected: &BTreeMap<&str, (T, Shape)>,
+        label: &str,
+    ) -> Result<Self, Diagnostic> {
         if fields.len() != expected.len() {
             return Err(queue_diagnostic(
                 "normalized_queue_record_fields",
@@ -548,9 +757,44 @@ impl<T: Copy> StructuralCodec<T> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
+            layout,
             fields: fields.into(),
         })
     }
+}
+
+fn merge_lease_state(
+    current: &mut Option<LeaseStateCodec>,
+    candidate: LeaseStateCodec,
+) -> Result<(), Diagnostic> {
+    if current
+        .as_ref()
+        .is_some_and(|current| current != &candidate)
+    {
+        return Err(queue_diagnostic(
+            "normalized_queue_lease_state_mismatch",
+            "claim and heartbeat disagree on the exact queue lease state",
+        ));
+    }
+    *current = Some(candidate);
+    Ok(())
+}
+
+fn merge_lease_info(
+    current: &mut Option<RecordCodec<LeaseInfoField>>,
+    candidate: RecordCodec<LeaseInfoField>,
+) -> Result<(), Diagnostic> {
+    if current
+        .as_ref()
+        .is_some_and(|current| current != &candidate)
+    {
+        return Err(queue_diagnostic(
+            "normalized_queue_lease_info_mismatch",
+            "queue operations disagree on the exact lease-info record",
+        ));
+    }
+    *current = Some(candidate);
+    Ok(())
 }
 
 fn require_standard_interface(interface: DeclarationReference) -> Result<(), Diagnostic> {
@@ -573,12 +817,19 @@ enum Shape {
     Bytes,
     Text,
     List,
+    NamedRecord,
+    NamedVariant,
+    Resource(DeclarationReference),
+}
+
+const fn ordinary(shape: Shape) -> (Shape, ParameterUse) {
+    (shape, ParameterUse::Unrestricted)
 }
 
 fn signature(
     program: &NormalizedProgram,
     operation: &NormalizedOperation,
-    parameters: &[Shape],
+    parameters: &[(Shape, ParameterUse)],
     result: Shape,
 ) -> Result<(), Diagnostic> {
     if operation.parameters.len() != parameters.len()
@@ -586,13 +837,15 @@ fn signature(
             .parameters
             .iter()
             .zip(parameters)
-            .any(|(actual, expected)| !matches_shape(program, actual.ty, *expected))
+            .any(|(actual, (expected, use_mode))| {
+                actual.use_mode != *use_mode || !matches_shape(program, actual.ty, *expected)
+            })
         || !matches_shape(program, operation.result, result)
     {
         return Err(queue_diagnostic(
             "normalized_queue_signature",
             format!(
-                "exact queue operation '{}' has a foreign signature",
+                "exact queue operation '{}' has a foreign signature or parameter-use mode",
                 operation.name
             ),
         ));
@@ -610,8 +863,43 @@ fn matches_shape(program: &NormalizedProgram, ty: TypeObjectDigest, shape: Shape
                 | (TypeForm::Bytes, Shape::Bytes)
                 | (TypeForm::Text, Shape::Text)
                 | (TypeForm::List { .. }, Shape::List)
-        )
+                | (TypeForm::Named { .. }, Shape::NamedRecord)
+                | (TypeForm::Named { .. }, Shape::NamedVariant)
+        ) || match (&object.form, shape) {
+            (TypeForm::CapabilityResource { interface }, Shape::Resource(expected)) => {
+                *interface == expected
+            }
+            _ => false,
+        }
     })
+}
+
+fn matches_resource(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    interface: DeclarationReference,
+) -> bool {
+    matches_shape(program, ty, Shape::Resource(interface))
+}
+
+fn named_declaration(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    label: &str,
+) -> Result<DeclarationReference, Diagnostic> {
+    let Some(object) = program.types.get(&ty) else {
+        return Err(queue_diagnostic(
+            "normalized_queue_type_missing",
+            format!("{label} type is absent from the artifact"),
+        ));
+    };
+    let TypeForm::Named { declaration } = object.form else {
+        return Err(queue_diagnostic(
+            "normalized_queue_named_type",
+            format!("{label} must use an exact nominal type"),
+        ));
+    };
+    Ok(declaration)
 }
 
 fn list_item(

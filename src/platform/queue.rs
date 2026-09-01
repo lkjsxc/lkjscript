@@ -8,7 +8,7 @@ use std::fmt;
 mod data;
 use data::DataQueue;
 
-pub const DURABLE_QUEUE_CONTRACT_VERSION: u16 = 1;
+pub const DURABLE_QUEUE_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_QUEUE_PAYLOAD_BYTES: usize = 16 * 1024 * 1024;
 pub const MAXIMUM_QUEUE_LEASE_MILLISECONDS: i64 = 24 * 60 * 60 * 1_000;
 pub const MAXIMUM_QUEUE_ATTEMPTS: u32 = 1_000_000;
@@ -89,14 +89,14 @@ impl JobState {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct JobLease {
-    pub job_id: String,
-    pub attempt_id: String,
-    pub payload: Vec<u8>,
-    pub attempt_number: u32,
-    pub lease_until_milliseconds: i64,
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct JobLease {
+    pub(crate) job_id: String,
+    pub(crate) attempt_id: String,
+    pub(crate) worker_id: String,
+    pub(crate) payload: Vec<u8>,
+    pub(crate) attempt_number: u32,
+    pub(crate) lease_until_milliseconds: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -208,47 +208,62 @@ impl DurableQueueEngine {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn heartbeat(
+    pub(crate) fn heartbeat_lease(
         &self,
-        job_id: &str,
-        attempt_id: &str,
-        worker_id: &str,
+        mut lease_authority: JobLease,
         now: i64,
-        lease: i64,
+        lease_duration: i64,
         control: &ExecutionControl,
         possible_visibility: bool,
-    ) -> Result<bool, ExecutionError> {
-        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
-        validate_lease_duration(lease, &self.limits)?;
-        self.store.heartbeat(
-            job_id,
-            attempt_id,
-            worker_id,
+    ) -> Result<Option<JobLease>, ExecutionError> {
+        self.validate_lease_call(
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
             now,
-            lease,
+            control,
+        )?;
+        validate_lease_duration(lease_duration, &self.limits)?;
+        let lease_until = now
+            .checked_add(lease_duration)
+            .ok_or_else(|| queue_argument("queue lease time overflowed"))?;
+        let renewed = self.store.heartbeat(
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
+            now,
+            lease_duration,
             control,
             possible_visibility,
-        )
+        )?;
+        if renewed {
+            lease_authority.lease_until_milliseconds = lease_until;
+            Ok(Some(lease_authority))
+        } else {
+            Ok(None)
+        }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn complete(
+    pub(crate) fn complete_lease(
         &self,
-        job_id: &str,
-        attempt_id: &str,
-        worker_id: &str,
+        lease_authority: JobLease,
         now: i64,
         result: &[u8],
         control: &ExecutionControl,
         possible_visibility: bool,
     ) -> Result<bool, ExecutionError> {
-        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
+        self.validate_lease_call(
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
+            now,
+            control,
+        )?;
         validate_bytes(result, "job result", self.limits.maximum_result_bytes)?;
         self.store.complete(
-            job_id,
-            attempt_id,
-            worker_id,
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
             now,
             result,
             control,
@@ -257,11 +272,9 @@ impl DurableQueueEngine {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn fail(
+    pub(crate) fn fail_lease(
         &self,
-        job_id: &str,
-        attempt_id: &str,
-        worker_id: &str,
+        lease_authority: JobLease,
         now: i64,
         retry: bool,
         retry_at: i64,
@@ -269,7 +282,13 @@ impl DurableQueueEngine {
         control: &ExecutionControl,
         possible_visibility: bool,
     ) -> Result<bool, ExecutionError> {
-        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
+        self.validate_lease_call(
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
+            now,
+            control,
+        )?;
         validate_nonnegative_time(retry_at, "retry time")?;
         if retry && retry_at < now {
             return Err(queue_argument("retry time precedes failure time"));
@@ -277,9 +296,9 @@ impl DurableQueueEngine {
         validate_bounded_text(error_class, "error class", 128)?;
         validate_token(error_class, "error class")?;
         self.store.fail(
-            job_id,
-            attempt_id,
-            worker_id,
+            &lease_authority.job_id,
+            &lease_authority.attempt_id,
+            &lease_authority.worker_id,
             now,
             retry,
             retry_at,
@@ -475,10 +494,8 @@ mod tests {
         assert_eq!(second.attempt_number, 2);
         assert!(
             !engine
-                .complete(
-                    &first.job_id,
-                    &first.attempt_id,
-                    "worker-1",
+                .complete_lease(
+                    first,
                     110,
                     b"stale",
                     &ExecutionControl::uncancelled(),
@@ -488,29 +505,14 @@ mod tests {
         );
         assert!(
             engine
-                .complete(
-                    &second.job_id,
-                    &second.attempt_id,
-                    "worker-2",
+                .complete_lease(
+                    second,
                     111,
                     b"result",
                     &ExecutionControl::uncancelled(),
                     false,
                 )
                 .expect("current completion")
-        );
-        assert!(
-            !engine
-                .complete(
-                    &second.job_id,
-                    &second.attempt_id,
-                    "worker-2",
-                    111,
-                    b"result",
-                    &ExecutionControl::uncancelled(),
-                    false,
-                )
-                .expect("duplicate completion")
         );
         let snapshot = engine
             .inspect("job-1", &ExecutionControl::uncancelled())
@@ -530,10 +532,8 @@ mod tests {
         let first = claim(&engine, "worker", 0);
         assert!(
             engine
-                .fail(
-                    &first.job_id,
-                    &first.attempt_id,
-                    "worker",
+                .fail_lease(
+                    first,
                     1,
                     true,
                     5,
@@ -546,10 +546,8 @@ mod tests {
         let second = claim(&engine, "worker", 5);
         assert!(
             engine
-                .fail(
-                    &second.job_id,
-                    &second.attempt_id,
-                    "worker",
+                .fail_lease(
+                    second,
                     6,
                     true,
                     7,
@@ -575,19 +573,11 @@ mod tests {
             .expect("initialize");
         enqueue(&engine, "job-1", "key-1", b"payload").expect("enqueue");
         let lease = claim(&engine, "worker", 0);
-        assert!(
-            engine
-                .heartbeat(
-                    &lease.job_id,
-                    &lease.attempt_id,
-                    "worker",
-                    1,
-                    20,
-                    &ExecutionControl::uncancelled(),
-                    false,
-                )
-                .expect("heartbeat")
-        );
+        let renewed = engine
+            .heartbeat_lease(lease, 1, 20, &ExecutionControl::uncancelled(), false)
+            .expect("heartbeat")
+            .expect("renewed lease");
+        assert_eq!(renewed.lease_until_milliseconds, 21);
         assert!(
             engine
                 .cancel("job-1", 2, &ExecutionControl::uncancelled(), false,)

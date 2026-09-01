@@ -1,4 +1,4 @@
-//! Exact Graph 5 semantic references without mutable locators.
+//! Exact Graph 6 semantic references without mutable locators.
 
 use super::id::PackageId;
 use crate::platform::semantic_id::{
@@ -34,47 +34,47 @@ exact_reference!(
     DeclarationReference,
     declaration,
     DeclarationId,
-    "lkjscript.Graph5DeclarationReferenceV1"
+    "lkjscript.Graph6DeclarationReferenceV1"
 );
 exact_reference!(
     ModuleReference,
     module,
     ModuleId,
-    "lkjscript.Graph5ModuleReferenceV1"
+    "lkjscript.Graph6ModuleReferenceV1"
 );
 exact_reference!(
     FieldReference,
     field,
     FieldId,
-    "lkjscript.Graph5FieldReferenceV1"
+    "lkjscript.Graph6FieldReferenceV1"
 );
 exact_reference!(
     CaseReference,
     case,
     CaseId,
-    "lkjscript.Graph5CaseReferenceV1"
+    "lkjscript.Graph6CaseReferenceV1"
 );
 exact_reference!(
     OperationReference,
     operation,
     OperationId,
-    "lkjscript.Graph5OperationReferenceV1"
+    "lkjscript.Graph6OperationReferenceV1"
 );
 exact_reference!(
     RequirementReference,
     requirement,
     RequirementId,
-    "lkjscript.Graph5RequirementReferenceV1"
+    "lkjscript.Graph6RequirementReferenceV1"
 );
 exact_reference!(
     PortReference,
     port,
     PortId,
-    "lkjscript.Graph5PortReferenceV1"
+    "lkjscript.Graph6PortReferenceV1"
 );
 exact_reference!(
     TargetReference,
     target,
     TargetId,
-    "lkjscript.Graph5TargetReferenceV1"
+    "lkjscript.Graph6TargetReferenceV1"
 );

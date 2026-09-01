@@ -508,16 +508,16 @@ operation. A 100,000-module attempt reached backup, but its final JSON was lost 
 execution session exceeded the orchestration capture context and could not be reopened; it is
 classified unavailable rather than pass. The one-million-owner public workflow was not run.
 
-## Current artifact-10 resident deployment
+## Historical artifact-10 resident deployment
 
-The maintained `lkjournal` bundle is now 697,403 bytes and contains two packages, 2,319 closure
+At the artifact-10 cutover, the maintained `lkjournal` bundle was 697,403 bytes and contained two packages, 2,319 closure
 objects (472,791 object bytes), 124 compiler units, and one artifact segment. Strict reload observes
 the same 2,319 objects and object bytes. Its manifest is
 `artifact_manifest_bab49942d015f38ac1898c43a15db56a25cd7a782411f6b94b40cbe86c9e51f9`
 and bundle identity is
 `artifact_bundle_79b9bb47b065d545402af21eb69057752e9f496e472475f030f5287139e592de`.
 
-The service oracle still covers copied-binary HTTP/worker/PostgreSQL behavior, readiness,
+That service oracle covered copied-binary HTTP/worker/PostgreSQL behavior, readiness,
 per-request and worker observations, shutdown, backup/restore, object state, and authority
 inventory. Contributor provisioning now accepts either its immutable pinned image or an exact
 verified local PostgreSQL 16.15 tool root while preserving one typed receipt and cleanup contract.

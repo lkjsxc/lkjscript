@@ -1,4 +1,4 @@
-//! Canonical Graph 5 authoring namespaces.
+//! Canonical Graph 6 authoring namespaces.
 //!
 //! Names are selector and presentation inputs. Accepted references use exact identities, so the
 //! namespace rule is deliberately separate from executable relation and dependency summaries.
