@@ -1,0 +1,473 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-graph-topology-authoring-evidence",
+    "version": 1
+  },
+  "campaign": "202609010657-public-graph-topology-authoring",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-01T00:02:49Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "3e440d3dc949c2ddcb731d0ee1e978a0dc5f1dbc",
+    "entry_tree": "cf23e6dd9703d9164c8e384bfd513ebb9e903dce",
+    "entry_origin_main": "3e440d3dc949c2ddcb731d0ee1e978a0dc5f1dbc",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commit": "ff913d13deb29f2de8a570bb0e29aea4268d6187",
+    "implementation_tree": "34cff22e72924062209ecbc8c04b12406ce890a1",
+    "implementation_summary": "Expose public graph topology authoring",
+    "post_verification_origin_main": "3e440d3dc949c2ddcb731d0ee1e978a0dc5f1dbc",
+    "post_verification_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 1
+    },
+    "tracked_worktree_before_evidence": "clean",
+    "preserved_work": [
+      {
+        "path": "AGENTS.md",
+        "entry_state": "modified",
+        "final_bytes": 19229,
+        "mode": "0640",
+        "sha256": "8fcc1360c1acca168d0a08b8b3ad2d0e6168174e5d4ddded39d00e9be596189d",
+        "disposition": "user-supplied durable repository policy was preserved and committed with the implementation"
+      },
+      {
+        "path": "docs/campaigns/202609010657.md",
+        "entry_state": "untracked",
+        "disposition": "user-supplied mandate body was preserved verbatim, committed, and only its lifecycle field and terminal record are changed by closure"
+      },
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "ignored": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "disposition": "preserved; campaign-owned evidence was added only below ignored .artifacts paths"
+      }
+    ],
+    "closure_note": "The containing evidence-only commit and its normal push result cannot be named inside its own content; they are reported in the campaign terminal handoff and final report."
+  },
+  "product_and_contracts": {
+    "source_product_version": "0.1.14",
+    "source_release_state": "unreleased",
+    "public_latest": "v0.1.13",
+    "public_release_id": 379981013,
+    "public_release_mutated": false,
+    "capabilities_digest": "adcc89421a83ab1758a2a585bb1973161ead50314309d2165cafda0498418d4e",
+    "advanced": {
+      "cli_contract_version": 16,
+      "compact_change_contract": "lkjscript-change-records-8",
+      "stateful_http_acceptance": "lkjscript-stateful-http-acceptance-4"
+    },
+    "unchanged": {
+      "graph": "lkjscript-meaning-graph-5",
+      "authored_change_codec": "lkjscript-authored-change-codec-6",
+      "logical_change_plan": "lkjscript-logical-change-plan-2",
+      "project_creation": "lkjscript-project-creation-3",
+      "contract_registry": "lkjscript-contract-registry-4",
+      "deployment_version": 3,
+      "artifact_version": 10,
+      "compiler_unit_version": 1,
+      "resident_runtime_version": 1,
+      "data_store_version": 1,
+      "data_backup_version": 1,
+      "http_client_adapter_version": 1
+    }
+  },
+  "public_topology": {
+    "classification": "fresh passed",
+    "operation_count_before": 21,
+    "operation_count_after": 25,
+    "records": [
+      "add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION",
+      "create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public",
+      "add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION",
+      "create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http"
+    ],
+    "field_forms": {
+      "port_reference": "$NAME|pkg_HEX/port_HEX",
+      "runner_kind": "command|http"
+    },
+    "dependency_resolution": "only the exact executable-owned built-in binding after explicit immutable transport staging; no network, registry, ambient directory, or unchecked file lookup",
+    "port_scope": "function-backed only",
+    "target_runners": ["command", "http"],
+    "forward_references": true,
+    "direct_and_input_file_plan_equal": true,
+    "idempotent_repreparation": true,
+    "generated_change_grammar_sha256": "4394390d874836f10325ef2a3bc236fabc03436125055f32992b6c9b9563d731"
+  },
+  "recipe_cutover": {
+    "classification": "fresh passed",
+    "engine": "normal authored request normalization, deterministic allocation, prepare, impact, selected tests, logical plan, full validation, and publication",
+    "visible_initial_revisions": 1,
+    "scratch_zero_base_retained": false,
+    "atomic_auxiliary_visibility": true,
+    "recipe_specific_semantic_id_assignment": false,
+    "recipe_specific_owner_or_snapshot_insertion": false,
+    "predecessor_search": {
+      "searched": [
+        "insert_owner",
+        "insert_expression",
+        "Placeholder",
+        "ModuleId::",
+        "DeclarationId::",
+        "ExpressionId::",
+        "RequirementId::",
+        "PortId::",
+        "TargetId::",
+        "SemanticId"
+      ],
+      "paths": [
+        "src/platform/project_creation.rs",
+        "src/platform/project_creation/"
+      ],
+      "matches": 0
+    },
+    "parity_oracle": "independent GraphRepository full reader plus captured generation-neutral predecessor projection; it does not read or share the recipe authored-operation list",
+    "recipes": [
+      {
+        "name": "minimal",
+        "owners": 0,
+        "types": 0,
+        "expressions": 0,
+        "relations": 0,
+        "dependencies": 0,
+        "targets": 0,
+        "tests": 0,
+        "projection": "recipe_projection_1959117ddc6915b382b7f0ae8bd7a51ea160cbee0780c9633d6fb681d43e4654",
+        "runtime": "stateful target oracle created minimal, observed zero owners/dependencies, then publicly authored the full BBS"
+      },
+      {
+        "name": "command",
+        "owners": 10,
+        "types": 2,
+        "expressions": 4,
+        "relations": 17,
+        "dependencies": 1,
+        "targets": 1,
+        "tests": 1,
+        "projection": "recipe_projection_a2d52c63c9643bba5fb45480e85e17d96a056eb2f07542dd22df9387129f2b1c",
+        "runtime": "check/build/run returned exact JSON string hello with production/reference equality in both target userlands"
+      },
+      {
+        "name": "http",
+        "owners": 20,
+        "types": 12,
+        "expressions": 10,
+        "relations": 35,
+        "dependencies": 1,
+        "targets": 1,
+        "tests": 1,
+        "projection": "recipe_projection_2bc1755056e2ccd52e98dccfe2ad156971f01a2fecd70356615b81131f6b7d4b",
+        "runtime": "distributed target oracle checked, built equal clean/incremental artifacts, served twice, and preserved graph authority"
+      },
+      {
+        "name": "nostr-relay-info",
+        "owners": 86,
+        "types": 12,
+        "expressions": 69,
+        "relations": 130,
+        "dependencies": 1,
+        "targets": 1,
+        "tests": 2,
+        "projection": "recipe_projection_c358f395eb986b7b9673549be779e296ae7a6265b8ccf14e50979336e6490da1",
+        "runtime": "outbound target oracle checked, built equal clean/incremental artifacts, and exercised 17 loopback-only HTTP/TLS connections without live-relay contact"
+      }
+    ]
+  },
+  "stateful_from_minimal": {
+    "classification": "fresh passed",
+    "execution_context": "transferred exact target candidate",
+    "receipt": ".artifacts/campaign/202609010657/final-target-2/target-admission/stateful-http/receipt.json",
+    "receipt_bytes": 116601,
+    "receipt_sha256": "75c2bb2e3c3d51e07e31c95a1d162e559283677565d573bb6638428b6b1f1e28",
+    "initial_template": "minimal",
+    "initial_revision": "rev_410d026d8543984978f7aa8c91a0bcc3222ca3149818a6def2c47609d9b6717b",
+    "initial_owners": 0,
+    "initial_dependencies": 0,
+    "builtin_binding": {
+      "package": "pkg_10000000000000000000000000000001",
+      "semantic_revision": "rev_805f3ec96b7907e8ad6ac63d53bdab63aee81d671a39b4ff6cd35604f97bd44f",
+      "package_revision": "package_revision_48cfe9aceb123da0d8a6fc30b034e89599cdc8235cf6b72085d2225b281cefc9",
+      "transport": "package_transport_629e6035e974334ecb79431860bb0678d4946aaf67817baa53f5d15d89a816d6",
+      "staged_without_semantic_head_change": true
+    },
+    "request": {
+      "path": ".artifacts/campaign/202609010657/final-target-2/target-admission/stateful-http/bbs-change.lkjc",
+      "records": 1404,
+      "bytes": 95970,
+      "sha256": "e97967670e5e13cd70bb1c8066aa5294f05b39a1eeab90e12b20519dfde43b7c"
+    },
+    "plan": {
+      "path": ".artifacts/campaign/202609010657/final-target-2/target-admission/stateful-http/bbs-change.logical-plan",
+      "token": "plan_0613cd28e41c36b196be51fbee9f13b5e7cbdabded44d07f3f6a38b2596bbc75d2426d37ffc1ba1d8ab8bdaeaaa031e80203a681aad2068057570509969f7de5",
+      "records": 6210,
+      "bytes": 1563742,
+      "sha256": "faa8fc3c1ad1cd7c6c96cdff2727c6f5b2106423b7ff14c07c39aacf5c65124e",
+      "replay_sha256": "faa8fc3c1ad1cd7c6c96cdff2727c6f5b2106423b7ff14c07c39aacf5c65124e",
+      "allocations": 848,
+      "owners": 848,
+      "types": 8,
+      "dependencies": 1,
+      "relations_added": 1453,
+      "tests": 11,
+      "reasons": 1328
+    },
+    "accepted_revision": "rev_edd6022284bd08fa5552511daee08ee1c2364ac3fd9ebf7f23a80609a208ae36",
+    "idempotent_reconciliation": true,
+    "topology": {
+      "module": "mod_6e9cd275d2c8fb112e40044b54fa60a7",
+      "component": "decl_ddfb7f98d472c774b07a9781de3f1ff1",
+      "handler": "decl_96d5fe8ff36d767b3243a12bd14dad05",
+      "request_parameter": "param_e30f3f5dd0fb336765d130d7380d2726",
+      "requirements": {
+        "streams": "req_a1be4dabe5daa38f5e2a846b4237aced",
+        "data": "req_236f4518ea331430c71288d9d87560fe",
+        "identifiers": "req_09c4ea4d9b6b523e10b4611bfaa059a7",
+        "clock": "req_a99218f9e097af03af046254c9ae0282"
+      },
+      "port": "port_d5fd2e05f3823d680988c53272e95603",
+      "target": "target_86d356b6bf7a9bb47d6df9e7c88d2394",
+      "target_name": "serve",
+      "runner": "http"
+    },
+    "artifact": {
+      "bytes": 584446,
+      "incremental_sha256": "bb1f8f34b5bdfe0c17c3064acc4ba0921031c5f040db9cc8637058d620bd938b",
+      "clean_sha256": "bb1f8f34b5bdfe0c17c3064acc4ba0921031c5f040db9cc8637058d620bd938b",
+      "deterministic": true
+    },
+    "live": {
+      "routes_checked": 25,
+      "runner_starts": 3,
+      "persistence_after_restart": true,
+      "backup_restore_equivalent": true,
+      "startup_failures_without_ready": 2,
+      "malformed_request_contained": true,
+      "shutdown_cleanup_failures": 0,
+      "authority_head_sha256_before": "783fbe18bb5c7ced176e4a1e841cf0ef28d9b766369f5ccb15f62a82d56aa402",
+      "authority_head_sha256_after": "783fbe18bb5c7ced176e4a1e841cf0ef28d9b766369f5ccb15f62a82d56aa402",
+      "authority_inventory_sha256_before": "e95e4df273d1c89cf5d2c6df3b3f79540af60633d5b83de459633d778d39ca2b",
+      "authority_inventory_sha256_after": "e95e4df273d1c89cf5d2c6df3b3f79540af60633d5b83de459633d778d39ca2b",
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    }
+  },
+  "negative_and_atomicity_proof": {
+    "classification": "fresh passed",
+    "owner": "fresh full workspace tests plus copied distributed/stateful target oracles",
+    "cases": [
+      "foreign or mismatched add.dependency binding rejected",
+      "absent, malformed, overcomplete, wrong-revision, and duplicate staged transports rejected or reconciled as specified",
+      "duplicate request symbols and duplicate topology namespaces rejected",
+      "expression-backed public port spelling absent and unknown predecessor spellings rejected",
+      "port/function type mismatch rejected",
+      "cross-component target port rejected",
+      "HTTP/command runner mismatch rejected",
+      "missing component requirement closure rejected",
+      "stale base and mismatched plan token rejected",
+      "change budget exhaustion rejected",
+      "destination conflict rejected",
+      "injected previsibility auxiliary failure removed all owned private paths",
+      "cancellation and interruption preserved semantic HEAD and external state"
+    ],
+    "failed_cases_advanced_head": false,
+    "failed_project_creation_exposed_destination": false
+  },
+  "maintained_assets": {
+    "classification": "fresh passed",
+    "standard_transport_sha256": "b863a95f62cf05fc8a9d6abe9c728c987c0d9b88b3d9d3d98cfda117a9140350",
+    "standard_artifact_sha256": "1cfeb8545e045e86682950c1ba7fa2b63346ba349e4ca70d39645dce6a78a1a7",
+    "lkjournal_artifact_sha256": "1e55c2053261b5a3d15e6e9d38c8de94cea6f263bd92658521f3fc57c70f6b8f",
+    "standard_byte_identical": true,
+    "lkjournal_byte_identical": true
+  },
+  "verification": {
+    "focused": {
+      "classification": "fresh passed",
+      "passed": 6,
+      "selected": 6,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788220040785478271-1110940-0/receipt.json",
+      "receipt_digest": "verification_640421aed05653f5a4e6856291ae1ea41e9faec3d48b3940746ecdadb5b5ab92",
+      "receipt_sha256": "0a36326ee59093997804cea1cfb741a1ea913b429bc82478ba06589ae5f2d0f3"
+    },
+    "product": {
+      "classification": "fresh passed",
+      "passed": 19,
+      "selected": 19,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788220167528412083-1114062-0/receipt.json",
+      "receipt_digest": "verification_c7ea3b34fd8a06276de6913ab3e35b04eefdfe93d6150993ea140bdfb1a2bad3",
+      "receipt_sha256": "5396e75b1a4b08d66818c02c4688be5ce5a950ff5db5b1a0c7a15bb3b69eac93"
+    },
+    "service": {
+      "classification": "fresh passed",
+      "passed": 9,
+      "selected": 9,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788220439478113389-1116312-0/receipt.json",
+      "receipt_digest": "verification_591c070ecf8da5612d9ffcd0f1543e72eab1ef5f72ed3534ca0b5133d080186b",
+      "receipt_sha256": "0f47dc229e6905c42d1fea2b349489cfbe4ff5683ab48a7c3a06b66ad2b4e4fb"
+    },
+    "full": {
+      "classification": "fresh passed",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788220470378804824-1117746-0/receipt.json",
+      "receipt_digest": "verification_c0f791fbe1f175016dfa549565de3ea042b4d01a3403cf76d5e7690d4c6633a2",
+      "receipt_sha256": "8ad087119219a94e89bba1dd295f6922bdec4b3e432621ebf75989123437fc5d",
+      "workspace_tests_evidence_digest": "verification_8bea790ec2fca880e1b658fc45a5c7c5454d6933396477bded26e980af5627ce",
+      "recipe_projection_test_included": true,
+      "stateful_gate_evidence_digest": "verification_3b538c31fb30eab9b2b257a0272642cdeca6db8c84ad2a3656f1acb481fb9717"
+    },
+    "all_required_source_profiles_fresh": true,
+    "required_source_reuse": 0,
+    "required_source_unavailable": 0,
+    "required_source_failed": 0,
+    "required_source_unrun": 0
+  },
+  "target_admission": {
+    "classification": "fresh passed",
+    "source_commit": "ff913d13deb29f2de8a570bb0e29aea4268d6187",
+    "target": "x86_64-unknown-linux-musl",
+    "runtime_linkage": "static-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "candidate": ".artifacts/campaign/202609010657/final-target-2/lkjscript",
+    "candidate_bytes": 16279776,
+    "candidate_sha256": "d0b8e994420a11558e3fb4d211f338becb7028ebf28f4664a027de7166bfe774",
+    "build_receipt": ".artifacts/campaign/202609010657/final-target-2/build-receipt.json",
+    "build_receipt_sha256": "90e1c98cf304f01765ca56aeb00ebf7fe4de80bfc0f3c09ca447473ab23ea47c",
+    "receipt": ".artifacts/campaign/202609010657/final-target-2/target-admission/receipt.json",
+    "receipt_bytes": 70500,
+    "receipt_digest": "verification_8fa3ae8f1c09644242c6df3c4c879672a37a14fda38a405d8d07ea91c1cef870",
+    "receipt_sha256": "bbfad43824a8d3f2c327fe13dcb3e389b7dbe1c53f8eb0d973bb0799a6cd3d18",
+    "static_inspection": {
+      "format": "ELF64 little-endian x86-64 position-independent executable",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0
+    },
+    "userlands": [
+      {
+        "classification": "fresh passed",
+        "role": "musl",
+        "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "observed_release": "Alpine Linux v3.22",
+        "candidate_commands": 12,
+        "clean_incremental_equal": true,
+        "execution_value": "\"hello\"",
+        "differential_equal": true
+      },
+      {
+        "classification": "fresh passed",
+        "role": "older-glibc",
+        "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+        "observed_release": "Debian GNU/Linux 11 (bullseye)",
+        "candidate_commands": 12,
+        "clean_incremental_equal": true,
+        "execution_value": "\"hello\"",
+        "differential_equal": true
+      }
+    ],
+    "oracles": [
+      {
+        "name": "distributed_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "977f64da828c9188562f264fa918a9c09666c58dd54d0b090dd81d568148743d"
+      },
+      {
+        "name": "outbound_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "5e71c12442256d43e19c00f65132b153cdcdcc52cbafd28d2c1ebd509cd3d194"
+      },
+      {
+        "name": "stateful_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "75c2bb2e3c3d51e07e31c95a1d162e559283677565d573bb6638428b6b1f1e28"
+      },
+      {
+        "name": "service_acceptance",
+        "classification": "fresh passed",
+        "receipt_sha256": "81b10e3d5cad4307871cefbc9dda48e9bbd163325940047771c15430f1094aa9"
+      }
+    ],
+    "cleanup_complete": true
+  },
+  "deviations": [
+    {
+      "classification": "unavailable",
+      "scope": "discarded first target-build attempt",
+      "path": ".artifacts/campaign/202609010657/final-target",
+      "cause": "the ambient shell PATH omitted the installed /home/coder/.cargo/bin, so the unchanged first-party owner could not launch its internally named cargo command",
+      "effect": "no candidate or receipt was created; two zero-byte bounded logs were retained",
+      "recovery": "the same owner and source commit ran in a new create-only directory with the installed Rust bin directory explicitly present; final build and admission fresh passed"
+    },
+    {
+      "classification": "fresh passed",
+      "scope": "non-cacheable live full-profile gates",
+      "detail": "their optional derived cache-store writes reported infrastructure failure, but each process itself passed freshly, no cached result was reused, and the full receipt passed 24/24"
+    }
+  ],
+  "external_state": {
+    "observed_at_utc": "2026-09-01T00:02:49Z",
+    "origin_main": "3e440d3dc949c2ddcb731d0ee1e978a0dc5f1dbc",
+    "open_pull_requests": 0,
+    "open_issues": 0,
+    "queued_workflows": 0,
+    "in_progress_workflows": 0,
+    "latest_workflow": {
+      "id": 33425711515,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "dadc142c8230c58af6fc7884a3a4e3a5b7267d5e"
+    },
+    "public_release": {
+      "id": 379981013,
+      "tag": "v0.1.13",
+      "annotated_tag_object": "893dbcb107decd72d9bffbd6ca2d66389be7257a",
+      "source_commit": "dadc142c8230c58af6fc7884a3a4e3a5b7267d5e",
+      "immutable_and_unchanged": true
+    },
+    "mutations_before_closure_push": []
+  },
+  "gta_disposition": {
+    "GTA-1": "fresh passed",
+    "GTA-2": "fresh passed",
+    "GTA-3": "fresh passed",
+    "GTA-4": "fresh passed",
+    "GTA-5": "fresh passed",
+    "GTA-6": "fresh passed",
+    "GTA-7": "fresh passed",
+    "GTA-8": "fresh passed"
+  },
+  "limitations": [
+    "source product 0.1.14 is not a public release; immutable latest remains v0.1.13",
+    "public dependency addition remains limited to the exact staged built-in transport",
+    "expression-backed ports, SetTarget, dependency deletion, arbitrary package resolution, a general registry, and user recipes remain unavailable",
+    "WebSocket and NIP-01 session behavior were not implemented or contacted",
+    "target evidence proves only the exact static candidate and the two pinned userlands, not generic Linux portability, sandboxing, signing, provenance, or reproducible builds",
+    "publication, workflow dispatch, deployment, migration, package publication, and live-relay contact were not run"
+  ],
+  "next_candidates": [
+    "Nostr WebSocket and NIP-01 persistent-session semantics",
+    "first-party data and long-history scale with a PostgreSQL differential",
+    "affine, typestate, session, effect, or refinement semantics selected from a measured maintained resource protocol"
+  ]
+}
