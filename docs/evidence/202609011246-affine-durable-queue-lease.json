@@ -1,0 +1,593 @@
+{
+  "schema": {
+    "identity": "lkjscript-affine-durable-queue-lease-evidence",
+    "version": 1
+  },
+  "campaign": "202609011246-affine-durable-queue-lease",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-01T07:40:27Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "3b562b7901977eddfa57f5f5481013cfb5bfc7d6",
+    "entry_tree": "301be5348090c91cd9e0b97412eddc90c6a572aa",
+    "entry_origin_main": "3b562b7901977eddfa57f5f5481013cfb5bfc7d6",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commit": "44a35c3c3490f9734533f35e480617f50a779cd7",
+    "implementation_tree": "42af2eb6acb4f59d37093fec63822004942c05f4",
+    "implementation_summary": "Add affine durable queue lease authority",
+    "post_verification_origin_main": "3b562b7901977eddfa57f5f5481013cfb5bfc7d6",
+    "post_verification_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 1
+    },
+    "tracked_worktree_before_evidence": "clean",
+    "supplied_mandate": {
+      "path": "docs/campaigns/202609011246.md",
+      "entry_state": "absent from the orientation revision and supplied in the active user turn",
+      "disposition": "initial body was archived without rewriting; only lifecycle status and the terminal record change in the evidence closure"
+    },
+    "preserved_work": [
+      {
+        "path": "AGENTS.md",
+        "mode": "0640",
+        "bytes": 19229,
+        "sha256": "8fcc1360c1acca168d0a08b8b3ad2d0e6168174e5d4ddded39d00e9be596189d",
+        "disposition": "applicable repository policy was unchanged"
+      },
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "ignored": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "disposition": "pre-existing ignored material was preserved; campaign logs, copied binaries, migration roots, and target receipts were added only below ignored .artifacts paths"
+      }
+    ],
+    "closure_note": "The containing evidence-only commit and its normal push result cannot be named inside its own content; they are reported in the campaign terminal handoff and final report."
+  },
+  "product_and_contracts": {
+    "source_product_version": "0.1.15",
+    "source_release_state": "unreleased",
+    "public_latest": "v0.1.14",
+    "public_release_id": 380190031,
+    "public_release_source_commit": "b9f37cb86353596d260521924b5986300595450e",
+    "public_release_mutated": false,
+    "capabilities_digest": "855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b",
+    "capabilities": {
+      "operations": 13,
+      "sections": 13,
+      "diagnostic_records": 324,
+      "diagnostic_bytes": 65230
+    },
+    "advanced": {
+      "graph": {
+        "from": "lkjscript-meaning-graph-5",
+        "to": "lkjscript-meaning-graph-6"
+      },
+      "validation_witness": {
+        "from": "lkjscript-validation-witness-2",
+        "to": "lkjscript-validation-witness-3"
+      },
+      "owner_summary": {
+        "from": "lkjscript-owner-summary-1",
+        "to": "lkjscript-owner-summary-2"
+      },
+      "validator": {
+        "from": "lkjscript-semantic-validator-5",
+        "to": "lkjscript-semantic-validator-6"
+      },
+      "package_interface": {
+        "from": "lkjscript-package-interface-owner-3",
+        "to": "lkjscript-package-interface-owner-4"
+      },
+      "compact_change": {
+        "from": "lkjscript-change-records-8",
+        "to": "lkjscript-change-records-9"
+      },
+      "authored_change": {
+        "from": "lkjscript-authored-change-codec-6",
+        "to": "lkjscript-authored-change-codec-7"
+      },
+      "compiler_unit": {
+        "from": "lkjscript-compiler-unit-1",
+        "to": "lkjscript-compiler-unit-2"
+      },
+      "bytecode": {
+        "from": "lkjscript-bytecode-1",
+        "to": "lkjscript-bytecode-2"
+      },
+      "artifact": {
+        "from": "lkjscript-artifact-manifest-10/lkjscript-artifact-bundle-10",
+        "to": "lkjscript-artifact-manifest-11/lkjscript-artifact-bundle-11"
+      },
+      "resident_runtime": {
+        "from": 1,
+        "to": 2
+      },
+      "durable_queue_adapter": {
+        "from": "lkjscript-queue-adapter-1",
+        "to": "lkjscript-queue-adapter-2"
+      },
+      "contract_registry": {
+        "from": "lkjscript-contract-registry-4",
+        "to": "lkjscript-contract-registry-5"
+      },
+      "cli": {
+        "from": 16,
+        "to": 17
+      },
+      "maintained_service_receipt": {
+        "from": 4,
+        "to": 5
+      }
+    },
+    "unchanged": {
+      "semantic_state": 1,
+      "semantic_summary": 3,
+      "semantic_fact": 3,
+      "package": 1,
+      "package_revision": 1,
+      "package_transport": 1,
+      "project_creation": 3,
+      "deployment": 3,
+      "data_store": 1,
+      "data_backup": 1,
+      "durable_queue_data": "lkjscript-durable-queue-data-1",
+      "http_client_adapter": 1,
+      "object_adapter": 1,
+      "release_receipt": 2,
+      "release_target_policy": 2
+    }
+  },
+  "affine_resource_meaning": {
+    "classification": "fresh passed",
+    "type": "CapabilityResource<ExactInterfaceReference>",
+    "parameter_use": [
+      "unrestricted",
+      "borrow",
+      "consume"
+    ],
+    "acquisition": "only a direct call through the exact requirement and exact interface may create a resource owner",
+    "provenance": "the accepted graph, compiler unit, artifact, runtime value, and task entry retain the exact acquiring requirement and interface",
+    "flow": {
+      "borrow": "preserves the same owner and provenance",
+      "consume": "moves the owner at argument evaluation and rejects every later use",
+      "drop": "allowed and has no durable-queue effect",
+      "variant": "one direct resource payload may transfer through a consumed nominal variant match",
+      "branch_join": "preserves a resource only when every reachable branch preserves the same owner and provenance"
+    },
+    "forbidden": [
+      "literal or decoder fabrication",
+      "resource constants and tests",
+      "resource-valued function parameters or results",
+      "record, list, map, stream, function, or generic containment",
+      "equality, serialization, caching, data-store, object, or queue-payload escape",
+      "partial moves, capture, or cross-task transfer"
+    ],
+    "semantic_failure": "validation occurs before GraphRepository publication and leaves HEAD, canonical inventory, generated output, derived cache, and operational data unchanged"
+  },
+  "public_authoring_and_oracle": {
+    "classification": "fresh passed",
+    "compact_forms": {
+      "resource_type": "type.capability-resource as=@TYPE interface=EXACT_INTERFACE",
+      "parameter_use": "use=unrestricted|borrow|consume",
+      "ordinary_omission": "unrestricted"
+    },
+    "copied_binary": {
+      "test": "copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_authority",
+      "operations": [
+        "capabilities",
+        "package builtin query",
+        "package builtin inspect",
+        "change plan",
+        "change apply",
+        "status",
+        "check",
+        "build"
+      ],
+      "direct_and_input_file_equal": true,
+      "idempotent_replan_equal": true,
+      "negative_cases": [
+        "duplicate consume",
+        "post-consume borrow",
+        "foreign exact requirement",
+        "resource list/function containment",
+        "predecessor type.resource",
+        "predecessor use=shared",
+        "implicit unrestricted resource parameter"
+      ],
+      "negative_authority_inventories_unchanged": true
+    },
+    "independent_oracle": {
+      "test": "independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus",
+      "maintained_graphs_accepted": 2,
+      "mutations_rejected_by_both": 9,
+      "mutations": [
+        "fabricated resource",
+        "post-consume escape",
+        "duplicate consume",
+        "resource invocation",
+        "foreign requirement",
+        "branch join mismatch",
+        "function escape",
+        "unrestricted resource operation parameter",
+        "resource record containment"
+      ],
+      "separation": "reference validation shares bounded snapshots but no production provenance, transfer, merge, or expected-result logic"
+    }
+  },
+  "queue_cutover": {
+    "classification": "fresh passed",
+    "interface": {
+      "reference": "pkg_10000000000000000000000000000001/decl_20a0ef729beda0abf0e743cd7e1126de",
+      "name": "DurableQueue",
+      "operation_count": 9,
+      "operations": [
+        "initialize",
+        "enqueue",
+        "cancel",
+        "inspect",
+        "claim",
+        "lease-info",
+        "heartbeat",
+        "complete",
+        "fail"
+      ]
+    },
+    "lease_state": {
+      "reference": "pkg_10000000000000000000000000000001/decl_e0ddc2780a132a75163537fa45d7473d",
+      "name": "QueueLeaseState",
+      "cases": [
+        "absent",
+        "live(CapabilityResource<DurableQueue>)"
+      ],
+      "used_by": [
+        "claim result",
+        "heartbeat result"
+      ]
+    },
+    "lease_info": {
+      "reference": "pkg_10000000000000000000000000000001/decl_0159d5a184fab62b8047bd131b310d23",
+      "fields": [
+        "job_id",
+        "attempt_number",
+        "lease_until_milliseconds",
+        "payload"
+      ],
+      "omitted_transition_authority": [
+        "attempt_id",
+        "worker_id"
+      ]
+    },
+    "uses": {
+      "lease-info.lease": "borrow",
+      "heartbeat.lease": "consume",
+      "complete.lease": "consume",
+      "fail.lease": "consume"
+    },
+    "runtime": {
+      "entry_binding": "task scope, queue-lease kind, exact DurableQueue interface, and exact requirement",
+      "maximum_entries_per_task": 65536,
+      "reservation": "claim and heartbeat reserve successor handle identity and capacity before the queue effect",
+      "possible_visibility": "a reached consume never restores the old local right, including stale, cancelled, and possible-visibility failures",
+      "hostile_copy": "a second use of copied derived handle bits observes a closed slot",
+      "unit_scope_peak_live_or_reserved_handles": 1,
+      "unit_scope_final_live_or_reserved_handles": 0,
+      "unit_scope_limit_fixture": 1
+    },
+    "deleted_or_rejected": [
+      "zero-or-one list claim result",
+      "structural lease record codec",
+      "public attempt_id transition authority",
+      "heartbeat/complete/fail raw job, attempt, and worker tuple parameters",
+      "application attempt/worker reconstruction and threading",
+      "predecessor Graph 5 roots, resource spellings, shared use modes, queue signatures, artifacts, and fixtures",
+      "compatibility aliases, flags, and dual readers"
+    ],
+    "operational_data": {
+      "queue_data_contract": "lkjscript-durable-queue-data-1",
+      "migration": "none",
+      "ordering_retry_attempt_policy": "unchanged",
+      "backup_restore": "unchanged",
+      "exactly_once_claim": false
+    }
+  },
+  "maintained_authority": {
+    "classification": "fresh passed",
+    "migration": "normal exact-base public planning/publication and create-new generated outputs; no temporary migrator or predecessor reader remains",
+    "stable_identity_result": "the DurableQueue declaration and surviving operations retain their stable semantic IDs; changed and new owners receive current deterministic IDs",
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261",
+      "semantic_state": "semantic_state_36f5b103cf76423d2edb48aafc708d543d878ca1c656b5775ebc6ad8bc531a69",
+      "semantic_root": "semantic_root_06ad47ec85b983f25720bf124565b95df67f81b6c1480229fdaf2ffdd3728673",
+      "validator": "validator_contract_b944748162d053e881f56581a9e40729a38bb9bfb84226e61f27151bb8135c0a",
+      "package_revision": "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705",
+      "transport": "package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9",
+      "artifact_manifest": "artifact_manifest_a44c48ac71f99688c22b1fb3a39f9bafe36792e3a697546d8bd2e06644bcc55f",
+      "artifact_bundle": "artifact_bundle_bbdebe268c69488400dbd99d6da9056b6fa436e250910d8674ea64c431c03a05",
+      "owners": 431,
+      "compiler_units": 83,
+      "closure_objects": 817,
+      "tests": 13,
+      "artifact_bytes": 256500,
+      "artifact_sha256": "fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b",
+      "transport_bytes": 89720,
+      "transport_sha256": "14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "semantic_state": "semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1",
+      "semantic_root": "semantic_root_60568c25c94b2395539cc64148c6cb364fd31b0d8844306587e8f906f4489621",
+      "validator": "validator_contract_b944748162d053e881f56581a9e40729a38bb9bfb84226e61f27151bb8135c0a",
+      "artifact_manifest": "artifact_manifest_7d151920e0160b901fc29a3b1c22c3915738d7ca30c83e412a49fff97447ee5b",
+      "artifact_bundle": "artifact_bundle_8c37417848ff93b9ffc752b4415ba841b7e3b1059a38a04d6d6cc0759df4106a",
+      "owners": 1579,
+      "compiler_units_with_dependencies": 143,
+      "closure_objects": 2794,
+      "tests": 18,
+      "artifact_bytes": 832550,
+      "artifact_sha256": "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728",
+      "worker_flow": "claim, match live/absent, borrow lease-info for policy, consume heartbeat, match fresh/absent, and consume complete or fail"
+    },
+    "clean_exact_current_incremental_equal": true,
+    "generated_public_docs_reproduced": true,
+    "predecessor_assets_rejected": true
+  },
+  "maintained_service": {
+    "classification": "fresh passed",
+    "source_full_receipt": {
+      "path": ".artifacts/lkjscript-dev/service/1788247875572058074-1360627-0/receipt.json",
+      "receipt_digest": "verification_5516f39ffdbb8e2d47b674aa6aa6d80fff9b921f0a43a3d489373be8e6899f1f",
+      "receipt_sha256": "7741729b4e9a568bf8628a4abcf11cfd386e7e9e1fae089964bd307356f07cd6"
+    },
+    "target_transferred_receipt": {
+      "path": ".artifacts/lkjscript-dev/service/1788248223749237625-1366019-0/receipt.json",
+      "receipt_sha256": "cc932a9feba0a706d66dd8f654fa1169b4385787b498316c2c47b0e56f778bf5"
+    },
+    "semantic_authority": {
+      "files": 58,
+      "bytes": 8596717,
+      "head_sha256": "55431ab1337650ec8aef1df0237b65bcad525a218acebeec8fca04fd40b90ab3",
+      "inventory_sha256": "8e1419e1aa91a75e0fda3fa84f396cb27a276b5e4ee88c8e43ac1f9469116396",
+      "unchanged_during_effects": true
+    },
+    "queue_observation": {
+      "data_contract": "lkjscript-durable-queue-data-1",
+      "records_scanned": 3,
+      "workers_started": 2,
+      "productive_iterations": 4,
+      "completed_jobs": 2,
+      "retry_job_state": "ready",
+      "retry_job_attempts": 2,
+      "retry_error_class": "empty-payload",
+      "stale_job_state": "completed",
+      "stale_job_attempts": 2,
+      "stale_replacement_observed": true,
+      "transition_authority_cleared": true
+    },
+    "behaviors": [
+      "claim, lease-info borrow, heartbeat renewal, complete",
+      "retrying fail and second attempt",
+      "two-worker expired-attempt stale replacement",
+      "restart persistence",
+      "failed readiness for absent data root",
+      "worker shutdown and task/resource cleanup",
+      "backup, corrupt-backup rejection, absent-root restore, and restored service read"
+    ],
+    "restart_read_equal": true,
+    "restored_read_equal": true,
+    "corrupt_backup_rejected": true,
+    "shutdown_cleanup_failures": 0,
+    "cleanup_complete": true,
+    "operational_data_migration": "none"
+  },
+  "verification": {
+    "final_content_binding": "focused, product, and service receipts share stable worktree digest verification_ff223e48d06e814c3751a1039fe958c4580e73e3110d5e60c14e31ee164c334a; that content was committed without modification as implementation tree 42af2eb6acb4f59d37093fec63822004942c05f4; full and target receipts bind the implementation commit directly",
+    "focused": {
+      "classification": "fresh passed",
+      "passed": 6,
+      "selected": 6,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788247151754727607-1349397-0/receipt.json",
+      "receipt_digest": "verification_73bb4e2919da9312d394decb72bd88797f8f989cd34ae33368ac2f13cd6aa71b",
+      "receipt_sha256": "473d7c4d71c24e9e1f62c984f8862fb4b6fa1f10895c8069703dab529f912c0b"
+    },
+    "product": {
+      "classification": "fresh passed",
+      "passed": 19,
+      "selected": 19,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788247272992371188-1352576-0/receipt.json",
+      "receipt_digest": "verification_c35186da5130620e6d5c80a03b95c89c4f887762ad052752dcdfe37056454d3d",
+      "receipt_sha256": "2b4ebec52d179a21799715be7f9bf0ea905649dcffc34f133565c1d5f2636d17"
+    },
+    "service": {
+      "classification": "fresh passed",
+      "passed": 9,
+      "selected": 9,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788247562599767401-1355040-0/receipt.json",
+      "receipt_digest": "verification_cbd5a407f1166cc2afffd9925ede592a94ef60d6e8e807893e98901ddc388e0e",
+      "receipt_sha256": "48d3700f95ab8127a4f496992888aff0d8ae42986ae7ce644a9a2b96294e0f76"
+    },
+    "full": {
+      "classification": "fresh passed",
+      "source_commit": "44a35c3c3490f9734533f35e480617f50a779cd7",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788247861352508697-1358687-0/receipt.json",
+      "receipt_digest": "verification_1aec2c5af5d732ef52360df50dad11fb96f74ac4267e0264f0aa0ad741816a71",
+      "receipt_sha256": "75d829a5f84d3f3d8152025617d52ce8c017e81070aa8001ad2ee2856a5c45c4",
+      "workspace_tests_evidence_digest": "verification_4615411a97282d6bacff872c3c59291372093dacfaf2c2a3cb2197bfe2c84021",
+      "public_guides_evidence_digest": "verification_ce755578765098786a0d4444865bd349fff180813b94db50cba5ee8dd622a930",
+      "service_evidence_digest": "verification_07f74080156bf74cacbb48d53d5e982d329c63a646753d117b393ec3d0c02a11",
+      "input_stable": true
+    },
+    "required_slices": {
+      "semantic_oracle": "fresh passed",
+      "copied_binary_authoring": "fresh passed",
+      "maintained_application": "fresh passed",
+      "generated": "fresh passed",
+      "predecessor_rejection_and_deletion": "fresh passed",
+      "focused": "fresh passed",
+      "product": "fresh passed",
+      "service": "fresh passed",
+      "full": "fresh passed",
+      "target": "fresh passed"
+    },
+    "all_required_source_profiles_fresh": true,
+    "required_reuse": 0,
+    "required_skipped": 0,
+    "required_unavailable": 0,
+    "required_failed": 0,
+    "required_unrun": 0
+  },
+  "target_admission": {
+    "classification": "fresh passed",
+    "source_commit": "44a35c3c3490f9734533f35e480617f50a779cd7",
+    "target": "x86_64-unknown-linux-musl",
+    "runtime_linkage": "static-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "candidate": ".artifacts/campaign/202609011246/target-44a35c3c/lkjscript",
+    "candidate_bytes": 16521440,
+    "candidate_sha256": "55d4f431ee23f3d2d6602408c6dbf4198e03333336341e530ec152f6fd928e3f",
+    "build_receipt": ".artifacts/campaign/202609011246/target-44a35c3c/build-receipt.json",
+    "build_receipt_sha256": "df34c1f367ec77f642593b9e0fffd79d1b69b211d445ea42868f3e85c6ba0109",
+    "receipt": ".artifacts/campaign/202609011246/target-44a35c3c/target-admission/receipt.json",
+    "receipt_bytes": 70543,
+    "receipt_digest": "verification_1c22ededc85166db24ec8ec8bc5e9a1ae98aeecfb2e958ac75b0ccb00a1d7ca0",
+    "receipt_sha256": "61566e82d576bfd47bca9a3899e51c789e3e897adea9c90a280faa8ca5c77146",
+    "static_inspection": {
+      "format": "ELF64 little-endian x86-64 position-independent executable",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0
+    },
+    "userlands": [
+      {
+        "classification": "fresh passed",
+        "role": "musl",
+        "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "observed_release": "Alpine Linux v3.22",
+        "candidate_commands": 12,
+        "clean_incremental_equal": true,
+        "differential_equal": true
+      },
+      {
+        "classification": "fresh passed",
+        "role": "older-glibc",
+        "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+        "observed_release": "Debian GNU/Linux 11 (bullseye)",
+        "candidate_commands": 12,
+        "clean_incremental_equal": true,
+        "differential_equal": true
+      }
+    ],
+    "oracles": [
+      {
+        "name": "distributed_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "db816f05181b2b5db0fea10307850c9ed5c2fd768b62d5a6bfe3eab2b536f8e3"
+      },
+      {
+        "name": "outbound_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "0943e2d62d305030ef43cc49d8da677d098c87b81fdc96a5b173f02f0d86a99a"
+      },
+      {
+        "name": "stateful_http",
+        "classification": "fresh passed",
+        "receipt_sha256": "34db5a17dd962842c76c1dfe0885805b66062c2f2391a90e4d79d6e498bb988a"
+      },
+      {
+        "name": "service_acceptance",
+        "classification": "fresh passed",
+        "receipt_sha256": "cc932a9feba0a706d66dd8f654fa1169b4385787b498316c2c47b0e56f778bf5"
+      }
+    ],
+    "cleanup_complete": true
+  },
+  "external_state": {
+    "observed_at_utc": "2026-09-01T07:38:41Z",
+    "origin_main": "3b562b7901977eddfa57f5f5481013cfb5bfc7d6",
+    "open_pull_requests": 0,
+    "open_issues": 0,
+    "queued_workflows": 0,
+    "in_progress_workflows": 0,
+    "latest_workflow": {
+      "id": 33464502157,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "b9f37cb86353596d260521924b5986300595450e"
+    },
+    "public_release": {
+      "id": 380190031,
+      "tag": "v0.1.14",
+      "annotated_tag_object": "07590034938283fabe48721980290dd24c1f72e3",
+      "source_commit": "b9f37cb86353596d260521924b5986300595450e",
+      "immutable_and_unchanged": true
+    },
+    "push_dry_run": "3b562b7901977eddfa57f5f5481013cfb5bfc7d6..44a35c3c3490f9734533f35e480617f50a779cd7 would fast-forward main",
+    "mutations_before_closure_push": []
+  },
+  "aql_disposition": {
+    "AQL-1": "fresh passed",
+    "AQL-2": "fresh passed",
+    "AQL-3": "fresh passed",
+    "AQL-4": "fresh passed",
+    "AQL-5": "fresh passed",
+    "AQL-6": "fresh passed",
+    "AQL-7": "fresh passed"
+  },
+  "deviations": [
+    {
+      "classification": "unavailable",
+      "scope": "pre-existing ignored historical container artifacts",
+      "paths": [
+        ".artifacts/static-0.1.8/docker-exec/",
+        ".artifacts/static-0.1.8/docker-data/",
+        ".artifacts/campaigns/202608290721/docker-exec/",
+        ".artifacts/campaigns/202608290721/docker-data/"
+      ],
+      "cause": "the current user cannot inspect the root-owned directories",
+      "effect": "none; they are unrelated ignored historical artifacts and were preserved without access or mutation"
+    }
+  ],
+  "limitations": [
+    "source product 0.1.15 is not published; immutable latest remains v0.1.14",
+    "the new generic affine mechanism admits only direct capability resources and one direct nominal-variant payload; task-function transfer, capture, containers, and general linear or session types remain unavailable",
+    "durable-queue leases are the only new application resource; byte streams and other protocols were not redesigned",
+    "dropping a lease is local cleanup and does not complete, fail, cancel, or otherwise mutate its durable job",
+    "durable jobs remain at-least-once and possible visibility does not establish exactly-once work",
+    "target evidence proves only the exact candidate and two pinned userlands, not generic Linux portability, memory safety, sandboxing, multi-tenant isolation, signing, provenance, reproducible builds, or service levels",
+    "workflow dispatch, tag/release/asset/package publication, deployment, hosted-data mutation, credential mutation, and live-relay contact were not run"
+  ],
+  "next_candidates": [
+    "publish source snapshot 0.1.15 in a separate release campaign",
+    "Nostr WebSocket and NIP-01 persistent-session semantics",
+    "separate measured million-owner/history-retention work",
+    "workload-driven task-function resource transfer",
+    "owner detail or worker recipe only after a demonstrated maintained need"
+  ]
+}
