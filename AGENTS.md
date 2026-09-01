@@ -38,6 +38,10 @@ binary, and running service are distinct states.
 - Ordinary application development must work through the distributed `lkjscript` executable.
 - Application policy belongs in graph meaning. Rust owns generic semantic, compiler, runtime,
   adapter, verification, and distribution mechanisms.
+- Maintained applications, protocol integrations, and recipes are evidence-bearing consumers of the
+  platform, not product-priority authorities. Use them to prove reusable graph and runtime semantics;
+  do not let enthusiasm for a protocol or demonstration justify application-private host semantics,
+  roadmap priority, or a parallel authoring path.
 - Choose the strongest graph-native semantic model that materially contracts authority or makes
   maintained-application invariants machine-checkable. Human familiarity, conventional syntax, and
   unaided manual authoring convenience are not design constraints.
