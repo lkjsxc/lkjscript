@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.13 executable provides offline command, editable inbound HTTP,
+The supported v0.1.14 executable provides offline command, editable inbound HTTP,
 deployment-bound outbound HTTPS, and reviewed stateful HTTP application lifecycles through one
 copied binary. They create typed meaning graph projects, inspect and change accepted meaning, run
 graph-owned tests, build deterministic artifact bundles, and execute through the standalone
@@ -14,16 +14,15 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot 0.1.14; the immutable supported release remains
-v0.1.13 and product snapshot 0.1.13. Source 0.1.14 adds public exact built-in dependency,
-component, requirement, function-backed port, and command/HTTP target authoring. All four built-in
-recipes now lower through that same typed authored-operation engine without changing the recipes'
-resulting meaning or atomic project-creation contract. These source changes have not been published.
-Both identities include one deployment-bound outbound `HttpClient.get` capability and a closed
-`nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures. No
-deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
+Current source and the immutable supported release are product snapshot 0.1.14. They include public
+exact built-in dependency, component, requirement, function-backed port, and command/HTTP target
+authoring. All four built-in recipes lower through that same typed authored-operation engine without
+changing their resulting meaning or atomic project-creation contract. The release also includes one
+deployment-bound outbound `HttpClient.get` capability and a closed `nostr-relay-info` recipe proved
+against deterministic loopback raw HTTP/TLS/DNS fixtures. No deployment, live relay, WebSocket, or
+NIP-01 event flow is claimed here.
 
-The current source and immutable v0.1.13 binary include public explicit type-parameter,
+The current source and immutable v0.1.14 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -57,10 +56,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.13` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.13) owns the immutable
+[`v0.1.14` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.14) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.13/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.13/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.14/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.14/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -97,7 +96,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.13 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.14 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -136,7 +135,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.13 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.14 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -165,8 +164,8 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-Current source 0.1.14 exposes the complete first-party boundary and topology authoring through one
-copied candidate's application-facing discovery:
+The immutable v0.1.14 download exposes the complete first-party boundary and topology authoring
+through one copied candidate's application-facing discovery:
 
 ```sh
 ./lkjscript capabilities data
@@ -177,9 +176,7 @@ copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact current-source identity query `./lkjscript --version` prints only `lkjscript 0.1.14`.
-Immutable public v0.1.13 remains downloadable above and retains its earlier HTTP-starter stateful
-workflow; it does not contain the source-only topology records below.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.14`.
 
 Public compact change records can add an exact staged built-in dependency, components,
 requirements, function-backed ports, command/HTTP targets, interfaces, operations and externals,
@@ -201,7 +198,7 @@ capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
 [built-in interface](docs/generated/builtin-standard.md),
 [deployment schema](docs/generated/deployment.md), and
-[stateful walkthrough](docs/generated/stateful-http-authoring.md), together with the current-source
+[stateful walkthrough](docs/generated/stateful-http-authoring.md), together with the public
 [relay-information walkthrough](docs/generated/nostr-relay-info-authoring.md), are the offline
 executable-owned authoring references.
 
@@ -273,7 +270,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.13 executable can obtain one complete admitted local neighborhood
+The public v0.1.14 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh

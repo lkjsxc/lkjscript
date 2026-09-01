@@ -5,12 +5,12 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.13`, release `379981013`, is the current supported release. Release run
-`33425711515` completed fresh source and four-oracle target verification, all three no-checkout
+Immutable `v0.1.14`, release `380190031`, is the current supported release. Release run
+`33464502157` completed fresh source and four-oracle target verification, all three no-checkout
 pre-publication application oracles, isolated publication, and independent anonymous exact/latest
-distributed, stateful, and outbound application oracles on attempt 1. Its exact identities and
-receipts are in
-[`202609010158-public-outbound-https-release.json`](evidence/202609010158-public-outbound-https-release.json).
+distributed, stateful-from-`minimal`, and outbound application oracles on attempt 1. Its exact
+identities and receipts are in
+[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 

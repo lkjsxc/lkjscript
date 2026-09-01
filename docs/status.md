@@ -38,21 +38,21 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.13`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.13) is the current public and
+[`v0.1.14`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.14) is the current public and
 supported release. Its annotated tag object
-`893dbcb107decd72d9bffbd6ca2d66389be7257a` selects source commit
-`dadc142c8230c58af6fc7884a3a4e3a5b7267d5e`; GitHub reports release `379981013` as immutable,
+`07590034938283fabe48721980290dd24c1f72e3` selects source commit
+`b9f37cb86353596d260521924b5986300595450e`; GitHub reports release `380190031` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 16,152,800-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 16,283,872-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,286,963 | `75d5fa42fcfeb8b8ad506de570df890de75abbaf9238e081ddb22ce0a8a739a9` |
-| `SHA256SUMS` | 109 | `3395dcc58faeaff28d848c44d38283e0f784e259d90cd69cda436b6f89f34adb` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,357,511 | `7cffbbb45f114048dcf7f5df9e3a4ae9fe6661edbb96a9015c202b648e1ff173` |
+| `SHA256SUMS` | 109 | `31909dc2f1a73de8c74bfecfe4f123f8b8da0f825d156b54c200f04f55dac25a` |
 
 Release workflow
-[`33425711515`](https://github.com/lkjsxc/lkjscript/actions/runs/33425711515) passed all four jobs on
+[`33464502157`](https://github.com/lkjsxc/lkjscript/actions/runs/33464502157) passed all four jobs on
 attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
 and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
@@ -61,15 +61,19 @@ oracles. A no-checkout job then verified the handoffs and passed all three trans
 application oracles before the write-isolated publication job ran. Anonymous exact-tag and
 `releases/latest` downloads independently passed
 checksum, attestation, strict extraction, static inspection, distributed HTTP, outbound
-HTTPS/TLS/DNS, and stateful HTTP. Exact and latest candidate and manifest bytes agree; each fresh
-application independently proved its clean/incremental equality, restart, failure/cancellation,
-authority equality, redaction, and cleanup behavior without contacting a live relay.
+HTTPS/TLS/DNS, and stateful HTTP. Each stateful path started at empty `minimal`, staged only the
+exact built-in transport, and publicly authored its dependency and complete component/requirement/
+function-backed-port/HTTP-target topology before the BBS. Exact and latest candidate and manifest
+bytes agree; each fresh application independently proved its clean/incremental equality, restart,
+failure/cancellation, authority equality, redaction, and cleanup behavior without contacting a live
+relay.
 
-The public binary contains the deployment-bound `HttpClient.get` and closed `nostr-relay-info`
-recipe, explicit higher-order generic authoring, single-product-version surface, bounded context
-traversal, and complete first-party ordered-data/durable-queue cutovers. Exact identities,
-classifications, resource observations, and raw-evidence pointers are retained in
-[`202609010158-public-outbound-https-release.json`](evidence/202609010158-public-outbound-https-release.json).
+The public binary contains exact built-in dependency and topology authoring, unified recipe
+lowering, the deployment-bound `HttpClient.get` and closed `nostr-relay-info` recipe, explicit
+higher-order generic authoring, bounded context traversal, and complete first-party ordered-data and
+durable-queue cutovers. Exact identities, classifications, resource observations, and raw-evidence
+pointers are retained in
+[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -90,14 +94,14 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source owns unreleased product snapshot 0.1.14. Immutable public latest remains v0.1.13
-and product snapshot 0.1.13. Source CLI 16 and compact-change records 8 advance for public exact
-dependency and topology authoring; project creation remains 3 because its resulting recipes,
-receipt model, deployment inventory, and one-rename atomicity are unchanged. Deployment 3,
-registry 4, `http_client_adapter` 1, and unrelated graph, data, queue, object, artifact, compiler,
-and runtime contract numbers remain independently owned. Graph, package, artifact, deployment, and
-operational-data identities remain separate. No deployment, release mutation, or live-relay contact
-occurred for the source change. The source executable exposes exactly
+Current source and immutable public latest own product snapshot 0.1.14. CLI 16 and compact-change
+records 8 expose public exact dependency and topology authoring; project creation remains 3 because
+the resulting recipes, receipt model, deployment inventory, and one-rename atomicity are unchanged.
+Deployment 3, registry 4, `http_client_adapter` 1, and unrelated graph, data, queue, object,
+artifact, compiler, and runtime contract numbers remain independently owned. Graph, package,
+artifact, deployment, and operational-data identities remain separate. Publication changed only
+derived distribution state; no deployment or live-relay contact occurred. The source and public
+executable expose exactly
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
@@ -140,12 +144,12 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.13` rejects predecessor PostgreSQL
+The closed HTTP recipe remains public behavior. Public `v0.1.14` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
-capture, partial application, inference, and maps remain unavailable. The current source compact
+capture, partial application, inference, and maps remain unavailable. The current public compact
 surface additionally exposes exact `add.dependency`, `create.component`, function-backed
 `add.port`, and `create.target` records alongside interface/external creation, operation parameters,
 dependency replacement, and requirement rebinding. Exact dependency addition is confined to an
@@ -156,8 +160,10 @@ header reducer and that fold. Immutable predecessor releases remain unchanged.
 
 Exact source-campaign identities, receipts, classifications, and resource observations are retained
 in [`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json),
+the topology cutover is retained in
+[`202609010657-public-graph-topology-authoring.json`](evidence/202609010657-public-graph-topology-authoring.json),
 and the current public distribution boundary is retained in
-[`202608302224-public-product-release.json`](evidence/202608302224-public-product-release.json).
+[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
 
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,

@@ -135,19 +135,21 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.13` closes this path at source commit
-`dadc142c8230c58af6fc7884a3a4e3a5b7267d5e`. Its exact and latest downloads independently passed
+Immutable `v0.1.14` closes this path at source commit
+`b9f37cb86353596d260521924b5986300595450e`. Its exact and latest downloads independently passed
 strict package and static inspection plus transferred distributed HTTP, deployment-bound outbound
-HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. The release contains the closed
-NIP-11 relay-information recipe, bounded context traversal, and the complete
-ordered-data/durable-queue cutover without contacting a live relay or deploying an application.
+HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Each stateful path began with empty
+`minimal`, staged the exact built-in transport, and authored the complete dependency/topology/BBS
+through the ordinary public writer. The release contains unified graph-native recipe lowering,
+the closed NIP-11 relay-information recipe, bounded context traversal, and the complete ordered-data
+and durable-queue cutover without contacting a live relay or deploying an application.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively through v0.1.9; the v0.1.10, v0.1.12, and v0.1.13 publications moved no
-predecessor tag, release, or asset. Current source owns unreleased product snapshot 0.1.14, CLI 16,
-and compact-change records 8; public latest remains product snapshot 0.1.13. Project creation 3,
-deployment 3, registry 4, HTTP-client-adapter 1, data-store, logical-backup, and all unrelated
-identities remain independently owned.
+advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
+no predecessor tag, release, or asset. Current source and public latest own product snapshot 0.1.14,
+CLI 16, and compact-change records 8. Project creation 3, deployment 3, registry 4,
+HTTP-client-adapter 1, data-store, logical-backup, and all unrelated identities remain independently
+owned.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
