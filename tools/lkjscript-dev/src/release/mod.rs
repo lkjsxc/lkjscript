@@ -1963,6 +1963,19 @@ mod tests {
         assert!(pre_publication.contains("distributed-http"));
         assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
+        assert!(
+            pre_publication
+                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
+        );
+        assert!(pre_publication.contains(".result.initial_template == \"minimal\""));
+        assert!(pre_publication.contains(".result.initial_owners == 0"));
+        assert!(pre_publication.contains(".result.initial_dependencies == 0"));
+        assert!(pre_publication.contains(".result.dependency_staged == true"));
+        assert!(pre_publication.contains(".result.topology.target_name == \"serve\""));
+        assert!(pre_publication.contains(".result.topology.runner == \"http\""));
+        assert!(pre_publication.contains(
+            "(.result.topology.requirements | keys) == [\"clock\",\"data\",\"identifiers\",\"streams\"]"
+        ));
         assert!(!pre_publication.contains("request_records =="));
         assert!(pre_publication.contains("--evidence-root"));
         assert!(pre_publication.contains("env -i LANG=C"));
@@ -2015,6 +2028,19 @@ mod tests {
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
+        assert!(
+            post_release
+                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
+        );
+        assert!(post_release.contains(".result.initial_template == \"minimal\""));
+        assert!(post_release.contains(".result.initial_owners == 0"));
+        assert!(post_release.contains(".result.initial_dependencies == 0"));
+        assert!(post_release.contains(".result.dependency_staged == true"));
+        assert!(post_release.contains(".result.topology.target_name == \"serve\""));
+        assert!(post_release.contains(".result.topology.runner == \"http\""));
+        assert!(post_release.contains(
+            "(.result.topology.requirements | keys) == [\"clock\",\"data\",\"identifiers\",\"streams\"]"
+        ));
         assert!(!post_release.contains("request_records =="));
         assert_eq!(
             post_release.matches(".result.incremental_sha256").count(),
@@ -2046,6 +2072,16 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
+        assert!(
+            !workflow
+                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:3}")
+        );
+        assert_eq!(
+            workflow
+                .matches(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
+                .count(),
+            2
+        );
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));
