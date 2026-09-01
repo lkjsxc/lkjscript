@@ -38,26 +38,29 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.14`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.14) is the current public and
+[`v0.1.15`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.15) is the current public and
 supported release. Its annotated tag object
-`07590034938283fabe48721980290dd24c1f72e3` selects source commit
-`b9f37cb86353596d260521924b5986300595450e`; GitHub reports release `380190031` as immutable,
+`d9a6e7812325810c5becae2e217e1b9a4a600c8f` selects source commit
+`2b428645471e032ba3cfb415bf81565d7ea0159e`; GitHub reports release `380401840` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 16,283,872-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 16,525,536-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,357,511 | `7cffbbb45f114048dcf7f5df9e3a4ae9fe6661edbb96a9015c202b648e1ff173` |
-| `SHA256SUMS` | 109 | `31909dc2f1a73de8c74bfecfe4f123f8b8da0f825d156b54c200f04f55dac25a` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,459,326 | `5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01` |
+| `SHA256SUMS` | 109 | `e50a7373b9d783b361cf2afa064c4dd1a41f5311052b7459ba3d55cde39fb6dc` |
 
 Release workflow
-[`33464502157`](https://github.com/lkjsxc/lkjscript/actions/runs/33464502157) passed all four jobs on
+[`33495319420`](https://github.com/lkjsxc/lkjscript/actions/runs/33495319420) passed all four jobs on
 attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
 and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
 distributed HTTP, outbound HTTPS/TLS/DNS, stateful HTTP, and maintained `lkjournal` service
-oracles. A no-checkout job then verified the handoffs and passed all three transferred
+oracles. The service oracle used the exact candidate and service-receipt contract 5 to prove the
+resource-owned queue claim/info/renew/complete/fail lifecycle, stale replacement, retry,
+restart, backup/restore, unchanged semantic authority, and cleanup. A no-checkout job then verified
+the handoffs and passed all three transferred
 application oracles before the write-isolated publication job ran. Anonymous exact-tag and
 `releases/latest` downloads independently passed
 checksum, attestation, strict extraction, static inspection, distributed HTTP, outbound
@@ -68,12 +71,15 @@ bytes agree; each fresh application independently proved its clean/incremental e
 failure/cancellation, authority equality, redaction, and cleanup behavior without contacting a live
 relay.
 
-The public binary contains exact built-in dependency and topology authoring, unified recipe
+The public binary contains Graph 6 exact-interface affine resources and unrestricted/borrow/consume
+parameter use, compiler/runtime move enforcement, the nine-operation resource-owned durable queue,
+and deletion of raw attempt-token program authority. It also contains exact built-in dependency and
+topology authoring, unified recipe
 lowering, the deployment-bound `HttpClient.get` and closed `nostr-relay-info` recipe, explicit
 higher-order generic authoring, bounded context traversal, and complete first-party ordered-data and
 durable-queue cutovers. Exact identities, classifications, resource observations, and raw-evidence
 pointers are retained in
-[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
+[`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -94,23 +100,25 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source is unreleased product snapshot 0.1.15; immutable public latest remains supported
-snapshot `v0.1.14`. The current source graph owns exact-interface affine resources and
+Current source and immutable public latest are supported product snapshot `v0.1.15`. The graph owns
+exact-interface affine resources and
 parameter-use meaning, and current CLI and compact authoring expose those forms. Only graph,
 witness/summary/validator, package-interface, compiler/bytecode/artifact, resident-runtime,
 queue-adapter, registry, and contributor service-receipt owners advance with their changed encoding
 or behavior. Project creation, deployment, HTTP client, data-store, logical-backup, queue-data,
-object, HTTP, and release contracts remain unchanged.
+object, and HTTP contracts remain unchanged; the release contracts also did not advance while their
+current instances bound the new product snapshot.
 Graph, package, artifact, deployment, and operational-data identities remain separate. This source
-campaign performed no release publication, deployment, hosted-data mutation, or live-relay contact.
-Both source and the released predecessor retain the same closed operation names:
+campaign performed no deployment, hosted-data mutation, or live-relay contact, and the release
+campaign advanced no semantic or operational authority. The public product retains the same closed
+operation names:
 `capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
 `855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b` in current source.
 
-Source `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
+`CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
 borrow, and consume. Validation follows language order, retains exact requirement provenance,
 permits ordered borrows and one consume, and rejects fabrication, aliases, use after consume,
@@ -155,7 +163,7 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.14` rejects predecessor PostgreSQL
+The closed HTTP recipe remains public behavior. Public `v0.1.15` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
@@ -174,7 +182,7 @@ in [`202608290721-public-higher-order-generic.json`](evidence/202608290721-publi
 the topology cutover is retained in
 [`202609010657-public-graph-topology-authoring.json`](evidence/202609010657-public-graph-topology-authoring.json),
 and the current public distribution boundary is retained in
-[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
+[`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
 
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
@@ -354,6 +362,9 @@ The current affine queue source closure, including independent semantic-flow, co
 authoring, maintained asset, two-worker service, predecessor-rejection, and exact static-target
 observations, is bound by
 [`202609011246-affine-durable-queue-lease.json`](evidence/202609011246-affine-durable-queue-lease.json).
+Its immutable product publication, exact service-to-public candidate chain, hosted and independently
+repeated anonymous exact/latest acceptance, and external-state closure are bound by
+[`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
 The semantic lifecycle campaign record [202608270014](campaigns/202608270014.md) names its exact
 focused, product, full, and service results. The public binary campaign record
 [202608271521](campaigns/202608271521.md) and its

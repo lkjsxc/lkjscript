@@ -5,12 +5,13 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.14`, release `380190031`, is the current supported release. Release run
-`33464502157` completed fresh source and four-oracle target verification, all three no-checkout
+Immutable `v0.1.15`, release `380401840`, is the current supported release. Release run
+`33495319420` completed fresh source and four-oracle target verification, all three no-checkout
 pre-publication application oracles, isolated publication, and independent anonymous exact/latest
 distributed, stateful-from-`minimal`, and outbound application oracles on attempt 1. Its exact
-identities and receipts are in
-[`202609010950-public-topology-authoring-release.json`](evidence/202609010950-public-topology-authoring-release.json).
+candidate was also used by service-receipt contract 5 for affine resource-owned queue/worker proof,
+then bound through the package and both public extraction paths. Exact identities and receipts are
+in [`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 

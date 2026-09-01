@@ -1,0 +1,899 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-product-release-evidence",
+    "version": 1
+  },
+  "campaign": "202609011758-affine-resource-release",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-01T10:34:37Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "upstream": "origin/main",
+    "entry_head": "a4b4186384476c4773dc679ca86cead86562b3bd",
+    "entry_tree": "3a4b868826f6e8ba5818e251b5a9962b1f9e521a",
+    "entry_origin_main": "a4b4186384476c4773dc679ca86cead86562b3bd",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "entry_supplied_work": [
+      {
+        "path": "AGENTS.md",
+        "state": "tracked modification",
+        "bytes_at_R": 19581,
+        "sha256_at_R": "d751eba677a0be00b20b25261e8323eec7a9b49d675485a5eaa56aff83d42111",
+        "git_blob_at_R": "ba964bd0bd68864cc5508853b30f682115ead924",
+        "disposition": "committed in R with only the supplied durable proving-consumer clarification"
+      },
+      {
+        "path": "docs/campaigns/202609011758.md",
+        "state": "untracked",
+        "bytes_at_R": 28615,
+        "sha256_at_R": "afd980ecbacba21236f6b5fd78edf33b0adcd59da836ffabadbd7e05bb06ef9e",
+        "git_blob_at_R": "479edac59d2a5e2d4c47105575c4f48b57373eed",
+        "disposition": "committed unchanged in R; closure changes only Status and appends one terminal record"
+      }
+    ],
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, rewrite, or deletion"
+      },
+      {
+        "paths": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "state": "pre-existing ignored build, evidence, lock, catalog, and derived roots",
+        "disposition": "preserved; new raw release evidence exists only beneath the ignored campaign and harness owners"
+      },
+      {
+        "paths": [
+          ".artifacts/campaigns/202608290721/docker-data",
+          ".artifacts/campaigns/202608290721/docker-exec",
+          ".artifacts/static-0.1.8/docker-data",
+          ".artifacts/static-0.1.8/docker-exec"
+        ],
+        "state": "root-owned unreadable historical artifact directories",
+        "disposition": "preserved without ownership, mode, content, or lifecycle mutation"
+      }
+    ],
+    "entry_open_issues": 0,
+    "entry_open_pull_requests": 0,
+    "entry_queued_or_running_release_runs": 0
+  },
+  "source": {
+    "orientation_baseline": "a4b4186384476c4773dc679ca86cead86562b3bd",
+    "public_predecessor_source": "b9f37cb86353596d260521924b5986300595450e",
+    "affine_implementation_commit": "44a35c3c3490f9734533f35e480617f50a779cd7",
+    "affine_closure_commit": "a4b4186384476c4773dc679ca86cead86562b3bd",
+    "release_source_commit_R": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+    "release_source_tree": "d2e276078b03104a6f05128c4a0185bbe7e63a5e",
+    "release_source_parent": "a4b4186384476c4773dc679ca86cead86562b3bd",
+    "release_source_timestamp_utc": "2026-09-01T09:30:29Z",
+    "release_source_summary": "Begin immutable v0.1.15 release campaign",
+    "release_source_paths": [
+      "AGENTS.md",
+      "docs/campaigns/202609011758.md"
+    ],
+    "release_blocker_corrections": [],
+    "source_behavior_changed_during_release_campaign": false,
+    "product_semantics_changed_during_release_campaign": false,
+    "root_product_version": "0.1.15",
+    "origin_main_equal_before_tag_push": true,
+    "worktree_clean_before_tag_push": true,
+    "workflow_git_blob": "fd6f92b776e0727584c002190669c289197c1f43",
+    "workflow_sha256": "bd806966bccc7a5e44e3f72bb84fc6bcd9adeb951e826e5e8f191a83b214e929",
+    "cargo_lock_sha256": "17735e9df015b9e1e279b63e72d8973ae35afcfcabe9d58d899d950c42094794",
+    "rust_toolchain_sha256": "f1adfed25fca89d418637337ee32a6580d06de345c179472acc780e17f291df4",
+    "public_delta_from_v0_1_14_source": [
+      "Graph 6 exact-interface CapabilityResource meaning",
+      "unrestricted, borrow, and consume operation-parameter use",
+      "compiler, artifact, loader, VM, and task-scope move enforcement",
+      "resource-owned nine-operation DurableQueue interface",
+      "standard and lkjournal migration with raw attempt-token program authority deleted",
+      "public direct and file compact authoring plus independent affine and maintained service proof"
+    ],
+    "semantic_leverage_result": "publication of the preceding affine authority contraction; this release campaign introduced no new graph meaning and made no application-private host semantic"
+  },
+  "product_and_contract_identities": {
+    "product": "0.1.15",
+    "capabilities_digest": "855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b",
+    "graph": "lkjscript-meaning-graph-6",
+    "cli": "lkjscript-cli-17",
+    "compact_change": "lkjscript-change-records-9",
+    "authored_change_codec": 7,
+    "package_interface": "lkjscript-package-interface-owner-4",
+    "artifact": "lkjscript-artifact-bundle-11",
+    "compiler_unit": 2,
+    "bytecode": 2,
+    "compilation_manifest": 3,
+    "resident_runtime": 2,
+    "durable_queue": 2,
+    "worker_runner": 1,
+    "service_receipt": 5,
+    "unchanged_by_release_campaign": {
+      "project_creation": 3,
+      "deployment": 3,
+      "data_store": "lkjscript-data-store-1",
+      "logical_backup": "lkjscript-data-backup-1",
+      "durable_queue_data": "lkjscript-durable-queue-data-1",
+      "http_client_adapter": 1,
+      "object_adapter": 1
+    },
+    "release_target_policy": {
+      "identity": "lkjscript-release-target-policy",
+      "version": 2,
+      "sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152"
+    },
+    "release_receipt": {
+      "identity": "lkjscript-release-receipt",
+      "version": 2
+    },
+    "target_build_receipt": {
+      "identity": "lkjscript-target-build-receipt",
+      "version": 1
+    },
+    "target_admission_receipt": {
+      "identity": "lkjscript-target-admission-receipt",
+      "version": 2
+    },
+    "application_verifier_handoff": {
+      "identity": "lkjscript-application-verifier-handoff",
+      "version": 3
+    },
+    "distributed_http_acceptance": 2,
+    "outbound_http_acceptance": 1,
+    "stateful_http_acceptance": 4
+  },
+  "published_affine_behavior": {
+    "classification": "fresh passed",
+    "resource": "CapabilityResource<ExactInterface>",
+    "parameter_use": [
+      "unrestricted",
+      "borrow",
+      "consume"
+    ],
+    "accepted": [
+      "acquisition only through the exact requirement",
+      "ordered borrows followed by at most one consume",
+      "direct nominal resource payload movement",
+      "branch agreement",
+      "task-local droppable resource scope"
+    ],
+    "rejected_before_publication_or_execution": [
+      "fabrication",
+      "alias or duplicate consume",
+      "post-consume use",
+      "foreign requirement authority",
+      "branch disagreement",
+      "function transfer",
+      "resource-bearing aggregate or durable containment",
+      "literal, constant, test, data, object, queue-payload, cache, or backup escape",
+      "predecessor compact and queue transition forms"
+    ],
+    "public_authoring": "one deterministic compact direct/file spelling for capability-resource types and borrow/consume parameter use",
+    "queue_interface_operations": 9,
+    "raw_attempt_or_worker_transition_authority_in_program_values": false,
+    "independent_affine_oracle": "fresh passed within the final full profile",
+    "generated_discovery_and_guides_match": true
+  },
+  "maintained_authority": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261",
+      "semantic_state": "semantic_state_36f5b103cf76423d2edb48aafc708d543d878ca1c656b5775ebc6ad8bc531a69",
+      "package_revision": "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705",
+      "package_transport": "package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9",
+      "transport_bytes": 89720,
+      "transport_sha256": "14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791",
+      "artifact_bytes": 256500,
+      "artifact_sha256": "fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "semantic_state": "semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1",
+      "standard_dependency_revision": "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705",
+      "artifact_bytes": 832550,
+      "artifact_sha256": "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728"
+    },
+    "regeneration_and_exact_compare": "fresh passed",
+    "publication_advanced_semantic_head": false,
+    "deployment_or_operational_data_mutated": false
+  },
+  "reconciliation": {
+    "entry_latest_release": {
+      "tag": "v0.1.14",
+      "release_id": 380190031,
+      "tag_object": "07590034938283fabe48721980290dd24c1f72e3",
+      "source_commit": "b9f37cb86353596d260521924b5986300595450e",
+      "immutable": true
+    },
+    "affine_campaign_terminal_and_coherent": true,
+    "later_release_input_delta": false,
+    "conflicting_active_mandate": false,
+    "intended_tag_absent_before_publication": true,
+    "intended_release_absent_before_publication": true,
+    "immutable_releases_enabled": true,
+    "repository_permission": "admin",
+    "release_runs_active_before_dispatch_or_tag": 0,
+    "open_issue_or_pull_request_count": 0,
+    "release_path_corrections_required": false,
+    "current_predicates_bound": [
+      "Graph 6",
+      "CLI 17",
+      "artifact 11",
+      "service receipt 5",
+      "capabilities digest 855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b"
+    ],
+    "target_oracles_bound": [
+      "distributed_http",
+      "outbound_http",
+      "stateful_http",
+      "service_acceptance"
+    ]
+  },
+  "pinned_inputs": {
+    "rust_toolchain": "1.98.0",
+    "rustc_commit": "88d9e12ae178fab0fb5cc050a94da85685d449ea",
+    "cargo_commit": "797e8a9bc",
+    "target": "x86_64-unknown-linux-musl",
+    "runtime_linkage": "static-musl",
+    "cargo_about": {
+      "version": "0.9.2",
+      "archive_sha256": "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af",
+      "executable_sha256": "b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8"
+    },
+    "userlands": [
+      "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+      "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+    ],
+    "independent_attestation_tool": {
+      "name": "gh",
+      "version": "2.98.0",
+      "archive_sha256": "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de",
+      "executable_sha256": "62885b97de6a0cd85e616cdd94bcda908bf5cf1018094385892b05cea3537163"
+    }
+  },
+  "local_final_proof": {
+    "focused_reconciliation": {
+      "classification": "fresh passed",
+      "selected": 6,
+      "fresh_passed": 6,
+      "reused_passed": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788254896984668632-1404302-0/receipt.json",
+      "receipt_sha256": "86574a8e98f63cc0b4a0eacc4fa91bfce5540902860313145f0223395852007c",
+      "elapsed_nanoseconds": 107552429657
+    },
+    "full": {
+      "classification": "fresh passed",
+      "selected": 24,
+      "fresh_passed": 24,
+      "reused_passed": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788255081084939491-1406935-0/receipt.json",
+      "receipt_sha256": "8e4b32b5b7b7fd91530b3cc40951b240aca6963518f1dbe4f65a5ba59e4f50fb",
+      "elapsed_nanoseconds": 129906844137,
+      "gates": [
+        "fmt",
+        "clippy",
+        "workspace_tests",
+        "release_build",
+        "release_command_lifecycle",
+        "distributed_http_application",
+        "outbound_http_application",
+        "stateful_http_application",
+        "checker_self_test",
+        "rust_only_tooling",
+        "generated_public_guides",
+        "product_surface_audit",
+        "standard_package_test",
+        "application_package_test",
+        "standard_artifact_build",
+        "standard_artifact_compare",
+        "builtin_package_export",
+        "builtin_package_compare",
+        "builtin_transport_export",
+        "builtin_transport_compare",
+        "application_artifact_build",
+        "application_artifact_compare",
+        "service_acceptance",
+        "diff_check"
+      ]
+    },
+    "target": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609011758/local-target/admission/receipt.json",
+      "receipt_sha256": "638357b054ed6593d1b1dee30669a38068f3ce7c6b89f181d2a5d743441f5d7b",
+      "candidate_bytes": 16521440,
+      "candidate_sha256": "55d4f431ee23f3d2d6602408c6dbf4198e03333336341e530ec152f6fd928e3f",
+      "userlands": 2,
+      "oracles": 4,
+      "classifications_fresh_passed": 7,
+      "elapsed_nanoseconds": 31757710816,
+      "cleanup_complete": true,
+      "service_receipt_sha256": "35c4087e999fa373bc979cd05fefc9d6127972ea050da5df4228251116c85d82",
+      "service_contract": 5,
+      "service_authority_unchanged": true,
+      "service_queue_observation": {
+        "records_scanned": 3,
+        "workers_started": 2,
+        "productive_iterations": 4,
+        "completed_jobs": 2,
+        "retry_attempts": 2,
+        "stale_replacement_attempts": 2,
+        "transition_authority_cleared": true
+      }
+    },
+    "package": {
+      "classification": "fresh passed",
+      "preparations": 2,
+      "strict_verifications": 2,
+      "archive_bytes": 7459139,
+      "archive_sha256": "75fb825477d723f26d28194fd25206201fc66d428ce99f0c86992f46b8ae9ecc",
+      "checksum_sha256": "f6d28445604114866e9ea1f941eef3cedb49a2ac8477a647806058dd86631523",
+      "manifest_sha256": "0928db77c8622e283654c6340ecb48b6a778c60c63cf84b5c71960c977cf9e81",
+      "release_receipt_sha256": [
+        "ad67030fdd66a91380aaf0bdf238beec657f54b1d0819849886b751ee91d5f36",
+        "fa10530a2a36fac471760ffa1060457d8505e5b3cef7c8a5130ff495c006b8bd"
+      ],
+      "archive_byte_equal": true,
+      "checksum_byte_equal": true,
+      "extracted_candidate_byte_equal": true,
+      "manifest_byte_equal": true
+    },
+    "local_and_hosted_candidate_equal": false,
+    "reproducible_build_claim": false
+  },
+  "hosted_dry_run": {
+    "classification": "fresh passed",
+    "run_id": 33493200904,
+    "run_number": 42,
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "publish": false,
+    "head_sha": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+    "created_at_utc": "2026-09-01T09:37:34Z",
+    "completed_at_utc": "2026-09-01T09:56:28Z",
+    "jobs": [
+      {
+        "id": 99809283186,
+        "name": "Build, verify, and package",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 99814289477,
+        "name": "Verify transferred packaged application candidate",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 99814458025,
+        "name": "Publish immutable release",
+        "classification": "skipped"
+      },
+      {
+        "id": 99814458040,
+        "name": "Verify anonymous public release",
+        "classification": "skipped"
+      }
+    ],
+    "full_receipt_sha256": "77566dd27bf1270d1f97df255513d8569c7e117327b83fd2df1487b22d4e0aca",
+    "full_gates_fresh_passed": 24,
+    "full_reused": 0,
+    "target_receipt_sha256": "0f12906b8872b37788c8d4f7c1df29214087afa2fc0ec901267afc89f054fe0c",
+    "target_classifications_fresh_passed": 7,
+    "candidate_bytes": 16525536,
+    "candidate_sha256": "9d30e33cb51cb6dc3b0c4fa090539d94c9bcd4cb7b3054e08db20d24ee9fdff9",
+    "service_receipt_sha256": "d537b179cde067b97989646a6ee9abf230ce45e2b72afd49a54b7b9efc07ce5b",
+    "archive_sha256": "e8ff0f9a69b37a5acf08a1d75ec9b43e2b0cc5812c91f05326d30397e90805c9",
+    "manifest_sha256": "17e1b907f567c2f31e873ad8378e729aba0a48709cc6ffd36870a4eaf9d0013d",
+    "verifier_sha256": "cad4714e73794f8868f8e585ed742c064f06317d62708dcc2aaee8ec9d88e1cb",
+    "verifier_identity_sha256": "9e71478eb212242b5ccedbb2fcdd204298d6b1a667983614ede19f75cd5bfe1c",
+    "pre_publication_receipts": {
+      "distributed_sha256": "661f339676e563f04a03eb13fe80b080f5392a1c94be02335793f9f21f6ceba4",
+      "outbound_sha256": "8e425cae0fdd6c8784240b833d1b733e00b64e6aae9ad8f450758b9599ce8b6a",
+      "stateful_sha256": "96e852ca17ff0a4dc161f8df6e3c9d5a58adb0ca32352341fadde636178c538a"
+    },
+    "downloaded_handoffs_independently_verified": true,
+    "public_objects_created": 0,
+    "artifacts": [
+      {
+        "id": 9795253374,
+        "name": "pre-publication-application-evidence-33493200904-1",
+        "digest": "sha256:8dc3765ed503cea10832e6b642e286543bc2c09c30a283c6bd5afe676bb8fa26"
+      },
+      {
+        "id": 9795232361,
+        "name": "verifier-handoff-33493200904-1",
+        "digest": "sha256:50ec14aebb15f325d5e9af0e0273aa9b910f90c8d4cc9f0dd6cd20f234dc24eb"
+      },
+      {
+        "id": 9795231236,
+        "name": "release-handoff-33493200904-1",
+        "digest": "sha256:71d830a0bf17c4991977bb4924f7936d4b03a62a6bcd63a5271e2f6ba3e11d28"
+      },
+      {
+        "id": 9795187687,
+        "name": "target-admission-evidence-33493200904-1",
+        "digest": "sha256:37ffd176b4d44a46a2817f3aaface598954f3d57237b9168e034c03587891033"
+      },
+      {
+        "id": 9795036440,
+        "name": "full-verification-evidence-33493200904-1",
+        "digest": "sha256:6e26e2b39139b4a1ae4a2a9900c962bd59562c905ad61af1bce254e2af7c813f"
+      }
+    ]
+  },
+  "publication": {
+    "preconditions": {
+      "classification": "fresh passed",
+      "observed_at_utc": "2026-09-01T10:01:23Z",
+      "R_equal_HEAD_and_origin_main": true,
+      "worktree_clean": true,
+      "tag_absent": true,
+      "release_absent": true,
+      "active_release_runs": 0,
+      "immutable_releases_enabled": true,
+      "repository_admin": true,
+      "predecessor_latest": "v0.1.14"
+    },
+    "tag": {
+      "name": "v0.1.15",
+      "object_sha": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "peeled_commit": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+      "annotated": true,
+      "tagger_timestamp_utc": "2026-09-01T10:01:45Z",
+      "signed": false,
+      "remote_exact": true
+    },
+    "confirmation_variable": {
+      "name": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+      "previous_value": "07590034938283fabe48721980290dd24c1f72e3",
+      "value": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "read_back_exact": true
+    },
+    "run": {
+      "id": 33495319420,
+      "number": 43,
+      "attempt": 1,
+      "event": "push",
+      "head_branch": "v0.1.15",
+      "head_sha": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+      "created_at_utc": "2026-09-01T10:02:09Z",
+      "completed_at_utc": "2026-09-01T10:26:38Z",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 99816030433,
+          "name": "Build, verify, and package",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 99822081784,
+          "name": "Verify transferred packaged application candidate",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 99822270372,
+          "name": "Publish immutable release",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 99822347282,
+          "name": "Verify anonymous public release",
+          "classification": "fresh passed"
+        }
+      ]
+    },
+    "release": {
+      "id": 380401840,
+      "tag": "v0.1.15",
+      "latest": true,
+      "immutable": true,
+      "draft": false,
+      "prerelease": false,
+      "published_at_utc": "2026-09-01T10:25:09Z",
+      "assets": [
+        {
+          "id": 539383016,
+          "name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+          "bytes": 7459326,
+          "sha256": "5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01"
+        },
+        {
+          "id": 539383030,
+          "name": "SHA256SUMS",
+          "bytes": 109,
+          "sha256": "e50a7373b9d783b361cf2afa064c4dd1a41f5311052b7459ba3d55cde39fb6dc"
+        }
+      ],
+      "attestation_timestamp_utc": "2026-09-01T10:25:09Z",
+      "attestation_tag_object_sha": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "attestation_release_id": 380401840
+    },
+    "release_receipt": {
+      "sha256": "f37efcd70f13b9b70e1b26474f577472e98d1e7cedc7bba23ccfbb2d7a2494a0",
+      "manifest_sha256": "bd8d8afd1f5a536f15189301f1161a202eb8074a56c0348ce69c2c08cbe28293",
+      "full_receipt_sha256": "b41c67251ce4dd159cb032f190e1cd1641c0c1c2828eac7ee187ada4d2cf7032",
+      "target_receipt_sha256": "7a787aa08972a1cb50c6230ac4d919b2483f4bd24f8b9fa8e6a824bdcbdebe97",
+      "classifications_fresh_passed": 11
+    },
+    "full": {
+      "classification": "fresh passed",
+      "selected": 24,
+      "fresh_passed": 24,
+      "reused_passed": 0,
+      "elapsed_nanoseconds": 573235740916
+    },
+    "target": {
+      "classification": "fresh passed",
+      "classifications_fresh_passed": 7,
+      "candidate_bytes": 16525536,
+      "candidate_sha256": "9d30e33cb51cb6dc3b0c4fa090539d94c9bcd4cb7b3054e08db20d24ee9fdff9",
+      "elapsed_nanoseconds": 38941052242,
+      "service_receipt_sha256": "cf189c8aa5333986631b8084803d08d8b38ec356d43c05de76b60652bbf66783",
+      "service_authority_unchanged": true,
+      "service_queue_observation": {
+        "records_scanned": 3,
+        "workers_started": 2,
+        "productive_iterations": 5,
+        "completed_jobs": 2,
+        "retry_attempts": 3,
+        "stale_replacement_attempts": 2,
+        "transition_authority_cleared": true
+      },
+      "static_elf": {
+        "class": "ELF64",
+        "machine": "x86-64",
+        "position_independent": true,
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0
+      }
+    },
+    "verifier": {
+      "bytes": 10698144,
+      "sha256": "cad4714e73794f8868f8e585ed742c064f06317d62708dcc2aaee8ec9d88e1cb",
+      "identity_sha256": "9e71478eb212242b5ccedbb2fcdd204298d6b1a667983614ede19f75cd5bfe1c"
+    },
+    "pre_publication_receipts": {
+      "distributed_sha256": "86e503eb3843e1a032e3ce265ce468bafdcf0029d7d8b6b26067fbe00d6997e6",
+      "outbound_sha256": "a57d1e24f618c8d196db9a92c6047221fa55917b5f046cb0b385d2dfcc5c14d2",
+      "stateful_sha256": "f3a83a74fb43266ad607cf305dfb9e7904a3404fb224806ab61f530c1a4cde2c"
+    },
+    "workflow_artifacts": [
+      {
+        "id": 9796287264,
+        "name": "public-application-verification-evidence-33495319420-1",
+        "digest": "sha256:561304126fc28eea5ee84afe16687827459b537937d450286a2f6557d2a81bf4"
+      },
+      {
+        "id": 9796230401,
+        "name": "pre-publication-application-evidence-33495319420-1",
+        "digest": "sha256:d3b052a83977fd86d634820af19f23e40b77eef2e41576a5624472bb16798c86"
+      },
+      {
+        "id": 9796206643,
+        "name": "verifier-handoff-33495319420-1",
+        "digest": "sha256:5312841fd9370fa10c9068a53b68fda726a040ddb52c59d324e11da71f7be7d5"
+      },
+      {
+        "id": 9796205988,
+        "name": "release-handoff-33495319420-1",
+        "digest": "sha256:d73d500fd203018c3cdd5643c118a5514a8dc8224eb1fed3ef46926291be3ed5"
+      },
+      {
+        "id": 9796158525,
+        "name": "target-admission-evidence-33495319420-1",
+        "digest": "sha256:b93dcd3a384c151cc6c982387bb014f33b77578cb0b11ea41d9997d82c79a317"
+      },
+      {
+        "id": 9795996568,
+        "name": "full-verification-evidence-33495319420-1",
+        "digest": "sha256:12285d96421fce0c6c133277b1313739e7c700e0269d3a7e660af5161d716742"
+      }
+    ]
+  },
+  "candidate_continuity": {
+    "classification": "fresh passed",
+    "candidate_sha256": "9d30e33cb51cb6dc3b0c4fa090539d94c9bcd4cb7b3054e08db20d24ee9fdff9",
+    "service_receipt_sha256": "cf189c8aa5333986631b8084803d08d8b38ec356d43c05de76b60652bbf66783",
+    "target_receipt_sha256": "7a787aa08972a1cb50c6230ac4d919b2483f4bd24f8b9fa8e6a824bdcbdebe97",
+    "release_manifest_sha256": "bd8d8afd1f5a536f15189301f1161a202eb8074a56c0348ce69c2c08cbe28293",
+    "archive_sha256": "5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01",
+    "handoff_candidate_equal": true,
+    "pre_publication_candidate_equal": true,
+    "release_manifest_candidate_equal": true,
+    "hosted_exact_candidate_equal": true,
+    "hosted_latest_candidate_equal": true,
+    "independent_exact_candidate_equal": true,
+    "independent_latest_candidate_equal": true
+  },
+  "hosted_anonymous_public_acceptance": {
+    "classification": "fresh passed",
+    "token_free_downloads": 4,
+    "checksums_each": "fresh passed",
+    "release_attestation_each": "fresh passed",
+    "asset_attestations_each": "fresh passed",
+    "strict_release_verify_each": true,
+    "static_elf_each": "fresh passed",
+    "exact": {
+      "distributed_receipt_sha256": "b4cc0624a4879c65550227a226b3f7031515fe3760c973b288fe69572127f4f0",
+      "outbound_receipt_sha256": "b0a916f3f2cc48b15ec47209871444f2866e958197a482b6d137549874bc7b44",
+      "stateful_receipt_sha256": "f9f733749cc39d1397994d20916eac9ccd3baaedb396616db12cbdef49f88867",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "distributed_receipt_sha256": "24eeab214331e3d8e03dd616aebde6972423ec46711f8785e38bbffc4b6aa952",
+      "outbound_receipt_sha256": "23649eeec561575da60959210dc5aaa2ae6cd3b584149a8f0b94f6a10340c041",
+      "stateful_receipt_sha256": "6435e6cdda521fa26af5a55810a93079fa90b0e22bfe5bba676f80a6e5ee9421",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "exact_latest_compared_after_behavior": true,
+    "archive_equal": true,
+    "checksum_equal": true,
+    "candidate_equal": true,
+    "manifest_equal": true
+  },
+  "independent_anonymous_public_acceptance": {
+    "classification": "fresh passed",
+    "root": ".artifacts/campaign/202609011758/independent-public/",
+    "token_free_downloads": 4,
+    "command_level_download_retries_observed": 0,
+    "curl_internal_retry_count": "not emitted and not inferred",
+    "checksums_each": "fresh passed",
+    "release_attestation_each": "fresh passed",
+    "asset_attestations_each": "fresh passed",
+    "strict_release_verify_each": true,
+    "direct_elf_inspection_each": {
+      "classification": "fresh passed",
+      "class": "ELF64",
+      "machine": "x86-64",
+      "position_independent": true,
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0
+    },
+    "verifier_handoff": {
+      "classification": "fresh passed",
+      "bytes": 10698144,
+      "sha256": "cad4714e73794f8868f8e585ed742c064f06317d62708dcc2aaee8ec9d88e1cb",
+      "transport_mode_observed": "0750",
+      "declared_mode": "0755",
+      "normalized_copy_mode": "0755",
+      "identity_verified_after_exact_byte_check": true
+    },
+    "exact": {
+      "distributed_receipt_sha256": "ae8373ea5b56f7e2d634857965ff558f38bd3c54a2d4e29d5b118f430ce1c35f",
+      "outbound_receipt_sha256": "db886fa943c789e38b382b1fdb74ccb00d4556a2e2cf204bfff6da5af2e952b3",
+      "stateful_receipt_sha256": "370ae675c070931451a0ba61601fc3d90c39b4a94de994fbf382223ad17b3860",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "stateful_from_minimal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "distributed_receipt_sha256": "534dd22ba293d64ae1f094167841199f518034e9f1a438a3d33c2c05adba0105",
+      "outbound_receipt_sha256": "5cfc301ced6d5c6b64bdb3e1ec7d723cce30c59691cb34afdc21fa8db7478aa5",
+      "stateful_receipt_sha256": "a726e4617b58c9ba99a3854769b9c8c597fb4e35d75a81a1dd5072f22eb9a583",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "stateful_from_minimal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "exact_latest_compared_after_behavior": true,
+    "archive_equal": true,
+    "checksum_equal": true,
+    "candidate_equal": true,
+    "manifest_equal": true
+  },
+  "classifications": {
+    "REL15-1": "fresh passed",
+    "REL15-2": "fresh passed",
+    "REL15-3": "fresh passed",
+    "REL15-4": "fresh passed",
+    "REL15-5": "fresh passed",
+    "REL15-6": "fresh passed",
+    "REL15-7": "fresh passed",
+    "REL15-8": "fresh passed",
+    "final_source_full": "fresh passed",
+    "final_target_admission": "fresh passed",
+    "final_local_package_verify": "fresh passed",
+    "hosted_dry_run": "fresh passed",
+    "publication_preconditions": "fresh passed",
+    "canonical_publication": "fresh passed",
+    "hosted_anonymous_exact": "fresh passed",
+    "hosted_anonymous_latest": "fresh passed",
+    "independent_anonymous_exact": "fresh passed",
+    "independent_anonymous_latest": "fresh passed",
+    "dry_run_publication_jobs": "skipped",
+    "predecessor_evidence_orientation": "reused passed",
+    "optional_local_file_utility": "unavailable",
+    "optional_local_gh_workflow_view_json_field": "unavailable",
+    "api_equivalent_external_inspection": "fresh passed",
+    "final_required_reused": 0,
+    "final_required_skipped": 0,
+    "final_required_unavailable": 0,
+    "final_required_failed": 0,
+    "final_required_not_run": 0
+  },
+  "cleanup": {
+    "local_target_admission_containers_removed": true,
+    "hosted_target_admission_containers_removed": true,
+    "temporary_application_and_data_roots_removed": true,
+    "runner_cleanup_complete": true,
+    "outbound_oracle_cleanup_complete": true,
+    "raw_secret_values_retained": false,
+    "campaign_processes_remaining": 0,
+    "campaign_containers_remaining": 0,
+    "live_relay_contacted": false,
+    "deployment_performed": false,
+    "ambient_hosted_or_user_data_touched": false,
+    "raw_logs_binaries_downloads_and_receipts": "retained only under ignored .artifacts roots"
+  },
+  "resources": {
+    "local_full_elapsed_nanoseconds": 129906844137,
+    "local_target_admission_elapsed_nanoseconds": 31757710816,
+    "publication_full_elapsed_nanoseconds": 573235740916,
+    "publication_target_admission_elapsed_nanoseconds": 38941052242,
+    "publication_candidate_lifecycle": {
+      "elapsed_nanoseconds": 27997039751,
+      "sampled_child_cpu_nanoseconds": 160000000,
+      "peak_rss_kib": 74244
+    },
+    "publication_job_elapsed_seconds": {
+      "build_verify_package": 1319,
+      "pre_publication": 41,
+      "publish": 15,
+      "anonymous_public": 84
+    },
+    "publication_target_oracles": {
+      "distributed_elapsed_nanoseconds": 2698770983,
+      "outbound_elapsed_nanoseconds": 6459315427,
+      "stateful_elapsed_nanoseconds": 20431319707,
+      "service_elapsed_nanoseconds": 3812379481
+    },
+    "publication_pre_publication_oracles": {
+      "distributed_elapsed_nanoseconds": 3322877840,
+      "outbound_elapsed_nanoseconds": 7638745479,
+      "stateful_elapsed_nanoseconds": 23239966552
+    },
+    "hosted_public_oracles": {
+      "exact_distributed_elapsed_nanoseconds": 6002647035,
+      "exact_outbound_elapsed_nanoseconds": 8636031192,
+      "exact_stateful_elapsed_nanoseconds": 18667000465,
+      "latest_distributed_elapsed_nanoseconds": 3415755003,
+      "latest_outbound_elapsed_nanoseconds": 7826088020,
+      "latest_stateful_elapsed_nanoseconds": 18374692915
+    },
+    "independent_public_oracles": {
+      "exact_distributed_elapsed_nanoseconds": 2171972000,
+      "exact_outbound_elapsed_nanoseconds": 5857852183,
+      "exact_stateful_elapsed_nanoseconds": 13625839182,
+      "latest_distributed_elapsed_nanoseconds": 2196373712,
+      "latest_outbound_elapsed_nanoseconds": 5843326668,
+      "latest_stateful_elapsed_nanoseconds": 13598487770
+    },
+    "candidate_bytes": 16525536,
+    "archive_bytes": 7459326,
+    "checksum_bytes": 109,
+    "manifest_bytes": 3907,
+    "notice_bytes": 304296,
+    "license_bytes": 11336,
+    "uncompressed_payload_bytes": 16845075,
+    "archive_ratio": 0.442819,
+    "provider_cost_and_reliable_aggregate_runner_cpu_rss": "unavailable and not inferred"
+  },
+  "recovery": {
+    "dry_run_dispatches_for_R": 1,
+    "canonical_run_attempts": 1,
+    "workflow_rerun": "not executed",
+    "exact_tag_recovery_dispatch": "not executed",
+    "content_changing_additive_patch": "not executed",
+    "attestation_or_download_retry": "not executed",
+    "transient_verifier_mode_normalization": "one downloaded artifact copy changed from transport mode 0750 to declared 0755 only after exact byte and SHA-256 verification",
+    "pre_dispatch_cli_deviation": "installed gh 2.45.0 lacked workflow view JSON support; the command stopped before dispatch and the read-only REST API equivalent was used",
+    "irreversible_boundary": "annotated v0.1.15 tag push",
+    "externally_committed_defect_observed": false
+  },
+  "external_mutations": [
+    "normal fast-forward main push through R 2b428645471e032ba3cfb415bf81565d7ea0159e",
+    "one hosted dry-run dispatch 33493200904 with publish=false and intended tag v0.1.15",
+    "repository confirmation variable LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA changed from the v0.1.14 tag object to exact v0.1.15 tag object d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+    "one annotated refs/tags/v0.1.15 push",
+    "canonical run 33495319420 created immutable latest release 380401840, its two canonical assets, and GitHub release attestations"
+  ],
+  "non_mutations": [
+    "no force push, history rewrite, rebase, reset, clean, restore, retag, tag deletion, release edit, asset replacement, unpublish, relabel, or manual release",
+    "no package or installer publication, deployment, live-relay contact, migration, schema mutation, or hosted/user/database/queue/object-data mutation",
+    "no issue, pull-request, permission, secret, credential, or repository-setting mutation other than the exact authorized non-secret confirmation-variable binding",
+    "immutable v0.1.14 and every older tag, release, asset, receipt, and historical evidence object remain unchanged"
+  ],
+  "limitations_and_nonclaims": [
+    "tested public target is only x86_64-unknown-linux-musl",
+    "tested userlands are only pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31",
+    "no minimum-kernel, universal x86-64, generic Linux, reproducible-build, or broader target claim",
+    "local and hosted candidates differed while every receipt remained internally exact; no reproducible-build claim is made",
+    "the annotated Git tag is unsigned; the GitHub-owned release attestation is integrity evidence, not binary signing or general provenance",
+    "no task-function resource transfer, affine container, closure, general linear/session type, WebSocket, NIP-01 event flow, signing, key storage, relay deployment, or live-relay observation",
+    "no inbound TLS, DNSSEC, privacy, exactly-once work, hostile-code isolation, encrypted storage, replication, consensus, multi-tenant isolation, or service-level claim",
+    "installed binaries, deployments, package registries, hosted data, and user data were not inspected or mutated",
+    "the optional local file utility was unavailable; first-party ELF parsing and independent readelf inspection both fresh-passed",
+    "provider monetary cost and reliable aggregate hosted CPU/RSS were unavailable"
+  ],
+  "next_candidates": [
+    "workload-driven task-function resource transfer with call/result/cancellation/branch proof",
+    "separately bounded scale and long-history retention with exact resource and recovery evidence",
+    "owner-detail projection or worker recipe only from demonstrated maintained-consumer need",
+    "Nostr WebSocket/session proving slice only after general connection, framing, subscription, reconnect, signing/key, authentication, replay, resource, and raw-protocol authority close"
+  ],
+  "raw_artifacts": {
+    "campaign_root": ".artifacts/campaign/202609011758/",
+    "local_full_receipt": ".artifacts/lkjscript-dev/check/1788255081084939491-1406935-0/receipt.json",
+    "local_target": ".artifacts/campaign/202609011758/local-target/",
+    "local_packages": [
+      ".artifacts/campaign/202609011758/package-one/",
+      ".artifacts/campaign/202609011758/package-two/"
+    ],
+    "hosted_dry_run": ".artifacts/campaign/202609011758/hosted-dry-run/",
+    "hosted_publication": ".artifacts/campaign/202609011758/hosted-publication/",
+    "independent_anonymous": ".artifacts/campaign/202609011758/independent-public/",
+    "attestation_tool": ".artifacts/campaign/202609010950/tools/gh-2.98.0/"
+  },
+  "closure": {
+    "evidence_path": "docs/evidence/202609011758-affine-resource-release.json",
+    "evidence_commit_E": "the containing evidence/current-truth commit; its SHA and normal push result are reported externally because a commit cannot contain its own identity",
+    "validation": {
+      "json_decode": "fresh passed",
+      "diff_check": "fresh passed",
+      "release_inputs_unchanged": true,
+      "final_assembled_changed_input_profile": "fresh passed; exact receipt is reported outside this self-containing evidence file"
+    },
+    "allowed_tracked_paths": [
+      "README.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/release.md",
+      "docs/performance.md",
+      "docs/evidence/202609011758-affine-resource-release.json",
+      "docs/campaigns/202609011758.md"
+    ],
+    "release_bound_inputs_changed_by_E": false,
+    "source_release_split_closed": true,
+    "deployment_state": "unchanged and not contacted",
+    "external_reconciliation_before_E": {
+      "observed_at_utc": "2026-09-01T10:34:37Z",
+      "R_equal_origin_main": true,
+      "active_release_runs": 0,
+      "open_issues_or_pull_requests": 0,
+      "v0_1_15_latest_immutable": true,
+      "v0_1_14_unchanged": true,
+      "confirmation_variable_exact": true
+    }
+  }
+}

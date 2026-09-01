@@ -12,40 +12,37 @@ SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, a
 and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
 100,100-owner full-lifecycle admission, exact-interface affine capability resources, and the
 resource-owned maintained durable-queue worker cutover are current architecture. PostgreSQL 16.15
-is retained only as contributor differential evidence. Current source is unreleased product
-snapshot 0.1.15; immutable `v0.1.14` remains the supported public
+is retained only as contributor differential evidence. Current source matches immutable `v0.1.15`,
+the supported public
 `x86_64-unknown-linux-musl` distribution; its exact and latest downloads independently passed
-static, distributed HTTP, deployment-bound outbound HTTPS/TLS/DNS, and stateful HTTP acceptance.
+static, distributed HTTP, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine
+service/worker acceptance with one exact candidate identity through publication.
 Immutable v0.1.8 remains an unclosed historical recovery point.
 
 Each future item requires a named maintained consumer, exact contract, independent oracle,
 measured reversal gate, and dependency-closed cutover/deletion plan.
 
-1. **Publish product snapshot 0.1.15.** Reconcile the completed source candidate against immutable
-   public `v0.1.14`, rerun exact final source and target admission on the selected commit, use the
-   tag-driven release procedure, and independently verify anonymous exact/latest assets. Do not
-   mutate the predecessor tag, release, assets, or operational deployment state.
-2. **Bounded owner-detail projection from maintained authoring evidence.** Add semantic body detail
+1. **Bounded owner-detail projection from maintained authoring evidence.** Add semantic body detail
    only when a real public editing workflow shows that owner summaries plus bounded context are
    insufficient. Define exact disclosed fields, ordering, byte/resource bounds, continuation or
    external-output behavior, and redaction before widening inspection. Keep it a read projection of
    accepted graph meaning rather than source text, storage bytes, or a second editable form.
-3. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
+2. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-4. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
+3. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
    DNS/address, TLS trust, cancellation, and resource ownership established by `HttpClient` without
    widening it into an ambient URL or socket capability. Define persistent connection ownership,
    framing, subscriptions, reconnect/backoff, NIP-01 event canonicalization, signing/key authority,
    relay authentication, replay visibility, and an independent raw WebSocket oracle before adding
    graph meaning or a deployment adapter.
-5. **Workload-driven resource transfer across task functions.** Extend the current lexical affine
+4. **Workload-driven resource transfer across task functions.** Extend the current lexical affine
    slice only when a maintained workload cannot keep acquisition and consumption inside one task
    body. Define call ownership, result transfer, recursion, cancellation, branch joins, artifact
    movement, and an independent oracle before permitting any resource-valued function signature.
    Do not generalize this into closures, affine containers, or linear must-use values without their
    own workloads and proof.
-6. **Million-owner compiler admission and separately selected data/history scale.** The current
+5. **Million-owner compiler admission and separately selected data/history scale.** The current
    harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
    capacity attempt reached 275,000 accepted modules before its one-hour allocation and is
    `environment_limit`, so complete the lightweight million-owner capacity boundary before
@@ -53,30 +50,30 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    long-history retention as a separate campaign with reader leases, registered backup roots, an
    independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O observations
    before any deletion, packing, or compaction mechanism.
-7. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
+6. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
    and member/case edits, extraction, inline, and repair only from maintained workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
    and predecessor rejection in each vertical slice.
-8. **Additional platform releases one target at a time.** Treat each architecture and operating
+7. **Additional platform releases one target at a time.** Treat each architecture and operating
    system as its own dependency-closed admission with a hosted execution oracle, exact runtime
    inventory, stable asset identity, and public-download smoke. Do not introduce a speculative
    build matrix.
-9. **Normalized package management and removed project workflows.** Introduce package
+8. **Normalized package management and removed project workflows.** Introduce package
    inspection/staging/publication, history, drafts, review, project backup/restore, and repository health
    only by exact consumer. Do not reinstate Graph 4 readers, compatibility commands, a general
    remote registry, or storage bytes as authoring input.
-10. **Broader incremental compilation and validation.** Generalize beyond the currently selected
+9. **Broader incremental compilation and validation.** Generalize beyond the currently selected
    compiler impacts and semantic edit classes only after clean/incremental artifact equality and
    randomized full-oracle evidence hold for signatures, types, effects, capabilities, targets,
    tests, dependencies, and mixed changes.
-11. **Broad branch and pull-request CI.** Select this only when its independent operating value,
+10. **Broad branch and pull-request CI.** Select this only when its independent operating value,
    required gate profile, retention, trust model, and recovery policy are explicit. Do not treat
    the release workflow or its transient artifacts as general CI.
-12. **Installers, package managers, signing, and build provenance.** Each registry, installer,
+11. **Installers, package managers, signing, and build provenance.** Each registry, installer,
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.
-13. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
+12. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
    implemented. Constraints, inference, lexical capture/closures, component composition,
    specialization, AOT, JIT, SIMD, or custom allocation still require multiple maintained
    workloads, independent semantic/reference behavior, measurements, and explicit reversal

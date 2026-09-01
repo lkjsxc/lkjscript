@@ -135,22 +135,27 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.14` closes this path at source commit
-`b9f37cb86353596d260521924b5986300595450e`. Its exact and latest downloads independently passed
+Immutable `v0.1.15` closes this path at source commit
+`2b428645471e032ba3cfb415bf81565d7ea0159e`. Its exact and latest downloads independently passed
 strict package and static inspection plus transferred distributed HTTP, deployment-bound outbound
 HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Each stateful path began with empty
 `minimal`, staged the exact built-in transport, and authored the complete dependency/topology/BBS
 through the ordinary public writer. The release contains unified graph-native recipe lowering,
 the closed NIP-11 relay-information recipe, bounded context traversal, and the complete ordered-data
-and durable-queue cutover without contacting a live relay or deploying an application.
+and durable-queue cutover without contacting a live relay or deploying an application. It also
+publishes Graph 6 exact-interface affine resources, unrestricted/borrow/consume parameter use,
+compiler/runtime movement checks, and the resource-owned queue interface. Target admission binds
+the exact service/worker candidate digest through the release manifest and independently accepted
+exact/latest public extractions.
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
-no predecessor tag, release, or asset. Current source is unreleased product snapshot 0.1.15 with
-the current graph and affine public authoring; public latest remains immutable snapshot 0.1.14.
+no predecessor tag, release, or asset, and v0.1.15 likewise leaves every predecessor unchanged.
+Current source and public latest are product snapshot 0.1.15 with the current graph and affine
+public authoring.
 Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
-1, and all other unchanged identities remain independently owned. The source/public split is an
-explicit later publication candidate, not a release in this campaign.
+1, and all other unchanged identities remain independently owned. Distribution advanced without
+advancing semantic `HEAD`, deployment authority, or operational data.
 
 Bounded context remains a read projection of one exact repository view rather than a query store:
 
