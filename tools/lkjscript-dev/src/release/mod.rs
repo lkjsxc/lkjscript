@@ -1687,6 +1687,53 @@ mod tests {
         fs::read_to_string(repository).expect("read release workflow")
     }
 
+    fn assert_current_distributed_projection_acceptance(job: &str) {
+        let schema = format!(
+            ".schema == {{identity:\"{}\",version:{}}}",
+            crate::distributed_http::ACCEPTANCE_SCHEMA,
+            crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
+        );
+        assert!(job.contains(&schema), "release job omitted {schema}");
+        for predicate in [
+            ".result.definition_projection.function | test(\"^decl_[0-9a-f]{32}$\")",
+            ".result.definition_projection.initial_revision == .result.initial_revision",
+            ".result.definition_projection.accepted_revision == .result.accepted_revision",
+            ".result.definition_projection.initial_revision != .result.definition_projection.accepted_revision",
+            ".result.definition_projection.initial_digest | test(\"^definition_[0-9a-f]{64}$\")",
+            ".result.definition_projection.accepted_digest | test(\"^definition_[0-9a-f]{64}$\")",
+            ".result.definition_projection.initial_digest != .result.definition_projection.accepted_digest",
+            ".result.definition_projection.initial_records > 0",
+            ".result.definition_projection.accepted_records > 0",
+            ".result.definition_projection.initial_pages >= 2",
+            ".result.definition_projection.accepted_pages >= 2",
+            ".result.definition_projection.initial_body_records > 0",
+            ".result.definition_projection.accepted_body_records > 0",
+            ".result.definition_projection.initial_fact_records > 0",
+            ".result.definition_projection.accepted_fact_records > 0",
+            ".result.definition_projection.initial_logical_bytes > 0",
+            ".result.definition_projection.accepted_logical_bytes > 0",
+            ".result.definition_projection.initial_output_bytes > 0",
+            ".result.definition_projection.accepted_output_bytes > 0",
+            ".result.definition_projection.initial_literal_sha256 | test(\"^[0-9a-f]{64}$\")",
+            ".result.definition_projection.accepted_literal_sha256 | test(\"^[0-9a-f]{64}$\")",
+            ".result.definition_projection.initial_literal_sha256 != .result.definition_projection.accepted_literal_sha256",
+            ".result.definition_projection.contract_unchanged == true",
+            ".result.definition_projection.intended_body_change == true",
+            ".result.definition_projection.digest_recomputed == true",
+            ".result.definition_projection.changed_page_budgets == true",
+            ".result.definition_projection.direct_file_plan_equal == true",
+            ".result.definition_projection.malformed_continuation_rejected == true",
+            ".result.definition_projection.stale_continuation_rejected == true",
+            ".result.definition_projection.projection_input_rejected == true",
+            ".result.definition_projection.authority_unchanged_before_apply == true",
+        ] {
+            assert!(
+                job.contains(predicate),
+                "release job omitted distributed projection predicate {predicate}"
+            );
+        }
+    }
+
     #[test]
     fn release_strict_tag_accepts_only_matching_plain_semver() {
         assert!(validate_strict_tag("v0.1.0", "0.1.0").is_ok());
@@ -1963,6 +2010,7 @@ mod tests {
         assert!(pre_publication.contains("distributed-http"));
         assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
+        assert_current_distributed_projection_acceptance(pre_publication);
         assert!(
             pre_publication
                 .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
@@ -2028,6 +2076,7 @@ mod tests {
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
+        assert_current_distributed_projection_acceptance(post_release);
         assert!(
             post_release
                 .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
@@ -2072,6 +2121,17 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
+        let distributed_schema = format!(
+            ".schema == {{identity:\"{}\",version:{}}}",
+            crate::distributed_http::ACCEPTANCE_SCHEMA,
+            crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
+        );
+        assert_eq!(workflow.matches(&distributed_schema).count(), 2);
+        assert!(
+            !workflow.contains(
+                ".schema == {identity:\"lkjscript-distributed-http-acceptance\",version:2}"
+            )
+        );
         assert!(
             !workflow
                 .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:3}")

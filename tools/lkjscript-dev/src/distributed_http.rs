@@ -19,8 +19,8 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
-const ACCEPTANCE_SCHEMA_VERSION: u32 = 3;
+pub(crate) const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
+pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 3;
 const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
