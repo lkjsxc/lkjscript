@@ -42,6 +42,15 @@ pub fn generated_documents() -> Result<Vec<GeneratedDocument>, String> {
             .into_bytes(),
         },
         GeneratedDocument {
+            relative_path: "function-definition.md",
+            bytes: registry_sections_markdown(
+                &snapshot,
+                "Revision-pinned function definition projection",
+                &[RegistrySection::Inspection],
+            )?
+            .into_bytes(),
+        },
+        GeneratedDocument {
             relative_path: "deployment.md",
             bytes: registry_sections_markdown(
                 &snapshot,
@@ -692,7 +701,7 @@ mod tests {
     fn generated_documents_are_unique_and_repeatable() {
         let first = generated_documents().expect("generated documents");
         let second = generated_documents().expect("generated documents");
-        assert_eq!(first.len(), 7);
+        assert_eq!(first.len(), 8);
         assert_eq!(first.len(), second.len());
         for (left, right) in first.iter().zip(second.iter()) {
             assert_eq!(left.relative_path, right.relative_path);

@@ -14,13 +14,18 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source and the immutable supported release are product snapshot `v0.1.15`. They include
-public exact built-in dependency, component, requirement, function-backed
+Current source is unreleased product snapshot `0.1.16`; the immutable supported release remains
+`v0.1.15`. Both include public exact built-in dependency, component, requirement, function-backed
 port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
 authored-operation engine without changing their resulting meaning or atomic project-creation
 contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
 No deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
+
+Unreleased 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
+live local function. They expose its complete accepted contract, structural body, exact reference
+cutoff, and revision-bound validation facts without exposing storage or creating a second authoring
+format. Immutable v0.1.15 does not contain this source-only addition.
 
 Product 0.1.15 adds exact-interface affine capability resources. Public compact records expose
 `type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
@@ -205,6 +210,7 @@ vocabulary also includes exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
 capture, partial application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
+[function-definition projection](docs/generated/function-definition.md),
 [built-in interface](docs/generated/builtin-standard.md),
 [deployment schema](docs/generated/deployment.md), and
 [stateful walkthrough](docs/generated/stateful-http-authoring.md), together with the public
@@ -293,6 +299,23 @@ complete neighborhood is admitted before paging; continuations are stateless and
 repository, package, revision, root, direction, depth, ordering, and resume section/key. Page item
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
+
+Unreleased 0.1.16 can project one complete accepted local function definition through stateless
+pages:
+
+```sh
+./lkjscript --project ./hello inspect owner pure_function decl_... \
+  --detail definition --limit 20 --bytes 65536
+```
+
+Each page repeats the exact repository, package, revision, function, projection contract, complete
+digest and counts, and page range. An `icont_` continuation resumes by exclusive logical record key
+and permits different item and byte budgets; the executable reconstructs and validates the entire
+definition on every request. Named declarations and types remain references rather than recursive
+expansion. Dependency bodies, source/raw/JSON aliases, mutable cursors, and projection records used
+as `change` input reject. The executable-owned
+[definition guide](docs/generated/function-definition.md) reports every record, form, limit,
+diagnostic, and containment nonclaim.
 
 Changes are typed semantic intent. For a direct rename, use the exact revision and owner returned
 by `status` and `query`:

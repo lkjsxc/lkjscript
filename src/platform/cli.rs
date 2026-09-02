@@ -4,10 +4,20 @@ use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
     BuiltinOwnerSelector, inspect_builtin_owner, parse_interface_owner_kind, query_builtin_owners,
 };
-use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
+use super::change::{AuthoredChange, AuthoredChangeSet, BoundOwnerSummary, OwnerSelector};
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
 use super::contract::{
-    CapabilitiesSnapshot, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
+    CapabilitiesSnapshot, FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
+    FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT, FUNCTION_DEFINITION_DEFAULT_ITEMS,
+    FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES, FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN,
+    FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY,
+    FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, FUNCTION_DEFINITION_RECORD_KEY_DOMAIN,
+    FUNCTION_DEFINITION_RESPONSE_FIELDS, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
+    MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES,
+    MAXIMUM_FUNCTION_DEFINITION_DEPTH, MAXIMUM_FUNCTION_DEFINITION_EDGES,
+    MAXIMUM_FUNCTION_DEFINITION_FACT_READS, MAXIMUM_FUNCTION_DEFINITION_ITEMS,
+    MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES, MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES,
+    MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES, MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
     PublicOperation, RegistrySection, capabilities_snapshot, diagnostic_class_name,
     generated_documents, operation_descriptors, operation_record,
 };
@@ -15,15 +25,18 @@ use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
     LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES,
     MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
-    decode_compact_change, encode_logical_change_plan, normalize_change_request,
+    decode_compact_change, encode_logical_change_plan, normalize_change_request, render_record,
 };
 use super::data::{DataLimits, DataStore};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
 use super::execution::normalized::NormalizedCommandPolicy;
 use super::kernel::{
-    Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId,
-    PackageTransportDigest,
+    BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility, EncodedOwnerKey,
+    ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect, LocalValueReference,
+    Name, OperationReference, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind,
+    OwnerRecord, PackageId, PackageTransportDigest, ParameterParent, ParameterUse,
+    RequirementReference, ResourceUnit, TextValue, TypeObjectDigest, encode_owner,
 };
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
@@ -32,10 +45,18 @@ use super::project_creation::{ProjectTemplate, create_project, create_project_wi
 use super::project_discovery::discover_project;
 use super::publication::{
     GraphRepository, PreparedAuthoredPublication, PublicationOptions,
-    PublicationOutcome as GraphPublicationOutcome,
+    PublicationOutcome as GraphPublicationOutcome, RepositoryDefinitionReader, RepositoryReadWork,
+    RepositoryView,
 };
-use super::semantic_id::{RepositoryId, RevisionId};
+use super::semantic_id::{RepositoryId, RevisionId, encode_hex};
 use super::storage::contract::MAXIMUM_PACK_BYTES;
+use super::witness::{
+    BindingContainerRole, ExpressionRootRole, OwnershipEntry, OwnershipParent, OwnershipRole,
+    SemanticDigest,
+};
+use base64::Engine;
+use std::collections::BTreeSet;
+use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -1760,6 +1781,123 @@ fn single_diagnostic(diagnostic: Diagnostic) -> Vec<Diagnostic> {
     vec![diagnostic]
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DefinitionPageRequest {
+    items: u64,
+    output_bytes: usize,
+    continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum OwnerInspectionDetail {
+    Summary,
+    Definition(DefinitionPageRequest),
+}
+
+fn parse_owner_inspection_detail(
+    arguments: &[String],
+) -> Result<OwnerInspectionDetail, Diagnostic> {
+    ensure_options(
+        arguments,
+        &[
+            "--package",
+            "--detail",
+            "--limit",
+            "--bytes",
+            "--continuation",
+        ],
+        &[],
+    )?;
+    let detail = option_value(arguments, "--detail")?;
+    let has_page_option = ["--limit", "--bytes", "--continuation"]
+        .into_iter()
+        .any(|name| arguments.iter().any(|argument| argument == name));
+    let Some(detail) = detail else {
+        if has_page_option {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_detail_required",
+                "--limit, --bytes, and --continuation require --detail definition",
+            ));
+        }
+        return Ok(OwnerInspectionDetail::Summary);
+    };
+    if detail != "definition" {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_detail_value",
+            format!("inspection detail '{detail}' is unknown; expected definition"),
+        ));
+    }
+    let items = option_value(arguments, "--limit")?
+        .map(|value| parse_definition_item_limit(&value))
+        .transpose()?
+        .unwrap_or(FUNCTION_DEFINITION_DEFAULT_ITEMS);
+    let output_bytes = option_value(arguments, "--bytes")?
+        .map(|value| parse_definition_byte_limit(&value))
+        .transpose()?
+        .unwrap_or(FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES);
+    let continuation = option_value(arguments, "--continuation")?;
+    if continuation
+        .as_ref()
+        .is_some_and(|token| token.len() > MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES)
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_oversized",
+            format!(
+                "definition continuation exceeds {MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES} encoded bytes"
+            ),
+        ));
+    }
+    Ok(OwnerInspectionDetail::Definition(DefinitionPageRequest {
+        items,
+        output_bytes,
+        continuation,
+    }))
+}
+
+fn parse_definition_item_limit(value: &str) -> Result<u64, Diagnostic> {
+    let parsed = value.parse::<u64>().map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_invalid_limit",
+            format!("definition item limit '{value}' is not a canonical positive integer"),
+        )
+    })?;
+    if parsed == 0 || parsed > MAXIMUM_FUNCTION_DEFINITION_ITEMS || parsed.to_string() != value {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_invalid_limit",
+            format!("definition item limit must be 1 through {MAXIMUM_FUNCTION_DEFINITION_ITEMS}"),
+        ));
+    }
+    Ok(parsed)
+}
+
+fn parse_definition_byte_limit(value: &str) -> Result<usize, Diagnostic> {
+    let parsed = value.parse::<usize>().map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_invalid_byte_limit",
+            format!("definition output-byte limit '{value}' is not canonical"),
+        )
+    })?;
+    if !(MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES..=MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES)
+        .contains(&parsed)
+        || parsed.to_string() != value
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_invalid_byte_limit",
+            format!(
+                "definition output-byte limit must be {MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES} through {MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES}"
+            ),
+        ));
+    }
+    Ok(parsed)
+}
+
 /// Reads one exact owner from the accepted normalized authority observed by a revision-pinned
 /// repository view. The selector never consults predecessor workspace or query indexes.
 pub fn execute_inspect_owner(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
@@ -1848,7 +1986,7 @@ fn execute_inspect_owner_with_limits(
             "normalized owner inspection requires 'inspect owner KIND ID'",
         ));
     }
-    ensure_options(&arguments[4..], &["--package"], &[])?;
+    let detail = parse_owner_inspection_detail(&arguments[4..])?;
     let requested_kind = parse_kernel_owner_kind(kind_name)?;
     let owner = parse_kernel_owner_key(identity)?;
     if !requested_kind.accepts_owner(owner) {
@@ -1869,6 +2007,16 @@ fn execute_inspect_owner_with_limits(
         .transpose()?
         .unwrap_or_else(|| view.package());
     if requested_package != view.package() {
+        if matches!(detail, OwnerInspectionDetail::Definition(_)) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Capability,
+                "definition_dependency_body",
+                format!(
+                    "definition detail is local-only; package '{requested_package}' is not the current local package '{}'",
+                    view.package()
+                ),
+            ));
+        }
         return Err(owner_inspection_error(
             DiagnosticClass::Semantic,
             "owner_foreign_package",
@@ -1877,6 +2025,33 @@ fn execute_inspect_owner_with_limits(
                 view.package()
             ),
         ));
+    }
+
+    if let OwnerInspectionDetail::Definition(request) = detail {
+        if !matches!(
+            requested_kind,
+            KernelOwnerKind::PureFunction | KernelOwnerKind::TaskFunction
+        ) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Semantic,
+                "definition_owner_kind",
+                format!(
+                    "definition detail requires pure_function or task_function, not '{}'",
+                    requested_kind.name()
+                ),
+            ));
+        }
+        let control = ExecutionControl::uncancelled();
+        let mut cancellation = || check_definition_control(&control);
+        return execute_function_definition(
+            &repository,
+            &view,
+            requested_kind,
+            owner,
+            &request,
+            limits,
+            &mut cancellation,
+        );
     }
 
     let owner_read = view.owner(owner)?;
@@ -1980,6 +2155,2749 @@ fn execute_inspect_owner_with_limits(
     Ok(output.finish())
 }
 
+const FUNCTION_DEFINITION_ORDERING: u8 = 1;
+const FUNCTION_DEFINITION_ORDERING_NAME: &str =
+    "header-contract-structural-preorder-reference-fact-v1";
+const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT01";
+const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 1;
+const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 1;
+const FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES: usize = 18;
+const FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES: usize = 32;
+const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES: usize = 224;
+const FUNCTION_DEFINITION_CONTINUATION_PREFIX: &str = "icont_";
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum DefinitionSection {
+    Header,
+    Contract,
+    Body,
+    Reference,
+    Fact,
+}
+
+impl DefinitionSection {
+    const fn tag(self) -> u8 {
+        match self {
+            Self::Header => 1,
+            Self::Contract => 2,
+            Self::Body => 3,
+            Self::Reference => 4,
+            Self::Fact => 5,
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Header => "header",
+            Self::Contract => "contract",
+            Self::Body => "body",
+            Self::Reference => "reference",
+            Self::Fact => "fact",
+        }
+    }
+
+    fn from_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(Self::Header),
+            2 => Some(Self::Contract),
+            3 => Some(Self::Body),
+            4 => Some(Self::Reference),
+            5 => Some(Self::Fact),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DefinitionDigest([u8; 32]);
+
+impl DefinitionDigest {
+    const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl fmt::Display for DefinitionDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("definition_")?;
+        formatter.write_str(&encode_hex(&self.0))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DefinitionLogicalRecord {
+    section: DefinitionSection,
+    bytes: Vec<u8>,
+    key: [u8; 32],
+}
+
+#[derive(Clone, Debug)]
+struct DefinitionProjection {
+    records: Vec<DefinitionLogicalRecord>,
+    digest: DefinitionDigest,
+    contract_records: u64,
+    body_records: u64,
+    reference_records: u64,
+    fact_records: u64,
+    structural_edges: u64,
+    reference_edges: u64,
+    fact_reads: u64,
+    maximum_depth: u64,
+    logical_bytes: usize,
+    validator: String,
+    certificate: String,
+    work: RepositoryReadWork,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DefinitionReferenceProjection {
+    role: String,
+    target_kind: String,
+    target: String,
+    source: String,
+    ordinal: u32,
+}
+
+#[derive(Clone, Debug)]
+struct DefinitionFactProjection {
+    owner: KernelOwnerKey,
+    kind: KernelOwnerKind,
+    summary: BoundOwnerSummary,
+}
+
+#[derive(Clone, Debug)]
+struct DefinitionPosition {
+    parent: KernelOwnerKey,
+    ownership_role: OwnershipRole,
+    slot: &'static str,
+    index: u32,
+    label: Option<String>,
+    depth: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DefinitionBinding {
+    repository: RepositoryId,
+    package: PackageId,
+    revision: RevisionId,
+    function: KernelOwnerKey,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DecodedDefinitionContinuation {
+    binding: DefinitionBinding,
+    projection: DefinitionDigest,
+    ordering: u8,
+    section: DefinitionSection,
+    index: u32,
+    resume_key: [u8; 32],
+}
+
+fn definition_record(
+    section: DefinitionSection,
+    operation: &'static str,
+    fields: &[(&'static str, String)],
+) -> Result<DefinitionLogicalRecord, Diagnostic> {
+    for (name, _) in fields {
+        if !FUNCTION_DEFINITION_RESPONSE_FIELDS.contains(&(operation, *name)) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Infrastructure,
+                "definition_response_field_inventory",
+                format!(
+                    "definition renderer field '{operation}.{name}' is absent from its executable inventory"
+                ),
+            ));
+        }
+    }
+    let borrowed = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect::<Vec<_>>();
+    let rendered = render_record(operation, &borrowed)?;
+    let bytes = rendered.into_bytes();
+    let mut key_hasher = blake3::Hasher::new_derive_key(FUNCTION_DEFINITION_RECORD_KEY_DOMAIN);
+    key_hasher.update(&[section.tag()]);
+    key_hasher.update(&(bytes.len() as u64).to_be_bytes());
+    key_hasher.update(&bytes);
+    Ok(DefinitionLogicalRecord {
+        section,
+        bytes,
+        key: *key_hasher.finalize().as_bytes(),
+    })
+}
+
+fn definition_logical_digest(
+    records: &[DefinitionLogicalRecord],
+) -> Result<(DefinitionDigest, usize), Diagnostic> {
+    let mut logical_bytes = 0_usize;
+    let mut hasher = blake3::Hasher::new_derive_key(FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN);
+    hasher.update(&(records.len() as u64).to_be_bytes());
+    for record in records {
+        logical_bytes = logical_bytes
+            .checked_add(record.bytes.len())
+            .ok_or_else(|| {
+                owner_inspection_error(
+                    DiagnosticClass::Resource,
+                    "definition_logical_byte_limit",
+                    "definition logical byte accounting overflowed",
+                )
+            })?;
+        if logical_bytes > MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_logical_byte_limit",
+                format!(
+                    "definition logical encoding exceeds {MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES} bytes"
+                ),
+            ));
+        }
+        hasher.update(&[record.section.tag()]);
+        hasher.update(&(record.bytes.len() as u64).to_be_bytes());
+        hasher.update(&record.bytes);
+    }
+    Ok((
+        DefinitionDigest(*hasher.finalize().as_bytes()),
+        logical_bytes,
+    ))
+}
+
+fn check_definition_control(control: &ExecutionControl) -> Result<(), Diagnostic> {
+    control.check().map_err(|error| {
+        owner_inspection_error(
+            DiagnosticClass::Cancelled,
+            "definition_cancelled",
+            format!("function-definition projection: {}", error.message),
+        )
+    })
+}
+
+fn encode_definition_continuation(
+    binding: DefinitionBinding,
+    projection: DefinitionDigest,
+    record_index: usize,
+    record: &DefinitionLogicalRecord,
+) -> Result<String, Diagnostic> {
+    let index = u32::try_from(record_index).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_continuation_resume_key",
+            "definition record index cannot be represented by the continuation contract",
+        )
+    })?;
+    let mut payload = Vec::with_capacity(155);
+    payload.extend_from_slice(&FUNCTION_DEFINITION_CONTINUATION_VERSION.to_be_bytes());
+    payload.extend_from_slice(&FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION.to_be_bytes());
+    payload.extend_from_slice(&binding.repository.bytes());
+    payload.extend_from_slice(&binding.package.bytes());
+    payload.extend_from_slice(&binding.revision.bytes());
+    payload.extend_from_slice(&EncodedOwnerKey::new(binding.function).bytes());
+    payload.extend_from_slice(&projection.bytes());
+    payload.push(FUNCTION_DEFINITION_ORDERING);
+    payload.push(record.section.tag());
+    payload.extend_from_slice(&index.to_be_bytes());
+    payload.extend_from_slice(&record.key);
+    let payload_length = u64::try_from(payload.len()).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_continuation_oversized",
+            "definition continuation payload length cannot be represented",
+        )
+    })?;
+    let mut bytes = Vec::with_capacity(
+        FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES
+            .saturating_add(payload.len())
+            .saturating_add(FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES),
+    );
+    bytes.extend_from_slice(&FUNCTION_DEFINITION_CONTINUATION_MAGIC);
+    bytes.extend_from_slice(&FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION.to_le_bytes());
+    bytes.extend_from_slice(&payload_length.to_le_bytes());
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&definition_domain_digest(
+        FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
+        &bytes,
+    ));
+    let token = format!(
+        "{FUNCTION_DEFINITION_CONTINUATION_PREFIX}{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+    );
+    if token.len() > MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Infrastructure,
+            "definition_continuation_oversized",
+            "canonical definition continuation exceeds its declared textual bound",
+        ));
+    }
+    Ok(token)
+}
+
+fn decode_definition_continuation(
+    token: &str,
+) -> Result<DecodedDefinitionContinuation, Diagnostic> {
+    if token.starts_with("cont_") || token.starts_with("qcont_") {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "predecessor_contract",
+            "the supplied continuation does not belong to the definition projection contract",
+        ));
+    }
+    if token.len() > MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_oversized",
+            format!(
+                "definition continuation exceeds {MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES} encoded bytes"
+            ),
+        ));
+    }
+    let encoded = token
+        .strip_prefix(FUNCTION_DEFINITION_CONTINUATION_PREFIX)
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation has an unknown textual domain",
+            )
+        })?;
+    if encoded.is_empty() || encoded.contains('=') {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_noncanonical",
+            "definition continuation must use canonical unpadded URL-safe base64",
+        ));
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation contains malformed URL-safe base64",
+            )
+        })?;
+    if bytes.len() > MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_oversized",
+            "decoded definition continuation exceeds its strict canonical bound",
+        ));
+    }
+    if base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes) != encoded {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_noncanonical",
+            "definition continuation base64 does not reproduce its canonical text",
+        ));
+    }
+    if bytes.len()
+        < FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES
+            + FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_malformed",
+            "definition continuation is truncated",
+        ));
+    }
+    if bytes[..8] != FUNCTION_DEFINITION_CONTINUATION_MAGIC {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_contract",
+            format!(
+                "definition continuation uses an unknown contract magic; expected {FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT}"
+            ),
+        ));
+    }
+    let envelope = u16::from_le_bytes([bytes[8], bytes[9]]);
+    if envelope != FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_contract",
+            "definition continuation uses a foreign envelope version",
+        ));
+    }
+    let length_bytes: [u8; 8] = bytes[10..18].try_into().map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_malformed",
+            "definition continuation has a malformed length field",
+        )
+    })?;
+    let payload_length = usize::try_from(u64::from_le_bytes(length_bytes)).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_oversized",
+            "definition continuation payload length cannot be represented",
+        )
+    })?;
+    let expected_length = FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES
+        .checked_add(payload_length)
+        .and_then(|length| length.checked_add(FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES))
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_oversized",
+                "definition continuation length overflowed",
+            )
+        })?;
+    if expected_length != bytes.len() {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_malformed",
+            "definition continuation length does not match its canonical envelope",
+        ));
+    }
+    let checksum_start = FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES + payload_length;
+    if bytes[checksum_start..]
+        != definition_domain_digest(
+            FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
+            &bytes[..checksum_start],
+        )
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_integrity",
+            "definition continuation integrity digest does not match its payload",
+        ));
+    }
+    let mut decoder = DefinitionContinuationDecoder::new(
+        &bytes[FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES..checksum_start],
+    );
+    if decoder.u16()? != FUNCTION_DEFINITION_CONTINUATION_VERSION
+        || decoder.u16()? != FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_contract",
+            "definition continuation uses a foreign continuation or projection version",
+        ));
+    }
+    let repository = RepositoryId::from_bytes(decoder.array_16()?).ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_reserved_identity",
+            "definition continuation contains the reserved repository identity",
+        )
+    })?;
+    let package = PackageId::from_bytes(decoder.array_16()?).ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_reserved_identity",
+            "definition continuation contains the reserved package identity",
+        )
+    })?;
+    let revision_bytes = decoder.array_32()?;
+    if revision_bytes == [0; 32] {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_reserved_identity",
+            "definition continuation contains the reserved revision identity",
+        ));
+    }
+    let revision = RevisionId::from_digest(revision_bytes);
+    let function = EncodedOwnerKey::decode(&decoder.array_17()?).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_malformed",
+            "definition continuation function identity is malformed",
+        )
+    })?;
+    if !matches!(function, KernelOwnerKey::Declaration(_)) {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_mismatch",
+            "definition continuation does not identify a function declaration domain",
+        ));
+    }
+    let projection = DefinitionDigest(decoder.array_32()?);
+    let ordering = decoder.u8()?;
+    let section = DefinitionSection::from_tag(decoder.u8()?).ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_resume_key",
+            "definition continuation contains an unknown output section",
+        )
+    })?;
+    let index = decoder.u32()?;
+    let resume_key = decoder.array_32()?;
+    decoder.finish()?;
+    Ok(DecodedDefinitionContinuation {
+        binding: DefinitionBinding {
+            repository,
+            package,
+            revision,
+            function,
+        },
+        projection,
+        ordering,
+        section,
+        index,
+        resume_key,
+    })
+}
+
+fn bind_definition_continuation(
+    request: &DefinitionPageRequest,
+    binding: DefinitionBinding,
+) -> Result<Option<DecodedDefinitionContinuation>, Diagnostic> {
+    let Some(token) = request.continuation.as_deref() else {
+        return Ok(None);
+    };
+    let continuation = decode_definition_continuation(token)?;
+    if continuation.binding.repository != binding.repository
+        || continuation.binding.package != binding.package
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_foreign",
+            "definition continuation belongs to a foreign repository or package",
+        ));
+    }
+    if continuation.binding.revision != binding.revision {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_stale",
+            format!(
+                "definition continuation observes revision '{}', but current HEAD is '{}'",
+                continuation.binding.revision, binding.revision
+            ),
+        ));
+    }
+    if continuation.binding.function != binding.function
+        || continuation.ordering != FUNCTION_DEFINITION_ORDERING
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_mismatch",
+            "definition continuation does not match the selected function or ordering",
+        ));
+    }
+    Ok(Some(continuation))
+}
+
+fn definition_resume_index(
+    projection: &DefinitionProjection,
+    continuation: Option<&DecodedDefinitionContinuation>,
+) -> Result<usize, Diagnostic> {
+    let Some(continuation) = continuation else {
+        return Ok(0);
+    };
+    if continuation.projection != projection.digest {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_mismatch",
+            "definition continuation projection digest does not match the recomputed definition",
+        ));
+    }
+    let index = usize::try_from(continuation.index).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_resume_key",
+            "definition continuation index cannot be represented",
+        )
+    })?;
+    let record = projection.records.get(index).ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_resume_key",
+            "definition continuation index is outside the complete projection",
+        )
+    })?;
+    if index.saturating_add(1) >= projection.records.len()
+        || record.section != continuation.section
+        || record.key != continuation.resume_key
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_resume_key",
+            "definition continuation exclusive resume key is impossible for this projection",
+        ));
+    }
+    Ok(index + 1)
+}
+
+struct DefinitionContinuationDecoder<'a> {
+    bytes: &'a [u8],
+    position: usize,
+}
+
+impl<'a> DefinitionContinuationDecoder<'a> {
+    const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
+
+    fn take(&mut self, length: usize) -> Result<&'a [u8], Diagnostic> {
+        let end = self.position.checked_add(length).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation decoder position overflowed",
+            )
+        })?;
+        let value = self.bytes.get(self.position..end).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation payload is truncated",
+            )
+        })?;
+        self.position = end;
+        Ok(value)
+    }
+
+    fn u8(&mut self) -> Result<u8, Diagnostic> {
+        self.take(1).map(|bytes| bytes[0])
+    }
+
+    fn u16(&mut self) -> Result<u16, Diagnostic> {
+        self.take(2)
+            .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn u32(&mut self) -> Result<u32, Diagnostic> {
+        self.take(4)
+            .map(|bytes| u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn array_16(&mut self) -> Result<[u8; 16], Diagnostic> {
+        self.take(16)?.try_into().map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation identity has the wrong width",
+            )
+        })
+    }
+
+    fn array_17(&mut self) -> Result<[u8; 17], Diagnostic> {
+        self.take(17)?.try_into().map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation owner has the wrong width",
+            )
+        })
+    }
+
+    fn array_32(&mut self) -> Result<[u8; 32], Diagnostic> {
+        self.take(32)?.try_into().map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_malformed",
+                "definition continuation digest has the wrong width",
+            )
+        })
+    }
+
+    fn finish(self) -> Result<(), Diagnostic> {
+        if self.position != self.bytes.len() {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Source,
+                "definition_continuation_trailing",
+                "definition continuation payload contains trailing bytes",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn definition_domain_digest(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key(domain);
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    *hasher.finalize().as_bytes()
+}
+
+struct DefinitionMaterializer<'reader, 'view, 'cancel> {
+    reader: &'reader mut RepositoryDefinitionReader<'view>,
+    package: PackageId,
+    cancellation: &'cancel mut dyn FnMut() -> Result<(), Diagnostic>,
+    records: Vec<DefinitionLogicalRecord>,
+    facts: Vec<DefinitionFactProjection>,
+    references: BTreeSet<DefinitionReferenceProjection>,
+    seen: BTreeSet<KernelOwnerKey>,
+    contract_records: u64,
+    body_records: u64,
+    structural_edges: u64,
+    maximum_depth: u64,
+    logical_bytes: usize,
+}
+
+impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
+    fn new(
+        reader: &'reader mut RepositoryDefinitionReader<'view>,
+        package: PackageId,
+        cancellation: &'cancel mut dyn FnMut() -> Result<(), Diagnostic>,
+    ) -> Self {
+        Self {
+            reader,
+            package,
+            cancellation,
+            records: Vec::new(),
+            facts: Vec::new(),
+            references: BTreeSet::new(),
+            seen: BTreeSet::new(),
+            contract_records: 0,
+            body_records: 0,
+            structural_edges: 0,
+            maximum_depth: 0,
+            logical_bytes: 0,
+        }
+    }
+
+    fn check(&mut self) -> Result<(), Diagnostic> {
+        (self.cancellation)()
+    }
+
+    fn push_record(&mut self, record: DefinitionLogicalRecord) -> Result<(), Diagnostic> {
+        let next = self
+            .logical_bytes
+            .checked_add(record.bytes.len())
+            .ok_or_else(|| {
+                owner_inspection_error(
+                    DiagnosticClass::Resource,
+                    "definition_logical_byte_limit",
+                    "definition logical byte accounting overflowed",
+                )
+            })?;
+        if next > MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_logical_byte_limit",
+                format!(
+                    "definition logical encoding exceeds {MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES} bytes"
+                ),
+            ));
+        }
+        if record.section == DefinitionSection::Contract {
+            self.contract_records = self.contract_records.saturating_add(1);
+        }
+        self.logical_bytes = next;
+        self.records.push(record);
+        Ok(())
+    }
+
+    fn push_fields(
+        &mut self,
+        section: DefinitionSection,
+        operation: &'static str,
+        fields: &[(&'static str, String)],
+    ) -> Result<(), Diagnostic> {
+        self.check()?;
+        self.push_record(definition_record(section, operation, fields)?)
+    }
+
+    fn admit_structural_edge(&mut self) -> Result<(), Diagnostic> {
+        let next = self.structural_edges.checked_add(1).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_edge_limit",
+                "definition structural edge accounting overflowed",
+            )
+        })?;
+        self.require_edge_total(next, self.references.len() as u64)?;
+        self.structural_edges = next;
+        Ok(())
+    }
+
+    fn require_edge_total(&self, structural: u64, references: u64) -> Result<(), Diagnostic> {
+        let total = structural.checked_add(references).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_edge_limit",
+                "definition edge accounting overflowed",
+            )
+        })?;
+        if total > MAXIMUM_FUNCTION_DEFINITION_EDGES {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_edge_limit",
+                format!(
+                    "definition contains {total} structural/reference edges, exceeding {MAXIMUM_FUNCTION_DEFINITION_EDGES}"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn admit_body_record(&mut self, depth: u64) -> Result<(), Diagnostic> {
+        if depth > MAXIMUM_FUNCTION_DEFINITION_DEPTH {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_depth_limit",
+                format!(
+                    "definition body depth {depth} exceeds {MAXIMUM_FUNCTION_DEFINITION_DEPTH}"
+                ),
+            ));
+        }
+        let next = self.body_records.checked_add(1).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_body_record_limit",
+                "definition body-record accounting overflowed",
+            )
+        })?;
+        if next > MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_body_record_limit",
+                format!(
+                    "definition body contains {next} records, exceeding {MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS}"
+                ),
+            ));
+        }
+        self.body_records = next;
+        self.maximum_depth = self.maximum_depth.max(depth);
+        Ok(())
+    }
+
+    fn require_fact_count(&self, count: u64) -> Result<(), Diagnostic> {
+        if count > MAXIMUM_FUNCTION_DEFINITION_FACT_READS {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_fact_limit",
+                format!(
+                    "definition requires {count} bound facts, exceeding {MAXIMUM_FUNCTION_DEFINITION_FACT_READS}"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn add_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target_kind: impl Into<String>,
+        target: impl Into<String>,
+    ) -> Result<(), Diagnostic> {
+        let ordinal = u32::try_from(ordinal).map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_edge_limit",
+                "definition reference ordinal cannot be represented",
+            )
+        })?;
+        let reference = DefinitionReferenceProjection {
+            role: role.into(),
+            target_kind: target_kind.into(),
+            target: target.into(),
+            source: local_definition_reference(self.package, source),
+            ordinal,
+        };
+        if !self.references.contains(&reference) {
+            let next = (self.references.len() as u64)
+                .checked_add(1)
+                .ok_or_else(|| {
+                    owner_inspection_error(
+                        DiagnosticClass::Resource,
+                        "definition_edge_limit",
+                        "definition reference edge accounting overflowed",
+                    )
+                })?;
+            self.require_edge_total(self.structural_edges, next)?;
+            self.references.insert(reference);
+        }
+        Ok(())
+    }
+
+    fn add_local_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target: KernelOwnerKey,
+    ) -> Result<(), Diagnostic> {
+        self.add_reference(
+            role,
+            source,
+            ordinal,
+            definition_identity_kind_name(target),
+            local_definition_reference(self.package, target),
+        )
+    }
+
+    fn add_type_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target: TypeObjectDigest,
+    ) -> Result<(), Diagnostic> {
+        self.add_reference(role, source, ordinal, "type", target.to_string())
+    }
+
+    fn add_declaration_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target: DeclarationReference,
+    ) -> Result<(), Diagnostic> {
+        self.add_reference(
+            role,
+            source,
+            ordinal,
+            "declaration",
+            format!("{}/{}", target.package, target.declaration),
+        )
+    }
+
+    fn add_requirement_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target: RequirementReference,
+    ) -> Result<(), Diagnostic> {
+        self.add_reference(
+            role,
+            source,
+            ordinal,
+            "requirement",
+            format!("{}/{}", target.package, target.requirement),
+        )
+    }
+
+    fn add_operation_reference(
+        &mut self,
+        role: impl Into<String>,
+        source: KernelOwnerKey,
+        ordinal: usize,
+        target: OperationReference,
+    ) -> Result<(), Diagnostic> {
+        self.add_reference(
+            role,
+            source,
+            ordinal,
+            "operation",
+            format!("{}/{}", target.package, target.operation),
+        )
+    }
+
+    fn add_fact(&mut self, owner: KernelOwnerKey, record: &OwnerRecord) -> Result<(), Diagnostic> {
+        let next = (self.facts.len() as u64).checked_add(1).ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_fact_limit",
+                "definition fact accounting overflowed",
+            )
+        })?;
+        self.require_fact_count(next)?;
+        let summary = self.reader.summary(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_summary_missing",
+                format!("definition owner '{owner}' has no bound validation summary"),
+            )
+        })?;
+        let (record_digest, _) = encode_owner(record)?;
+        if summary.summary.owner != owner
+            || summary.summary.kind != record.kind()
+            || summary.summary.record != record_digest
+        {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_summary_mismatch",
+                format!("definition owner '{owner}' disagrees with its bound validation summary"),
+            ));
+        }
+        self.facts.push(DefinitionFactProjection {
+            owner,
+            kind: record.kind(),
+            summary,
+        });
+        Ok(())
+    }
+
+    fn load_structural_owner(
+        &mut self,
+        owner: KernelOwnerKey,
+        expected: OwnershipEntry,
+        body_depth: Option<u64>,
+    ) -> Result<OwnerRecord, Diagnostic> {
+        self.check()?;
+        if !self.seen.insert(owner) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_shared_or_cyclic",
+                format!("definition owner '{owner}' is structurally shared or cyclic"),
+            ));
+        }
+        self.admit_structural_edge()?;
+        if let Some(depth) = body_depth {
+            self.admit_body_record(depth)?;
+        }
+        let record = self.reader.owner(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_missing",
+                format!("structurally owned definition owner '{owner}' is absent"),
+            )
+        })?;
+        if record.owner() != owner {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("definition owner key '{owner}' disagrees with its record"),
+            ));
+        }
+        let ownership = self.reader.ownership(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_missing",
+                format!("definition owner '{owner}' has no ownership witness"),
+            )
+        })?;
+        if ownership != expected {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!(
+                    "definition owner '{owner}' ownership {ownership:?} does not match {expected:?}"
+                ),
+            ));
+        }
+        self.add_fact(owner, &record)?;
+        Ok(record)
+    }
+
+    fn load_function_root(
+        &mut self,
+        owner: KernelOwnerKey,
+        requested_kind: KernelOwnerKind,
+    ) -> Result<OwnerRecord, Diagnostic> {
+        self.check()?;
+        if !self.seen.insert(owner) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_shared_or_cyclic",
+                "function root identity is duplicated before projection",
+            ));
+        }
+        let record = self.reader.owner(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Semantic,
+                "definition_owner_not_found",
+                format!("function '{owner}' is not live at the observed revision"),
+            )
+        })?;
+        if record.owner() != owner || record.kind() != requested_kind {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Semantic,
+                "definition_owner_kind",
+                format!(
+                    "owner '{owner}' has kind '{}', not requested function kind '{}'",
+                    record.kind().name(),
+                    requested_kind.name()
+                ),
+            ));
+        }
+        let OwnerRecord::Declaration(declaration) = &record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                "function identity does not bind a declaration record",
+            ));
+        };
+        if !matches!(declaration.payload, DeclarationPayload::Function(_)) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_body_missing",
+                "function declaration has no canonical function payload",
+            ));
+        }
+        self.admit_structural_edge()?;
+        let expected = OwnershipEntry::new(
+            OwnershipParent::Owner(KernelOwnerKey::Module(declaration.module)),
+            OwnershipRole::ModuleDeclaration,
+        );
+        let ownership = self.reader.ownership(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_missing",
+                "function declaration has no ownership witness",
+            )
+        })?;
+        if ownership != expected {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                "function declaration does not have its canonical module parent",
+            ));
+        }
+        self.add_fact(owner, &record)?;
+        Ok(record)
+    }
+
+    fn load_local_requirement_if_owned(
+        &mut self,
+        owner: KernelOwnerKey,
+        function: KernelOwnerKey,
+    ) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.check()?;
+        let ownership = self.reader.ownership(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_missing",
+                format!("local requirement '{owner}' has no ownership witness"),
+            )
+        })?;
+        let expected = OwnershipEntry::new(
+            OwnershipParent::Owner(function),
+            OwnershipRole::DeclarationRequirement,
+        );
+        if ownership != expected {
+            return Ok(None);
+        }
+        if !self.seen.insert(owner) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_shared_or_cyclic",
+                format!("function-owned requirement '{owner}' is duplicated"),
+            ));
+        }
+        self.admit_structural_edge()?;
+        let record = self.reader.owner(owner)?.ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_missing",
+                format!("function-owned requirement '{owner}' is absent"),
+            )
+        })?;
+        if record.owner() != owner {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("requirement key '{owner}' disagrees with its record"),
+            ));
+        }
+        self.add_fact(owner, &record)?;
+        Ok(Some(record))
+    }
+
+    fn visit_expression(
+        &mut self,
+        expression: super::semantic_id::ExpressionId,
+        position: DefinitionPosition,
+    ) -> Result<(), Diagnostic> {
+        let owner = KernelOwnerKey::Expression(expression);
+        let record = self.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(position.parent),
+                position.ownership_role,
+            ),
+            Some(position.depth),
+        )?;
+        let OwnerRecord::Expression(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("body expression '{owner}' has the wrong owner record"),
+            ));
+        };
+        if record.id != expression {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("body expression '{owner}' disagrees with its record identity"),
+            ));
+        }
+        let mut fields = vec![
+            ("id", owner.to_string()),
+            ("parent", position.parent.to_string()),
+            ("slot", position.slot.to_owned()),
+            ("index", position.index.to_string()),
+        ];
+        if let Some(label) = &position.label {
+            fields.push(("label", label.clone()));
+        }
+        fields.push(("depth", position.depth.to_string()));
+        let mut literal_fragments = None;
+        match &record.operation {
+            ExpressionOperation::Unit {} => fields.push(("form", "unit".to_owned())),
+            ExpressionOperation::Bool { value } => {
+                fields.push(("form", "bool".to_owned()));
+                fields.push(("value", value.to_string()));
+            }
+            ExpressionOperation::I64 { value } => {
+                fields.push(("form", "i64".to_owned()));
+                fields.push(("value", value.to_string()));
+            }
+            ExpressionOperation::Text { value } | ExpressionOperation::StaticText { value } => {
+                fields.push((
+                    "form",
+                    if matches!(&record.operation, ExpressionOperation::Text { .. }) {
+                        "text"
+                    } else {
+                        "static_text"
+                    }
+                    .to_owned(),
+                ));
+                match value {
+                    TextValue::Inline { text } => {
+                        let fragments = definition_text_fragments(text);
+                        fields.push(("text-storage", "inline".to_owned()));
+                        fields.push(("text-bytes", text.len().to_string()));
+                        fields.push(("text-fragments", fragments.len().to_string()));
+                        literal_fragments = Some(fragments);
+                    }
+                    TextValue::Blob { digest, bytes } => {
+                        fields.push(("text-storage", "blob".to_owned()));
+                        fields.push(("text-bytes", bytes.to_string()));
+                        fields.push(("text-fragments", "0".to_owned()));
+                        fields.push(("blob", digest.to_string()));
+                        self.add_reference("text_blob", owner, 0, "blob", digest.to_string())?;
+                    }
+                }
+            }
+            ExpressionOperation::Local { value } => {
+                fields.push(("form", "local".to_owned()));
+                let target = definition_local_value_owner(*value);
+                let exact = local_definition_reference(self.package, target);
+                fields.push(("value", exact.clone()));
+                self.add_reference(
+                    "local_value",
+                    owner,
+                    0,
+                    definition_local_value_kind(*value),
+                    exact,
+                )?;
+            }
+            ExpressionOperation::Constant { declaration } => {
+                fields.push(("form", "constant".to_owned()));
+                let reference = format!("{}/{}", declaration.package, declaration.declaration);
+                fields.push(("value", reference));
+                self.add_declaration_reference("constant_declaration", owner, 0, *declaration)?;
+            }
+            ExpressionOperation::If { .. } => fields.push(("form", "if".to_owned())),
+            ExpressionOperation::Let { bindings, .. } => {
+                fields.push(("form", "let".to_owned()));
+                fields.push(("bindings", bindings.len().to_string()));
+            }
+            ExpressionOperation::Sequence { items } => {
+                fields.push(("form", "sequence".to_owned()));
+                fields.push(("items", items.len().to_string()));
+            }
+            ExpressionOperation::Call {
+                function,
+                type_arguments,
+                arguments,
+            } => {
+                fields.push(("form", "call".to_owned()));
+                fields.push((
+                    "function",
+                    format!("{}/{}", function.package, function.declaration),
+                ));
+                fields.push(("type-arguments", type_arguments.len().to_string()));
+                fields.push(("arguments", arguments.len().to_string()));
+                self.add_declaration_reference("call_function", owner, 0, *function)?;
+                for (index, argument) in type_arguments.iter().copied().enumerate() {
+                    self.add_type_reference("call_type_argument", owner, index, argument)?;
+                }
+            }
+            ExpressionOperation::FunctionValue {
+                function,
+                type_arguments,
+            } => {
+                fields.push(("form", "function_value".to_owned()));
+                fields.push((
+                    "function",
+                    format!("{}/{}", function.package, function.declaration),
+                ));
+                fields.push(("type-arguments", type_arguments.len().to_string()));
+                self.add_declaration_reference("function_value", owner, 0, *function)?;
+                for (index, argument) in type_arguments.iter().copied().enumerate() {
+                    self.add_type_reference(
+                        "function_value_type_argument",
+                        owner,
+                        index,
+                        argument,
+                    )?;
+                }
+            }
+            ExpressionOperation::Invoke { arguments, .. } => {
+                fields.push(("form", "invoke".to_owned()));
+                fields.push(("arguments", arguments.len().to_string()));
+            }
+            ExpressionOperation::Record {
+                nominal_type,
+                fields: values,
+            } => {
+                fields.push(("form", "record".to_owned()));
+                fields.push(("fields", values.len().to_string()));
+                if let Some(nominal) = nominal_type {
+                    fields.push((
+                        "nominal-type",
+                        format!("{}/{}", nominal.package, nominal.declaration),
+                    ));
+                    self.add_declaration_reference("record_nominal_type", owner, 0, *nominal)?;
+                } else {
+                    fields.push(("nominal-type", "structural".to_owned()));
+                }
+                for (index, field) in values.iter().enumerate() {
+                    if let FieldSelector::Nominal(reference) = &field.selector {
+                        self.add_reference(
+                            "record_field",
+                            owner,
+                            index,
+                            "field",
+                            format!("{}/{}", reference.package, reference.field),
+                        )?;
+                    }
+                }
+            }
+            ExpressionOperation::Variant { case, payload } => {
+                fields.push(("form", "variant".to_owned()));
+                fields.push(("case", format!("{}/{}", case.package, case.case)));
+                fields.push(("payload", payload.is_some().to_string()));
+                self.add_reference(
+                    "variant_case",
+                    owner,
+                    0,
+                    "case",
+                    format!("{}/{}", case.package, case.case),
+                )?;
+            }
+            ExpressionOperation::Field { selector, .. } => {
+                fields.push(("form", "field".to_owned()));
+                match selector {
+                    FieldSelector::Nominal(reference) => {
+                        fields.push(("selector-kind", "nominal".to_owned()));
+                        fields.push((
+                            "selector",
+                            format!("{}/{}", reference.package, reference.field),
+                        ));
+                        self.add_reference(
+                            "field_selector",
+                            owner,
+                            0,
+                            "field",
+                            format!("{}/{}", reference.package, reference.field),
+                        )?;
+                    }
+                    FieldSelector::Structural(name) => {
+                        fields.push(("selector-kind", "structural".to_owned()));
+                        fields.push(("selector", name.as_str().to_owned()));
+                    }
+                }
+            }
+            ExpressionOperation::List { item_type, items } => {
+                fields.push(("form", "list".to_owned()));
+                fields.push(("item-type", item_type.to_string()));
+                fields.push(("items", items.len().to_string()));
+                self.add_type_reference("list_item_type", owner, 0, *item_type)?;
+            }
+            ExpressionOperation::Map {
+                key_type,
+                value_type,
+                entries,
+            } => {
+                fields.push(("form", "map".to_owned()));
+                fields.push(("key-type", key_type.to_string()));
+                fields.push(("value-type", value_type.to_string()));
+                fields.push(("entries", entries.len().to_string()));
+                self.add_type_reference("map_key_type", owner, 0, *key_type)?;
+                self.add_type_reference("map_value_type", owner, 0, *value_type)?;
+            }
+            ExpressionOperation::Match { arms, .. } => {
+                fields.push(("form", "match".to_owned()));
+                fields.push(("arms", arms.len().to_string()));
+                for (index, arm) in arms.iter().enumerate() {
+                    self.add_reference(
+                        "match_case",
+                        owner,
+                        index,
+                        "case",
+                        format!("{}/{}", arm.case.package, arm.case.case),
+                    )?;
+                }
+            }
+            ExpressionOperation::CapabilityCall {
+                requirement,
+                operation,
+                arguments,
+            } => {
+                fields.push(("form", "capability_call".to_owned()));
+                fields.push((
+                    "requirement",
+                    format!("{}/{}", requirement.package, requirement.requirement),
+                ));
+                fields.push((
+                    "operation",
+                    format!("{}/{}", operation.package, operation.operation),
+                ));
+                fields.push(("arguments", arguments.len().to_string()));
+                self.add_requirement_reference("capability_requirement", owner, 0, *requirement)?;
+                self.add_operation_reference("capability_operation", owner, 0, *operation)?;
+            }
+            ExpressionOperation::Transaction {
+                requirement,
+                binding,
+                ..
+            } => {
+                fields.push(("form", "transaction".to_owned()));
+                fields.push((
+                    "requirement",
+                    format!("{}/{}", requirement.package, requirement.requirement),
+                ));
+                fields.push(("binding", binding.to_string()));
+                self.add_requirement_reference("transaction_requirement", owner, 0, *requirement)?;
+                self.add_local_reference(
+                    "transaction_binding",
+                    owner,
+                    0,
+                    KernelOwnerKey::Binding(*binding),
+                )?;
+            }
+        }
+        self.push_fields(DefinitionSection::Body, "definition.expression", &fields)?;
+        if let Some(fragments) = literal_fragments {
+            for (index, fragment) in fragments.into_iter().enumerate() {
+                self.push_fields(
+                    DefinitionSection::Body,
+                    "definition.literal",
+                    &[
+                        ("owner", owner.to_string()),
+                        ("index", index.to_string()),
+                        ("bytes", fragment.len().to_string()),
+                        ("value", fragment),
+                    ],
+                )?;
+            }
+        }
+
+        let child_depth = definition_child_depth(position.depth)?;
+        match record.operation {
+            ExpressionOperation::If {
+                condition,
+                when_true,
+                when_false,
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    condition,
+                    (ExpressionChildRole::Condition, "condition"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    when_true,
+                    (ExpressionChildRole::TrueBranch, "true_branch"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    when_false,
+                    (ExpressionChildRole::FalseBranch, "false_branch"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::Let { bindings, body } => {
+                for (index, binding) in bindings.into_iter().enumerate() {
+                    self.visit_binding(
+                        binding,
+                        DefinitionPosition {
+                            parent: owner,
+                            ownership_role: OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::Let,
+                                ordinal: definition_ordinal(index)?,
+                            },
+                            slot: "let_binding",
+                            index: definition_ordinal(index)?,
+                            label: None,
+                            depth: child_depth,
+                        },
+                        BindingKind::Let,
+                    )?;
+                }
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::LetBody, "let_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::Sequence { items } => {
+                for (index, item) in items.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        item,
+                        (ExpressionChildRole::SequenceItem, "sequence_item"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Call { arguments, .. } => {
+                for (index, argument) in arguments.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        argument,
+                        (ExpressionChildRole::CallArgument, "call_argument"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Invoke { callee, arguments } => {
+                self.visit_expression_child(
+                    owner,
+                    callee,
+                    (ExpressionChildRole::InvokeCallee, "invoke_callee"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, argument) in arguments.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        argument,
+                        (ExpressionChildRole::InvokeArgument, "invoke_argument"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Record { fields, .. } => {
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        field.value,
+                        (ExpressionChildRole::RecordField, "record_field"),
+                        index,
+                        Some(definition_field_selector(&field.selector)),
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Variant {
+                case,
+                payload: Some(payload),
+            } => self.visit_expression_child(
+                owner,
+                payload,
+                (ExpressionChildRole::VariantPayload, "variant_payload"),
+                0,
+                Some(format!("{}/{}", case.package, case.case)),
+                child_depth,
+            )?,
+            ExpressionOperation::Field { value, selector } => self.visit_expression_child(
+                owner,
+                value,
+                (ExpressionChildRole::FieldValue, "field_value"),
+                0,
+                Some(definition_field_selector(&selector)),
+                child_depth,
+            )?,
+            ExpressionOperation::List { items, .. } => {
+                for (index, item) in items.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        item,
+                        (ExpressionChildRole::ListItem, "list_item"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Map { entries, .. } => {
+                for (index, entry) in entries.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        entry.key,
+                        (ExpressionChildRole::MapKey, "map_key"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                    self.visit_expression_child(
+                        owner,
+                        entry.value,
+                        (ExpressionChildRole::MapValue, "map_value"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Match { value, arms } => {
+                self.visit_expression_child(
+                    owner,
+                    value,
+                    (ExpressionChildRole::MatchValue, "match_value"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, arm) in arms.into_iter().enumerate() {
+                    let label = format!("{}/{}", arm.case.package, arm.case.case);
+                    if let Some(binding) = arm.payload_binding {
+                        self.visit_binding(
+                            binding,
+                            DefinitionPosition {
+                                parent: owner,
+                                ownership_role: OwnershipRole::ExpressionBinding {
+                                    role: BindingContainerRole::MatchPayload,
+                                    ordinal: definition_ordinal(index)?,
+                                },
+                                slot: "match_payload",
+                                index: definition_ordinal(index)?,
+                                label: Some(label.clone()),
+                                depth: child_depth,
+                            },
+                            BindingKind::MatchPayload,
+                        )?;
+                    }
+                    self.visit_expression_child(
+                        owner,
+                        arm.body,
+                        (ExpressionChildRole::MatchArmBody, "match_arm"),
+                        index,
+                        Some(label),
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::CapabilityCall { arguments, .. } => {
+                for (index, argument) in arguments.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        argument,
+                        (
+                            ExpressionChildRole::CapabilityArgument,
+                            "capability_argument",
+                        ),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Transaction { binding, body, .. } => {
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding {
+                            role: BindingContainerRole::Transaction,
+                            ordinal: 0,
+                        },
+                        slot: "transaction_binding",
+                        index: 0,
+                        label: None,
+                        depth: child_depth,
+                    },
+                    BindingKind::Transaction,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::TransactionBody, "transaction_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::Unit {}
+            | ExpressionOperation::Bool { .. }
+            | ExpressionOperation::I64 { .. }
+            | ExpressionOperation::Text { .. }
+            | ExpressionOperation::StaticText { .. }
+            | ExpressionOperation::Local { .. }
+            | ExpressionOperation::Constant { .. }
+            | ExpressionOperation::FunctionValue { .. }
+            | ExpressionOperation::Variant { payload: None, .. } => {}
+        }
+        Ok(())
+    }
+
+    fn visit_expression_child(
+        &mut self,
+        parent: KernelOwnerKey,
+        expression: super::semantic_id::ExpressionId,
+        child: (ExpressionChildRole, &'static str),
+        index: usize,
+        label: Option<String>,
+        depth: u64,
+    ) -> Result<(), Diagnostic> {
+        let (role, slot) = child;
+        let child = KernelOwnerKey::Expression(expression);
+        self.add_local_reference("expression_child", parent, index, child)?;
+        let index = definition_ordinal(index)?;
+        self.visit_expression(
+            expression,
+            DefinitionPosition {
+                parent,
+                ownership_role: OwnershipRole::ExpressionChild {
+                    role,
+                    ordinal: index,
+                },
+                slot,
+                index,
+                label,
+                depth,
+            },
+        )
+    }
+
+    fn visit_binding(
+        &mut self,
+        binding: super::semantic_id::BindingId,
+        position: DefinitionPosition,
+        expected_kind: BindingKind,
+    ) -> Result<(), Diagnostic> {
+        let owner = KernelOwnerKey::Binding(binding);
+        let reference_index = usize::try_from(position.index).map_err(|_| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_edge_limit",
+                "definition binding ordinal cannot be represented",
+            )
+        })?;
+        self.add_local_reference(
+            "expression_binding",
+            position.parent,
+            reference_index,
+            owner,
+        )?;
+        let record = self.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(position.parent),
+                position.ownership_role,
+            ),
+            Some(position.depth),
+        )?;
+        let OwnerRecord::Binding(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("body binding '{owner}' has the wrong owner record"),
+            ));
+        };
+        if record.kind != expected_kind {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!("body binding '{owner}' has an unexpected lexical kind"),
+            ));
+        }
+        if let Some(ty) = record.declared_type {
+            self.add_type_reference("binding_declared_type", owner, 0, ty)?;
+        }
+        if let Some(value) = record.value {
+            self.add_local_reference("binding_value", owner, 0, KernelOwnerKey::Expression(value))?;
+        }
+        let mut fields = vec![
+            ("id", owner.to_string()),
+            ("parent", position.parent.to_string()),
+            ("slot", position.slot.to_owned()),
+            ("index", position.index.to_string()),
+        ];
+        if let Some(label) = position.label {
+            fields.push(("label", label));
+        }
+        fields.extend([
+            ("depth", position.depth.to_string()),
+            ("kind", definition_binding_kind_name(record.kind).to_owned()),
+            ("name", record.name.as_str().to_owned()),
+            (
+                "declared-type",
+                record
+                    .declared_type
+                    .map_or_else(|| "absent".to_owned(), |value| value.to_string()),
+            ),
+            (
+                "value",
+                record
+                    .value
+                    .map_or_else(|| "absent".to_owned(), |value| value.to_string()),
+            ),
+        ]);
+        self.push_fields(DefinitionSection::Body, "definition.binding", &fields)?;
+        if let Some(value) = record.value {
+            self.visit_expression(
+                value,
+                DefinitionPosition {
+                    parent: owner,
+                    ownership_role: OwnershipRole::ExpressionRoot(ExpressionRootRole::BindingValue),
+                    slot: "binding_value",
+                    index: 0,
+                    label: None,
+                    depth: definition_child_depth(position.depth)?,
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    fn finish(
+        mut self,
+        validator: String,
+        certificate: String,
+    ) -> Result<DefinitionProjection, Diagnostic> {
+        let references = std::mem::take(&mut self.references);
+        let reference_records = references.len() as u64;
+        for (index, reference) in references.into_iter().enumerate() {
+            self.push_fields(
+                DefinitionSection::Reference,
+                "definition.reference",
+                &[
+                    ("index", index.to_string()),
+                    ("role", reference.role),
+                    ("ordinal", reference.ordinal.to_string()),
+                    ("source", reference.source),
+                    ("target-kind", reference.target_kind),
+                    ("target", reference.target),
+                ],
+            )?;
+        }
+        let facts = std::mem::take(&mut self.facts);
+        let fact_records = facts.len() as u64;
+        for (index, fact) in facts.into_iter().enumerate() {
+            let summary_digest = fact.summary.digest.to_string();
+            let summary = fact.summary.summary;
+            self.push_fields(
+                DefinitionSection::Fact,
+                "definition.fact",
+                &[
+                    ("index", index.to_string()),
+                    ("owner", fact.owner.to_string()),
+                    ("kind", fact.kind.name().to_owned()),
+                    ("record", summary.record.to_string()),
+                    ("summary", summary_digest),
+                    (
+                        "semantic-interface",
+                        definition_semantic_digest(summary.semantic_interface),
+                    ),
+                    (
+                        "implementation",
+                        definition_semantic_digest(summary.implementation),
+                    ),
+                    ("type", definition_semantic_digest(summary.type_digest)),
+                    ("effect", definition_semantic_digest(summary.effect)),
+                    ("capability", definition_semantic_digest(summary.capability)),
+                    ("relations", definition_semantic_digest(summary.relations)),
+                    (
+                        "presentation",
+                        definition_semantic_digest(summary.presentation),
+                    ),
+                    (
+                        "test",
+                        summary
+                            .test
+                            .map_or_else(|| "absent".to_owned(), definition_semantic_digest),
+                    ),
+                    (
+                        "validation-dependencies",
+                        definition_semantic_digest(summary.validation_dependencies),
+                    ),
+                ],
+            )?;
+        }
+        let (digest, logical_bytes) = definition_logical_digest(&self.records)?;
+        if logical_bytes != self.logical_bytes {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Infrastructure,
+                "definition_logical_byte_limit",
+                "definition logical byte accounting disagrees with canonical records",
+            ));
+        }
+        Ok(DefinitionProjection {
+            records: self.records,
+            digest,
+            contract_records: self.contract_records,
+            body_records: self.body_records,
+            reference_records,
+            fact_records,
+            structural_edges: self.structural_edges,
+            reference_edges: reference_records,
+            fact_reads: fact_records,
+            maximum_depth: self.maximum_depth,
+            logical_bytes,
+            validator,
+            certificate,
+            work: self.reader.work(),
+        })
+    }
+}
+
+fn local_definition_reference(package: PackageId, owner: KernelOwnerKey) -> String {
+    format!("{package}/{owner}")
+}
+
+fn definition_semantic_digest(value: SemanticDigest) -> String {
+    format!("semantic_{}", encode_hex(&value.bytes()))
+}
+
+fn definition_identity_kind_name(owner: KernelOwnerKey) -> &'static str {
+    match owner {
+        KernelOwnerKey::Module(_) => "module",
+        KernelOwnerKey::Declaration(_) => "declaration",
+        KernelOwnerKey::TypeParameter(_) => "type_parameter",
+        KernelOwnerKey::Field(_) => "field",
+        KernelOwnerKey::Case(_) => "case",
+        KernelOwnerKey::Operation(_) => "operation",
+        KernelOwnerKey::Parameter(_) => "parameter",
+        KernelOwnerKey::Binding(_) => "binding",
+        KernelOwnerKey::Expression(_) => "expression",
+        KernelOwnerKey::Requirement(_) => "requirement",
+        KernelOwnerKey::Port(_) => "port",
+        KernelOwnerKey::Target(_) => "target",
+        KernelOwnerKey::Documentation(_) => "documentation",
+        KernelOwnerKey::Annotation(_) => "annotation",
+    }
+}
+
+fn materialize_function_definition(
+    view: &RepositoryView,
+    requested_kind: KernelOwnerKind,
+    function_owner: KernelOwnerKey,
+    cancellation: &mut dyn FnMut() -> Result<(), Diagnostic>,
+) -> Result<DefinitionProjection, Diagnostic> {
+    let mut reader = view.definition_reader();
+    let mut materializer = DefinitionMaterializer::new(&mut reader, view.package(), cancellation);
+    let root = materializer.load_function_root(function_owner, requested_kind)?;
+    let OwnerRecord::Declaration(declaration) = root else {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Corrupt,
+            "definition_owner_binding",
+            "function root is not a declaration record",
+        ));
+    };
+    let DeclarationPayload::Function(function) = declaration.payload else {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Corrupt,
+            "definition_body_missing",
+            "function declaration has no function payload",
+        ));
+    };
+    let KernelOwnerKey::Declaration(function_id) = function_owner else {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Corrupt,
+            "definition_owner_binding",
+            "function selector is not in the declaration identity domain",
+        ));
+    };
+
+    materializer.push_fields(
+        DefinitionSection::Header,
+        "definition.header",
+        &[
+            ("repository", view.current().head.repository_id.to_string()),
+            ("package", view.package().to_string()),
+            ("revision", view.revision().to_string()),
+            ("function", function_owner.to_string()),
+            (
+                "contract",
+                FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY.to_owned(),
+            ),
+            ("ordering", FUNCTION_DEFINITION_ORDERING_NAME.to_owned()),
+        ],
+    )?;
+    let effect_name = match &function.effect {
+        FunctionEffect::Pure => "pure",
+        FunctionEffect::Task { .. } => "task",
+    };
+    let requirements = match &function.effect {
+        FunctionEffect::Pure => &[][..],
+        FunctionEffect::Task { requirements } => requirements.as_slice(),
+    };
+    materializer.push_fields(
+        DefinitionSection::Contract,
+        "definition.function",
+        &[
+            ("id", function_owner.to_string()),
+            ("kind", requested_kind.name().to_owned()),
+            (
+                "module",
+                local_definition_reference(
+                    view.package(),
+                    KernelOwnerKey::Module(declaration.module),
+                ),
+            ),
+            ("name", declaration.name.as_str().to_owned()),
+            (
+                "visibility",
+                definition_visibility_name(declaration.visibility).to_owned(),
+            ),
+            (
+                "type-parameters",
+                function.type_parameters.len().to_string(),
+            ),
+            ("parameters", function.parameters.len().to_string()),
+            ("result", function.result.to_string()),
+            ("effect", effect_name.to_owned()),
+            ("requirements", requirements.len().to_string()),
+            ("body", function.body.to_string()),
+        ],
+    )?;
+    materializer.add_local_reference(
+        "function_module",
+        function_owner,
+        0,
+        KernelOwnerKey::Module(declaration.module),
+    )?;
+    materializer.add_type_reference("function_result", function_owner, 0, function.result)?;
+    materializer.add_local_reference(
+        "function_body",
+        function_owner,
+        0,
+        KernelOwnerKey::Expression(function.body),
+    )?;
+
+    for (index, type_parameter) in function.type_parameters.iter().copied().enumerate() {
+        let owner = KernelOwnerKey::TypeParameter(type_parameter);
+        materializer.add_local_reference(
+            "function_type_parameter",
+            function_owner,
+            index,
+            owner,
+        )?;
+        let record = materializer.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(function_owner),
+                OwnershipRole::DeclarationTypeParameter,
+            ),
+            None,
+        )?;
+        let OwnerRecord::TypeParameter(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("function type parameter '{owner}' has the wrong owner record"),
+            ));
+        };
+        if KernelOwnerKey::Declaration(record.declaration) != function_owner {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!("function type parameter '{owner}' names another declaration"),
+            ));
+        }
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.type-parameter",
+            &[
+                ("id", owner.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", record.name.as_str().to_owned()),
+            ],
+        )?;
+    }
+
+    for (index, parameter) in function.parameters.iter().copied().enumerate() {
+        let owner = KernelOwnerKey::Parameter(parameter);
+        materializer.add_local_reference("function_parameter", function_owner, index, owner)?;
+        let record = materializer.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(function_owner),
+                OwnershipRole::DeclarationParameter,
+            ),
+            None,
+        )?;
+        let OwnerRecord::Parameter(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("function parameter '{owner}' has the wrong owner record"),
+            ));
+        };
+        if record.parent != ParameterParent::Function(function_id) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!("function parameter '{owner}' names another declaration"),
+            ));
+        }
+        materializer.add_type_reference("parameter_type", owner, 0, record.ty)?;
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.parameter",
+            &[
+                ("id", owner.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", record.name.as_str().to_owned()),
+                ("type", record.ty.to_string()),
+                (
+                    "use",
+                    definition_parameter_use_name(record.use_mode).to_owned(),
+                ),
+            ],
+        )?;
+    }
+
+    for (index, requirement) in requirements.iter().copied().enumerate() {
+        materializer.add_requirement_reference(
+            "function_requirement",
+            function_owner,
+            index,
+            requirement,
+        )?;
+        if requirement.package != view.package() {
+            continue;
+        }
+        let owner = KernelOwnerKey::Requirement(requirement.requirement);
+        let Some(record) = materializer.load_local_requirement_if_owned(owner, function_owner)?
+        else {
+            continue;
+        };
+        let OwnerRecord::Requirement(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("function requirement '{owner}' has the wrong owner record"),
+            ));
+        };
+        materializer.add_declaration_reference(
+            "requirement_interface",
+            owner,
+            0,
+            record.interface,
+        )?;
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.requirement",
+            &[
+                ("id", owner.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", record.name.as_str().to_owned()),
+                (
+                    "interface",
+                    format!(
+                        "{}/{}",
+                        record.interface.package, record.interface.declaration
+                    ),
+                ),
+                ("operations", record.operations.len().to_string()),
+                ("limits", record.limits.len().to_string()),
+            ],
+        )?;
+        for (operation_index, operation) in record.operations.iter().copied().enumerate() {
+            materializer.add_operation_reference(
+                "requirement_operation",
+                owner,
+                operation_index,
+                operation,
+            )?;
+            materializer.push_fields(
+                DefinitionSection::Contract,
+                "definition.requirement-operation",
+                &[
+                    ("parent", owner.to_string()),
+                    ("index", operation_index.to_string()),
+                    (
+                        "reference",
+                        format!("{}/{}", operation.package, operation.operation),
+                    ),
+                ],
+            )?;
+        }
+        for (limit_index, limit) in record.limits.iter().enumerate() {
+            materializer.push_fields(
+                DefinitionSection::Contract,
+                "definition.requirement-limit",
+                &[
+                    ("parent", owner.to_string()),
+                    ("index", limit_index.to_string()),
+                    ("name", limit.name.as_str().to_owned()),
+                    ("maximum", limit.maximum.to_string()),
+                    ("unit", definition_resource_unit_name(limit.unit).to_owned()),
+                ],
+            )?;
+        }
+    }
+
+    materializer.visit_expression(
+        function.body,
+        DefinitionPosition {
+            parent: function_owner,
+            ownership_role: OwnershipRole::ExpressionRoot(ExpressionRootRole::FunctionBody),
+            slot: "function_body",
+            index: 0,
+            label: None,
+            depth: 0,
+        },
+    )?;
+    materializer.finish(
+        view.current().witness.validator_contract.to_string(),
+        view.current().witness.certificate.to_string(),
+    )
+}
+
+fn definition_visibility_name(value: DeclarationVisibility) -> &'static str {
+    match value {
+        DeclarationVisibility::Private => "private",
+        DeclarationVisibility::Package => "package",
+        DeclarationVisibility::Public => "public",
+    }
+}
+
+fn definition_parameter_use_name(value: ParameterUse) -> &'static str {
+    match value {
+        ParameterUse::Unrestricted => "unrestricted",
+        ParameterUse::Borrow => "borrow",
+        ParameterUse::Consume => "consume",
+    }
+}
+
+fn definition_resource_unit_name(value: ResourceUnit) -> &'static str {
+    match value {
+        ResourceUnit::Bytes => "bytes",
+        ResourceUnit::Items => "items",
+        ResourceUnit::Calls => "calls",
+        ResourceUnit::Tasks => "tasks",
+        ResourceUnit::Milliseconds => "milliseconds",
+    }
+}
+
+fn definition_binding_kind_name(value: BindingKind) -> &'static str {
+    match value {
+        BindingKind::Let => "let",
+        BindingKind::MatchPayload => "match_payload",
+        BindingKind::Transaction => "transaction",
+    }
+}
+
+fn definition_local_value_owner(value: LocalValueReference) -> KernelOwnerKey {
+    match value {
+        LocalValueReference::FunctionParameter(value)
+        | LocalValueReference::OperationParameter(value) => KernelOwnerKey::Parameter(value),
+        LocalValueReference::LexicalBinding(value)
+        | LocalValueReference::MatchPayload(value)
+        | LocalValueReference::TransactionBinding(value) => KernelOwnerKey::Binding(value),
+    }
+}
+
+fn definition_local_value_kind(value: LocalValueReference) -> &'static str {
+    match value {
+        LocalValueReference::FunctionParameter(_) => "function_parameter",
+        LocalValueReference::OperationParameter(_) => "operation_parameter",
+        LocalValueReference::LexicalBinding(_) => "lexical_binding",
+        LocalValueReference::MatchPayload(_) => "match_payload",
+        LocalValueReference::TransactionBinding(_) => "transaction_binding",
+    }
+}
+
+fn definition_field_selector(selector: &FieldSelector) -> String {
+    match selector {
+        FieldSelector::Nominal(reference) => {
+            format!("{}/{}", reference.package, reference.field)
+        }
+        FieldSelector::Structural(name) => name.as_str().to_owned(),
+    }
+}
+
+fn definition_child_depth(depth: u64) -> Result<u64, Diagnostic> {
+    depth.checked_add(1).ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_depth_limit",
+            "definition body depth accounting overflowed",
+        )
+    })
+}
+
+fn definition_ordinal(index: usize) -> Result<u32, Diagnostic> {
+    u32::try_from(index).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_edge_limit",
+            "definition structural ordinal cannot be represented",
+        )
+    })
+}
+
+fn definition_text_fragments(value: &str) -> Vec<String> {
+    if value.is_empty() {
+        return vec![String::new()];
+    }
+    let mut fragments = Vec::new();
+    let mut start = 0_usize;
+    while start < value.len() {
+        let mut end = start
+            .saturating_add(MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES)
+            .min(value.len());
+        while end > start && !value.is_char_boundary(end) {
+            end -= 1;
+        }
+        if end == start {
+            end = value[start..]
+                .char_indices()
+                .nth(1)
+                .map_or(value.len(), |(offset, _)| start.saturating_add(offset));
+        }
+        fragments.push(value[start..end].to_owned());
+        start = end;
+    }
+    fragments
+}
+
+fn execute_function_definition(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+    requested_kind: KernelOwnerKind,
+    function: KernelOwnerKey,
+    request: &DefinitionPageRequest,
+    response_limits: CompactResponseLimits,
+    cancellation: &mut dyn FnMut() -> Result<(), Diagnostic>,
+) -> Result<Vec<u8>, Diagnostic> {
+    cancellation()?;
+    let binding = DefinitionBinding {
+        repository: view.current().head.repository_id,
+        package: view.package(),
+        revision: view.revision(),
+        function,
+    };
+    let continuation = bind_definition_continuation(request, binding)?;
+    let projection = materialize_function_definition(view, requested_kind, function, cancellation)
+        .map_err(classify_definition_read_diagnostic)?;
+    let start = definition_resume_index(&projection, continuation.as_ref())?;
+    let capabilities = capabilities_snapshot().map_err(|message| {
+        owner_inspection_error(
+            DiagnosticClass::Infrastructure,
+            "capabilities_projection_invalid",
+            message,
+        )
+    })?;
+    let output_limit = request
+        .output_bytes
+        .min(response_limits.maximum_bytes)
+        .min(MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES)
+        .min(MAXIMUM_CLI_RESPONSE_BYTES);
+    let record_limit = response_limits
+        .maximum_records
+        .min(MAXIMUM_CLI_RESPONSE_RECORDS);
+    render_definition_page(
+        repository,
+        view,
+        binding,
+        requested_kind,
+        &projection,
+        start,
+        request.items,
+        output_limit,
+        record_limit,
+        &capabilities.digest,
+        cancellation,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_definition_page(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+    binding: DefinitionBinding,
+    requested_kind: KernelOwnerKind,
+    projection: &DefinitionProjection,
+    start: usize,
+    requested_items: u64,
+    output_limit: usize,
+    record_limit: usize,
+    capabilities_digest: &str,
+    cancellation: &mut dyn FnMut() -> Result<(), Diagnostic>,
+) -> Result<Vec<u8>, Diagnostic> {
+    cancellation()?;
+    if start >= projection.records.len() {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "definition_continuation_resume_key",
+            "definition page begins outside the complete logical projection",
+        ));
+    }
+    const FIXED_RECORDS_WITH_CONTINUATION: usize = 8;
+    let item_record_capacity = record_limit
+        .checked_sub(FIXED_RECORDS_WITH_CONTINUATION)
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_output_envelope_too_large",
+                "compact response record capacity cannot hold the definition page envelope",
+            )
+        })?;
+    if item_record_capacity == 0 {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_output_item_too_large",
+            "compact response record capacity cannot hold one definition item",
+        ));
+    }
+    let requested_items = usize::try_from(requested_items).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_invalid_limit",
+            "definition item limit cannot be represented",
+        )
+    })?;
+    let maximum_end = start
+        .checked_add(requested_items.min(item_record_capacity))
+        .map(|end| end.min(projection.records.len()))
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_invalid_limit",
+                "definition page range accounting overflowed",
+            )
+        })?;
+    if maximum_end <= start {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_output_item_too_large",
+            "definition page has no admitted logical record slot",
+        ));
+    }
+
+    let mut render = |end: usize| {
+        cancellation()?;
+        render_definition_page_exact(
+            repository,
+            view,
+            binding,
+            requested_kind,
+            projection,
+            start,
+            end,
+            output_limit,
+            record_limit,
+            capabilities_digest,
+        )
+    };
+    match render(maximum_end) {
+        Ok(bytes) => return Ok(bytes),
+        Err(error) if definition_page_budget_error(&error) => {}
+        Err(error) => return Err(classify_definition_output_diagnostic(error)),
+    }
+    let mut lower = start.saturating_add(1);
+    let mut upper = maximum_end.saturating_sub(1);
+    let mut best = None;
+    while lower <= upper {
+        let middle = lower + (upper - lower) / 2;
+        match render(middle) {
+            Ok(bytes) => {
+                best = Some(bytes);
+                lower = middle.saturating_add(1);
+            }
+            Err(error) if definition_page_budget_error(&error) => {
+                if middle == 0 {
+                    break;
+                }
+                upper = middle - 1;
+            }
+            Err(error) => return Err(classify_definition_output_diagnostic(error)),
+        }
+    }
+    best.ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_output_item_too_large",
+            format!(
+                "one definition record plus its revision-pinned envelope cannot fit {output_limit} output bytes"
+            ),
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_definition_page_exact(
+    _repository: &GraphRepository,
+    view: &RepositoryView,
+    binding: DefinitionBinding,
+    requested_kind: KernelOwnerKind,
+    projection: &DefinitionProjection,
+    start: usize,
+    end: usize,
+    output_limit: usize,
+    record_limit: usize,
+    capabilities_digest: &str,
+) -> Result<Vec<u8>, Diagnostic> {
+    let mut rendered_bytes = 0_usize;
+    for _ in 0..4 {
+        let bytes = render_definition_page_once(
+            view,
+            binding,
+            requested_kind,
+            projection,
+            start,
+            end,
+            output_limit,
+            record_limit,
+            capabilities_digest,
+            rendered_bytes,
+        )?;
+        if bytes.len() == rendered_bytes {
+            return Ok(bytes);
+        }
+        rendered_bytes = bytes.len();
+    }
+    Err(owner_inspection_error(
+        DiagnosticClass::Infrastructure,
+        "definition_output_size_convergence",
+        "compact definition response byte count did not converge",
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_definition_page_once(
+    view: &RepositoryView,
+    binding: DefinitionBinding,
+    requested_kind: KernelOwnerKind,
+    projection: &DefinitionProjection,
+    start: usize,
+    end: usize,
+    output_limit: usize,
+    record_limit: usize,
+    capabilities_digest: &str,
+    rendered_bytes: usize,
+) -> Result<Vec<u8>, Diagnostic> {
+    if end <= start || end > projection.records.len() {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Infrastructure,
+            "definition_continuation_resume_key",
+            "definition renderer received an invalid logical page range",
+        ));
+    }
+    let complete = end == projection.records.len();
+    let continuation = if complete {
+        None
+    } else {
+        let index = end - 1;
+        Some(encode_definition_continuation(
+            binding,
+            projection.digest,
+            index,
+            &projection.records[index],
+        )?)
+    };
+    let rendered_records = 7_usize
+        .checked_add(end - start)
+        .and_then(|records| records.checked_add(usize::from(continuation.is_some())))
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Resource,
+                "definition_output_envelope_too_large",
+                "definition response record accounting overflowed",
+            )
+        })?;
+    let mut writer = CompactResponseWriter::new(CompactResponseLimits {
+        maximum_bytes: output_limit,
+        maximum_records: record_limit,
+    })?;
+    append_definition_fields(
+        &mut writer,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "inspect.owner.definition".to_owned()),
+        ],
+    )?;
+    append_definition_fields(
+        &mut writer,
+        "project",
+        &[
+            (
+                "name",
+                view.current()
+                    .semantic_root
+                    .package_name
+                    .as_str()
+                    .to_owned(),
+            ),
+            ("repository", binding.repository.to_string()),
+            ("package", binding.package.to_string()),
+        ],
+    )?;
+    append_definition_fields(
+        &mut writer,
+        "revision",
+        &[("observed", binding.revision.to_string())],
+    )?;
+    append_definition_fields(
+        &mut writer,
+        "projection",
+        &[
+            ("detail", "definition".to_owned()),
+            (
+                "contract",
+                FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY.to_owned(),
+            ),
+            (
+                "version",
+                FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION.to_string(),
+            ),
+            ("function", binding.function.to_string()),
+            ("kind", requested_kind.name().to_owned()),
+            ("digest", projection.digest.to_string()),
+            ("ordering", FUNCTION_DEFINITION_ORDERING_NAME.to_owned()),
+            ("total-records", projection.records.len().to_string()),
+            ("contract-records", projection.contract_records.to_string()),
+            ("body-records", projection.body_records.to_string()),
+            (
+                "reference-records",
+                projection.reference_records.to_string(),
+            ),
+            ("fact-records", projection.fact_records.to_string()),
+            ("structural-edges", projection.structural_edges.to_string()),
+            ("reference-edges", projection.reference_edges.to_string()),
+            ("fact-reads", projection.fact_reads.to_string()),
+            ("maximum-depth", projection.maximum_depth.to_string()),
+            ("logical-bytes", projection.logical_bytes.to_string()),
+            ("validator", projection.validator.clone()),
+            ("certificate", projection.certificate.clone()),
+        ],
+    )?;
+    append_definition_fields(
+        &mut writer,
+        "page",
+        &[
+            ("start", start.to_string()),
+            ("end", end.to_string()),
+            ("returned", (end - start).to_string()),
+            ("complete", complete.to_string()),
+            (
+                "first-section",
+                projection.records[start].section.name().to_owned(),
+            ),
+            (
+                "last-section",
+                projection.records[end - 1].section.name().to_owned(),
+            ),
+        ],
+    )?;
+    for record in &projection.records[start..end] {
+        writer.append_serialized_records(&record.bytes)?;
+    }
+    if let Some(token) = continuation {
+        append_definition_fields(&mut writer, "continuation", &[("token", token)])?;
+    }
+    append_definition_fields(
+        &mut writer,
+        "work",
+        &[
+            ("map-pages-read", projection.work.map.pages_read.to_string()),
+            ("map-bytes-read", projection.work.map.bytes_read.to_string()),
+            (
+                "map-entries-visited",
+                projection.work.map.entries_visited.to_string(),
+            ),
+            (
+                "catalog-lookups",
+                projection.work.store.catalog_lookups.to_string(),
+            ),
+            (
+                "store-objects-read",
+                projection.work.store.objects_read.to_string(),
+            ),
+            (
+                "store-bytes-read",
+                projection.work.store.bytes_read.to_string(),
+            ),
+            (
+                "canonical-records-decoded",
+                projection.work.canonical_records_decoded.to_string(),
+            ),
+            (
+                "witness-records-decoded",
+                projection.work.witness_records_decoded.to_string(),
+            ),
+            ("fact-reads", projection.fact_reads.to_string()),
+            ("rendered-records", rendered_records.to_string()),
+            ("rendered-output-bytes", rendered_bytes.to_string()),
+        ],
+    )?;
+    append_definition_fields(
+        &mut writer,
+        "schema",
+        &[("capabilities", capabilities_digest.to_owned())],
+    )?;
+    Ok(writer.finish())
+}
+
+fn append_definition_fields(
+    writer: &mut CompactResponseWriter,
+    operation: &'static str,
+    fields: &[(&'static str, String)],
+) -> Result<(), Diagnostic> {
+    for (name, _) in fields {
+        if !FUNCTION_DEFINITION_RESPONSE_FIELDS.contains(&(operation, *name)) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Infrastructure,
+                "definition_response_field_inventory",
+                format!(
+                    "definition response field '{operation}.{name}' is absent from capabilities"
+                ),
+            ));
+        }
+    }
+    let borrowed = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect::<Vec<_>>();
+    writer.append_record(operation, &borrowed)
+}
+
+fn definition_page_budget_error(error: &Diagnostic) -> bool {
+    matches!(
+        error.code.as_str(),
+        "control_response_byte_budget" | "control_response_record_budget"
+    )
+}
+
+fn classify_definition_output_diagnostic(mut diagnostic: Diagnostic) -> Diagnostic {
+    let replacement = match diagnostic.code.as_str() {
+        "control_response_byte_budget" | "control_response_record_budget" => {
+            Some("definition_output_envelope_too_large")
+        }
+        "control_render_record_bytes" | "control_render_value_bytes" => {
+            Some("definition_output_item_too_large")
+        }
+        _ => None,
+    };
+    if let Some(code) = replacement {
+        diagnostic.code = code.to_owned();
+    }
+    diagnostic
+}
+
+fn classify_definition_read_diagnostic(mut diagnostic: Diagnostic) -> Diagnostic {
+    let replacement = match diagnostic.code.as_str() {
+        "persistent_map_admission_pages_read" => Some("definition_admission_map_pages"),
+        "persistent_map_admission_bytes_read" => Some("definition_admission_map_bytes"),
+        "persistent_map_admission_entries_visited" => Some("definition_admission_map_entries"),
+        "object_read_catalog_lookups_exhausted" => Some("definition_admission_catalog_lookups"),
+        "object_read_objects_exhausted" => Some("definition_admission_store_objects"),
+        "object_read_bytes_exhausted" => Some("definition_admission_store_bytes"),
+        "persistent_map_page_missing" => Some("definition_required_map_page_missing"),
+        "publication_read_object_missing" => Some("definition_required_object_missing"),
+        "control_render_record_bytes" | "control_render_value_bytes" => {
+            Some("definition_output_item_too_large")
+        }
+        _ => None,
+    };
+    if let Some(code) = replacement {
+        diagnostic.code = code.to_owned();
+    }
+    diagnostic
+}
+
 fn open_normalized_repository(project: Option<PathBuf>) -> Result<GraphRepository, Diagnostic> {
     let start = match project {
         Some(path) => path,
@@ -2059,6 +4977,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         output.append_serialized_records(record.as_bytes())?;
         let focused_section = match operation {
             PublicOperation::New => Some(RegistrySection::Templates),
+            PublicOperation::Inspect => Some(RegistrySection::Inspection),
             PublicOperation::Query => Some(RegistrySection::Query),
             _ => None,
         };
@@ -2919,6 +5838,581 @@ mod tests {
         )
         .expect_err("byte budget");
         assert_eq!(byte_error.code, "control_response_byte_budget");
+    }
+
+    #[test]
+    fn maintained_affine_worker_definition_pages_are_complete_stateless_and_read_only() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let head_path = project.join("HEAD");
+        let catalog_path = project.join("catalog/current.lkjc");
+        let generated_path = project.join("generated/lkjournal.lkja");
+        let before_head = std::fs::read(&head_path).expect("lkjournal HEAD before projection");
+        let before_catalog = std::fs::read(&catalog_path).expect("catalog before projection");
+        let before_generated =
+            std::fs::read(&generated_path).expect("generated application before projection");
+        let function = "decl_a914bb78de075ff44a857ac028d704f3";
+        let base = vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "task_function".to_owned(),
+            function.to_owned(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+        ];
+        let mut complete_arguments = base.clone();
+        complete_arguments.extend([
+            "--limit".to_owned(),
+            "10000".to_owned(),
+            "--bytes".to_owned(),
+            MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+        ]);
+        let complete =
+            execute_inspect_owner(complete_arguments).expect("complete worker projection");
+        let complete_records = parse_records("complete-definition", &complete)
+            .expect("complete definition compact records");
+        assert_eq!(
+            response_field(&complete_records, "page", "complete"),
+            "true"
+        );
+        let digest = response_field(&complete_records, "projection", "digest").to_owned();
+        assert!(digest.starts_with("definition_"));
+        assert_eq!(
+            response_field(&complete_records, "projection", "body-records"),
+            "48"
+        );
+        assert_eq!(
+            response_field(&complete_records, "projection", "fact-records"),
+            "51"
+        );
+        let project_record = complete_records
+            .iter()
+            .find(|record| record.operation == "project")
+            .expect("project envelope");
+        assert!(
+            project_record
+                .fields
+                .iter()
+                .all(|field| field.name != "path")
+        );
+        assert!(complete_records.iter().any(|record| {
+            record.operation == "definition.binding"
+                && record
+                    .fields
+                    .iter()
+                    .any(|field| field.name == "name" && field.value == "lease-info")
+        }));
+        assert!(complete_records.iter().any(|record| {
+            record.operation == "definition.binding"
+                && record
+                    .fields
+                    .iter()
+                    .any(|field| field.name == "name" && field.value == "renewed-lease")
+        }));
+        for operation in [
+            "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
+            "op_1a5491eb1c3ef3d15ec28268b6f04afc",
+            "op_f593ba236055aa1afa6c02eaf0db6a64",
+            "op_679b43bb7dc0b298a7706d4e8a7bef23",
+            "op_242e065f9738b454e2328ed0e558e6a0",
+        ] {
+            assert!(complete_records.iter().any(|record| {
+                record.operation == "definition.reference"
+                    && record
+                        .fields
+                        .iter()
+                        .any(|field| field.name == "target" && field.value.ends_with(operation))
+            }));
+        }
+        let complete_items = complete_records
+            .iter()
+            .filter(|record| record.operation.starts_with("definition."))
+            .map(compact_record_identity)
+            .collect::<Vec<_>>();
+
+        let mut paged_items = Vec::new();
+        let mut continuation: Option<String> = None;
+        for page in 0..100_usize {
+            let mut arguments = base.clone();
+            arguments.extend([
+                "--limit".to_owned(),
+                if page % 2 == 0 { "7" } else { "11" }.to_owned(),
+                "--bytes".to_owned(),
+                if page % 3 == 0 { "8192" } else { "16384" }.to_owned(),
+            ]);
+            if let Some(token) = &continuation {
+                arguments.extend(["--continuation".to_owned(), token.clone()]);
+            }
+            let bytes = execute_inspect_owner(arguments).expect("worker definition page");
+            let records =
+                parse_records("definition-page", &bytes).expect("definition page records");
+            assert_eq!(response_field(&records, "projection", "digest"), digest);
+            paged_items.extend(
+                records
+                    .iter()
+                    .filter(|record| record.operation.starts_with("definition."))
+                    .map(compact_record_identity),
+            );
+            if response_field(&records, "page", "complete") == "true" {
+                continuation = None;
+                break;
+            }
+            continuation = Some(response_field(&records, "continuation", "token").to_owned());
+        }
+        assert!(
+            continuation.is_none(),
+            "definition pagination did not finish"
+        );
+        assert_eq!(paged_items, complete_items);
+        assert_eq!(
+            std::fs::read(&head_path).expect("HEAD after projection"),
+            before_head
+        );
+        assert_eq!(
+            std::fs::read(&catalog_path).expect("catalog after projection"),
+            before_catalog
+        );
+        assert_eq!(
+            std::fs::read(&generated_path).expect("generated app after projection"),
+            before_generated
+        );
+    }
+
+    #[test]
+    fn definition_detail_rejects_aliases_projection_input_and_cancellation_without_writes() {
+        for (arguments, code) in [
+            (
+                vec![
+                    "inspect".to_owned(),
+                    "owner".to_owned(),
+                    "task_function".to_owned(),
+                    "decl_a914bb78de075ff44a857ac028d704f3".to_owned(),
+                    "--detail".to_owned(),
+                    "body".to_owned(),
+                ],
+                "definition_detail_value",
+            ),
+            (
+                vec![
+                    "inspect".to_owned(),
+                    "owner".to_owned(),
+                    "task_function".to_owned(),
+                    "decl_a914bb78de075ff44a857ac028d704f3".to_owned(),
+                    "--limit".to_owned(),
+                    "1".to_owned(),
+                ],
+                "definition_detail_required",
+            ),
+            (
+                vec![
+                    "inspect".to_owned(),
+                    "owner".to_owned(),
+                    "task_function".to_owned(),
+                    "decl_a914bb78de075ff44a857ac028d704f3".to_owned(),
+                    "--raw".to_owned(),
+                ],
+                "cli_usage",
+            ),
+        ] {
+            let error = execute_inspect_owner(arguments).expect_err("definition alias rejection");
+            assert_eq!(error.code, code);
+        }
+        let projection_input = b"request base=rev_0000000000000000000000000000000000000000000000000000000000000001\ndefinition.expression id=expr_00000000000000000000000000000001\n";
+        assert!(decode_compact_change("projection-input", projection_input).is_err());
+
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let before = std::fs::read(project.join("HEAD")).expect("HEAD before cancellation");
+        let repository = GraphRepository::open(&project).expect("lkjournal repository");
+        let view = repository.view_current().expect("lkjournal view");
+        let owner = "decl_a914bb78de075ff44a857ac028d704f3"
+            .parse()
+            .expect("worker identity");
+        let mut checks = 0_u64;
+        let mut cancellation = || {
+            checks = checks.saturating_add(1);
+            if checks == 6 {
+                Err(owner_inspection_error(
+                    DiagnosticClass::Cancelled,
+                    "definition_cancelled",
+                    "injected definition cancellation",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        let error = materialize_function_definition(
+            &view,
+            KernelOwnerKind::TaskFunction,
+            owner,
+            &mut cancellation,
+        )
+        .expect_err("injected definition cancellation");
+        assert_eq!(error.code, "definition_cancelled");
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("HEAD after cancellation"),
+            before
+        );
+
+        let mut materialization_control = || Ok(());
+        let projection = materialize_function_definition(
+            &view,
+            KernelOwnerKind::TaskFunction,
+            owner,
+            &mut materialization_control,
+        )
+        .expect("definition before render cancellation");
+        let binding = DefinitionBinding {
+            repository: view.current().head.repository_id,
+            package: view.package(),
+            revision: view.revision(),
+            function: owner,
+        };
+        let capabilities = capabilities_snapshot().expect("capabilities");
+        let mut render_checks = 0_u64;
+        let mut render_cancellation = || {
+            render_checks = render_checks.saturating_add(1);
+            if render_checks == 2 {
+                Err(owner_inspection_error(
+                    DiagnosticClass::Cancelled,
+                    "definition_cancelled",
+                    "injected definition render cancellation",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        let error = render_definition_page(
+            &repository,
+            &view,
+            binding,
+            KernelOwnerKind::TaskFunction,
+            &projection,
+            0,
+            1,
+            MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
+            MAXIMUM_CLI_RESPONSE_RECORDS,
+            &capabilities.digest,
+            &mut render_cancellation,
+        )
+        .expect_err("injected definition render cancellation");
+        assert_eq!(error.code, "definition_cancelled");
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("HEAD after render cancellation"),
+            before
+        );
+    }
+
+    #[test]
+    fn definition_continuation_codec_rejects_mutation_and_predecessors() {
+        let record = definition_record(
+            DefinitionSection::Body,
+            "definition.literal",
+            &[
+                ("owner", "expr_00000000000000000000000000000001".to_owned()),
+                ("index", "0".to_owned()),
+                ("bytes", "1".to_owned()),
+                ("value", "x".to_owned()),
+            ],
+        )
+        .expect("definition record");
+        let binding = DefinitionBinding {
+            repository: RepositoryId::from_bytes([1; 16]).expect("repository"),
+            package: PackageId::from_bytes([2; 16]).expect("package"),
+            revision: RevisionId::from_digest([3; 32]),
+            function: "decl_04040404040404040404040404040404"
+                .parse()
+                .expect("function"),
+        };
+        let digest = DefinitionDigest([5; 32]);
+        let token = encode_definition_continuation(binding, digest, 7, &record)
+            .expect("definition continuation");
+        let decoded = decode_definition_continuation(&token).expect("decode continuation");
+        assert_eq!(decoded.binding, binding);
+        assert_eq!(decoded.projection, digest);
+        assert_eq!(decoded.index, 7);
+        assert_eq!(decoded.section, DefinitionSection::Body);
+        assert_eq!(decoded.resume_key, record.key);
+        let mut mutated = token.into_bytes();
+        let last = mutated.last_mut().expect("token byte");
+        *last = if *last == b'A' { b'B' } else { b'A' };
+        let mutated = String::from_utf8(mutated).expect("mutated token UTF-8");
+        let error = decode_definition_continuation(&mutated).expect_err("mutated token");
+        assert!(matches!(
+            error.code.as_str(),
+            "definition_continuation_integrity"
+                | "definition_continuation_noncanonical"
+                | "definition_continuation_malformed"
+        ));
+        assert_eq!(
+            decode_definition_continuation("qcont_AA")
+                .expect_err("query continuation")
+                .code,
+            "predecessor_contract"
+        );
+        assert_eq!(definition_text_fragments("").len(), 1);
+        let text = "x".repeat(MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES + 1);
+        let fragments = definition_text_fragments(&text);
+        assert_eq!(fragments.len(), 2);
+        assert_eq!(fragments.concat(), text);
+    }
+
+    #[test]
+    fn definition_logical_admissions_accept_exact_fit_and_reject_one_over() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let repository = GraphRepository::open(&project).expect("lkjournal repository");
+        let view = repository.view_current().expect("lkjournal view");
+        let mut reader = view.definition_reader();
+        let mut cancellation = || Ok(());
+        let mut materializer =
+            DefinitionMaterializer::new(&mut reader, view.package(), &mut cancellation);
+
+        materializer.body_records = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS - 1;
+        materializer
+            .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH)
+            .expect("exact body/depth admission");
+        assert_eq!(
+            materializer.body_records,
+            MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS
+        );
+        assert_eq!(
+            materializer
+                .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH)
+                .expect_err("one-over body records")
+                .code,
+            "definition_body_record_limit"
+        );
+        materializer.body_records = 0;
+        assert_eq!(
+            materializer
+                .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH + 1)
+                .expect_err("one-over body depth")
+                .code,
+            "definition_depth_limit"
+        );
+        materializer.structural_edges = MAXIMUM_FUNCTION_DEFINITION_EDGES;
+        materializer
+            .require_edge_total(MAXIMUM_FUNCTION_DEFINITION_EDGES, 0)
+            .expect("exact edge admission");
+        assert_eq!(
+            materializer
+                .admit_structural_edge()
+                .expect_err("one-over edge admission")
+                .code,
+            "definition_edge_limit"
+        );
+        materializer
+            .require_fact_count(MAXIMUM_FUNCTION_DEFINITION_FACT_READS)
+            .expect("exact fact admission");
+        assert_eq!(
+            materializer
+                .require_fact_count(MAXIMUM_FUNCTION_DEFINITION_FACT_READS + 1)
+                .expect_err("one-over fact admission")
+                .code,
+            "definition_fact_limit"
+        );
+
+        let record_bytes = 64 * 1_024;
+        let record_count = MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES / record_bytes;
+        let mut exact = Vec::with_capacity(record_count);
+        for _ in 0..record_count {
+            exact.push(DefinitionLogicalRecord {
+                section: DefinitionSection::Body,
+                bytes: vec![b'x'; record_bytes],
+                key: [0; 32],
+            });
+        }
+        let (_, bytes) = definition_logical_digest(&exact).expect("exact logical byte admission");
+        assert_eq!(bytes, MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES);
+        exact.push(DefinitionLogicalRecord {
+            section: DefinitionSection::Body,
+            bytes: vec![b'x'],
+            key: [0; 32],
+        });
+        assert_eq!(
+            definition_logical_digest(&exact)
+                .expect_err("one-over logical byte admission")
+                .code,
+            "definition_logical_byte_limit"
+        );
+        assert_eq!(
+            parse_definition_item_limit(&MAXIMUM_FUNCTION_DEFINITION_ITEMS.to_string())
+                .expect("exact page item admission"),
+            MAXIMUM_FUNCTION_DEFINITION_ITEMS
+        );
+        assert_eq!(
+            parse_definition_item_limit(&(MAXIMUM_FUNCTION_DEFINITION_ITEMS + 1).to_string())
+                .expect_err("one-over page item admission")
+                .code,
+            "definition_invalid_limit"
+        );
+        assert_eq!(
+            parse_definition_byte_limit(&MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string())
+                .expect("exact page byte admission"),
+            MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES
+        );
+        assert_eq!(
+            parse_definition_byte_limit(
+                &(MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES + 1).to_string()
+            )
+            .expect_err("one-over page byte admission")
+            .code,
+            "definition_invalid_byte_limit"
+        );
+    }
+
+    #[test]
+    fn definition_materializer_rejects_missing_shared_and_wrong_ownership() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let repository = GraphRepository::open(&project).expect("lkjournal repository");
+        let view = repository.view_current().expect("lkjournal view");
+        let function: KernelOwnerKey = "decl_a914bb78de075ff44a857ac028d704f3"
+            .parse()
+            .expect("worker function");
+
+        let mut reader = view.definition_reader();
+        let mut cancellation = || Ok(());
+        let mut shared =
+            DefinitionMaterializer::new(&mut reader, view.package(), &mut cancellation);
+        shared
+            .load_function_root(function, KernelOwnerKind::TaskFunction)
+            .expect("first function root");
+        assert_eq!(
+            shared
+                .load_function_root(function, KernelOwnerKind::TaskFunction)
+                .expect_err("shared function root")
+                .code,
+            "definition_shared_or_cyclic"
+        );
+
+        let mut reader = view.definition_reader();
+        let mut cancellation = || Ok(());
+        let mut missing =
+            DefinitionMaterializer::new(&mut reader, view.package(), &mut cancellation);
+        let absent = KernelOwnerKey::Expression(
+            crate::platform::semantic_id::ExpressionId::migrate(b"missing-definition-owner", 1),
+        );
+        assert_eq!(
+            missing
+                .load_structural_owner(
+                    absent,
+                    OwnershipEntry::new(
+                        OwnershipParent::Owner(function),
+                        OwnershipRole::ExpressionRoot(ExpressionRootRole::FunctionBody),
+                    ),
+                    Some(0),
+                )
+                .expect_err("missing structural owner")
+                .code,
+            "definition_owner_missing"
+        );
+
+        let root = view
+            .owner(function)
+            .expect("function read")
+            .value
+            .expect("function owner");
+        let OwnerRecord::Declaration(declaration) = root else {
+            panic!("worker root is not a declaration");
+        };
+        let DeclarationPayload::Function(worker) = declaration.payload else {
+            panic!("worker root has no body");
+        };
+        let body = KernelOwnerKey::Expression(worker.body);
+        let mut reader = view.definition_reader();
+        let mut cancellation = || Ok(());
+        let mut wrong = DefinitionMaterializer::new(&mut reader, view.package(), &mut cancellation);
+        assert_eq!(
+            wrong
+                .load_structural_owner(
+                    body,
+                    OwnershipEntry::new(
+                        OwnershipParent::Owner(function),
+                        OwnershipRole::ExpressionRoot(ExpressionRootRole::ConstantValue),
+                    ),
+                    Some(0),
+                )
+                .expect_err("wrong structural role")
+                .code,
+            "definition_ownership_mismatch"
+        );
+    }
+
+    #[test]
+    fn definition_public_boundary_rejects_foreign_missing_and_nonfunction_owners() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let base = vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+        ];
+        for (suffix, code) in [
+            (
+                vec![
+                    "task_function".to_owned(),
+                    "decl_a914bb78de075ff44a857ac028d704f3".to_owned(),
+                    "--detail".to_owned(),
+                    "definition".to_owned(),
+                    "--package".to_owned(),
+                    "pkg_10000000000000000000000000000001".to_owned(),
+                ],
+                "definition_dependency_body",
+            ),
+            (
+                vec![
+                    "module".to_owned(),
+                    "mod_0510586a801c429b7a4a49a217de7fab".to_owned(),
+                    "--detail".to_owned(),
+                    "definition".to_owned(),
+                ],
+                "definition_owner_kind",
+            ),
+            (
+                vec![
+                    "pure_function".to_owned(),
+                    "decl_01010101010101010101010101010101".to_owned(),
+                    "--detail".to_owned(),
+                    "definition".to_owned(),
+                ],
+                "definition_owner_not_found",
+            ),
+        ] {
+            let mut arguments = base.clone();
+            arguments.extend(suffix);
+            assert_eq!(
+                execute_inspect_owner(arguments)
+                    .expect_err("definition boundary rejection")
+                    .code,
+                code
+            );
+        }
+    }
+
+    fn response_field<'a>(
+        records: &'a [crate::platform::control::CompactRecord],
+        operation: &str,
+        name: &str,
+    ) -> &'a str {
+        records
+            .iter()
+            .find(|record| record.operation == operation)
+            .and_then(|record| record.fields.iter().find(|field| field.name == name))
+            .map(|field| field.value.as_str())
+            .unwrap_or_else(|| panic!("missing response field {operation}.{name}"))
+    }
+
+    fn compact_record_identity(
+        record: &crate::platform::control::CompactRecord,
+    ) -> (String, Vec<(String, String)>) {
+        (
+            record.operation.clone(),
+            record
+                .fields
+                .iter()
+                .map(|field| (field.name.clone(), field.value.clone()))
+                .collect(),
+        )
     }
 
     #[test]

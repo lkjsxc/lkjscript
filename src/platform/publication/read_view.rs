@@ -13,6 +13,12 @@ use crate::platform::change::{
     WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
     prepare_change_analysis_with_budget, update_witness_maps_from,
 };
+use crate::platform::contract::{
+    MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
+    MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES, MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES,
+    MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES, MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS,
+    MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES, MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerKind,
@@ -137,6 +143,50 @@ pub(crate) struct RepositoryQueryAdmission {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RepositoryDefinitionAdmission {
+    pub map_pages: u64,
+    pub map_bytes: u64,
+    pub map_entries: u64,
+    pub catalog_lookups: u64,
+    pub store_objects: u64,
+    pub store_bytes: u64,
+    pub canonical_records: u64,
+    pub ownership_records: u64,
+    pub summary_records: u64,
+}
+
+impl RepositoryDefinitionAdmission {
+    pub const fn maximum() -> Self {
+        Self {
+            map_pages: MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES,
+            map_bytes: MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES,
+            map_entries: MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES,
+            catalog_lookups: MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
+            store_objects: MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
+            store_bytes: MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES,
+            canonical_records: MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS,
+            ownership_records: MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS,
+            summary_records: MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
+        }
+    }
+}
+
+/// One aggregate point-reader admission for a complete function-definition projection.
+///
+/// The reader pins the existing immutable view, shares one physical admission across canonical
+/// owners, ownership facts, and bound summaries, and retains exact work for the public receipt.
+/// It has no cursor, cache, or write capability.
+pub(crate) struct RepositoryDefinitionReader<'a> {
+    view: &'a RepositoryView,
+    admission: RepositoryReadAdmission,
+    work: RepositoryReadWork,
+    remaining_ownership_records: u64,
+    remaining_summary_records: u64,
+    ownership_records: u64,
+    summary_records: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RepositoryRelationQueryRange<'a> {
     pub endpoint: RelationEndpoint,
     pub kind: Option<RelationKind>,
@@ -226,6 +276,29 @@ impl RepositoryReadAdmission {
             maximum_witness_records: admission.witness_records,
             canonical_code: "query_admission_canonical_records",
             witness_code: "query_admission_witness_records",
+        }
+    }
+
+    const fn definition(admission: RepositoryDefinitionAdmission) -> Self {
+        Self {
+            map: MapAdmission {
+                maximum_pages_read: admission.map_pages,
+                maximum_bytes_read: admission.map_bytes,
+                maximum_entries_visited: admission.map_entries,
+                maximum_pages_encoded: 0,
+                maximum_bytes_encoded: 0,
+            },
+            store: StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: admission.catalog_lookups,
+                maximum_objects: admission.store_objects,
+                maximum_bytes: admission.store_bytes,
+            }),
+            maximum_canonical_records: admission.canonical_records,
+            maximum_witness_records: admission
+                .ownership_records
+                .saturating_add(admission.summary_records),
+            canonical_code: "definition_admission_canonical_records",
+            witness_code: "definition_admission_witness_records",
         }
     }
 
@@ -596,6 +669,18 @@ impl RepositoryView {
 
     pub const fn current(&self) -> &CurrentPublication {
         &self.current
+    }
+
+    pub(crate) fn definition_reader(&self) -> RepositoryDefinitionReader<'_> {
+        RepositoryDefinitionReader::new(self, RepositoryDefinitionAdmission::maximum())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn definition_reader_with_admission(
+        &self,
+        admission: RepositoryDefinitionAdmission,
+    ) -> RepositoryDefinitionReader<'_> {
+        RepositoryDefinitionReader::new(self, admission)
     }
 
     /// Normalizes, validates, and stages one change against this view's exact immutable revision.
@@ -2507,6 +2592,72 @@ impl RepositoryView {
     }
 }
 
+impl<'a> RepositoryDefinitionReader<'a> {
+    fn new(view: &'a RepositoryView, admission: RepositoryDefinitionAdmission) -> Self {
+        Self {
+            view,
+            admission: RepositoryReadAdmission::definition(admission),
+            work: RepositoryReadWork::default(),
+            remaining_ownership_records: admission.ownership_records,
+            remaining_summary_records: admission.summary_records,
+            ownership_records: 0,
+            summary_records: 0,
+        }
+    }
+
+    pub(crate) fn owner(&mut self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        let read = self.view.owner_admitted(owner, &mut self.admission)?;
+        self.work.add(read.work);
+        Ok(read.value)
+    }
+
+    pub(crate) fn ownership(
+        &mut self,
+        owner: OwnerKey,
+    ) -> Result<Option<OwnershipEntry>, Diagnostic> {
+        admit_decoded_records(
+            &mut self.remaining_ownership_records,
+            1,
+            "definition_admission_witness_records",
+            "ownership records",
+        )?;
+        let read = self.view.ownership_admitted(owner, &mut self.admission)?;
+        self.work.add(read.work);
+        self.ownership_records = self.ownership_records.saturating_add(1);
+        Ok(read.value)
+    }
+
+    pub(crate) fn summary(
+        &mut self,
+        owner: OwnerKey,
+    ) -> Result<Option<BoundOwnerSummary>, Diagnostic> {
+        admit_decoded_records(
+            &mut self.remaining_summary_records,
+            1,
+            "definition_admission_witness_records",
+            "bound owner summaries",
+        )?;
+        let read = self
+            .view
+            .bound_owner_summary_admitted(owner, &mut self.admission)?;
+        self.work.add(read.work);
+        self.summary_records = self.summary_records.saturating_add(1);
+        Ok(read.value)
+    }
+
+    pub(crate) const fn work(&self) -> RepositoryReadWork {
+        self.work
+    }
+
+    pub(crate) const fn ownership_records(&self) -> u64 {
+        self.ownership_records
+    }
+
+    pub(crate) const fn summary_records(&self) -> u64 {
+        self.summary_records
+    }
+}
+
 fn map_diagnostic(error: MapError) -> Diagnostic {
     let class = match error.class {
         MapErrorClass::Input => DiagnosticClass::Source,
@@ -3075,6 +3226,87 @@ mod query_read_tests {
     use crate::platform::kernel::ExactOwnerKey;
     use crate::platform::semantic_id::ModuleId;
     use crate::platform::witness::{forward_relation_key, reverse_relation_key};
+
+    #[test]
+    fn definition_physical_admissions_bind_exact_derived_maxima() {
+        let maximum = RepositoryDefinitionAdmission::maximum();
+        assert_eq!(
+            maximum.map_pages,
+            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
+        );
+        assert_eq!(
+            maximum.map_bytes,
+            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
+        );
+        assert_eq!(
+            maximum.map_entries,
+            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES
+        );
+        assert_eq!(
+            maximum.store_objects,
+            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS
+        );
+        assert_eq!(
+            maximum.store_bytes,
+            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES
+        );
+        let mut decoded = RepositoryReadAdmission::definition(maximum);
+        decoded
+            .admit_canonical_records(maximum.canonical_records)
+            .expect("exact canonical decode admission");
+        assert_eq!(
+            decoded
+                .admit_canonical_records(1)
+                .expect_err("one-over canonical decode")
+                .code,
+            "definition_admission_canonical_records"
+        );
+        decoded
+            .admit_witness_records(
+                maximum
+                    .ownership_records
+                    .saturating_add(maximum.summary_records),
+            )
+            .expect("exact witness decode admission");
+        assert_eq!(
+            decoded
+                .admit_witness_records(1)
+                .expect_err("one-over witness decode")
+                .code,
+            "definition_admission_witness_records"
+        );
+
+        let mut exact_store = StoreReadAdmission::new(StoreReadLimits {
+            maximum_catalog_lookups: 1,
+            maximum_objects: 1,
+            maximum_bytes: maximum.store_bytes,
+        });
+        exact_store
+            .admit_catalog_lookup()
+            .expect("exact store lookup admission");
+        exact_store
+            .admit_object_bytes(maximum.store_bytes)
+            .expect("exact store byte admission");
+        assert_eq!(
+            exact_store
+                .admit_object_bytes(1)
+                .expect_err("one-over store object")
+                .code,
+            "object_read_objects_exhausted"
+        );
+        let mut one_under = StoreReadAdmission::new(StoreReadLimits {
+            maximum_catalog_lookups: 1,
+            maximum_objects: 1,
+            maximum_bytes: maximum.store_bytes - 1,
+        });
+        assert_eq!(
+            one_under
+                .admit_object_bytes(maximum.store_bytes)
+                .expect_err("one-over store bytes")
+                .code,
+            "object_read_bytes_exhausted"
+        );
+    }
 
     #[test]
     fn query_relation_entry_strictly_revalidates_key_value_prefix_and_direction() {

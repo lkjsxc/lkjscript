@@ -36,7 +36,8 @@ pub use read_view::{
     RevisionWitnessMapUpdate, TestDependencyRead,
 };
 pub(crate) use read_view::{
-    RepositoryQueryAdmission, RepositoryQueryRangeRead, RepositoryRelationQueryRange,
+    RepositoryDefinitionAdmission, RepositoryDefinitionReader, RepositoryQueryAdmission,
+    RepositoryQueryRangeRead, RepositoryRelationQueryRange,
 };
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,

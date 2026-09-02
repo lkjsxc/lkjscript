@@ -21,6 +21,15 @@ branch-merge logic or encoded expected results. It must agree on both maintained
 fabrication, unrestricted resource parameters, borrow/consume, duplicate and post-consume use,
 foreign requirement, branch mismatch, function escape, and forbidden containment mutations.
 
+Function-definition projection acceptance uses complete typed reconstruction as a disjoint oracle.
+The oracle may decode the same canonical authority, but it cannot call production point traversal,
+structural ordering, rendering, paging, continuation, or expected-result helpers. It independently
+derives the selected function contract, structural owner preorder, owner-bound validation facts,
+exact semantic relations, and referenced capability operations. Production output must agree for
+representative pure, task, generic, transaction, nominal-match, capability, and affine forms plus
+the maintained worker and the largest maintained function. Corrupt ownership and exact-fit/one-over
+admission cases remain finite implementation tests rather than repaired oracle results.
+
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
 predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
@@ -72,6 +81,16 @@ modes, normalize direct and input-file affine requests identically, accept a pub
 acquire/borrow/consume task, and reject predecessor type/use spellings and raw queue transition
 signatures with an unchanged complete authority inventory.
 
+The copied executable must discover function-definition inspection offline, force multiple pages
+with changed resume budgets, and independently recompute the complete digest from raw compact
+records. In a fresh isolated HTTP project it locates and projects `response-text`, constructs one
+ordinary compact `replace.body` request, proves direct/file plan equality, applies against the exact
+base, reinspects the child revision, and observes only the intended response literal change with an
+unchanged function contract. It then checks, deterministically builds, serves on loopback, and
+observes that response. Stale continuation/base/plan, mutated token, and projection-as-change input
+must reject without advancing authority, and the temporary project, service root, request files,
+artifacts, and copied candidate must be removed.
+
 Test names and retained evidence must map these properties to exact mechanisms. An internal unit
 fixture alone is not copied-binary or maintained-consumer completion.
 
@@ -95,6 +114,14 @@ iterations, and clean task shutdown. It must audit that no project marker or rep
 opened and that canonical typed meaning authority is unchanged before/after. This required
 product/service gate has no database server, container, connection secret, or host database-library
 prerequisite.
+
+The same copied candidate must project the maintained affine worker and the independently selected
+largest maintained function from an isolated full authority copy before running live effects. The
+worker comparison derives its `jobs` acquisition, absent/live and renewed-state matches,
+`lease-info` borrow, heartbeat consume, and complete/fail consume from generic definition records,
+exact references, and the disjoint typed oracle. Small and changed page budgets must cover the exact
+logical inventory once, with matching complete digest/counts and unchanged repository tree,
+semantic `HEAD`, generated application bundle, descriptor, data, queue, and object authority.
 
 ## Exact release-target admission
 

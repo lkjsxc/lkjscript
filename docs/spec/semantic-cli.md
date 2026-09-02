@@ -132,6 +132,51 @@ backup alias. Exact behavior and limits are specified in
 `status` reports project, repository, package, revision, state/root, validation evidence, receipt,
 and semantic counts. `inspect owner KIND ID [--package PACKAGE]` reads one exact typed owner.
 
+One local function definition has the additional exact form:
+
+```text
+inspect owner KIND ID --detail definition \
+  [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]
+```
+
+`KIND` must be `pure_function` or `task_function`, the owner must be live in the selected local
+package, and it must have a body. Summary inspection is unchanged. A dependency package, a
+non-function, a missing or retired function, or a dependency implementation request rejects.
+`body`, `full`, `raw`, `source`, `recursive`, and JSON spellings are not aliases.
+
+Definition detail is a revision-pinned derived projection, not an authoring format. It discloses
+the complete accepted function contract; every structurally owned expression, binding, pattern,
+construction, projection, list, match, call, transaction, and resource form; exact references at
+named declaration, package, interface, operation, requirement, field, parameter, and type
+boundaries; and the resolved summary and validation facts already bound to those body records.
+Referenced declarations are not recursively expanded. Storage bytes and paths, indexes, caches,
+compiler or artifact operands, runtime handles, deployment state, grants, secrets, environment,
+operational data, queue transition tokens, object bytes, and evidence paths are never consulted or
+reported.
+
+The projector pins one immutable repository view and validates the complete closure before emitting
+success. Sections are ordered as the definition/revision header, function contract in semantic
+field order, structural body preorder using canonical slots and explicit indexes, external
+references by `(role, typed target)`, and validation facts in body order. Missing, foreign, shared,
+cyclic, duplicate-slot, noncanonical, or summary/fact-inconsistent ownership is corruption rather
+than partial output.
+
+The complete logical definition admits at most 4,096 body records, 16,384 combined structural and
+reference edges, 32,768 fact reads, depth 256, and 8 MiB of canonical logical encoding. Literal
+fragments are at most 8 KiB. Existing compact page bounds remain 50 default and 10,000 maximum
+emitted records, 1,536 minimum, 65,536 default, and 4 MiB maximum output bytes. Executable
+discovery reports the separately derived canonical-record, ownership, persistent-map, object-store,
+continuation, and output admissions.
+
+Every page repeats repository, package, exact revision, function, projection contract, complete
+definition digest and counts, ordering, and the page range. Stateless `icont_` continuations bind
+all of those identities plus the section and exclusive resume record key; they carry no body,
+frontier, cursor, cache, or process state. Resume reconstructs and validates the complete definition
+from immutable authority. Only page item and byte budgets may change. Malformed, padded, truncated,
+oversized, predecessor, foreign, stale, selector-mismatched, projection-mismatched, or impossible
+tokens reject without writes. Projection records are unknown compact-change input and cannot
+advance semantic authority.
+
 Normalized query supports exactly:
 
 ```text

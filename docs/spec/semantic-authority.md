@@ -63,6 +63,14 @@ operations are:
 `change plan`, status, inspect, query, package inspection/export, check, build, run, capabilities,
 and all their failure paths do not advance accepted authority.
 
+Detailed local-function inspection is a deterministic revision-bound transport over one immutable
+accepted view. Its complete function contract, structurally owned body, exact reference cutoff, and
+bound validation facts are derived from graph authority and validated before any page is emitted.
+Its stateless continuation binds the immutable view and complete projection identity but carries no
+meaning or mutable cursor. Definition output is neither source text nor compact authored intent;
+`change` rejects it, and no projection page, digest, continuation, cache, or reader can select or
+advance `HEAD`.
+
 ## Reviewed authored changes
 
 Every public mutation lowers to typed semantic intent before validation. Plan and apply share

@@ -3,6 +3,10 @@ use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
+use lkjscript::platform::contributor::{
+    FunctionDefinitionOracle, function_definition_oracle, largest_function_definition_oracle,
+};
+use lkjscript::platform::control::{CompactRecord, parse_records};
 use lkjscript::platform::data::{
     DataCommitOutcome, DataExpectation, DataKey, DataKeyPart, DataLimits, DataScanDirection,
     DataStore, DataTransaction,
@@ -23,7 +27,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 5;
+const SERVICE_CONTRACT_VERSION: u32 = 6;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -36,6 +40,7 @@ const QUEUE_JOB_CHECKSUM_DOMAIN: &str = "lkjscript.queue.data-job.v1";
 const QUEUE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.queue.data-schema.v1";
 const ORACLE_RETRY_JOB: &str = "affine-oracle-retry";
 const ORACLE_STALE_JOB: &str = "affine-oracle-stale";
+const WORKER_FUNCTION: &str = "decl_a914bb78de075ff44a857ac028d704f3";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
     "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728";
@@ -46,6 +51,7 @@ const MAXIMUM_RUNNER_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
 const MAXIMUM_DESCRIPTOR_BYTES: u64 = 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
+const MAXIMUM_BINARY_BYTES: u64 = 256 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const RUNNER_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -204,6 +210,89 @@ struct ServiceResult {
     initialization_transport: InitializationTransport,
     initialization_observation: InitializationObservation,
     request_elapsed_nanoseconds: BTreeMap<String, u64>,
+    definition_projection: MaintainedDefinitionObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct MaintainedDefinitionObservation {
+    function: String,
+    revision: String,
+    digest: String,
+    total_records: u64,
+    contract_records: u64,
+    body_records: u64,
+    reference_records: u64,
+    fact_records: u64,
+    structural_edges: u64,
+    reference_edges: u64,
+    maximum_depth: u64,
+    logical_bytes: u64,
+    pages: u64,
+    rendered_output_bytes: u64,
+    owner_order_digest: String,
+    fact_digest: String,
+    relation_digest: String,
+    capability_calls: Vec<MaintainedCapabilityObservation>,
+    matches: u64,
+    largest_function: String,
+    largest_body_records: u64,
+    largest_digest: String,
+    largest_admitted: bool,
+    oracle_equal: bool,
+    digest_recomputed: bool,
+    changed_page_budgets: bool,
+    copied_binary_equal: bool,
+    authority_unchanged: bool,
+    isolated_copy_removed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct MaintainedCapabilityObservation {
+    operation: String,
+    parameter_uses: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct MaintainedDefinitionIdentity {
+    revision: String,
+    digest: String,
+    total_records: u64,
+    contract_records: u64,
+    body_records: u64,
+    reference_records: u64,
+    fact_records: u64,
+    structural_edges: u64,
+    reference_edges: u64,
+    maximum_depth: u64,
+    logical_bytes: u64,
+}
+
+#[derive(Clone, Debug)]
+struct MaintainedDefinitionAssembly {
+    revision: String,
+    digest: String,
+    total_records: u64,
+    contract_records: u64,
+    body_records: u64,
+    reference_records: u64,
+    fact_records: u64,
+    structural_edges: u64,
+    reference_edges: u64,
+    maximum_depth: u64,
+    logical_bytes: u64,
+    pages: u64,
+    rendered_output_bytes: u64,
+    changed_page_budgets: bool,
+    records: Vec<MaintainedDefinitionRecord>,
+}
+
+#[derive(Clone, Debug)]
+struct MaintainedDefinitionRecord {
+    operation: String,
+    fields: BTreeMap<String, String>,
+    bytes: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -554,6 +643,31 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.shutdown_cleanup_failures != 0
         || result.initialization_transport.status == 0
         || result.initialization_observation.status == 0
+        || result.definition_projection.function != WORKER_FUNCTION
+        || result.definition_projection.total_records == 0
+        || result.definition_projection.contract_records == 0
+        || result.definition_projection.body_records == 0
+        || result.definition_projection.reference_records == 0
+        || result.definition_projection.fact_records == 0
+        || result.definition_projection.structural_edges == 0
+        || result.definition_projection.reference_edges == 0
+        || result.definition_projection.maximum_depth == 0
+        || result.definition_projection.logical_bytes == 0
+        || result.definition_projection.pages < 2
+        || result.definition_projection.rendered_output_bytes == 0
+        || result.definition_projection.capability_calls.len() < 5
+        || result.definition_projection.matches < 2
+        || result.definition_projection.largest_function.is_empty()
+        || result.definition_projection.largest_body_records
+            < result.definition_projection.body_records
+        || result.definition_projection.largest_digest.is_empty()
+        || !result.definition_projection.largest_admitted
+        || !result.definition_projection.oracle_equal
+        || !result.definition_projection.digest_recomputed
+        || !result.definition_projection.changed_page_budgets
+        || !result.definition_projection.copied_binary_equal
+        || !result.definition_projection.authority_unchanged
+        || !result.definition_projection.isolated_copy_removed
     {
         return Err(DevError::corrupt(
             "service receipt binding or maintained acceptance mismatch",
@@ -978,6 +1092,8 @@ fn run_acceptance(
 ) -> Result<ServiceResult, ServiceFailure> {
     let application = context.repository.join("applications/lkjournal");
     let authority_before = observe_graph_authority(&application)?;
+    let definition_projection =
+        verify_maintained_function_definition(context, binary, &application)?;
     let artifact_source = application.join(SERVICE_ARTIFACT_RELATIVE);
     let service_source = application.join("service.deployment.json");
     let worker_source = application.join("worker.deployment.json");
@@ -1620,6 +1736,7 @@ fn run_acceptance(
         initialization_transport,
         initialization_observation,
         request_elapsed_nanoseconds: timings,
+        definition_projection,
     })
 }
 
@@ -2601,6 +2718,874 @@ fn u64_at(value: &Value, field: &str) -> Result<u64, ServiceFailure> {
     })
 }
 
+fn verify_maintained_function_definition(
+    context: &mut ServiceContext,
+    binary: &Path,
+    application: &Path,
+) -> Result<MaintainedDefinitionObservation, ServiceFailure> {
+    let temporary = tempfile::Builder::new()
+        .prefix("definition-projection-")
+        .tempdir_in(&context.run_directory)
+        .map_err(|error| ServiceFailure::infrastructure("definition_workspace", error))?;
+    let temporary_path = temporary.path().to_path_buf();
+    let result = (|| {
+        let copied_application = temporary_path.join("lkjournal");
+        copy_bounded_tree(application, &copied_application)?;
+        let copied_binary = temporary_path.join("lkjscript");
+        fs::copy(binary, &copied_binary)
+            .map_err(|error| ServiceFailure::infrastructure("definition_binary_copy", error))?;
+        let source_binary = process::read_bounded(binary, MAXIMUM_BINARY_BYTES)
+            .map_err(|error| ServiceFailure::infrastructure("definition_binary_source", error))?;
+        let copied_binary_bytes = process::read_bounded(&copied_binary, MAXIMUM_BINARY_BYTES)
+            .map_err(|error| ServiceFailure::infrastructure("definition_binary_read", error))?;
+        let copied_binary_equal = source_binary == copied_binary_bytes;
+        require(
+            copied_binary_equal,
+            "definition_binary_mismatch",
+            "copied maintained-definition candidate differs from the selected candidate",
+        )?;
+        let authority_before = observe_graph_authority(&copied_application)?;
+        let tree_before = service_tree_digest(&copied_application)?;
+        let oracle = function_definition_oracle(&copied_application, WORKER_FUNCTION).map_err(
+            |diagnostic| {
+                ServiceFailure::failed(
+                    "definition_oracle",
+                    format!(
+                        "independent maintained definition reconstruction failed: {}",
+                        diagnostic.message
+                    ),
+                )
+            },
+        )?;
+        let largest =
+            largest_function_definition_oracle(&copied_application).map_err(|diagnostic| {
+                ServiceFailure::failed(
+                    "definition_largest_oracle",
+                    format!(
+                        "largest maintained function reconstruction failed: {}",
+                        diagnostic.message
+                    ),
+                )
+            })?;
+        let largest_admitted = largest.function == "decl_0693166bd7c29bee83d2ead289148f65"
+            && largest.body_preorder.len() == 192;
+        require(
+            largest_admitted,
+            "definition_largest_function",
+            "largest maintained function identity or body size drifted",
+        )?;
+        let projection = run_maintained_definition_pages(
+            context,
+            &copied_binary,
+            &copied_application,
+            &oracle,
+            "worker",
+        )?;
+        compare_maintained_definition(&projection, &oracle)?;
+        let largest_projection = run_maintained_definition_pages(
+            context,
+            &copied_binary,
+            &copied_application,
+            &largest,
+            "largest",
+        )?;
+        compare_maintained_definition(&largest_projection, &largest)?;
+        let authority_after = observe_graph_authority(&copied_application)?;
+        let tree_after = service_tree_digest(&copied_application)?;
+        let authority_unchanged = authority_before == authority_after && tree_before == tree_after;
+        require(
+            authority_unchanged,
+            "definition_authority_changed",
+            "maintained definition projection changed its isolated project copy",
+        )?;
+        let capability_calls = oracle
+            .capability_calls
+            .iter()
+            .map(|call| MaintainedCapabilityObservation {
+                operation: call.operation.clone(),
+                parameter_uses: call.parameter_uses.clone(),
+            })
+            .collect::<Vec<_>>();
+        for (operation, mode) in [
+            ("op_1a5491eb1c3ef3d15ec28268b6f04afc", "borrow"),
+            ("op_f593ba236055aa1afa6c02eaf0db6a64", "consume"),
+            ("op_679b43bb7dc0b298a7706d4e8a7bef23", "consume"),
+            ("op_242e065f9738b454e2328ed0e558e6a0", "consume"),
+        ] {
+            require(
+                capability_calls.iter().any(|call| {
+                    call.operation.ends_with(operation)
+                        && call.parameter_uses.iter().any(|use_mode| use_mode == mode)
+                }),
+                "definition_affine_observation",
+                format!("maintained definition omitted {mode} operation '{operation}'"),
+            )?;
+        }
+        require(
+            capability_calls.iter().any(|call| {
+                call.operation
+                    .ends_with("op_23bc0c498113c09a2ff0a4cf9c0a37ab")
+            }),
+            "definition_claim_observation",
+            "maintained definition omitted the jobs acquisition operation",
+        )?;
+        Ok(MaintainedDefinitionObservation {
+            function: WORKER_FUNCTION.to_owned(),
+            revision: projection.revision,
+            digest: projection.digest,
+            total_records: projection.total_records,
+            contract_records: projection.contract_records,
+            body_records: projection.body_records,
+            reference_records: projection.reference_records,
+            fact_records: projection.fact_records,
+            structural_edges: projection.structural_edges,
+            reference_edges: projection.reference_edges,
+            maximum_depth: projection.maximum_depth,
+            logical_bytes: projection.logical_bytes,
+            pages: projection.pages,
+            rendered_output_bytes: projection.rendered_output_bytes,
+            owner_order_digest: oracle.owner_order_digest,
+            fact_digest: oracle.fact_digest,
+            relation_digest: oracle.relation_digest,
+            capability_calls,
+            matches: oracle.matches.len() as u64,
+            largest_function: largest.function,
+            largest_body_records: largest.body_preorder.len() as u64,
+            largest_digest: largest_projection.digest,
+            largest_admitted,
+            oracle_equal: true,
+            digest_recomputed: true,
+            changed_page_budgets: projection.changed_page_budgets,
+            copied_binary_equal,
+            authority_unchanged,
+            isolated_copy_removed: true,
+        })
+    })();
+    let removal = temporary.close();
+    if let Err(error) = removal {
+        return Err(ServiceFailure::infrastructure(
+            "definition_workspace_cleanup",
+            error,
+        ));
+    }
+    require(
+        !temporary_path.exists(),
+        "definition_workspace_retained",
+        "maintained definition workspace remained after cleanup",
+    )?;
+    result
+}
+
+fn run_maintained_definition_pages(
+    context: &mut ServiceContext,
+    binary: &Path,
+    application: &Path,
+    oracle: &FunctionDefinitionOracle,
+    label: &str,
+) -> Result<MaintainedDefinitionAssembly, ServiceFailure> {
+    const LIMITS: [u64; 4] = [31, 47, 19, 61];
+    const BYTES: [u64; 2] = [65_536, 32_768];
+    let mut continuation: Option<String> = None;
+    let mut expected_start = 0_u64;
+    let mut pages = 0_usize;
+    let mut rendered_output_bytes = 0_u64;
+    let mut records = Vec::new();
+    let mut identity: Option<MaintainedDefinitionIdentity> = None;
+    loop {
+        if pages >= 10_000 {
+            return Err(ServiceFailure::failed(
+                "definition_page_limit",
+                "maintained definition exceeded the finite verifier page bound",
+            ));
+        }
+        let limit = LIMITS[pages % LIMITS.len()];
+        let bytes = BYTES[pages % BYTES.len()];
+        let mut command = vec![
+            binary.to_string_lossy().into_owned(),
+            "--project".to_owned(),
+            application.to_string_lossy().into_owned(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            oracle.kind.clone(),
+            oracle.function.clone(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+            "--limit".to_owned(),
+            limit.to_string(),
+            "--bytes".to_owned(),
+            bytes.to_string(),
+        ];
+        if let Some(token) = &continuation {
+            command.push("--continuation".to_owned());
+            command.push(token.clone());
+        }
+        let output = context.invoke(CommandRequest::standard(
+            &format!("definition-{label}-page-{pages}"),
+            command,
+        ))?;
+        let parsed = service_compact_records("maintained definition page", &output)?;
+        service_require_field(&parsed, "result", "status", "success")?;
+        let revision =
+            service_required_field(service_required_record(&parsed, "revision")?, "observed")?;
+        require(
+            revision == oracle.revision,
+            "definition_revision",
+            "maintained projection revision disagrees with the independent oracle",
+        )?;
+        let projection = service_required_record(&parsed, "projection")?;
+        service_require_exact(
+            service_required_field(projection, "function")?,
+            &oracle.function,
+            "definition function",
+        )?;
+        let digest = service_required_field(projection, "digest")?.to_owned();
+        let total_records = service_parse_u64(
+            service_required_field(projection, "total-records")?,
+            "definition total records",
+        )?;
+        let contract_records = service_parse_u64(
+            service_required_field(projection, "contract-records")?,
+            "definition contract records",
+        )?;
+        let body_records = service_parse_u64(
+            service_required_field(projection, "body-records")?,
+            "definition body records",
+        )?;
+        let reference_records = service_parse_u64(
+            service_required_field(projection, "reference-records")?,
+            "definition reference records",
+        )?;
+        let fact_records = service_parse_u64(
+            service_required_field(projection, "fact-records")?,
+            "definition fact records",
+        )?;
+        let structural_edges = service_parse_u64(
+            service_required_field(projection, "structural-edges")?,
+            "definition structural edges",
+        )?;
+        let reference_edges = service_parse_u64(
+            service_required_field(projection, "reference-edges")?,
+            "definition reference edges",
+        )?;
+        let maximum_depth = service_parse_u64(
+            service_required_field(projection, "maximum-depth")?,
+            "definition maximum depth",
+        )?;
+        let logical_bytes = service_parse_u64(
+            service_required_field(projection, "logical-bytes")?,
+            "definition logical bytes",
+        )?;
+        let current_identity = MaintainedDefinitionIdentity {
+            revision: revision.to_owned(),
+            digest,
+            total_records,
+            contract_records,
+            body_records,
+            reference_records,
+            fact_records,
+            structural_edges,
+            reference_edges,
+            maximum_depth,
+            logical_bytes,
+        };
+        if let Some(expected) = &identity {
+            require(
+                expected == &current_identity,
+                "definition_page_identity",
+                "maintained definition page changed complete identity or counts",
+            )?;
+        } else {
+            identity = Some(current_identity);
+        }
+        let page = service_required_record(&parsed, "page")?;
+        let start = service_parse_u64(
+            service_required_field(page, "start")?,
+            "definition page start",
+        )?;
+        let end = service_parse_u64(service_required_field(page, "end")?, "definition page end")?;
+        let returned = service_parse_u64(
+            service_required_field(page, "returned")?,
+            "definition page returned",
+        )?;
+        require(
+            start == expected_start
+                && end == start.saturating_add(returned)
+                && returned > 0
+                && returned <= limit,
+            "definition_page_range",
+            "maintained definition page is empty, overlapping, or outside its item budget",
+        )?;
+        let logical = service_definition_records(&parsed, &output)?;
+        require(
+            logical.len() as u64 == returned,
+            "definition_page_records",
+            "maintained page count disagrees with its logical definition records",
+        )?;
+        records.extend(logical);
+        rendered_output_bytes = rendered_output_bytes
+            .checked_add(service_parse_u64(
+                service_required_field(
+                    service_required_record(&parsed, "work")?,
+                    "rendered-output-bytes",
+                )?,
+                "definition rendered output bytes",
+            )?)
+            .ok_or_else(|| {
+                ServiceFailure::failed(
+                    "definition_output_bytes",
+                    "maintained definition output-byte accounting overflowed",
+                )
+            })?;
+        expected_start = end;
+        pages = pages.saturating_add(1);
+        match service_required_field(page, "complete")? {
+            "true" => {
+                require(
+                    !parsed
+                        .iter()
+                        .any(|record| record.operation == "continuation"),
+                    "definition_terminal_continuation",
+                    "complete maintained definition page emitted a continuation",
+                )?;
+                break;
+            }
+            "false" => {
+                let token = service_required_field(
+                    service_required_record(&parsed, "continuation")?,
+                    "token",
+                )?;
+                require(
+                    token.starts_with("icont_") && token.len() <= 320,
+                    "definition_continuation",
+                    "maintained definition emitted a foreign or oversized continuation",
+                )?;
+                continuation = Some(token.to_owned());
+            }
+            _ => {
+                return Err(ServiceFailure::failed(
+                    "definition_completion",
+                    "maintained definition page emitted a non-boolean completion",
+                ));
+            }
+        }
+    }
+    let identity = identity.ok_or_else(|| {
+        ServiceFailure::failed(
+            "definition_identity",
+            "maintained definition emitted no projection identity",
+        )
+    })?;
+    require(
+        records.len() as u64 == identity.total_records && expected_start == identity.total_records,
+        "definition_complete_records",
+        "maintained definition assembly disagrees with its complete record count",
+    )?;
+    let (recomputed, recomputed_bytes) = service_definition_digest(&records)?;
+    require(
+        recomputed == identity.digest && recomputed_bytes == identity.logical_bytes,
+        "definition_digest",
+        "maintained definition digest or logical-byte count failed independent recomputation",
+    )?;
+    require(
+        pages > 1,
+        "definition_multipage",
+        "maintained definition did not require multiple stateless pages",
+    )?;
+    Ok(MaintainedDefinitionAssembly {
+        revision: identity.revision,
+        digest: identity.digest,
+        total_records: identity.total_records,
+        contract_records: identity.contract_records,
+        body_records: identity.body_records,
+        reference_records: identity.reference_records,
+        fact_records: identity.fact_records,
+        structural_edges: identity.structural_edges,
+        reference_edges: identity.reference_edges,
+        maximum_depth: identity.maximum_depth,
+        logical_bytes: identity.logical_bytes,
+        pages: pages as u64,
+        rendered_output_bytes,
+        changed_page_budgets: pages > 1,
+        records,
+    })
+}
+
+fn compare_maintained_definition(
+    projection: &MaintainedDefinitionAssembly,
+    oracle: &FunctionDefinitionOracle,
+) -> Result<(), ServiceFailure> {
+    require(
+        projection.revision == oracle.revision
+            && projection.body_records == oracle.body_preorder.len() as u64
+            && projection.fact_records
+                == (oracle.contract_owners.len() + oracle.body_preorder.len()) as u64
+            && projection.structural_edges == oracle.structural_edges
+            && projection.maximum_depth == oracle.maximum_depth,
+        "definition_oracle_counts",
+        "maintained projection counts disagree with the independent typed oracle",
+    )?;
+    let body = projection
+        .records
+        .iter()
+        .filter(|record| {
+            matches!(
+                record.operation.as_str(),
+                "definition.expression" | "definition.binding"
+            )
+        })
+        .collect::<Vec<_>>();
+    require(
+        body.len() == oracle.body_preorder.len(),
+        "definition_oracle_body_count",
+        "maintained projection body-owner count disagrees with the oracle",
+    )?;
+    for (projected, expected) in body.iter().zip(&oracle.body_preorder) {
+        let form = if projected.operation == "definition.binding" {
+            format!("binding:{}", service_definition_field(projected, "kind")?)
+        } else {
+            service_definition_field(projected, "form")?.to_owned()
+        };
+        require(
+            service_definition_field(projected, "id")? == expected.owner
+                && service_definition_field(projected, "parent")? == expected.parent
+                && service_definition_field(projected, "slot")? == expected.role
+                && service_parse_u64(
+                    service_definition_field(projected, "index")?,
+                    "definition body index",
+                )? == u64::from(expected.ordinal)
+                && service_parse_u64(
+                    service_definition_field(projected, "depth")?,
+                    "definition body depth",
+                )? == expected.depth
+                && form == expected.form
+                && projected.fields.get("name") == expected.name.as_ref(),
+            "definition_oracle_body",
+            format!(
+                "maintained body owner '{}' disagrees with the oracle",
+                expected.owner
+            ),
+        )?;
+    }
+    let projected_facts = projection
+        .records
+        .iter()
+        .filter(|record| record.operation == "definition.fact")
+        .collect::<Vec<_>>();
+    let oracle_facts = oracle
+        .contract_owners
+        .iter()
+        .chain(&oracle.body_preorder)
+        .collect::<Vec<_>>();
+    require(
+        projected_facts.len() == oracle_facts.len(),
+        "definition_oracle_fact_count",
+        "maintained fact count disagrees with the rebuilt witness",
+    )?;
+    for (projected, expected) in projected_facts.iter().zip(oracle_facts) {
+        require(
+            service_definition_field(projected, "owner")? == expected.owner
+                && service_definition_field(projected, "record")? == expected.record
+                && service_definition_field(projected, "summary")? == expected.summary,
+            "definition_oracle_fact",
+            format!(
+                "maintained fact '{}' disagrees with rebuilt authority",
+                expected.owner
+            ),
+        )?;
+    }
+    let projected_calls = projection
+        .records
+        .iter()
+        .filter(|record| {
+            record.operation == "definition.expression"
+                && record.fields.get("form").map(String::as_str) == Some("capability_call")
+        })
+        .collect::<Vec<_>>();
+    require(
+        projected_calls.len() == oracle.capability_calls.len(),
+        "definition_oracle_capability_count",
+        "maintained capability-call count disagrees with the typed oracle",
+    )?;
+    for (projected, expected) in projected_calls.iter().zip(&oracle.capability_calls) {
+        require(
+            service_definition_field(projected, "id")? == expected.expression
+                && service_definition_field(projected, "requirement")? == expected.requirement
+                && service_definition_field(projected, "operation")? == expected.operation
+                && service_parse_u64(
+                    service_definition_field(projected, "arguments")?,
+                    "definition capability arguments",
+                )? == expected.arguments,
+            "definition_oracle_capability",
+            format!(
+                "maintained capability call '{}' disagrees with typed authority",
+                expected.expression
+            ),
+        )?;
+    }
+    for expected_match in &oracle.matches {
+        for expected_case in &expected_match.cases {
+            require(
+                projection.records.iter().any(|record| {
+                    record.operation == "definition.reference"
+                        && record.fields.get("role").map(String::as_str) == Some("match_case")
+                        && record
+                            .fields
+                            .get("source")
+                            .is_some_and(|source| source.ends_with(&expected_match.expression))
+                        && record.fields.get("target") == Some(expected_case)
+                }),
+                "definition_oracle_match",
+                format!(
+                    "maintained match '{}' omitted exact case '{}'",
+                    expected_match.expression, expected_case
+                ),
+            )?;
+        }
+    }
+    if oracle.function == WORKER_FUNCTION {
+        require(
+            oracle.body_preorder.iter().any(|owner| {
+                owner.name.as_deref() == Some("lease-info") && owner.form == "binding:let"
+            }) && oracle.body_preorder.iter().any(|owner| {
+                owner.name.as_deref() == Some("renewed-lease")
+                    && owner.form == "binding:match_payload"
+            }),
+            "definition_oracle_bindings",
+            "maintained worker omitted lease-info or renewed-lease lexical structure",
+        )?;
+    }
+    for record in &projection.records {
+        let lower = String::from_utf8_lossy(&record.bytes).to_ascii_lowercase();
+        require(
+            !lower.contains("packs/")
+                && !lower.contains("catalog/")
+                && !lower.contains("generated/")
+                && !lower.contains(" path=/")
+                && !lower.contains("runtime-handle=")
+                && !lower.contains("secret-environment="),
+            "definition_containment",
+            "maintained definition exposed a forbidden storage or operational detail",
+        )?;
+    }
+    Ok(())
+}
+
+fn service_definition_records(
+    parsed: &[CompactRecord],
+    output: &[u8],
+) -> Result<Vec<MaintainedDefinitionRecord>, ServiceFailure> {
+    let logical = parsed
+        .iter()
+        .filter(|record| record.operation.starts_with("definition."))
+        .collect::<Vec<_>>();
+    let physical = output
+        .split_inclusive(|byte| *byte == b'\n')
+        .filter(|line| line.starts_with(b"definition."))
+        .collect::<Vec<_>>();
+    require(
+        logical.len() == physical.len(),
+        "definition_physical_count",
+        "maintained parsed and physical definition-record counts disagree",
+    )?;
+    logical
+        .into_iter()
+        .zip(physical)
+        .map(|(record, physical)| {
+            require(
+                physical.last() == Some(&b'\n'),
+                "definition_physical_newline",
+                "maintained definition record is not newline complete",
+            )?;
+            let mut fields = BTreeMap::new();
+            for field in &record.fields {
+                require(
+                    fields
+                        .insert(field.name.clone(), field.value.clone())
+                        .is_none(),
+                    "definition_duplicate_field",
+                    "maintained definition record contains a duplicate field",
+                )?;
+            }
+            Ok(MaintainedDefinitionRecord {
+                operation: record.operation.clone(),
+                fields,
+                bytes: physical.to_vec(),
+            })
+        })
+        .collect()
+}
+
+fn service_definition_digest(
+    records: &[MaintainedDefinitionRecord],
+) -> Result<(String, u64), ServiceFailure> {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v1");
+    hasher.update(&(records.len() as u64).to_be_bytes());
+    let mut logical_bytes = 0_u64;
+    for record in records {
+        let section = match record.operation.as_str() {
+            "definition.header" => 1,
+            "definition.function"
+            | "definition.type-parameter"
+            | "definition.parameter"
+            | "definition.requirement"
+            | "definition.requirement-operation"
+            | "definition.requirement-limit" => 2,
+            "definition.expression" | "definition.binding" | "definition.literal" => 3,
+            "definition.reference" => 4,
+            "definition.fact" => 5,
+            operation => {
+                return Err(ServiceFailure::failed(
+                    "definition_record_unknown",
+                    format!("maintained definition emitted unknown record '{operation}'"),
+                ));
+            }
+        };
+        let length = record.bytes.len() as u64;
+        logical_bytes = logical_bytes.checked_add(length).ok_or_else(|| {
+            ServiceFailure::failed(
+                "definition_logical_bytes",
+                "maintained definition logical byte accounting overflowed",
+            )
+        })?;
+        hasher.update(&[section]);
+        hasher.update(&length.to_be_bytes());
+        hasher.update(&record.bytes);
+    }
+    Ok((
+        format!("definition_{}", hasher.finalize().to_hex()),
+        logical_bytes,
+    ))
+}
+
+fn service_compact_records(
+    label: &str,
+    bytes: &[u8],
+) -> Result<Vec<CompactRecord>, ServiceFailure> {
+    parse_records(label, bytes).map_err(|diagnostics| {
+        ServiceFailure::failed(
+            "definition_compact_output",
+            format!(
+                "{label} is not strict compact output ({})",
+                diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        )
+    })
+}
+
+fn service_required_record<'a>(
+    records: &'a [CompactRecord],
+    operation: &str,
+) -> Result<&'a CompactRecord, ServiceFailure> {
+    records
+        .iter()
+        .find(|record| record.operation == operation)
+        .ok_or_else(|| {
+            ServiceFailure::failed(
+                "definition_compact_record",
+                format!("maintained definition output omitted '{operation}'"),
+            )
+        })
+}
+
+fn service_required_field<'a>(
+    record: &'a CompactRecord,
+    name: &str,
+) -> Result<&'a str, ServiceFailure> {
+    record
+        .fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.value.as_str())
+        .ok_or_else(|| {
+            ServiceFailure::failed(
+                "definition_compact_field",
+                format!("maintained '{}' record omitted '{name}'", record.operation),
+            )
+        })
+}
+
+fn service_definition_field<'a>(
+    record: &'a MaintainedDefinitionRecord,
+    name: &str,
+) -> Result<&'a str, ServiceFailure> {
+    record.fields.get(name).map(String::as_str).ok_or_else(|| {
+        ServiceFailure::failed(
+            "definition_record_field",
+            format!("maintained '{}' record omitted '{name}'", record.operation),
+        )
+    })
+}
+
+fn service_require_field(
+    records: &[CompactRecord],
+    operation: &str,
+    name: &str,
+    expected: &str,
+) -> Result<(), ServiceFailure> {
+    service_require_exact(
+        service_required_field(service_required_record(records, operation)?, name)?,
+        expected,
+        name,
+    )
+}
+
+fn service_require_exact(actual: &str, expected: &str, label: &str) -> Result<(), ServiceFailure> {
+    require(
+        actual == expected,
+        "definition_exact_output",
+        format!("maintained definition {label} is '{actual}', expected '{expected}'"),
+    )
+}
+
+fn service_parse_u64(value: &str, label: &str) -> Result<u64, ServiceFailure> {
+    value.parse::<u64>().map_err(|error| {
+        ServiceFailure::infrastructure(
+            "definition_numeric_output",
+            format!("parse {label}: {error}"),
+        )
+    })
+}
+
+fn copy_bounded_tree(source: &Path, destination: &Path) -> Result<(), ServiceFailure> {
+    fn copy_directory(
+        source: &Path,
+        destination: &Path,
+        files: &mut u64,
+        bytes: &mut u64,
+    ) -> Result<(), ServiceFailure> {
+        fs::create_dir(destination)
+            .map_err(|error| ServiceFailure::infrastructure("definition_copy_directory", error))?;
+        let mut entries = fs::read_dir(source)
+            .map_err(|error| ServiceFailure::infrastructure("definition_copy_read", error))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| ServiceFailure::infrastructure("definition_copy_entry", error))?;
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
+                ServiceFailure::infrastructure("definition_copy_metadata", error)
+            })?;
+            require(
+                !metadata.file_type().is_symlink(),
+                "definition_copy_symlink",
+                "maintained application copy encountered a symbolic link",
+            )?;
+            let target = destination.join(entry.file_name());
+            if metadata.is_dir() {
+                copy_directory(&entry.path(), &target, files, bytes)?;
+            } else if metadata.is_file() {
+                *files = files.checked_add(1).ok_or_else(|| {
+                    ServiceFailure::failed(
+                        "definition_copy_files",
+                        "maintained application file count overflowed",
+                    )
+                })?;
+                *bytes = bytes.checked_add(metadata.len()).ok_or_else(|| {
+                    ServiceFailure::failed(
+                        "definition_copy_bytes",
+                        "maintained application byte count overflowed",
+                    )
+                })?;
+                require(
+                    *files <= 100_000 && *bytes <= 1024 * 1024 * 1024,
+                    "definition_copy_bound",
+                    "maintained application exceeded the isolated-copy admission",
+                )?;
+                fs::copy(entry.path(), target).map_err(|error| {
+                    ServiceFailure::infrastructure("definition_copy_file", error)
+                })?;
+            } else {
+                return Err(ServiceFailure::failed(
+                    "definition_copy_file_type",
+                    "maintained application contains a special file",
+                ));
+            }
+        }
+        Ok(())
+    }
+    let mut files = 0_u64;
+    let mut bytes = 0_u64;
+    copy_directory(source, destination, &mut files, &mut bytes)
+}
+
+fn service_tree_digest(root: &Path) -> Result<String, ServiceFailure> {
+    fn collect(
+        root: &Path,
+        directory: &Path,
+        paths: &mut Vec<(String, PathBuf)>,
+    ) -> Result<(), ServiceFailure> {
+        let mut entries = fs::read_dir(directory)
+            .map_err(|error| ServiceFailure::infrastructure("definition_tree_read", error))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| ServiceFailure::infrastructure("definition_tree_entry", error))?;
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
+                ServiceFailure::infrastructure("definition_tree_metadata", error)
+            })?;
+            require(
+                !metadata.file_type().is_symlink(),
+                "definition_tree_symlink",
+                "isolated maintained application contains a symbolic link",
+            )?;
+            if metadata.is_dir() {
+                collect(root, &entry.path(), paths)?;
+            } else if metadata.is_file() {
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(|error| {
+                        ServiceFailure::infrastructure("definition_tree_relative", error)
+                    })?
+                    .to_str()
+                    .ok_or_else(|| {
+                        ServiceFailure::failed(
+                            "definition_tree_utf8",
+                            "isolated maintained application contains a non-UTF-8 path",
+                        )
+                    })?
+                    .to_owned();
+                paths.push((relative, entry.path()));
+            } else {
+                return Err(ServiceFailure::failed(
+                    "definition_tree_file_type",
+                    "isolated maintained application contains a special file",
+                ));
+            }
+        }
+        Ok(())
+    }
+    let mut paths = Vec::new();
+    collect(root, root, &mut paths)?;
+    paths.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut hasher = Sha256::new();
+    hasher.update(b"lkjscript.service.definition-tree.v1");
+    let mut total = 0_u64;
+    for (relative, path) in paths {
+        let bytes = process::read_bounded(&path, MAXIMUM_ARTIFACT_BYTES)
+            .map_err(|error| ServiceFailure::infrastructure("definition_tree_file", error))?;
+        total = total.checked_add(bytes.len() as u64).ok_or_else(|| {
+            ServiceFailure::failed(
+                "definition_tree_bytes",
+                "isolated maintained tree byte count overflowed",
+            )
+        })?;
+        require(
+            total <= 1024 * 1024 * 1024,
+            "definition_tree_bound",
+            "isolated maintained tree exceeded the verifier byte bound",
+        )?;
+        hasher.update((relative.len() as u64).to_be_bytes());
+        hasher.update(relative.as_bytes());
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(lower_hex(&hasher.finalize()))
+}
+
 fn require(
     condition: bool,
     code: &'static str,
@@ -2897,7 +3882,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 5);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 6);
     }
 
     #[test]

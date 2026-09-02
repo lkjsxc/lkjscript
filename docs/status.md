@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-01 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-02 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -71,7 +71,7 @@ bytes agree; each fresh application independently proved its clean/incremental e
 failure/cancellation, authority equality, redaction, and cleanup behavior without contacting a live
 relay.
 
-The public binary contains Graph 6 exact-interface affine resources and unrestricted/borrow/consume
+The public binary contains exact-interface affine resources and unrestricted/borrow/consume
 parameter use, compiler/runtime move enforcement, the nine-operation resource-owned durable queue,
 and deletion of raw attempt-token program authority. It also contains exact built-in dependency and
 topology authoring, unified recipe
@@ -100,14 +100,17 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source and immutable public latest are supported product snapshot `v0.1.15`. The graph owns
-exact-interface affine resources and
-parameter-use meaning, and current CLI and compact authoring expose those forms. Only graph,
-witness/summary/validator, package-interface, compiler/bytecode/artifact, resident-runtime,
-queue-adapter, registry, and contributor service-receipt owners advance with their changed encoding
-or behavior. Project creation, deployment, HTTP client, data-store, logical-backup, queue-data,
-object, and HTTP contracts remain unchanged; the release contracts also did not advance while their
-current instances bound the new product snapshot.
+Current source is unreleased product snapshot `0.1.16`; immutable public latest and the supported
+download remain `v0.1.15`. Source adds revision-pinned local-function definition inspection without
+adding graph meaning or changing compact authoring. Semantic graph, witness, owner-summary,
+validation, authored/compact change, package-interface, compiler/bytecode, artifact,
+resident-runtime, queue-adapter, project creation, deployment, HTTP client, data-store,
+logical-backup, queue-data, object, HTTP, package transport, and maintained semantic/artifact
+identities remain unchanged. The product snapshot and executable-owned inspection/dispatch
+compatibility advance, and the sole function-definition projection contract is
+`lkjscript-function-definition-projection-1`. Contributor distributed-HTTP acceptance and service
+receipt owners advance only for their new copied-binary proof. No release contract or public object
+advanced.
 Graph, package, artifact, deployment, and operational-data identities remain separate. This source
 campaign performed no deployment, hosted-data mutation, or live-relay contact, and the release
 campaign advanced no semantic or operational authority. The public product retains the same closed
@@ -116,7 +119,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b` in current source.
+`7bbb0d3a2410911d815ee4159a3a9b0244c12eef0045db241565d449b9158d09` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -187,10 +190,10 @@ and the current public distribution boundary is retained in
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
 effects, idempotency, visibility, and revision-bound bounded continuations. Deployment discovery is
-generated from the strict descriptor inventory and includes every adapter field and range. Seven
-executable-owned generated documents now cover operations, diagnostics, compact change
-grammar, built-in public interface, deployment schema, and stateful and Nostr relay-information
-composition walkthroughs.
+generated from the strict descriptor inventory and includes every adapter field and range. Eight
+executable-owned generated documents now cover operations, diagnostics, compact change grammar,
+local-function definition projection, built-in public interface, deployment schema, and stateful
+and Nostr relay-information composition walkthroughs.
 
 `status`, exact owner `inspect`, and normalized owner/name/relation/context `query` read one accepted
 revision. Context takes one live local owner, mandatory incoming/outgoing/both direction, and depth
@@ -200,6 +203,29 @@ revision/selector/section/key-bound continuation. Fixed maxima are 4,096 selecte
 16,384 unique relations, and 32,768 relation-witness visits; map, store, decode, output, and
 continuation bounds remain separate and executable-discovered. Package and foreign endpoints are
 reported but not expanded. Success and every failure perform no repository write.
+
+`inspect owner KIND ID --detail definition` succeeds only for one live local pure or task function
+with a body. It materializes the complete accepted contract, structural body closure, exact
+references, and bound validation facts before rendering deterministic header/contract/preorder-body/
+reference/fact pages. Fixed logical maxima are 4,096 body records, 16,384 combined structural and
+reference edges, 32,768 fact reads, depth 256, and 8 MiB canonical logical encoding; map, object,
+decode, literal-fragment, output, and 320-byte continuation admissions remain independently
+discovered. Stateless `icont_` tokens bind repository, package, revision, function, contract,
+complete digest, ordering, section, and exclusive record key. Resume recomputes the complete
+definition, and output is unknown `change` input.
+
+The maintained `lkjournal` worker is task function
+`decl_a914bb78de075ff44a857ac028d704f3`. Its definition digest is
+`definition_eaaf72ff8b3d39f940af04405dc256bb081f27070918ec73f1624fa63f65e2be`:
+210 logical records across six forced pages, comprising 9 contract, 48 body, 99 reference, and 51
+fact records, with 51 structural edges, 99 reference edges, depth 8, and 88,035 logical bytes. The
+disjoint complete-authority oracle agrees on owners, facts, exact relations, two live-state matches,
+the `jobs` requirement, `lease-info` borrow, heartbeat consume, renewed lease, and complete/fail
+consume. The independently selected largest maintained function is
+`decl_0693166bd7c29bee83d2ead289148f65`, with 192 body records and definition digest
+`definition_7494a67ac0a3538d57e108eddd6e6b9379949b6717b0267f5563415ab1ebd0a2`;
+it remains within every fixed admission. Both projections leave the complete maintained repository
+tree and generated application bytes unchanged.
 
 `change plan` and `change apply` share typed lowering and a reviewed logical-plan
 commitment; apply is the only normal existing-project semantic writer. Exact idempotent apply
@@ -318,8 +344,9 @@ sandbox or multi-tenant isolation boundary.
 - Public `run` is pure-command-only. Arbitrary outbound URLs/methods, request bodies, streaming,
   redirects, private-network destinations, proxies, client certificates, WebSocket, NIP-01 event
   models/signing, and additional effect families remain absent.
-- Full owner-body projection, generic impact query, fuzzy search, multiple-root context, and
-  historical query are absent.
+- Whole-project source/export, recursive referenced-declaration bodies, dependency implementation
+  projection, generic impact query, fuzzy search, multiple-root context, and historical query are
+  absent. Definition detail is confined to one admitted live local function.
 - Removed draft/history/review/project-backup/project-restore/doctor workflows have not been
   reintroduced on typed meaning authority. Operational data backup/restore is separately public.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
@@ -333,9 +360,9 @@ sandbox or multi-tenant isolation boundary.
   payload of one nominal variant; resource-valued function signatures, calls, ports, closures,
   aggregates, partial moves, general linear must-use values, and additional resource protocols are
   absent.
-- Compact finite output is bounded to 4 MiB and 10,000 records. Query has independent item and byte
-  budgets and a bounded revision-bound continuation. Exact limits and diagnostics are executable
-  registry data.
+- Compact finite output is bounded to 4 MiB and 10,000 records. Query and function-definition
+  inspection have independent item and byte budgets and distinct bounded revision-bound
+  continuations. Exact limits and diagnostics are executable capability data.
 - Artifact input/output, compiler units, graph traversal, expression depth, execution stack,
   instruction count, capability work, and adapter resources retain separate checked boundaries.
   These bounds are implementation admissions, not demonstrated scale ceilings.
@@ -358,6 +385,12 @@ sandbox or multi-tenant isolation boundary.
 
 The contributor-only `lkjscript-dev check` harness owns gate dependencies, exact input
 fingerprints, fresh/reused classification, bounded child logs, required outputs, and receipts.
+The source-only function-definition closure adds a complete-authority oracle disjoint from
+production traversal/order/rendering/paging/tokens, copied-candidate maintained worker and largest-
+function projection, and a fresh HTTP discover/project/plan/apply/reinspect/check/build/serve
+workflow. Its exact definition digests, admissions, negatives, unchanged maintained identities,
+gate classifications, target observation, cleanup, and raw-evidence pointers are owned by
+[`202609021013-function-definition-projection.json`](evidence/202609021013-function-definition-projection.json).
 The current affine queue source closure, including independent semantic-flow, copied-binary
 authoring, maintained asset, two-worker service, predecessor-rejection, and exact static-target
 observations, is bound by

@@ -143,7 +143,7 @@ HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Each stateful path
 through the ordinary public writer. The release contains unified graph-native recipe lowering,
 the closed NIP-11 relay-information recipe, bounded context traversal, and the complete ordered-data
 and durable-queue cutover without contacting a live relay or deploying an application. It also
-publishes Graph 6 exact-interface affine resources, unrestricted/borrow/consume parameter use,
+publishes exact-interface affine resources, unrestricted/borrow/consume parameter use,
 compiler/runtime movement checks, and the resource-owned queue interface. Target admission binds
 the exact service/worker candidate digest through the release manifest and independently accepted
 exact/latest public extractions.
@@ -151,8 +151,9 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset, and v0.1.15 likewise leaves every predecessor unchanged.
-Current source and public latest are product snapshot 0.1.15 with the current graph and affine
-public authoring.
+Current source is unreleased product snapshot 0.1.16; immutable public latest remains v0.1.15.
+Source adds only revision-pinned local-function definition inspection and its contributor proof to
+the released graph and affine public authoring. It has not entered the distribution path above.
 Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
@@ -176,6 +177,29 @@ Package and foreign endpoints stop expansion. Every resumed page reconstructs th
 result from immutable authority; no query index, frontier file, session, cache write, or mutable
 cursor exists.
 
+Function definition detail is a separate, narrower accepted-meaning projection:
+
+```text
+exact local pure/task function + accepted RepositoryView
+                         │
+                         ▼
+ aggregate bounded point reader + structural ownership validation
+                         │ complete contract/body/reference/fact closure
+                         ▼
+ canonical definition records + complete digest/counts
+                         │ header, contract, preorder body, references, facts
+                         ▼
+ stateless pages ── icont_ binds view, function, contract, digest, section, key
+```
+
+The aggregate point reader shares one physical admission budget and reveals typed records and bound
+facts, never storage representation. Structural children are followed only within the selected
+function; named owners and types remain exact reference boundaries. Every page reconstructs and
+validates the complete closure. A contributor oracle independently reconstructs full typed
+authority and compares owner/fact/relation inventories without production traversal, ordering,
+rendering, paging, or token code. No source projection, body index, mutable session, application
+dumper, or `change` reader exists.
+
 ## Layer ownership
 
 | Layer | Primary code | Owns | Does not own |
@@ -183,7 +207,7 @@ cursor exists.
 | Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, exact-interface resource/use meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, runtime handles, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
-| Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, relation, and bounded local-context reads with logical continuations | mutable cursors, query indexes, repair, or full owner bodies |
+| Inspection and query | `platform/cli.rs`, `platform/normalized_query`, publication read views | exact-owner summary, complete bounded local-function definition projection, namespace, relation, and bounded local-context reads with stateless logical continuations | mutable cursors, body/query indexes, repair, dependency bodies, source export, or authoring authority |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |

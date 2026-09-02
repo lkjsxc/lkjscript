@@ -4,6 +4,7 @@
     reason = "the black-box test harness uses panic-on-failure assertions"
 )]
 
+use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -151,7 +152,7 @@ fn compact_success_output(output: Output) -> Vec<CompactRecord> {
     );
     assert!(output.stderr.is_empty());
     assert!(
-        output.stdout.len() < 64 * 1024,
+        output.stdout.len() <= MAXIMUM_CLI_RESPONSE_BYTES,
         "compact success output is excessive"
     );
     let records = parse_records("stdout", &output.stdout).expect("compact records");
@@ -1289,7 +1290,7 @@ fn generated_public_guides_match_executable() {
             .iter()
             .filter(|record| record.operation == "file")
             .count(),
-        7
+        8
     );
     assert!(!Path::new("docs/generated/contracts.md").exists());
 }

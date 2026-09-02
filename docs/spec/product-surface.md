@@ -14,6 +14,11 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
+The active source snapshot is unreleased product 0.1.16. Immutable public latest remains v0.1.15;
+its tag, release, assets, and metadata continue to identify product 0.1.15. A source package version
+does not imply a tag or public release, and distribution cannot select the newer source snapshot
+until its independently authorized publication path closes.
+
 ## Public projection
 
 Default and focused capability discovery begins with product name/version and an opaque
@@ -21,6 +26,12 @@ capabilities digest. It then reports stable operations, grammar, fields, limits,
 authority effects, project requirements, and security nonclaims. The digest binds the executable's
 complete capability projection, is deterministic, and is cache evidence rather than program
 meaning.
+
+Focused inspection discovery includes one revision-pinned local-function definition contract. Its
+grammar, exact record fields and forms, logical and physical admissions, `icont_` binding,
+diagnostics, authority effect, and containment nonclaims are executable-owned capability records
+and one generated guide. Projection version and digest identify derived transport; neither is a
+product version or semantic revision, and neither is accepted as authored change input.
 
 Logical review files retain exact base/result authority, semantic state, request and prepared-plan
 commitments, effects, budgets, selected tests, and the review token. They may report product

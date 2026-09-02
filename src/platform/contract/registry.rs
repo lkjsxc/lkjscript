@@ -89,15 +89,215 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-5";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 5;
-pub const CLI_CONTRACT_VERSION: u16 = 17;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-6";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 6;
+pub const CLI_CONTRACT_VERSION: u16 = 18;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v5";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v5";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
+    "lkjscript-function-definition-projection-1";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 1;
+pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
+pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
+pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
+pub const MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES: usize = 1_536;
+pub const MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES: usize = 4 * 1_048_576;
+pub const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES: usize = 320;
+pub const MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS: u64 = 4_096;
+pub const MAXIMUM_FUNCTION_DEFINITION_EDGES: u64 = 16_384;
+pub const MAXIMUM_FUNCTION_DEFINITION_FACT_READS: u64 = 32_768;
+pub const MAXIMUM_FUNCTION_DEFINITION_DEPTH: u64 = 256;
+pub const MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES: usize = 8 * 1_048_576;
+pub const MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES: usize = 8 * 1_024;
+
+const MAXIMUM_FUNCTION_DEFINITION_POINT_MAP_PATH_PAGES: u64 = 18;
+pub const MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS: u64 =
+    MAXIMUM_FUNCTION_DEFINITION_EDGES + 1;
+pub const MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS: u64 = MAXIMUM_FUNCTION_DEFINITION_EDGES;
+pub const MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES: u64 =
+    (MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
+        + MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS
+        + MAXIMUM_FUNCTION_DEFINITION_FACT_READS)
+        * MAXIMUM_FUNCTION_DEFINITION_POINT_MAP_PATH_PAGES;
+pub const MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES: u64 =
+    MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES * super::super::persistent_map::MAXIMUM_PAGE_BYTES as u64;
+pub const MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES: u64 = MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
+    * (super::super::persistent_map::MAXIMUM_PAGE_BYTES / 6) as u64;
+pub const MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS: u64 = MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
+    + MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
+    + MAXIMUM_FUNCTION_DEFINITION_FACT_READS;
+pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: u64 = MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
+    + MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
+        * super::super::kernel::contract::MAXIMUM_OWNER_OBJECT_BYTES as u64
+    + MAXIMUM_FUNCTION_DEFINITION_FACT_READS
+        * super::super::witness::contract::MAXIMUM_OWNER_SUMMARY_BYTES as u64;
+
+pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT01";
+pub(crate) const FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN: &str =
+    "lkjscript.function-definition.continuation-integrity.v1";
+pub(crate) const FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN: &str =
+    "lkjscript.function-definition.logical.v1";
+pub(crate) const FUNCTION_DEFINITION_RECORD_KEY_DOMAIN: &str =
+    "lkjscript.function-definition.record-key.v1";
+
+pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
+    ("result", "status"),
+    ("result", "command"),
+    ("project", "name"),
+    ("project", "repository"),
+    ("project", "package"),
+    ("revision", "observed"),
+    ("projection", "detail"),
+    ("projection", "contract"),
+    ("projection", "version"),
+    ("projection", "function"),
+    ("projection", "kind"),
+    ("projection", "digest"),
+    ("projection", "ordering"),
+    ("projection", "total-records"),
+    ("projection", "contract-records"),
+    ("projection", "body-records"),
+    ("projection", "reference-records"),
+    ("projection", "fact-records"),
+    ("projection", "structural-edges"),
+    ("projection", "reference-edges"),
+    ("projection", "fact-reads"),
+    ("projection", "maximum-depth"),
+    ("projection", "logical-bytes"),
+    ("projection", "validator"),
+    ("projection", "certificate"),
+    ("page", "start"),
+    ("page", "end"),
+    ("page", "returned"),
+    ("page", "complete"),
+    ("page", "first-section"),
+    ("page", "last-section"),
+    ("definition.header", "repository"),
+    ("definition.header", "package"),
+    ("definition.header", "revision"),
+    ("definition.header", "function"),
+    ("definition.header", "contract"),
+    ("definition.header", "ordering"),
+    ("definition.function", "id"),
+    ("definition.function", "kind"),
+    ("definition.function", "module"),
+    ("definition.function", "name"),
+    ("definition.function", "visibility"),
+    ("definition.function", "type-parameters"),
+    ("definition.function", "parameters"),
+    ("definition.function", "result"),
+    ("definition.function", "effect"),
+    ("definition.function", "requirements"),
+    ("definition.function", "body"),
+    ("definition.type-parameter", "id"),
+    ("definition.type-parameter", "parent"),
+    ("definition.type-parameter", "index"),
+    ("definition.type-parameter", "name"),
+    ("definition.parameter", "id"),
+    ("definition.parameter", "parent"),
+    ("definition.parameter", "index"),
+    ("definition.parameter", "name"),
+    ("definition.parameter", "type"),
+    ("definition.parameter", "use"),
+    ("definition.requirement", "id"),
+    ("definition.requirement", "parent"),
+    ("definition.requirement", "index"),
+    ("definition.requirement", "name"),
+    ("definition.requirement", "interface"),
+    ("definition.requirement", "operations"),
+    ("definition.requirement", "limits"),
+    ("definition.requirement-operation", "parent"),
+    ("definition.requirement-operation", "index"),
+    ("definition.requirement-operation", "reference"),
+    ("definition.requirement-limit", "parent"),
+    ("definition.requirement-limit", "index"),
+    ("definition.requirement-limit", "name"),
+    ("definition.requirement-limit", "maximum"),
+    ("definition.requirement-limit", "unit"),
+    ("definition.expression", "id"),
+    ("definition.expression", "parent"),
+    ("definition.expression", "slot"),
+    ("definition.expression", "index"),
+    ("definition.expression", "label"),
+    ("definition.expression", "depth"),
+    ("definition.expression", "form"),
+    ("definition.expression", "value"),
+    ("definition.expression", "text-storage"),
+    ("definition.expression", "text-bytes"),
+    ("definition.expression", "text-fragments"),
+    ("definition.expression", "blob"),
+    ("definition.expression", "type-arguments"),
+    ("definition.expression", "arguments"),
+    ("definition.expression", "bindings"),
+    ("definition.expression", "items"),
+    ("definition.expression", "entries"),
+    ("definition.expression", "arms"),
+    ("definition.expression", "fields"),
+    ("definition.expression", "nominal-type"),
+    ("definition.expression", "case"),
+    ("definition.expression", "payload"),
+    ("definition.expression", "selector-kind"),
+    ("definition.expression", "selector"),
+    ("definition.expression", "item-type"),
+    ("definition.expression", "key-type"),
+    ("definition.expression", "value-type"),
+    ("definition.expression", "function"),
+    ("definition.expression", "requirement"),
+    ("definition.expression", "operation"),
+    ("definition.expression", "binding"),
+    ("definition.binding", "id"),
+    ("definition.binding", "parent"),
+    ("definition.binding", "slot"),
+    ("definition.binding", "index"),
+    ("definition.binding", "label"),
+    ("definition.binding", "depth"),
+    ("definition.binding", "kind"),
+    ("definition.binding", "name"),
+    ("definition.binding", "declared-type"),
+    ("definition.binding", "value"),
+    ("definition.literal", "owner"),
+    ("definition.literal", "index"),
+    ("definition.literal", "bytes"),
+    ("definition.literal", "value"),
+    ("definition.reference", "index"),
+    ("definition.reference", "role"),
+    ("definition.reference", "ordinal"),
+    ("definition.reference", "source"),
+    ("definition.reference", "target-kind"),
+    ("definition.reference", "target"),
+    ("definition.fact", "index"),
+    ("definition.fact", "owner"),
+    ("definition.fact", "kind"),
+    ("definition.fact", "record"),
+    ("definition.fact", "summary"),
+    ("definition.fact", "semantic-interface"),
+    ("definition.fact", "implementation"),
+    ("definition.fact", "type"),
+    ("definition.fact", "effect"),
+    ("definition.fact", "capability"),
+    ("definition.fact", "relations"),
+    ("definition.fact", "presentation"),
+    ("definition.fact", "test"),
+    ("definition.fact", "validation-dependencies"),
+    ("continuation", "token"),
+    ("work", "map-pages-read"),
+    ("work", "map-bytes-read"),
+    ("work", "map-entries-visited"),
+    ("work", "catalog-lookups"),
+    ("work", "store-objects-read"),
+    ("work", "store-bytes-read"),
+    ("work", "canonical-records-decoded"),
+    ("work", "witness-records-decoded"),
+    ("work", "fact-reads"),
+    ("work", "rendered-records"),
+    ("work", "rendered-output-bytes"),
+    ("schema", "capabilities"),
+];
+
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v6";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v6";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -187,6 +387,7 @@ pub enum ContractKey {
     LogicalChangePlan,
     Transaction,
     Query,
+    FunctionDefinitionProjection,
     Diff,
     ArtifactManifest,
     ArtifactBundle,
@@ -235,6 +436,7 @@ impl ContractKey {
             Self::LogicalChangePlan => "logical_change_plan",
             Self::Transaction => "transaction",
             Self::Query => "query",
+            Self::FunctionDefinitionProjection => "function_definition_projection",
             Self::Diff => "diff",
             Self::ArtifactManifest => "artifact_manifest",
             Self::ArtifactBundle => "artifact_bundle",
@@ -587,6 +789,21 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             digest_domains: &[
                 QUERY_SELECTOR_DIGEST_DOMAIN,
                 QUERY_CONTINUATION_INTEGRITY_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::FunctionDefinitionProjection,
+            name: "revision-pinned function definition projection",
+            identity: FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY,
+            version: FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::PublicProtocol,
+            predecessor_policy: REJECT,
+            magic_values: &[FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT],
+            digest_domains: &[
+                FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
+                FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN,
+                FUNCTION_DEFINITION_RECORD_KEY_DOMAIN,
             ],
         },
         ContractDescriptor {
@@ -1095,8 +1312,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "status",
         ),
         inspect_operation(
-            "Inspect a compact summary of one exact owner at the observed accepted revision.",
-            "inspect owner KIND ID [--package PACKAGE]",
+            "Inspect a compact summary of one exact owner or page one complete accepted local-function definition at the observed accepted revision.",
+            "inspect owner KIND ID [--package PACKAGE] [--detail definition [--limit N] [--bytes N] [--continuation TOKEN]]",
         ),
         query_operation(
             "Enumerate live owners, resolve one exact namespace, inspect one relation prefix, or traverse one bounded local context at the current normalized revision.",
@@ -2859,6 +3076,282 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             retry: "Recreate the request or authority under the advertised current contract.",
         },
         diagnostic(
+            "definition_detail_value",
+            DiagnosticClass::Source,
+            "Function-definition inspection received an unknown detail selector.",
+            "Use exactly --detail definition or omit detail for summary inspection.",
+        ),
+        diagnostic(
+            "definition_detail_required",
+            DiagnosticClass::Source,
+            "Definition paging options were supplied without selecting definition detail.",
+            "Add --detail definition or remove --limit, --bytes, and --continuation.",
+        ),
+        diagnostic(
+            "definition_invalid_limit",
+            DiagnosticClass::Source,
+            "The definition page item limit is noncanonical or outside its public bound.",
+            "Supply a canonical positive integer within the advertised maximum.",
+        ),
+        diagnostic(
+            "definition_invalid_byte_limit",
+            DiagnosticClass::Source,
+            "The definition page byte limit is noncanonical or outside its public bound.",
+            "Supply a canonical integer within the advertised output-byte range.",
+        ),
+        diagnostic(
+            "definition_owner_not_found",
+            DiagnosticClass::Semantic,
+            "The selected exact local function is not live at the observed revision.",
+            "Refresh exact owner discovery and retry at current HEAD.",
+        ),
+        diagnostic(
+            "definition_owner_kind",
+            DiagnosticClass::Semantic,
+            "Definition detail selected an owner that is not a live local pure or task function.",
+            "Select one pure_function or task_function identity reported by current query.",
+        ),
+        diagnostic(
+            "definition_dependency_body",
+            DiagnosticClass::Capability,
+            "Definition detail attempted to disclose dependency-package implementation.",
+            "Inspect only a live function in the current local package.",
+        ),
+        diagnostic(
+            "definition_body_missing",
+            DiagnosticClass::Corrupt,
+            "A function declaration has no canonical function body record.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_owner_missing",
+            DiagnosticClass::Corrupt,
+            "A structurally owned definition record is absent from canonical authority.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_owner_binding",
+            DiagnosticClass::Corrupt,
+            "A structural identity disagrees with the canonical owner record at that identity.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_ownership_missing",
+            DiagnosticClass::Corrupt,
+            "A definition record has no committed exact ownership witness.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_ownership_mismatch",
+            DiagnosticClass::Corrupt,
+            "A definition record ownership parent, slot, or index disagrees with canonical structure.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_shared_or_cyclic",
+            DiagnosticClass::Corrupt,
+            "Definition traversal encountered a shared or cyclic structural child.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_summary_missing",
+            DiagnosticClass::Corrupt,
+            "A projected definition record has no bound validation summary.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_summary_mismatch",
+            DiagnosticClass::Corrupt,
+            "A bound summary disagrees with its exact owner, kind, or canonical record digest.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_body_record_limit",
+            DiagnosticClass::Resource,
+            "A complete function body exceeds the fixed structural-record admission.",
+            "Reduce the accepted function definition before retrying projection.",
+        ),
+        diagnostic(
+            "definition_edge_limit",
+            DiagnosticClass::Resource,
+            "A complete definition exceeds the combined structural/reference edge admission.",
+            "Reduce the accepted function definition before retrying projection.",
+        ),
+        diagnostic(
+            "definition_fact_limit",
+            DiagnosticClass::Resource,
+            "A complete definition exceeds its fixed bound-fact read admission.",
+            "Reduce the accepted function definition before retrying projection.",
+        ),
+        diagnostic(
+            "definition_depth_limit",
+            DiagnosticClass::Resource,
+            "A complete function body exceeds the fixed structural depth admission.",
+            "Reduce body nesting before retrying projection.",
+        ),
+        diagnostic(
+            "definition_logical_byte_limit",
+            DiagnosticClass::Resource,
+            "The complete canonical logical definition encoding exceeds eight MiB.",
+            "Reduce the accepted function definition before retrying projection.",
+        ),
+        diagnostic(
+            "definition_continuation_oversized",
+            DiagnosticClass::Source,
+            "A definition continuation exceeds its strict textual or decoded byte bound.",
+            "Restart definition inspection without the foreign token.",
+        ),
+        diagnostic(
+            "definition_continuation_malformed",
+            DiagnosticClass::Source,
+            "A definition continuation is truncated or malformed.",
+            "Restart projection and use the exact emitted token.",
+        ),
+        diagnostic(
+            "definition_continuation_noncanonical",
+            DiagnosticClass::Source,
+            "A definition continuation is not canonical unpadded URL-safe base64.",
+            "Use the exact continuation text emitted by the executable.",
+        ),
+        diagnostic(
+            "definition_continuation_integrity",
+            DiagnosticClass::Source,
+            "A definition continuation integrity digest does not match its payload.",
+            "Restart projection without modifying the emitted token.",
+        ),
+        diagnostic(
+            "definition_continuation_contract",
+            DiagnosticClass::Source,
+            "A definition continuation has a foreign projection or envelope contract.",
+            "Restart projection using a token emitted by the current executable.",
+        ),
+        diagnostic(
+            "definition_continuation_reserved_identity",
+            DiagnosticClass::Source,
+            "A definition continuation contains a reserved all-zero authority identity.",
+            "Discard the token and restart projection.",
+        ),
+        diagnostic(
+            "definition_continuation_foreign",
+            DiagnosticClass::Source,
+            "A definition continuation belongs to another repository or package.",
+            "Restart projection in the selected project.",
+        ),
+        diagnostic(
+            "definition_continuation_stale",
+            DiagnosticClass::Source,
+            "A definition continuation is pinned to an accepted revision that is no longer HEAD.",
+            "Refresh status and restart projection at current HEAD.",
+        ),
+        diagnostic(
+            "definition_continuation_mismatch",
+            DiagnosticClass::Source,
+            "A definition continuation selects another function, digest, or ordering contract.",
+            "Use the token only with its exact original function selector.",
+        ),
+        diagnostic(
+            "definition_continuation_resume_key",
+            DiagnosticClass::Source,
+            "A definition continuation contains a malformed or impossible exclusive resume key.",
+            "Restart projection using the exact emitted token.",
+        ),
+        diagnostic(
+            "definition_continuation_trailing",
+            DiagnosticClass::Source,
+            "A definition continuation payload contains noncanonical trailing bytes.",
+            "Discard the token and restart projection.",
+        ),
+        diagnostic(
+            "definition_output_item_too_large",
+            DiagnosticClass::Resource,
+            "One canonical definition record cannot fit the selected output bound.",
+            "Increase --bytes within the advertised maximum.",
+        ),
+        diagnostic(
+            "definition_output_envelope_too_large",
+            DiagnosticClass::Resource,
+            "The selected output bound cannot hold the fixed revision-pinned definition envelope.",
+            "Increase --bytes within the advertised definition bounds.",
+        ),
+        diagnostic(
+            "definition_output_size_convergence",
+            DiagnosticClass::Infrastructure,
+            "Exact rendered definition output-byte reporting failed to converge.",
+            "Preserve the executable and request for renderer inspection.",
+        ),
+        diagnostic(
+            "definition_response_field_inventory",
+            DiagnosticClass::Infrastructure,
+            "The definition renderer attempted a field absent from its executable inventory.",
+            "Use a matching executable and generated capability guide.",
+        ),
+        diagnostic(
+            "definition_admission_map_pages",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its persistent-map page-read admission.",
+            "Preserve the repository and inspect unexpected map locality.",
+        ),
+        diagnostic(
+            "definition_admission_map_bytes",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its persistent-map byte-read admission.",
+            "Preserve the repository and inspect unexpectedly large map pages.",
+        ),
+        diagnostic(
+            "definition_admission_map_entries",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its map-entry visit admission.",
+            "Preserve the repository and inspect unexpected logical map work.",
+        ),
+        diagnostic(
+            "definition_admission_catalog_lookups",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its object-catalog lookup admission.",
+            "Preserve the repository and inspect unexpected object locality.",
+        ),
+        diagnostic(
+            "definition_admission_store_objects",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its immutable object-read admission.",
+            "Preserve the repository and inspect unexpected object locality.",
+        ),
+        diagnostic(
+            "definition_admission_store_bytes",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its immutable-store byte admission.",
+            "Preserve the repository and inspect unexpectedly large canonical objects.",
+        ),
+        diagnostic(
+            "definition_admission_canonical_records",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its canonical owner-record decode admission.",
+            "Reduce the definition or preserve the repository for admission inspection.",
+        ),
+        diagnostic(
+            "definition_admission_witness_records",
+            DiagnosticClass::Resource,
+            "Function projection exhausted its ownership or summary decode admission.",
+            "Reduce the definition or preserve the repository for admission inspection.",
+        ),
+        diagnostic(
+            "definition_required_map_page_missing",
+            DiagnosticClass::Corrupt,
+            "A required canonical or witness map page is absent from immutable storage.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_required_object_missing",
+            DiagnosticClass::Corrupt,
+            "A required accepted owner or summary object is absent from immutable storage.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "definition_cancelled",
+            DiagnosticClass::Cancelled,
+            "Function-definition materialization or rendering was cancelled by its owning scope.",
+            "Retry the read-only projection when the owning scope is active.",
+        ),
+        diagnostic(
             "query_usage",
             DiagnosticClass::Source,
             "The normalized query action or positional grammar is incomplete.",
@@ -3623,6 +4116,7 @@ pub enum RegistrySection {
     Operations,
     Change,
     Query,
+    Inspection,
     Type,
     Expression,
     Owners,
@@ -3636,11 +4130,12 @@ pub enum RegistrySection {
 }
 
 impl RegistrySection {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Contracts,
         Self::Operations,
         Self::Change,
         Self::Query,
+        Self::Inspection,
         Self::Type,
         Self::Expression,
         Self::Owners,
@@ -3653,10 +4148,11 @@ impl RegistrySection {
         Self::Security,
     ];
 
-    pub const PUBLIC: [Self; 13] = [
+    pub const PUBLIC: [Self; 14] = [
         Self::Operations,
         Self::Change,
         Self::Query,
+        Self::Inspection,
         Self::Type,
         Self::Expression,
         Self::Owners,
@@ -3675,6 +4171,7 @@ impl RegistrySection {
             Self::Operations => "operations",
             Self::Change => "change",
             Self::Query => "query",
+            Self::Inspection => "inspection",
             Self::Type => "type",
             Self::Expression => "expression",
             Self::Owners => "owners",
@@ -4222,6 +4719,212 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "query.continuation-field",
                     &[("name", field.to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Inspection => {
+            records.push(compact_record(
+                "inspection.definition",
+                &[
+                    (
+                        "usage",
+                        "inspect owner KIND ID --detail definition [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]".to_owned(),
+                    ),
+                    ("authority", "accepted-revision-derived-read-only".to_owned()),
+                    ("scope", "live-local-pure-or-task-function-with-body".to_owned()),
+                    ("reference-cutoff", "named-owner-and-type-boundary".to_owned()),
+                    ("continuation", "stateless-exclusive-record-key".to_owned()),
+                    ("prefix", "icont_".to_owned()),
+                ],
+            )?);
+            for (ordinal, section) in [
+                "definition-header",
+                "function-contract",
+                "structural-body-preorder",
+                "references-by-role-and-target",
+                "validation-facts-by-body-order",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                records.push(compact_record(
+                    "inspection.definition-section",
+                    &[
+                        ("ordinal", ordinal.saturating_add(1).to_string()),
+                        ("name", section.to_owned()),
+                    ],
+                )?);
+            }
+            for form in [
+                "unit",
+                "bool",
+                "i64",
+                "text",
+                "static_text",
+                "local",
+                "constant",
+                "if",
+                "let",
+                "sequence",
+                "call",
+                "function_value",
+                "invoke",
+                "record",
+                "variant",
+                "field",
+                "list",
+                "map",
+                "match",
+                "capability_call",
+                "transaction",
+            ] {
+                records.push(compact_record(
+                    "inspection.definition-expression",
+                    &[("form", form.to_owned())],
+                )?);
+            }
+            for (name, value, unit) in [
+                (
+                    "default-items",
+                    FUNCTION_DEFINITION_DEFAULT_ITEMS.to_string(),
+                    "records",
+                ),
+                (
+                    "maximum-items",
+                    MAXIMUM_FUNCTION_DEFINITION_ITEMS.to_string(),
+                    "records",
+                ),
+                (
+                    "minimum-output-bytes",
+                    MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "default-output-bytes",
+                    FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-output-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-continuation-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-body-records",
+                    MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS.to_string(),
+                    "records",
+                ),
+                (
+                    "maximum-structural-reference-edges",
+                    MAXIMUM_FUNCTION_DEFINITION_EDGES.to_string(),
+                    "edges",
+                ),
+                (
+                    "maximum-fact-reads",
+                    MAXIMUM_FUNCTION_DEFINITION_FACT_READS.to_string(),
+                    "reads",
+                ),
+                (
+                    "maximum-depth",
+                    MAXIMUM_FUNCTION_DEFINITION_DEPTH.to_string(),
+                    "depth",
+                ),
+                (
+                    "maximum-logical-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-literal-fragment-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-map-pages",
+                    MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES.to_string(),
+                    "pages",
+                ),
+                (
+                    "maximum-map-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-map-entries",
+                    MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES.to_string(),
+                    "entries",
+                ),
+                (
+                    "maximum-store-objects",
+                    MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS.to_string(),
+                    "objects",
+                ),
+                (
+                    "maximum-store-bytes",
+                    MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-canonical-record-reads",
+                    MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS.to_string(),
+                    "records",
+                ),
+                (
+                    "maximum-ownership-reads",
+                    MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS.to_string(),
+                    "records",
+                ),
+            ] {
+                records.push(compact_record(
+                    "inspection.definition-limit",
+                    &[
+                        ("name", name.to_owned()),
+                        ("value", value),
+                        ("unit", unit.to_owned()),
+                    ],
+                )?);
+            }
+            for (record, field) in FUNCTION_DEFINITION_RESPONSE_FIELDS {
+                records.push(compact_record(
+                    "inspection.definition-response-field",
+                    &[
+                        ("record", (*record).to_owned()),
+                        ("name", (*field).to_owned()),
+                    ],
+                )?);
+            }
+            for field in [
+                "repository",
+                "package",
+                "revision",
+                "function",
+                "projection-contract",
+                "projection-digest",
+                "ordering",
+                "section",
+                "exclusive-resume-key",
+                "integrity-digest",
+            ] {
+                records.push(compact_record(
+                    "inspection.definition-continuation-field",
+                    &[("name", field.to_owned())],
+                )?);
+            }
+            for nonclaim in [
+                "not-source-text-or-whole-project-export",
+                "not-change-input-or-round-trip-authority",
+                "no-dependency-implementation-disclosure",
+                "no-storage-cache-artifact-runtime-deployment-or-operational-data",
+                "no-mutable-session-cursor-or-body-cache",
+            ] {
+                records.push(compact_record(
+                    "inspection.definition-nonclaim",
+                    &[("name", nonclaim.to_owned())],
                 )?);
             }
         }
@@ -4946,6 +5649,87 @@ mod tests {
             canonical.extend_from_slice(&snapshot.bytes);
         }
         assert_eq!(first.digest, digest(CAPABILITIES_DIGEST_DOMAIN, &canonical));
+    }
+
+    #[test]
+    fn function_definition_contract_has_one_owner_and_derived_physical_admissions() {
+        let contract = contract_descriptors()
+            .iter()
+            .find(|descriptor| descriptor.key == ContractKey::FunctionDefinitionProjection)
+            .expect("definition projection contract");
+        assert_eq!(
+            contract.identity,
+            "lkjscript-function-definition-projection-1"
+        );
+        assert_eq!(contract.version, 1);
+        assert_eq!(
+            contract_descriptors()
+                .iter()
+                .filter(|descriptor| {
+                    descriptor
+                        .identity
+                        .contains("function-definition-projection")
+                })
+                .count(),
+            1
+        );
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, 4_096);
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_EDGES, 16_384);
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_FACT_READS, 32_768);
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_DEPTH, 256);
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES, 8 * 1_048_576);
+        assert_eq!(
+            MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS,
+            MAXIMUM_FUNCTION_DEFINITION_EDGES + 1
+        );
+        assert_eq!(
+            MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS,
+            MAXIMUM_FUNCTION_DEFINITION_EDGES
+        );
+        let point_reads = MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
+            + MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS
+            + MAXIMUM_FUNCTION_DEFINITION_FACT_READS;
+        assert_eq!(
+            MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES,
+            point_reads * MAXIMUM_FUNCTION_DEFINITION_POINT_MAP_PATH_PAGES
+        );
+        assert_eq!(
+            MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES,
+            MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
+                * super::super::super::persistent_map::MAXIMUM_PAGE_BYTES as u64
+        );
+        assert_eq!(
+            MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES,
+            MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
+                * (super::super::super::persistent_map::MAXIMUM_PAGE_BYTES / 6) as u64
+        );
+        assert!(MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS > point_reads);
+        const {
+            assert!(
+                MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES > MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
+            );
+        }
+        let registry = registry_snapshot().expect("registry snapshot");
+        let inspection = registry
+            .section(RegistrySection::Inspection)
+            .expect("inspection section");
+        let text = std::str::from_utf8(&inspection.bytes).expect("inspection UTF-8");
+        for required in [
+            "maximum-body-records value=4096",
+            "maximum-structural-reference-edges value=16384",
+            "maximum-fact-reads value=32768",
+            "maximum-depth value=256",
+            "maximum-logical-bytes value=8388608",
+            "maximum-map-pages",
+            "maximum-map-bytes",
+            "maximum-map-entries",
+            "maximum-store-objects",
+            "maximum-store-bytes",
+            "maximum-canonical-record-reads",
+            "maximum-ownership-reads",
+        ] {
+            assert!(text.contains(required), "inspection omitted {required}");
+        }
     }
 
     #[test]

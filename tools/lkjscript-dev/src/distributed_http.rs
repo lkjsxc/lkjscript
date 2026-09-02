@@ -20,7 +20,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
-const ACCEPTANCE_SCHEMA_VERSION: u32 = 2;
+const ACCEPTANCE_SCHEMA_VERSION: u32 = 3;
 const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
@@ -215,6 +215,63 @@ struct WorkflowResult {
     responses: Vec<HttpObservation>,
     restart_equal: bool,
     startup_failures_without_ready: u64,
+    definition_projection: DefinitionWorkflowObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DefinitionWorkflowObservation {
+    function: String,
+    initial_revision: String,
+    accepted_revision: String,
+    initial_digest: String,
+    accepted_digest: String,
+    initial_records: u64,
+    accepted_records: u64,
+    initial_pages: u64,
+    accepted_pages: u64,
+    initial_body_records: u64,
+    accepted_body_records: u64,
+    initial_fact_records: u64,
+    accepted_fact_records: u64,
+    initial_logical_bytes: u64,
+    accepted_logical_bytes: u64,
+    initial_output_bytes: u64,
+    accepted_output_bytes: u64,
+    initial_literal_sha256: String,
+    accepted_literal_sha256: String,
+    contract_unchanged: bool,
+    intended_body_change: bool,
+    digest_recomputed: bool,
+    changed_page_budgets: bool,
+    direct_file_plan_equal: bool,
+    malformed_continuation_rejected: bool,
+    stale_continuation_rejected: bool,
+    projection_input_rejected: bool,
+    authority_unchanged_before_apply: bool,
+}
+
+#[derive(Clone, Debug)]
+struct DefinitionProjection {
+    revision: String,
+    function: String,
+    digest: String,
+    total_records: u64,
+    body_records: u64,
+    fact_records: u64,
+    logical_bytes: u64,
+    pages: u64,
+    output_bytes: u64,
+    first_continuation: String,
+    changed_page_budgets: bool,
+    records: Vec<DefinitionRecord>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DefinitionRecord {
+    operation: String,
+    fields: BTreeMap<String, String>,
+    bytes: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -569,6 +626,33 @@ pub(crate) fn read_transferred_receipt(
         || !result.restart_equal
         || result.startup_failures_without_ready == 0
         || result.responses.is_empty()
+        || result.definition_projection.initial_revision != result.initial_revision
+        || result.definition_projection.accepted_revision != result.accepted_revision
+        || result.definition_projection.initial_digest
+            == result.definition_projection.accepted_digest
+        || result.definition_projection.initial_pages < 2
+        || result.definition_projection.accepted_pages < 2
+        || result.definition_projection.initial_records == 0
+        || result.definition_projection.accepted_records == 0
+        || result.definition_projection.initial_body_records == 0
+        || result.definition_projection.accepted_body_records == 0
+        || result.definition_projection.initial_fact_records == 0
+        || result.definition_projection.accepted_fact_records == 0
+        || result.definition_projection.initial_logical_bytes == 0
+        || result.definition_projection.accepted_logical_bytes == 0
+        || result.definition_projection.initial_output_bytes == 0
+        || result.definition_projection.accepted_output_bytes == 0
+        || !result.definition_projection.contract_unchanged
+        || !result.definition_projection.intended_body_change
+        || !result.definition_projection.digest_recomputed
+        || !result.definition_projection.changed_page_budgets
+        || !result.definition_projection.direct_file_plan_equal
+        || !result.definition_projection.malformed_continuation_rejected
+        || !result.definition_projection.stale_continuation_rejected
+        || !result.definition_projection.projection_input_rejected
+        || !result
+            .definition_projection
+            .authority_unchanged_before_apply
     {
         return Err(DevError::corrupt(
             "transferred distributed HTTP receipt binding or acceptance mismatch",
@@ -630,6 +714,36 @@ fn run_workflow(
         "digest",
     )?
     .to_owned();
+    let inspection_capabilities = context.invoke_success(
+        "capabilities-inspect",
+        vec!["capabilities".to_owned(), "inspect".to_owned()],
+        isolated_root,
+    )?;
+    let inspection_records =
+        compact_records("inspection capabilities", &inspection_capabilities.stdout)?;
+    let inspection_usage =
+        required_field(required_record(&inspection_records, "operation")?, "usage")?;
+    if !inspection_usage.contains("--detail definition")
+        || !inspection_usage.contains("--continuation TOKEN")
+    {
+        return Err(AcceptanceFailure::acceptance(
+            "inspection_discovery",
+            "offline inspection discovery omitted definition detail or stateless paging",
+        ));
+    }
+    let change_capabilities = context.invoke_success(
+        "capabilities-change",
+        vec!["capabilities".to_owned(), "change".to_owned()],
+        isolated_root,
+    )?;
+    let change_records = compact_records("change capabilities", &change_capabilities.stdout)?;
+    let change_usage = required_field(required_record(&change_records, "operation")?, "usage")?;
+    if !change_usage.contains("change plan") || !change_usage.contains("--input") {
+        return Err(AcceptanceFailure::acceptance(
+            "change_discovery",
+            "offline change discovery omitted the compact plan input boundary",
+        ));
+    }
 
     let created = context.invoke_success(
         "new-http",
@@ -678,6 +792,107 @@ fn run_workflow(
     validate_next_actions(&created_records)?;
     validate_starter_files(&project, &descriptor, &artifact)?;
 
+    let module_query = context.invoke_success(
+        "find-application-module",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "query".to_owned(),
+            "find".to_owned(),
+            "module".to_owned(),
+            "application".to_owned(),
+        ],
+        isolated_root,
+    )?;
+    let module_records = compact_records("find application module", &module_query.stdout)?;
+    let module = required_field(required_record(&module_records, "owner")?, "id")?.to_owned();
+    let function_query = context.invoke_success(
+        "find-response-text",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "query".to_owned(),
+            "find".to_owned(),
+            "declaration".to_owned(),
+            "response-text".to_owned(),
+            "--parent".to_owned(),
+            module,
+        ],
+        isolated_root,
+    )?;
+    let function_records = compact_records("find response-text", &function_query.stdout)?;
+    let function = required_field(required_record(&function_records, "owner")?, "id")?.to_owned();
+    require_field(&function_records, "owner", "kind", "pure_function")?;
+    let authority_before_projection = authority::observe_graph_authority(&project)
+        .map_err(|error| AcceptanceFailure::infrastructure("projection_authority_before", error))?;
+    let tree_before_projection = project_tree_digest(&project)?;
+    let initial_definition = project_function_definition(
+        context,
+        isolated_root,
+        &project,
+        "pure_function",
+        &function,
+        &initial_revision,
+        "initial",
+    )?;
+    let malformed_continuation = mutate_continuation(&initial_definition.first_continuation)?;
+    context.invoke_compact_failure(
+        "definition-malformed-continuation",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "pure_function".to_owned(),
+            function.clone(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+            "--continuation".to_owned(),
+            malformed_continuation,
+        ],
+        isolated_root,
+        "definition_continuation_integrity",
+    )?;
+    let projection_input_path = isolated_root.join("definition-projection.lkjc");
+    let projection_input = initial_definition
+        .records
+        .iter()
+        .flat_map(|record| record.bytes.iter().copied())
+        .collect::<Vec<_>>();
+    publish_product_input(&projection_input_path, &projection_input)?;
+    context.invoke_compact_failure(
+        "definition-projection-as-change",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "change".to_owned(),
+            "plan".to_owned(),
+            "--input-file".to_owned(),
+            projection_input_path.display().to_string(),
+        ],
+        isolated_root,
+        "change_operation_unknown",
+    )?;
+    require_revision(
+        context,
+        isolated_root,
+        &project,
+        &initial_revision,
+        "after projection negatives",
+    )?;
+    let authority_after_projection = authority::observe_graph_authority(&project)
+        .map_err(|error| AcceptanceFailure::infrastructure("projection_authority_after", error))?;
+    let tree_after_projection = project_tree_digest(&project)?;
+    let authority_unchanged_before_apply = authority_before_projection
+        == authority_after_projection
+        && tree_before_projection == tree_after_projection;
+    if !authority_unchanged_before_apply {
+        return Err(AcceptanceFailure::acceptance(
+            "projection_write",
+            "definition success or rejection changed project files before apply",
+        ));
+    }
+
     context.invoke_runtime_failure(
         "serve-absent-artifact",
         vec![
@@ -705,6 +920,20 @@ fn run_workflow(
          replace.body function=application/response-text body=$response\n"
     );
     publish_product_input(&request_path, request.as_bytes())?;
+    let direct_planned = context.invoke_success(
+        "change-plan-direct",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "change".to_owned(),
+            "plan".to_owned(),
+            "--input".to_owned(),
+            request.clone(),
+        ],
+        isolated_root,
+    )?;
+    let direct_plan_records = compact_records("direct change plan", &direct_planned.stdout)?;
+    let direct_plan = required_record(&direct_plan_records, "plan")?;
     let planned = context.invoke_success(
         "change-plan",
         vec![
@@ -724,6 +953,15 @@ fn run_workflow(
     let plan_token = required_field(plan, "token")?.to_owned();
     let request_commitment = required_field(plan, "request-commitment")?.to_owned();
     let prepared_commitment = required_field(plan, "prepared-commitment")?.to_owned();
+    let direct_file_plan_equal = required_field(direct_plan, "token")? == plan_token
+        && required_field(direct_plan, "request-commitment")? == request_commitment
+        && required_field(direct_plan, "prepared-commitment")? == prepared_commitment;
+    if !direct_file_plan_equal {
+        return Err(AcceptanceFailure::acceptance(
+            "change_transport_equality",
+            "direct and file compact requests produced different logical plans",
+        ));
+    }
     let validation = required_record(&plan_records, "validation")?;
     let change_compiler_units = parse_u64(
         required_field(validation, "compiler-units")?,
@@ -782,6 +1020,59 @@ fn run_workflow(
             "accepted response edit did not advance the semantic revision",
         ));
     }
+    context.invoke_compact_failure(
+        "definition-stale-continuation",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "pure_function".to_owned(),
+            function.clone(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+            "--continuation".to_owned(),
+            initial_definition.first_continuation.clone(),
+        ],
+        isolated_root,
+        "definition_continuation_stale",
+    )?;
+    let accepted_definition = project_function_definition(
+        context,
+        isolated_root,
+        &project,
+        "pure_function",
+        &function,
+        &accepted_revision,
+        "accepted",
+    )?;
+    let contract_unchanged = definition_contract_equal(&initial_definition, &accepted_definition)?;
+    let initial_literal = definition_literal(&initial_definition)?;
+    let accepted_literal = definition_literal(&accepted_definition)?;
+    let intended_body_change = initial_literal.as_slice() != CHANGED_RESPONSE
+        && accepted_literal.as_slice() == CHANGED_RESPONSE
+        && initial_definition.digest != accepted_definition.digest;
+    if !contract_unchanged || !intended_body_change {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_reinspection",
+            "reinspection did not prove an unchanged signature and the exact intended body change",
+        ));
+    }
+    context.invoke_compact_failure(
+        "change-stale-plan-apply",
+        vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "change".to_owned(),
+            "apply".to_owned(),
+            "--input-file".to_owned(),
+            request_path.display().to_string(),
+            "--plan".to_owned(),
+            plan_token.clone(),
+        ],
+        isolated_root,
+        "change_authored_stale_base",
+    )?;
     context.invoke_compact_failure(
         "change-stale-base",
         vec![
@@ -1010,6 +1301,37 @@ fn run_workflow(
         responses: vec![first, second],
         restart_equal,
         startup_failures_without_ready: 1_u64.saturating_add(artifact_startup_failures),
+        definition_projection: DefinitionWorkflowObservation {
+            function,
+            initial_revision: initial_definition.revision.clone(),
+            accepted_revision: accepted_definition.revision.clone(),
+            initial_digest: initial_definition.digest.clone(),
+            accepted_digest: accepted_definition.digest.clone(),
+            initial_records: initial_definition.total_records,
+            accepted_records: accepted_definition.total_records,
+            initial_pages: initial_definition.pages,
+            accepted_pages: accepted_definition.pages,
+            initial_body_records: initial_definition.body_records,
+            accepted_body_records: accepted_definition.body_records,
+            initial_fact_records: initial_definition.fact_records,
+            accepted_fact_records: accepted_definition.fact_records,
+            initial_logical_bytes: initial_definition.logical_bytes,
+            accepted_logical_bytes: accepted_definition.logical_bytes,
+            initial_output_bytes: initial_definition.output_bytes,
+            accepted_output_bytes: accepted_definition.output_bytes,
+            initial_literal_sha256: sha256_hex(&initial_literal),
+            accepted_literal_sha256: sha256_hex(&accepted_literal),
+            contract_unchanged,
+            intended_body_change,
+            digest_recomputed: true,
+            changed_page_budgets: initial_definition.changed_page_budgets
+                && accepted_definition.changed_page_budgets,
+            direct_file_plan_equal,
+            malformed_continuation_rejected: true,
+            stale_continuation_rejected: true,
+            projection_input_rejected: true,
+            authority_unchanged_before_apply,
+        },
     })
 }
 
@@ -1742,6 +2064,524 @@ fn compiler_observation(
     })
 }
 
+fn project_function_definition(
+    context: &mut AcceptanceContext,
+    isolated_root: &Path,
+    project: &Path,
+    kind: &str,
+    function: &str,
+    expected_revision: &str,
+    label: &str,
+) -> Result<DefinitionProjection, AcceptanceFailure> {
+    const LIMITS: [u64; 4] = [2, 3, 1, 5];
+    const BYTES: [u64; 2] = [65_536, 32_768];
+    let mut page_index = 0_usize;
+    let mut continuation: Option<String> = None;
+    let mut first_continuation = None;
+    let mut expected_start = 0_u64;
+    let mut all_records = Vec::new();
+    let mut output_bytes = 0_u64;
+    let mut identity: Option<(String, String, u64, u64, u64, u64)> = None;
+    loop {
+        if page_index >= 10_000 {
+            return Err(AcceptanceFailure::acceptance(
+                "definition_page_count",
+                "definition paging exceeded the finite verifier page bound",
+            ));
+        }
+        let limit = LIMITS[page_index % LIMITS.len()];
+        let bytes = BYTES[page_index % BYTES.len()];
+        let mut arguments = vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            kind.to_owned(),
+            function.to_owned(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+            "--limit".to_owned(),
+            limit.to_string(),
+            "--bytes".to_owned(),
+            bytes.to_string(),
+        ];
+        if let Some(token) = &continuation {
+            arguments.push("--continuation".to_owned());
+            arguments.push(token.clone());
+        }
+        let output = context.invoke_success(
+            &format!("definition-{label}-page-{page_index}"),
+            arguments,
+            isolated_root,
+        )?;
+        output_bytes = output_bytes
+            .checked_add(output.stdout.len() as u64)
+            .ok_or_else(|| {
+                AcceptanceFailure::acceptance(
+                    "definition_output_bytes",
+                    "definition verifier output-byte accounting overflowed",
+                )
+            })?;
+        let records = compact_records("function definition page", &output.stdout)?;
+        require_field(&records, "result", "status", "success")?;
+        require_field(&records, "result", "command", "inspect.owner.definition")?;
+        let revision = required_field(required_record(&records, "revision")?, "observed")?;
+        require_exact(revision, expected_revision, "definition revision")?;
+        let projection = required_record(&records, "projection")?;
+        require_exact(
+            required_field(projection, "function")?,
+            function,
+            "definition function",
+        )?;
+        require_exact(
+            required_field(projection, "contract")?,
+            "lkjscript-function-definition-projection-1",
+            "definition contract",
+        )?;
+        require_exact(
+            required_field(projection, "version")?,
+            "1",
+            "definition version",
+        )?;
+        let digest = required_field(projection, "digest")?.to_owned();
+        let total_records = parse_u64(
+            required_field(projection, "total-records")?,
+            "definition total records",
+        )?;
+        let body_records = parse_u64(
+            required_field(projection, "body-records")?,
+            "definition body records",
+        )?;
+        let fact_records = parse_u64(
+            required_field(projection, "fact-records")?,
+            "definition fact records",
+        )?;
+        let logical_bytes = parse_u64(
+            required_field(projection, "logical-bytes")?,
+            "definition logical bytes",
+        )?;
+        let current_identity = (
+            revision.to_owned(),
+            digest,
+            total_records,
+            body_records,
+            fact_records,
+            logical_bytes,
+        );
+        if let Some(expected) = &identity {
+            if expected != &current_identity {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_page_identity",
+                    "definition page changed its revision, digest, or complete counts",
+                ));
+            }
+        } else {
+            identity = Some(current_identity);
+        }
+        let page = required_record(&records, "page")?;
+        let start = parse_u64(required_field(page, "start")?, "definition page start")?;
+        let end = parse_u64(required_field(page, "end")?, "definition page end")?;
+        let returned = parse_u64(required_field(page, "returned")?, "definition page records")?;
+        let complete = match required_field(page, "complete")? {
+            "true" => true,
+            "false" => false,
+            value => {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_page_complete",
+                    format!("definition page used non-boolean completion '{value}'"),
+                ));
+            }
+        };
+        if start != expected_start || end != start.saturating_add(returned) || returned == 0 {
+            return Err(AcceptanceFailure::acceptance(
+                "definition_page_range",
+                "definition page range is empty, overlapping, or noncontiguous",
+            ));
+        }
+        let definition_records = definition_records(&records, &output.stdout)?;
+        if definition_records.len() as u64 != returned || returned > limit {
+            return Err(AcceptanceFailure::acceptance(
+                "definition_page_items",
+                "definition page item count disagrees with its emitted records or budget",
+            ));
+        }
+        all_records.extend(definition_records);
+        expected_start = end;
+        page_index = page_index.saturating_add(1);
+        if complete {
+            if records
+                .iter()
+                .any(|record| record.operation == "continuation")
+            {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_terminal_continuation",
+                    "complete definition page emitted a continuation",
+                ));
+            }
+            break;
+        }
+        let token = required_field(required_record(&records, "continuation")?, "token")?;
+        if !token.starts_with("icont_") || token.len() > 320 {
+            return Err(AcceptanceFailure::acceptance(
+                "definition_continuation",
+                "definition page emitted a foreign or oversized continuation",
+            ));
+        }
+        if first_continuation.is_none() {
+            first_continuation = Some(token.to_owned());
+        }
+        continuation = Some(token.to_owned());
+    }
+    let (revision, digest, total_records, body_records, fact_records, logical_bytes) = identity
+        .ok_or_else(|| {
+            AcceptanceFailure::acceptance(
+                "definition_identity",
+                "definition paging produced no projection identity",
+            )
+        })?;
+    if all_records.len() as u64 != total_records || expected_start != total_records {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_complete_count",
+            "assembled definition record count disagrees with its complete projection",
+        ));
+    }
+    let (recomputed, recomputed_bytes) = recompute_definition_digest(&all_records)?;
+    if recomputed != digest || recomputed_bytes != logical_bytes {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_digest",
+            "independently recomputed definition digest or logical bytes disagree",
+        ));
+    }
+    let first_continuation = first_continuation.ok_or_else(|| {
+        AcceptanceFailure::acceptance(
+            "definition_single_page",
+            "definition verifier did not force stateless multipage output",
+        )
+    })?;
+    Ok(DefinitionProjection {
+        revision,
+        function: function.to_owned(),
+        digest,
+        total_records,
+        body_records,
+        fact_records,
+        logical_bytes,
+        pages: page_index as u64,
+        output_bytes,
+        first_continuation,
+        changed_page_budgets: page_index > 1,
+        records: all_records,
+    })
+}
+
+fn definition_records(
+    parsed: &[CompactRecord],
+    bytes: &[u8],
+) -> Result<Vec<DefinitionRecord>, AcceptanceFailure> {
+    let logical = parsed
+        .iter()
+        .filter(|record| record.operation.starts_with("definition."))
+        .collect::<Vec<_>>();
+    let physical = bytes
+        .split_inclusive(|byte| *byte == b'\n')
+        .filter(|line| line.starts_with(b"definition."))
+        .collect::<Vec<_>>();
+    if logical.len() != physical.len() {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_physical_records",
+            "parsed and physical definition-record counts disagree",
+        ));
+    }
+    logical
+        .into_iter()
+        .zip(physical)
+        .map(|(record, physical)| {
+            if physical.last() != Some(&b'\n') {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_physical_newline",
+                    "definition logical record is not newline complete",
+                ));
+            }
+            let operation = physical
+                .split(|byte| *byte == b' ' || *byte == b'\n')
+                .next()
+                .and_then(|value| std::str::from_utf8(value).ok())
+                .ok_or_else(|| {
+                    AcceptanceFailure::acceptance(
+                        "definition_physical_operation",
+                        "definition logical record has no UTF-8 operation",
+                    )
+                })?;
+            if operation != record.operation {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_physical_operation",
+                    "parsed and physical definition operations disagree",
+                ));
+            }
+            let mut fields = BTreeMap::new();
+            for field in &record.fields {
+                if fields
+                    .insert(field.name.clone(), field.value.clone())
+                    .is_some()
+                {
+                    return Err(AcceptanceFailure::acceptance(
+                        "definition_duplicate_field",
+                        "definition logical record contains a duplicate field",
+                    ));
+                }
+            }
+            Ok(DefinitionRecord {
+                operation: record.operation.clone(),
+                fields,
+                bytes: physical.to_vec(),
+            })
+        })
+        .collect()
+}
+
+fn recompute_definition_digest(
+    records: &[DefinitionRecord],
+) -> Result<(String, u64), AcceptanceFailure> {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v1");
+    hasher.update(&(records.len() as u64).to_be_bytes());
+    let mut logical_bytes = 0_u64;
+    for record in records {
+        let section = match record.operation.as_str() {
+            "definition.header" => 1,
+            "definition.function"
+            | "definition.type-parameter"
+            | "definition.parameter"
+            | "definition.requirement"
+            | "definition.requirement-operation"
+            | "definition.requirement-limit" => 2,
+            "definition.expression" | "definition.binding" | "definition.literal" => 3,
+            "definition.reference" => 4,
+            "definition.fact" => 5,
+            operation => {
+                return Err(AcceptanceFailure::acceptance(
+                    "definition_unknown_record",
+                    format!("definition projection emitted unknown record '{operation}'"),
+                ));
+            }
+        };
+        let length = record.bytes.len() as u64;
+        logical_bytes = logical_bytes.checked_add(length).ok_or_else(|| {
+            AcceptanceFailure::acceptance(
+                "definition_logical_bytes",
+                "definition logical byte count overflowed",
+            )
+        })?;
+        hasher.update(&[section]);
+        hasher.update(&length.to_be_bytes());
+        hasher.update(&record.bytes);
+    }
+    Ok((
+        format!("definition_{}", hasher.finalize().to_hex()),
+        logical_bytes,
+    ))
+}
+
+fn definition_contract_equal(
+    before: &DefinitionProjection,
+    after: &DefinitionProjection,
+) -> Result<bool, AcceptanceFailure> {
+    let signature = |projection: &DefinitionProjection| {
+        projection
+            .records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.operation.as_str(),
+                    "definition.function"
+                        | "definition.type-parameter"
+                        | "definition.parameter"
+                        | "definition.requirement"
+                        | "definition.requirement-operation"
+                        | "definition.requirement-limit"
+                )
+            })
+            .map(|record| {
+                let mut fields = record.fields.clone();
+                if record.operation == "definition.function" {
+                    fields.remove("body");
+                }
+                (record.operation.clone(), fields)
+            })
+            .collect::<Vec<_>>()
+    };
+    if before.function != after.function {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_function_identity",
+            "definition reinspection selected a different function",
+        ));
+    }
+    Ok(signature(before) == signature(after))
+}
+
+fn definition_literal(projection: &DefinitionProjection) -> Result<Vec<u8>, AcceptanceFailure> {
+    let expression = projection
+        .records
+        .iter()
+        .find(|record| record.operation == "definition.expression")
+        .ok_or_else(|| {
+            AcceptanceFailure::acceptance(
+                "definition_body_expression",
+                "response-text definition omitted its body expression",
+            )
+        })?;
+    if expression.fields.get("form").map(String::as_str) != Some("static_text")
+        || expression.fields.get("text-storage").map(String::as_str) != Some("inline")
+    {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_body_form",
+            "response-text definition is not an inline static-text body",
+        ));
+    }
+    let mut fragments = projection
+        .records
+        .iter()
+        .filter(|record| record.operation == "definition.literal")
+        .map(|record| {
+            let index = record
+                .fields
+                .get("index")
+                .ok_or_else(|| {
+                    AcceptanceFailure::acceptance(
+                        "definition_literal_index",
+                        "definition literal omitted its fragment index",
+                    )
+                })?
+                .parse::<u64>()
+                .map_err(|error| {
+                    AcceptanceFailure::infrastructure("definition_literal_index", error)
+                })?;
+            let value = record.fields.get("value").cloned().ok_or_else(|| {
+                AcceptanceFailure::acceptance(
+                    "definition_literal_value",
+                    "definition literal omitted its accepted value",
+                )
+            })?;
+            Ok((index, value))
+        })
+        .collect::<Result<Vec<_>, AcceptanceFailure>>()?;
+    fragments.sort_by_key(|(index, _)| *index);
+    if fragments.is_empty()
+        || fragments
+            .windows(2)
+            .any(|pair| pair[0].0.saturating_add(1) != pair[1].0)
+        || fragments[0].0 != 0
+    {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_literal_order",
+            "definition literal fragments are empty or noncontiguous",
+        ));
+    }
+    Ok(fragments
+        .into_iter()
+        .flat_map(|(_, value)| value.into_bytes())
+        .collect())
+}
+
+fn mutate_continuation(token: &str) -> Result<String, AcceptanceFailure> {
+    if !token.starts_with("icont_") || token.len() < 32 {
+        return Err(AcceptanceFailure::acceptance(
+            "definition_continuation_fixture",
+            "definition continuation is too short to mutate safely",
+        ));
+    }
+    let mut bytes = token.as_bytes().to_vec();
+    // Leave the envelope magic/version/length intact and mutate the bound payload so decoding
+    // reaches the independently checked integrity digest.
+    let index = 50;
+    bytes[index] = if bytes[index] == b'A' { b'B' } else { b'A' };
+    String::from_utf8(bytes).map_err(|error| {
+        AcceptanceFailure::infrastructure("definition_continuation_fixture", error)
+    })
+}
+
+fn project_tree_digest(root: &Path) -> Result<String, AcceptanceFailure> {
+    fn collect(
+        root: &Path,
+        directory: &Path,
+        files: &mut Vec<(String, PathBuf)>,
+    ) -> Result<(), AcceptanceFailure> {
+        let mut entries = fs::read_dir(directory)
+            .map_err(|error| AcceptanceFailure::infrastructure("project_tree_read", error))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AcceptanceFailure::infrastructure("project_tree_entry", error))?;
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
+                AcceptanceFailure::infrastructure("project_tree_metadata", error)
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(AcceptanceFailure::acceptance(
+                    "project_tree_symlink",
+                    "isolated project tree contains a symbolic link",
+                ));
+            }
+            if metadata.is_dir() {
+                collect(root, &entry.path(), files)?;
+            } else if metadata.is_file() {
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(|error| {
+                        AcceptanceFailure::infrastructure("project_tree_relative", error)
+                    })?
+                    .to_str()
+                    .ok_or_else(|| {
+                        AcceptanceFailure::acceptance(
+                            "project_tree_utf8",
+                            "isolated project tree contains a non-UTF-8 path",
+                        )
+                    })?
+                    .to_owned();
+                files.push((relative, entry.path()));
+                if files.len() > 100_000 {
+                    return Err(AcceptanceFailure::acceptance(
+                        "project_tree_files",
+                        "isolated project tree exceeded the verifier file bound",
+                    ));
+                }
+            } else {
+                return Err(AcceptanceFailure::acceptance(
+                    "project_tree_file_type",
+                    "isolated project tree contains a non-file special entry",
+                ));
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    collect(root, root, &mut files)?;
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut hasher = Sha256::new();
+    hasher.update(b"lkjscript.distributed-http.project-tree.v1");
+    let mut total = 0_u64;
+    for (relative, path) in files {
+        let bytes = process::read_bounded(&path, MAXIMUM_ARTIFACT_BYTES)
+            .map_err(|error| AcceptanceFailure::infrastructure("project_tree_file", error))?;
+        total = total.checked_add(bytes.len() as u64).ok_or_else(|| {
+            AcceptanceFailure::acceptance(
+                "project_tree_bytes",
+                "isolated project tree byte accounting overflowed",
+            )
+        })?;
+        if total > 1024 * 1024 * 1024 {
+            return Err(AcceptanceFailure::acceptance(
+                "project_tree_bytes",
+                "isolated project tree exceeded the verifier byte bound",
+            ));
+        }
+        hasher.update((relative.len() as u64).to_be_bytes());
+        hasher.update(relative.as_bytes());
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(lowercase_hex(&hasher.finalize()))
+}
+
 fn compact_records(label: &str, bytes: &[u8]) -> Result<Vec<CompactRecord>, AcceptanceFailure> {
     parse_records(label, bytes).map_err(|diagnostics| {
         let codes = diagnostics
@@ -2310,7 +3150,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode acceptance schema"),
-            r#"{"identity":"lkjscript-distributed-http-acceptance","version":2}"#
+            r#"{"identity":"lkjscript-distributed-http-acceptance","version":3}"#
         );
         assert_eq!(ACCEPTANCE_WORKFLOW, "distributed-http-application");
     }

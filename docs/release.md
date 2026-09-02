@@ -15,6 +15,10 @@ in [`202609011758-affine-resource-release.json`](evidence/202609011758-affine-re
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 
+Current checkout source is unreleased product 0.1.16. It has no tag, release, asset, checksum, or
+public-latest claim; immutable v0.1.15 remains the supported distribution until a separately
+authorized publication campaign completes this procedure.
+
 ## Identity and authority
 
 The root `Cargo.toml` package version owns the human-facing release snapshot and its exact annotated
