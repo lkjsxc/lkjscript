@@ -5,19 +5,20 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.15`, release `380401840`, is the current supported release. Release run
-`33495319420` completed fresh source and four-oracle target verification, all three no-checkout
+Immutable `v0.1.16`, release `381033538`, is the current supported release. Release run
+`33599176438` completed fresh source and four-oracle target verification, all three no-checkout
 pre-publication application oracles, isolated publication, and independent anonymous exact/latest
 distributed, stateful-from-`minimal`, and outbound application oracles on attempt 1. Its exact
-candidate was also used by service-receipt contract 5 for affine resource-owned queue/worker proof,
-then bound through the package and both public extraction paths. Exact identities and receipts are
-in [`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
+candidate was also used by service-receipt contract 6 for affine resource-owned queue/worker and
+worker-definition proof. Distributed-receipt contract 3 proves complete definition paging and the
+inspect → plan → apply → reinspect body change through the package and both public extraction paths.
+Exact identities and receipts are in
+[`202609021420-function-definition-release.json`](evidence/202609021420-function-definition-release.json).
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 
-Current checkout source is unreleased product 0.1.16. It has no tag, release, asset, checksum, or
-public-latest claim; immutable v0.1.15 remains the supported distribution until a separately
-authorized publication campaign completes this procedure.
+Current checkout source and immutable public latest are product 0.1.16. Immutable v0.1.15 and every
+older tag, release, asset, and attestation remain unchanged.
 
 ## Identity and authority
 

@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.15 executable provides offline command, editable inbound HTTP,
+The supported v0.1.16 executable provides offline command, editable inbound HTTP,
 deployment-bound outbound HTTPS, and reviewed stateful HTTP application lifecycles through one
 copied binary. They create typed meaning graph projects, inspect and change accepted meaning, run
 graph-owned tests, build deterministic artifact bundles, and execute through the standalone
@@ -14,20 +14,20 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot `0.1.16`; the immutable supported release remains
-`v0.1.15`. Both include public exact built-in dependency, component, requirement, function-backed
+Current source and the immutable supported release are product snapshot `0.1.16`. It includes
+public exact built-in dependency, component, requirement, function-backed
 port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
 authored-operation engine without changing their resulting meaning or atomic project-creation
 contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
 No deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
 
-Unreleased 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
+Product 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
 live local function. They expose its complete accepted contract, structural body, exact reference
 cutoff, and revision-bound validation facts without exposing storage or creating a second authoring
-format. Immutable v0.1.15 does not contain this source-only addition.
+format. Immutable v0.1.16 publishes this projection through the same copied-binary workflow.
 
-Product 0.1.15 adds exact-interface affine capability resources. Public compact records expose
+Product 0.1.15 introduced exact-interface affine capability resources. Public compact records expose
 `type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
 fabrication, aliases, foreign authority, branch disagreement, escape, and use after consume before
 publication. The maintained standard queue now returns an absent/live resource variant, exposes
@@ -36,7 +36,7 @@ failure. Raw attempt/worker transition tokens are no longer graph or adapter inp
 and backup formats remain unchanged. Immutable `v0.1.15` publishes these semantics through the
 same copied-binary authoring, build, service, and worker boundaries.
 
-The current source and immutable v0.1.15 binary include public explicit type-parameter,
+The current source and immutable v0.1.16 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -70,10 +70,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.15` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.15) owns the immutable
+[`v0.1.16` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.16) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.15/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.15/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.16/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.16/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -110,7 +110,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.15 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.16 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -149,7 +149,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.15 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.16 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -178,7 +178,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.15 download exposes the complete first-party boundary and topology authoring
+The immutable v0.1.16 download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -190,7 +190,7 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.15`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.16`.
 
 Public compact change records can add an exact staged built-in dependency, components,
 requirements, function-backed ports, command/HTTP targets, interfaces, operations and externals,
@@ -285,7 +285,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.15 executable can obtain one complete admitted local neighborhood
+The public v0.1.16 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -300,8 +300,8 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-Unreleased 0.1.16 can project one complete accepted local function definition through stateless
-pages:
+The public v0.1.16 executable can project one complete accepted local function definition through
+stateless pages:
 
 ```sh
 ./lkjscript --project ./hello inspect owner pure_function decl_... \
@@ -424,7 +424,7 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-In v0.1.15 the worker claims `QueueLeaseState`, matches its live resource, borrows
+Since v0.1.15 the worker claims `QueueLeaseState`, matches its live resource, borrows
 `QueueLeaseInfo`, then consumes the lease through heartbeat and the renewed lease through complete
 or fail. A handle is bound to the exact worker task, resource kind, `DurableQueue` interface, and
 `jobs` requirement. Dropping it performs no implicit queue transition, and no application code

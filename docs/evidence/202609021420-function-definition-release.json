@@ -1,0 +1,1089 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-product-release-evidence",
+    "version": 1
+  },
+  "campaign": "202609021420-function-definition-release",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-02T07:36:28Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "upstream": "origin/main",
+    "entry_head": "9b7ee9f9937a781e93344c11e27a595c21ba5346",
+    "entry_tree": "d2dad1877cc4c6137ce2bad64fd16d10dbb2b5a8",
+    "entry_origin_main": "9b7ee9f9937a781e93344c11e27a595c21ba5346",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "entry_supplied_work": [
+      {
+        "path": "docs/campaigns/202609021420.md",
+        "state": "untracked supplied work",
+        "mode": "0640",
+        "bytes": 25916,
+        "sha256": "1941e8d6808606ca860711729070e32c026d12013b9f0c6b196082df706b28aa",
+        "git_blob_at_R": "445e9fb63f3ae842ef70cea25f57b5bbb804a58b",
+        "disposition": "committed byte-for-byte in R; E changes only Status and appends one terminal record"
+      }
+    ],
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, rewrite, or deletion"
+      },
+      {
+        "paths": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "state": "pre-existing ignored build, evidence, lock, catalog, and derived roots",
+        "disposition": "preserved; new raw campaign evidence exists only below ignored artifact owners"
+      },
+      {
+        "paths": [
+          ".artifacts/campaigns/202608290721/docker-data",
+          ".artifacts/campaigns/202608290721/docker-exec",
+          ".artifacts/static-0.1.8/docker-data",
+          ".artifacts/static-0.1.8/docker-exec"
+        ],
+        "state": "root-owned unreadable historical artifact directories",
+        "disposition": "preserved without ownership, mode, content, or lifecycle mutation"
+      }
+    ],
+    "entry_open_issues": 0,
+    "entry_open_pull_requests": 0,
+    "entry_queued_or_running_release_runs": 0,
+    "pre_E_head": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+    "pre_E_tree": "c33a497bfb685d22d23bd84e554707d32cec6e34",
+    "pre_E_origin_main": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+    "pre_E_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    }
+  },
+  "source": {
+    "orientation_baseline": "9b7ee9f9937a781e93344c11e27a595c21ba5346",
+    "function_definition_implementation_commits": [
+      "3f581f793c7d2e26b6c35ab22a780186436c4894",
+      "c8e11170b721cffa9e080d1d8cd577380fcd5c4d"
+    ],
+    "function_definition_source_closure": "9b7ee9f9937a781e93344c11e27a595c21ba5346",
+    "release_source_commit_R": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+    "release_source_tree": "c33a497bfb685d22d23bd84e554707d32cec6e34",
+    "release_source_parent": "9b7ee9f9937a781e93344c11e27a595c21ba5346",
+    "release_source_timestamp_utc": "2026-09-02T05:51:57Z",
+    "release_source_summary": "Begin immutable v0.1.16 release campaign",
+    "release_source_paths": [
+      ".github/workflows/release.yml",
+      "docs/campaigns/202609021420.md",
+      "tools/lkjscript-dev/src/distributed_http.rs",
+      "tools/lkjscript-dev/src/release/mod.rs"
+    ],
+    "release_blocker_correction": {
+      "classification": "fresh passed",
+      "live_predecessor_consumers_found": 2,
+      "live_current_consumers_after_cutover": 2,
+      "predecessor_version_accepted_after_cutover": false,
+      "owner": "lkjscript-distributed-http-acceptance-3",
+      "required_result": "definition_projection",
+      "release_paths": [
+        "transferred pre-publication acceptance",
+        "anonymous exact/latest acceptance"
+      ],
+      "rust_owned_regression": "workflow predicates derive the distributed owner version and require every projection result field"
+    },
+    "product_behavior_changed_during_release_campaign": false,
+    "release_workflow_behavior_changed_during_release_campaign": true,
+    "product_semantics_changed_during_release_campaign": false,
+    "root_product_version": "0.1.16",
+    "expected_tag": "v0.1.16",
+    "origin_main_equal_before_dry_run_and_tag": true,
+    "worktree_clean_before_tag_push": true,
+    "release_bound_inputs": {
+      "workflow_git_blob": "f6defb841bd742c5e17a17bdba5d7922679b8818",
+      "workflow_sha256": "000d6a15e39865289e636e4a6ae537ad421314fa55f1a50737c35bda0f5f41e6",
+      "distributed_verifier_git_blob": "b984f67df8949a22279d2c753ef82dd8deb14977",
+      "distributed_verifier_sha256": "9c767e14321ec1f93109a7d357c6d1bd1bc35fb1a3b5fb4dc81c96d3b615fbad",
+      "release_owner_git_blob": "f9594517520d9e6beb4195b9b71772990c3e3a7a",
+      "release_owner_sha256": "8eeb5dac3c411b2159e8b0ffa5b52dd709cc7afb72869359ce0fd5c13f56b111",
+      "cargo_lock_git_blob": "86ee9a064e1dbd84cf1793ee013dd3ecb7a611be",
+      "cargo_lock_sha256": "adfa7ddf2d22b32357cc7bbfd9ac82d6e41f8e163e60b3d12145d70a99d00caf",
+      "rust_toolchain_git_blob": "3d4ab0f319f77512292c4856ba2611557731ab29",
+      "rust_toolchain_sha256": "f1adfed25fca89d418637337ee32a6580d06de345c179472acc780e17f291df4"
+    },
+    "semantic_leverage_result": "distribution closure for already accepted function-definition projection; no graph meaning or application-private host semantic was added"
+  },
+  "product_and_contract_identities": {
+    "product": "0.1.16",
+    "capabilities_digest": "7bbb0d3a2410911d815ee4159a3a9b0244c12eef0045db241565d449b9158d09",
+    "contract_registry": "lkjscript-contract-registry-6",
+    "meaning_graph": "lkjscript-meaning-graph-6",
+    "validation_witness": 3,
+    "owner_summary": 2,
+    "semantic_validator": 6,
+    "cli": "lkjscript-cli-18",
+    "function_definition_projection": "lkjscript-function-definition-projection-1",
+    "compact_change": "lkjscript-change-records-9",
+    "authored_change_codec": 7,
+    "package_interface": "lkjscript-package-interface-owner-4",
+    "compiler_unit": 2,
+    "bytecode": 2,
+    "compilation_manifest": 3,
+    "artifact": "lkjscript-artifact-bundle-11",
+    "resident_runtime": 2,
+    "durable_queue_adapter": 2,
+    "project_creation": 3,
+    "deployment": 3,
+    "http_client_adapter": 1,
+    "data_store": "lkjscript-data-store-1",
+    "logical_backup": "lkjscript-data-backup-1",
+    "durable_queue_data": "lkjscript-durable-queue-data-1",
+    "package_transport": 1,
+    "service_receipt": 6,
+    "release_target_policy": {
+      "identity": "lkjscript-release-target-policy",
+      "version": 2,
+      "sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152"
+    },
+    "release_receipt": {
+      "identity": "lkjscript-release-receipt",
+      "version": 2
+    },
+    "target_build_receipt": {
+      "identity": "lkjscript-target-build-receipt",
+      "version": 1
+    },
+    "target_admission_receipt": {
+      "identity": "lkjscript-target-admission-receipt",
+      "version": 2
+    },
+    "application_verifier_handoff": {
+      "identity": "lkjscript-application-verifier-handoff",
+      "version": 3
+    },
+    "distributed_http_acceptance": 3,
+    "outbound_http_acceptance": 1,
+    "stateful_http_acceptance": 4
+  },
+  "published_function_definition_behavior": {
+    "classification": "fresh passed",
+    "public_grammar": "inspect owner KIND ID --detail definition [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]",
+    "scope": "one live local pure_function or task_function with a body at one exact accepted revision",
+    "projection_contract": "lkjscript-function-definition-projection-1",
+    "complete_sections": [
+      "function contract",
+      "structural body preorder",
+      "typed references",
+      "validation facts"
+    ],
+    "continuation_prefix": "icont_",
+    "continuation_stateless": true,
+    "complete_authority_reconstructed_before_rendering": true,
+    "dependency_and_named_bodies_recursively_expanded": false,
+    "projection_is_change_input": false,
+    "distributed_body_change_proof": {
+      "initial_records": 9,
+      "accepted_records": 9,
+      "initial_pages": 4,
+      "accepted_pages": 4,
+      "initial_body_records": 1,
+      "accepted_body_records": 1,
+      "initial_fact_records": 2,
+      "accepted_fact_records": 2,
+      "initial_logical_bytes": 3717,
+      "accepted_logical_bytes": 3727,
+      "initial_output_bytes": 9993,
+      "accepted_output_bytes": 10003,
+      "initial_literal_sha256": "9fab386152f9f1472746a47ea010c11e6f395e633ff3f7303bea7bfdf86fa18a",
+      "accepted_literal_sha256": "a2ab3c627cb792d859512e4f2e6a49de7bf79699f53f2488c5eff84026133664",
+      "revision_changed": true,
+      "definition_digest_changed": true,
+      "literal_changed": true,
+      "contract_unchanged": true,
+      "intended_body_change": true,
+      "digest_recomputed": true,
+      "changed_page_budgets": true,
+      "direct_file_plan_equal": true,
+      "malformed_continuation_rejected": true,
+      "stale_continuation_rejected": true,
+      "projection_input_rejected": true,
+      "authority_unchanged_before_apply": true
+    },
+    "maintained_service_projection": {
+      "function": "decl_a914bb78de075ff44a857ac028d704f3",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "digest": "definition_eaaf72ff8b3d39f940af04405dc256bb081f27070918ec73f1624fa63f65e2be",
+      "total_records": 210,
+      "contract_records": 9,
+      "body_records": 48,
+      "reference_records": 99,
+      "fact_records": 51,
+      "structural_edges": 51,
+      "reference_edges": 99,
+      "maximum_depth": 8,
+      "logical_bytes": 88035,
+      "pages": 6,
+      "rendered_output_bytes": 97752,
+      "largest_function": "decl_0693166bd7c29bee83d2ead289148f65",
+      "largest_body_records": 192,
+      "largest_digest": "definition_7494a67ac0a3538d57e108eddd6e6b9379949b6717b0267f5563415ab1ebd0a2",
+      "oracle_equal": true,
+      "digest_recomputed": true,
+      "changed_page_budgets": true,
+      "copied_binary_equal": true,
+      "authority_unchanged": true,
+      "isolated_copy_removed": true
+    }
+  },
+  "maintained_authority": {
+    "standard": {
+      "tree": "8e8514e9df477e0114fb3eaade60393041bfd233",
+      "generated_tree": "ce962b9c2dc05be1b42137d01e4928c4eff4cdc2",
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261",
+      "semantic_state": "semantic_state_36f5b103cf76423d2edb48aafc708d543d878ca1c656b5775ebc6ad8bc531a69",
+      "package_revision": "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705",
+      "package_transport": "package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9",
+      "transport_bytes": 89720,
+      "transport_sha256": "14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791",
+      "artifact_bytes": 256500,
+      "artifact_sha256": "fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b"
+    },
+    "lkjournal": {
+      "tree": "32bb8228cf578284afb87ecea4d057061bb09bac",
+      "generated_tree": "eaba58393031aa0ef5828ff8c009960011b845b6",
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "semantic_state": "semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1",
+      "artifact_bytes": 832550,
+      "artifact_sha256": "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728"
+    },
+    "equal_to_function_definition_source_closure": true,
+    "regeneration_and_exact_compare": "fresh passed",
+    "publication_advanced_semantic_HEAD": false,
+    "deployment_or_operational_data_mutated": false
+  },
+  "reconciliation": {
+    "predecessor": {
+      "tag": "v0.1.15",
+      "release_id": 380401840,
+      "tag_object": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "source_commit": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+      "archive_asset_id": 539383016,
+      "archive_bytes": 7459326,
+      "archive_sha256": "5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01",
+      "checksum_asset_id": 539383030,
+      "checksum_bytes": 109,
+      "checksum_sha256": "e50a7373b9d783b361cf2afa064c4dd1a41f5311052b7459ba3d55cde39fb6dc",
+      "immutable_and_unchanged_after_publication": true
+    },
+    "function_definition_predecessor_campaign_terminal": true,
+    "conflicting_active_mandate": false,
+    "intended_tag_absent_before_publication": true,
+    "intended_release_absent_before_publication": true,
+    "immutable_releases_enabled": true,
+    "release_runs_active_before_tag_push": 0,
+    "open_issue_or_pull_request_count": 0,
+    "deployments_before_and_after": 0,
+    "current_release_oracles": [
+      "distributed_http",
+      "outbound_http",
+      "stateful_http",
+      "service_acceptance"
+    ]
+  },
+  "pinned_inputs": {
+    "rust_toolchain": "1.98.0",
+    "rustc_commit": "88d9e12ae178fab0fb5cc050a94da85685d449ea",
+    "cargo_commit": "797e8a9bc",
+    "target": "x86_64-unknown-linux-musl",
+    "runtime_linkage": "static-musl",
+    "cargo_about": {
+      "version": "0.9.2",
+      "archive_bytes": 6732751,
+      "archive_sha256": "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af",
+      "executable_bytes": 15835280,
+      "executable_sha256": "b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8"
+    },
+    "userlands": [
+      "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+      "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+    ],
+    "independent_attestation_tool": {
+      "name": "gh",
+      "version": "2.98.0",
+      "archive_sha256": "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de",
+      "executable_sha256": "62885b97de6a0cd85e616cdd94bcda908bf5cf1018094385892b05cea3537163"
+    }
+  },
+  "local_final_proof": {
+    "focused_iteration": {
+      "classification": "fresh passed",
+      "selected": 6,
+      "fresh_passed": 6,
+      "reused_passed": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788328173194577712-1703057-0/receipt.json",
+      "receipt_bytes": 15191,
+      "receipt_sha256": "eeb08a11b3c375b5d4efab5b00ecb9e9391520018986a32da14878b7b119c2b8",
+      "elapsed_nanoseconds": 114345263978,
+      "exact_R": false,
+      "scope": "uncommitted final R content over the predecessor HEAD; iteration evidence only"
+    },
+    "full": {
+      "classification": "fresh passed",
+      "exact_R": true,
+      "selected": 24,
+      "fresh_passed": 24,
+      "reused_passed": 0,
+      "unrun": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788328327626951458-1706987-0/receipt.json",
+      "receipt_bytes": 56454,
+      "receipt_sha256": "342d4568f2520b790f55a1c172df9c2be838921cbabfb85042201ffb958a899d",
+      "elapsed_nanoseconds": 251900743059,
+      "input_stable": true,
+      "gates": [
+        "fmt",
+        "clippy",
+        "workspace_tests",
+        "release_build",
+        "release_command_lifecycle",
+        "distributed_http_application",
+        "outbound_http_application",
+        "stateful_http_application",
+        "checker_self_test",
+        "rust_only_tooling",
+        "generated_public_guides",
+        "product_surface_audit",
+        "standard_package_test",
+        "application_package_test",
+        "standard_artifact_build",
+        "standard_artifact_compare",
+        "builtin_package_export",
+        "builtin_package_compare",
+        "builtin_transport_export",
+        "builtin_transport_compare",
+        "application_artifact_build",
+        "application_artifact_compare",
+        "service_acceptance",
+        "diff_check"
+      ]
+    },
+    "target": {
+      "classification": "fresh passed",
+      "build_receipt": ".artifacts/campaign/202609021420/build-receipt-final.json",
+      "build_receipt_bytes": 2790,
+      "build_receipt_sha256": "9970985204c43426cc88ac16e7004f20d87f29949b1b4f24662af4db0cb7e320",
+      "admission_receipt": ".artifacts/campaign/202609021420/target-admission/receipt.json",
+      "admission_receipt_bytes": 70003,
+      "admission_receipt_sha256": "6638093770fbd5a465b85b6cd1abed1a54cf3b422031b378da088569acf98ce1",
+      "candidate_bytes": 16713952,
+      "candidate_sha256": "c6cc5b3d1b2cf10243e6dfc7a8902fc9f8c1b137cbe5d573f80468f360c8bde6",
+      "verifier_bytes": 11280096,
+      "verifier_sha256": "3685bb982260ab9d16d6b1e8183b5a9835c301e4375dc86a3d4b8ebcba984883",
+      "userlands": 2,
+      "candidate_commands_per_userland": 12,
+      "oracles": 4,
+      "classifications_fresh_passed": 7,
+      "elapsed_nanoseconds": 35028438907,
+      "cleanup_complete": true,
+      "service_receipt_bytes": 90438,
+      "service_receipt_sha256": "838b8830a8a01646d298e5e5725589b2f7ab9283b76bea555039f2957325318a"
+    },
+    "package": {
+      "classification": "fresh passed",
+      "preparations": 2,
+      "strict_verifications": 2,
+      "archive_bytes": 7532767,
+      "archive_sha256": "60746354d2e17cbce63b88d07ea67fce205e2debbb62c7d9fc9ed1f24db74dbb",
+      "checksum_bytes": 109,
+      "checksum_sha256": "5083c60bb1a6373ea30223373221beb87bdffb2054e9385bedae4ba85f439a4b",
+      "manifest_bytes": 3869,
+      "manifest_sha256": "b3eab784e67c7d6c00ffb223c48a5f1c4f6fa64bd3b2c99a6eb50e527ed8af1e",
+      "release_receipts": [
+        {
+          "bytes": 4283,
+          "sha256": "cad9f463fdfdf53733651ad21a7d05b4556c852d44c6dd0a123e3081b74c3c27"
+        },
+        {
+          "bytes": 4284,
+          "sha256": "8ab90825b84f7f22d49bfc6b3f7dc65563f71a1bf87edb523ed08f90056e1282"
+        }
+      ],
+      "archive_byte_equal": true,
+      "checksum_byte_equal": true,
+      "extracted_candidate_byte_equal": true,
+      "manifest_byte_equal": true,
+      "hostile_input_rejection": "fresh passed through the release owner tests and both strict verifications"
+    },
+    "local_and_hosted_candidate_equal": false,
+    "reproducible_build_claim": false
+  },
+  "hosted_dry_run": {
+    "classification": "fresh passed",
+    "run_id": 33597094514,
+    "run_number": 44,
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "publish": false,
+    "head_sha": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+    "created_at_utc": "2026-09-02T06:01:53Z",
+    "completed_at_utc": "2026-09-02T06:22:05Z",
+    "jobs": [
+      {
+        "id": 100142639959,
+        "name": "Build, verify, and package",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 100146716009,
+        "name": "Verify transferred packaged application candidate",
+        "classification": "fresh passed"
+      },
+      {
+        "id": 100146878070,
+        "name": "Publish immutable release",
+        "classification": "skipped"
+      },
+      {
+        "id": 100146878285,
+        "name": "Verify anonymous public release",
+        "classification": "skipped"
+      }
+    ],
+    "full_receipt_bytes": 56326,
+    "full_receipt_sha256": "58cfcd3f0b25948327e8289fecbea8fefe8700c9de6f0ad6e773f1352ebf507e",
+    "full_gates_fresh_passed": 24,
+    "full_reused": 0,
+    "target_receipt_bytes": 68813,
+    "target_receipt_sha256": "99d1d4e9d7852836308316cdaa22fde23f27776393fbebe69df54a3afab9103d",
+    "target_classifications_fresh_passed": 7,
+    "candidate_bytes": 16722144,
+    "candidate_sha256": "7fc4731f741e0fa7f4c6112a7c48b0693cd6c2a150ee6d808805a14473226e77",
+    "service_receipt_bytes": 89871,
+    "service_receipt_sha256": "7e5539cd07c98859f7e601972e7dba3fb084ede170eefa5f5bc34f72b7ca0368",
+    "archive_bytes": 7532902,
+    "archive_sha256": "f066c711e2058b34bdc619b5d699a1ef01b358dc3d44e26d4ead5115d458862b",
+    "checksum_sha256": "99d8fbedd403c287d2f1285473dfe8bd2026bb3edb9b9f76e660c678f3b69552",
+    "manifest_bytes": 3869,
+    "manifest_sha256": "bb75423d22f7b996c1623cbac742c86408e67c23e10716c31d664d384ff7b5fe",
+    "release_receipt_bytes": 4366,
+    "release_receipt_sha256": "0b9798ceeba880ddb8c5d54c061608ce086f613f2c6899dafa7b54cbbaae4bf6",
+    "verifier_bytes": 11280096,
+    "verifier_sha256": "2ce3ef7e817052bacee217747b4bd4c605bcff3ef25dc2bb4cfe792e363a826a",
+    "verifier_identity_bytes": 455,
+    "verifier_identity_sha256": "801113638a1478faf2c609906c439cdaadb2a88ee5593d8bafd633ec953f987a",
+    "pre_publication_receipts": {
+      "distributed_sha256": "8d17866e7c925852dca734e37016c3b11a65d251123a8a13088f35d8a1d3d1a9",
+      "outbound_sha256": "5a928509814360faa6c7a60e70fb8acecb00fa79ac24706bc1dafdfcad514e94",
+      "stateful_sha256": "5567563ac1114046b18dfac9582bf0a85b8ddc88d0679e694b2919e8738e56d0"
+    },
+    "workflow_artifacts": [
+      {
+        "id": 9834255395,
+        "name": "pre-publication-application-evidence-33597094514-1",
+        "bytes": 272607,
+        "digest": "sha256:783846325ac562cff18721cbdfa14bc4642eb09371df5342050ca24bded56629"
+      },
+      {
+        "id": 9834236325,
+        "name": "verifier-handoff-33597094514-1",
+        "bytes": 11280827,
+        "digest": "sha256:debcf50388fedf95a0385d9b4252e22f3277291e570aa2b1e79a7067222c660d"
+      },
+      {
+        "id": 9834235521,
+        "name": "release-handoff-33597094514-1",
+        "bytes": 7537819,
+        "digest": "sha256:0467aa98ceccd5a241736411d5b86f6205efe7f83624da726f9bee41fefe17b0"
+      },
+      {
+        "id": 9834202739,
+        "name": "target-admission-evidence-33597094514-1",
+        "bytes": 679469,
+        "digest": "sha256:3515a44d3085e00866306857ab8d51c5436cadedbb905c8aba60cb1cf08e1373"
+      },
+      {
+        "id": 9834081153,
+        "name": "full-verification-evidence-33597094514-1",
+        "bytes": 482574,
+        "digest": "sha256:1f16cdb8cfb5b0189270b7ce4f9ede6433b037e094dc81f028f28328cd22c8a1"
+      }
+    ],
+    "downloaded_handoffs_independently_verified": true,
+    "public_objects_created": 0
+  },
+  "publication": {
+    "preconditions": {
+      "classification": "fresh passed",
+      "R_equal_HEAD_and_origin_main": true,
+      "worktree_clean": true,
+      "tag_absent": true,
+      "release_absent": true,
+      "active_release_runs": 0,
+      "immutable_releases_enabled": true,
+      "dry_run_exact_R_success": true,
+      "predecessor_latest": "v0.1.15"
+    },
+    "tag": {
+      "name": "v0.1.16",
+      "object_sha": "fd9879e967512e9269faf111d462140572fec137",
+      "peeled_commit": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+      "annotated": true,
+      "tagger_timestamp_utc": "2026-09-02T06:30:24Z",
+      "signed": false,
+      "remote_exact": true
+    },
+    "confirmation_variable": {
+      "name": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+      "previous_value": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "value": "fd9879e967512e9269faf111d462140572fec137",
+      "read_back_exact": true,
+      "updated_at_utc": "2026-09-02T06:30:25Z"
+    },
+    "run": {
+      "id": 33599176438,
+      "number": 45,
+      "attempt": 1,
+      "event": "push",
+      "head_branch": "v0.1.16",
+      "head_sha": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+      "created_at_utc": "2026-09-02T06:30:54Z",
+      "completed_at_utc": "2026-09-02T06:56:06Z",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 100148852456,
+          "name": "Build, verify, and package",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 100154157467,
+          "name": "Verify transferred packaged application candidate",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 100154360764,
+          "name": "Publish immutable release",
+          "classification": "fresh passed"
+        },
+        {
+          "id": 100154452781,
+          "name": "Verify anonymous public release",
+          "classification": "fresh passed"
+        }
+      ]
+    },
+    "release": {
+      "id": 381033538,
+      "node_id": "RE_kwDOTeret84WthxC",
+      "tag": "v0.1.16",
+      "latest": true,
+      "immutable": true,
+      "draft": false,
+      "prerelease": false,
+      "published_at_utc": "2026-09-02T06:54:38Z",
+      "assets": [
+        {
+          "id": 540758458,
+          "node_id": "RA_kwDOTeret84gO1G6",
+          "name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+          "bytes": 7532929,
+          "sha256": "2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5"
+        },
+        {
+          "id": 540758487,
+          "node_id": "RA_kwDOTeret84gO1HX",
+          "name": "SHA256SUMS",
+          "bytes": 109,
+          "sha256": "d48b562bf620793c82706183620ee480ac45d0e79db89a77c2946d011e7f2ef4"
+        }
+      ],
+      "attestation": {
+        "verification_result_sha256": "f581605f7f31365986ca10943d50fbeaa61846b62a4a852ff1fe6eca8e9cbbc3",
+        "timestamp_utc": "2026-09-02T06:54:38Z",
+        "predicate_type": "https://in-toto.io/attestation/release/v0.2",
+        "release_subject": "pkg:github/lkjsxc/lkjscript@v0.1.16",
+        "tag_object_sha1": "fd9879e967512e9269faf111d462140572fec137",
+        "release_id": "381033538",
+        "archive_subject_sha256": "2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5",
+        "checksum_subject_sha256": "d48b562bf620793c82706183620ee480ac45d0e79db89a77c2946d011e7f2ef4"
+      }
+    },
+    "release_receipt": {
+      "bytes": 4366,
+      "sha256": "1874f0e0689a00910d9df28063a3b99b0976312d633167b3edb0f37aea05cad0",
+      "manifest_bytes": 3907,
+      "manifest_sha256": "f2470924b2a98f46d6ee65029bb9f5ee3ac27941b3e008909e68085a9ce48aa7",
+      "full_receipt_bytes": 56346,
+      "full_receipt_sha256": "130caf42d26a47d16cbc12a51fd53069fd0e373c8fdb0ae12c85a55e60ab45b7",
+      "target_receipt_bytes": 68826,
+      "target_receipt_sha256": "d2aa7fca0b07ceaeb2a2cc499127221072c7b921ce70b38b010d6e66b9610e70",
+      "classifications_fresh_passed": 11
+    },
+    "full": {
+      "classification": "fresh passed",
+      "selected": 24,
+      "fresh_passed": 24,
+      "reused_passed": 0,
+      "elapsed_nanoseconds": 585778918855
+    },
+    "target": {
+      "classification": "fresh passed",
+      "classifications_fresh_passed": 7,
+      "candidate_bytes": 16722144,
+      "candidate_sha256": "7fc4731f741e0fa7f4c6112a7c48b0693cd6c2a150ee6d808805a14473226e77",
+      "elapsed_nanoseconds": 46140403802,
+      "service_receipt_bytes": 89871,
+      "service_receipt_sha256": "bf66291d2abcdb8341dcf62dd3c415b58272a401e5b5f618a87590c86b55146f",
+      "service_authority_unchanged": true,
+      "static_elf": {
+        "class": "ELF64",
+        "machine": "x86-64",
+        "position_independent": true,
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0
+      }
+    },
+    "verifier": {
+      "bytes": 11280096,
+      "sha256": "2ce3ef7e817052bacee217747b4bd4c605bcff3ef25dc2bb4cfe792e363a826a",
+      "identity_bytes": 455,
+      "identity_sha256": "801113638a1478faf2c609906c439cdaadb2a88ee5593d8bafd633ec953f987a"
+    },
+    "pre_publication_receipts": {
+      "distributed_bytes": 68415,
+      "distributed_sha256": "5edba817629ebd45c86d4663750e0eeeeb2cc517f72ac0df5fe436c90b448a76",
+      "outbound_bytes": 51459,
+      "outbound_sha256": "444421c74d884d89b599f4d32c7e8121a7e21835a04f7b9f53f14d8ff31de7de",
+      "stateful_bytes": 116567,
+      "stateful_sha256": "8d80b613ebae827e8a19b08fcca2fd66cb76dc71e2b6554c08686599d97f995a"
+    },
+    "workflow_artifacts": [
+      {
+        "id": 9835200416,
+        "name": "public-application-verification-evidence-33599176438-1",
+        "bytes": 565214,
+        "digest": "sha256:a725729096d2609e510e476a8f7c42fec931e79665c33cce0e49afaaebc8e989"
+      },
+      {
+        "id": 9835149054,
+        "name": "pre-publication-application-evidence-33599176438-1",
+        "bytes": 272513,
+        "digest": "sha256:60d711e3d82b5a8a902cbb8c4d833bc790f4aa786a2a5d19ea6aa65cd9200f1e"
+      },
+      {
+        "id": 9835124109,
+        "name": "verifier-handoff-33599176438-1",
+        "bytes": 11280827,
+        "digest": "sha256:f99bc529f25a74b8857b1a17675df9fda210ad5fcdbdb31a563ed283c854f835"
+      },
+      {
+        "id": 9835123668,
+        "name": "release-handoff-33599176438-1",
+        "bytes": 7537846,
+        "digest": "sha256:cfd7f50ac87de98ea660282c95ae5b4f5072e5521bda401b6a17e7907872bf96"
+      },
+      {
+        "id": 9835080220,
+        "name": "target-admission-evidence-33599176438-1",
+        "bytes": 679224,
+        "digest": "sha256:4b1b8c800843b39e2d3122cee279b7566ff70ee81d240a37dcb14c257fc0fb49"
+      },
+      {
+        "id": 9834937268,
+        "name": "full-verification-evidence-33599176438-1",
+        "bytes": 482392,
+        "digest": "sha256:8d4708fa7b7f6389bb807e56f55185fb66db9a657bc3d4362d6a8792e12e7dfa"
+      }
+    ]
+  },
+  "hosted_anonymous_public_acceptance": {
+    "classification": "fresh passed",
+    "token_free_downloads": 4,
+    "checksums_each": "fresh passed",
+    "release_attestation_each": "fresh passed",
+    "asset_attestations_each": "fresh passed",
+    "strict_release_verify_each": true,
+    "static_elf_each": "fresh passed",
+    "exact": {
+      "distributed_receipt_bytes": 68436,
+      "distributed_receipt_sha256": "ba5e5642390cccb1a6064291b86ba9fb289792293b0ee5fc0037ee57e0e24c13",
+      "outbound_receipt_bytes": 51476,
+      "outbound_receipt_sha256": "d6cbde83d5b75342704507a9f489a4c82aae0b9a5482dbba88af969e36aaa350",
+      "stateful_receipt_bytes": 116593,
+      "stateful_receipt_sha256": "251b05de22b55643d74ddc612355babc0dcbc65ba6408f7692ac45f85df1b3d6",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "definition_function": "decl_62f2a2dc1cc009eee1806ce33cd9ff08",
+      "definition_initial_digest": "definition_c17577d3315169f83006ac4282676ccc5e57b2aab424d036d5ee5a51f767239c",
+      "definition_accepted_digest": "definition_33ff1a649a6932cc17796680c76a01245af1f198c863ee2f54a8e7126ad2cb02",
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "distributed_receipt_bytes": 68443,
+      "distributed_receipt_sha256": "10dc8a4a799fb1990e9c1e8d8edc4d930ea14354808daebd9c9eaa96dffc8f71",
+      "outbound_receipt_bytes": 51485,
+      "outbound_receipt_sha256": "a1510eef0b04cb41955ca78d814e77e23972ef1a08af895e638318f297e92c16",
+      "stateful_receipt_bytes": 116603,
+      "stateful_receipt_sha256": "ac61c8c2b27f2c6f3b7a8bc9daa0ff358a69a45aa4021b307fc34e486c8ae811",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "definition_function": "decl_0e03c5a4d4c12a69a20ae99714b9079f",
+      "definition_initial_digest": "definition_3b7fe926371ac3334c3f8f57523f2b63a957bef030e5326f24cc64107d9c8add",
+      "definition_accepted_digest": "definition_55a36938322d279a73e23b1d122be0419e56542ba6e3a298de52b2af63a0244e",
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "exact_latest_compared_after_behavior": true,
+    "archive_equal": true,
+    "checksum_equal": true,
+    "candidate_equal": true,
+    "manifest_equal": true
+  },
+  "independent_anonymous_public_acceptance": {
+    "classification": "fresh passed",
+    "root": ".artifacts/campaign/202609021420/independent-public/",
+    "token_free_downloads": 4,
+    "command_level_download_retries_observed": 0,
+    "curl_internal_retry_count": "not configured and not inferred",
+    "checksums_each": "fresh passed",
+    "release_attestation_each": "fresh passed with the existing read credential because the pinned GitHub CLI rejected token-free attestation API access",
+    "asset_attestations_each": "fresh passed with the same read credential; downloaded asset bytes remained token-free",
+    "strict_release_verify_each": true,
+    "direct_elf_inspection_each": {
+      "classification": "fresh passed",
+      "class": "ELF64",
+      "machine": "x86-64",
+      "position_independent": true,
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0
+    },
+    "verifier_handoff": {
+      "classification": "fresh passed",
+      "bytes": 11280096,
+      "sha256": "2ce3ef7e817052bacee217747b4bd4c605bcff3ef25dc2bb4cfe792e363a826a",
+      "identity_bytes": 455,
+      "identity_sha256": "801113638a1478faf2c609906c439cdaadb2a88ee5593d8bafd633ec953f987a",
+      "transport_mode_observed": "0750",
+      "declared_mode": "0755",
+      "normalized_copy_mode": "0755",
+      "identity_verified_after_exact_byte_check": true
+    },
+    "public_material": {
+      "archive_bytes": 7532929,
+      "archive_sha256": "2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5",
+      "checksum_bytes": 109,
+      "checksum_sha256": "d48b562bf620793c82706183620ee480ac45d0e79db89a77c2946d011e7f2ef4",
+      "candidate_bytes": 16722144,
+      "candidate_sha256": "7fc4731f741e0fa7f4c6112a7c48b0693cd6c2a150ee6d808805a14473226e77",
+      "manifest_bytes": 3907,
+      "manifest_sha256": "f2470924b2a98f46d6ee65029bb9f5ee3ac27941b3e008909e68085a9ce48aa7"
+    },
+    "attestation": {
+      "verification_result_sha256": "f581605f7f31365986ca10943d50fbeaa61846b62a4a852ff1fe6eca8e9cbbc3",
+      "six_verification_commands_passed": true,
+      "subjects_exact": true
+    },
+    "exact": {
+      "distributed_receipt_bytes": 68543,
+      "distributed_receipt_sha256": "4960762329a40e61feecadfa89f61a3c08af43c354c01ef10e87b3e7966936e5",
+      "outbound_receipt_bytes": 51584,
+      "outbound_receipt_sha256": "eb4f05b159c0e8c6a68bb6e63fabecc9793f014d299b26709961e2c978800ffa",
+      "stateful_receipt_bytes": 116647,
+      "stateful_receipt_sha256": "f0437367a881da8cd0f9a76321d65b42f9247c5f17113874544b54c0d0371062",
+      "distributed_elapsed_nanoseconds": 2513088816,
+      "outbound_elapsed_nanoseconds": 5890373124,
+      "stateful_elapsed_nanoseconds": 13601308009,
+      "definition_function": "decl_cf5688d577d6069f500a1adad3edb779",
+      "definition_initial_revision": "rev_d76a63e017f39a65947dce50c92efd887b8381e0e97c595722d18742420a79f4",
+      "definition_accepted_revision": "rev_c5d9d979b57007059ce381e0e94ec2ef2a92f8bc695b948c4ed246c6c3372f83",
+      "definition_initial_digest": "definition_c61b0bf1f8316eec44dc603aff7a148646cc98791cbd160f447640e5f1a629c9",
+      "definition_accepted_digest": "definition_3a587cfeeff9d7d740820415658a64f3b86d0207ba37d4dafdffdcdc9ef26292",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "stateful_from_minimal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "distributed_receipt_bytes": 68542,
+      "distributed_receipt_sha256": "66b329c749cbdb7dfae219c8d149957371105e11673052387f4a2df0dae27215",
+      "outbound_receipt_bytes": 51580,
+      "outbound_receipt_sha256": "2ad82f0f53bcd32448bfd5ab6db25e90b1f85707a2a689b2c603263c8dcf9b74",
+      "stateful_receipt_bytes": 116641,
+      "stateful_receipt_sha256": "85469dbf797a2d029fab64d5c4d607e313a98009bf5a88fd83281060595bf85f",
+      "distributed_elapsed_nanoseconds": 2458974602,
+      "outbound_elapsed_nanoseconds": 5796521151,
+      "stateful_elapsed_nanoseconds": 13625972077,
+      "definition_function": "decl_d4ca5abe7ac4ba6f88b7a3c3504e134f",
+      "definition_initial_revision": "rev_d18c266c93281bdc41af5207562c9e3326b00264812e59a22651899e4d50c952",
+      "definition_accepted_revision": "rev_151271a7f983c8d3fbbe4b05bb726776e8b89a3468cd425873ed2c4e5f1b926e",
+      "definition_initial_digest": "definition_29d005164e4bd3c6fff31c5d71812ca789396586dbf8de3a8c21d4d6e680272f",
+      "definition_accepted_digest": "definition_00f49df0d069b7c7b96600cca26237e7aba5b567e1f91c995b36e0ca4761c617",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "stateful_http": "fresh passed",
+      "stateful_from_minimal": true,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "exact_latest_compared_after_behavior": true,
+    "archive_equal": true,
+    "checksum_equal": true,
+    "candidate_equal": true,
+    "manifest_equal": true,
+    "stable_projection_counts_literals_and_outcomes_equal": true
+  },
+  "candidate_continuity": {
+    "classification": "fresh passed",
+    "candidate_sha256": "7fc4731f741e0fa7f4c6112a7c48b0693cd6c2a150ee6d808805a14473226e77",
+    "service_receipt_sha256": "bf66291d2abcdb8341dcf62dd3c415b58272a401e5b5f618a87590c86b55146f",
+    "target_receipt_sha256": "d2aa7fca0b07ceaeb2a2cc499127221072c7b921ce70b38b010d6e66b9610e70",
+    "release_manifest_sha256": "f2470924b2a98f46d6ee65029bb9f5ee3ac27941b3e008909e68085a9ce48aa7",
+    "archive_sha256": "2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5",
+    "handoff_candidate_equal": true,
+    "pre_publication_candidate_equal": true,
+    "release_manifest_candidate_equal": true,
+    "hosted_exact_candidate_equal": true,
+    "hosted_latest_candidate_equal": true,
+    "independent_exact_candidate_equal": true,
+    "independent_latest_candidate_equal": true,
+    "dry_run_and_publication_candidate_equal": true,
+    "local_candidate_equal": false,
+    "reproducible_build_claim": false
+  },
+  "classifications": {
+    "REL16-1_exact_release_source": "fresh passed",
+    "REL16-2_fresh_source_proof": "fresh passed",
+    "REL16-3_exact_target_admission": "fresh passed",
+    "REL16-4_deterministic_no_checkout_package": "fresh passed",
+    "REL16-5_hosted_non_publication_proof": "fresh passed",
+    "REL16-6_immutable_publication": "fresh passed",
+    "REL16-7_anonymous_exact_latest_proof": "fresh passed",
+    "REL16-8_evidence_and_closure": "fresh passed",
+    "required_gate_failures": 0,
+    "required_gate_unavailable": 0,
+    "required_gate_reused": 0,
+    "required_gate_skipped": 0,
+    "required_gate_not_run": 0
+  },
+  "cleanup": {
+    "local_target_admission_containers_removed": true,
+    "hosted_target_admission_containers_removed": true,
+    "temporary_application_and_data_roots_removed": true,
+    "runner_cleanup_complete": true,
+    "outbound_oracle_cleanup_complete": true,
+    "raw_secret_values_retained": false,
+    "campaign_processes_remaining": 0,
+    "campaign_containers_remaining": 0,
+    "live_relay_contacted": false,
+    "deployment_performed": false,
+    "ambient_hosted_or_user_data_touched": false,
+    "raw_logs_binaries_downloads_and_receipts": "retained only under ignored .artifacts roots"
+  },
+  "closure": {
+    "evidence_path": "docs/evidence/202609021420-function-definition-release.json",
+    "evidence_commit_E": "the containing evidence/current-truth commit; its SHA and normal push result are reported externally because a commit cannot contain its own identity",
+    "validation": {
+      "json_decode": "fresh passed",
+      "documentation_and_diff_check": "fresh passed",
+      "release_inputs_unchanged": true,
+      "final_assembled_changed_input_profile": "fresh passed; exact receipt is reported outside this self-containing evidence file"
+    },
+    "allowed_tracked_paths": [
+      "README.md",
+      "docs/status.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+      "docs/release.md",
+      "docs/evidence/202609021420-function-definition-release.json",
+      "docs/campaigns/202609021420.md"
+    ],
+    "release_bound_inputs_changed_by_E": false,
+    "maintained_semantic_or_generated_assets_changed_by_E": false,
+    "source_release_split_closed": true,
+    "deployment_state": "unchanged and not contacted",
+    "external_reconciliation_before_E": {
+      "observed_at_utc": "2026-09-02T07:08:42Z",
+      "R_equal_origin_main": true,
+      "active_release_runs": 0,
+      "open_issues_or_pull_requests": 0,
+      "v0_1_16_latest_immutable": true,
+      "v0_1_15_unchanged": true,
+      "confirmation_variable_exact": true,
+      "deployments": 0
+    }
+  },
+  "external_mutations": [
+    "normal fast-forward main push through R b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+    "one hosted dry-run dispatch 33597094514 with publish=false and intended tag v0.1.16",
+    "repository confirmation variable LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA changed from the v0.1.15 tag object to exact v0.1.16 tag object fd9879e967512e9269faf111d462140572fec137",
+    "one annotated refs/tags/v0.1.16 push",
+    "canonical run 33599176438 created immutable latest release 381033538, its two canonical assets, and GitHub release attestations",
+    "normal fast-forward main push through E is reported externally after the containing commit exists"
+  ],
+  "non_mutations": [
+    "no force push, history rewrite, rebase, reset, clean, restore, retag, tag deletion, release edit, asset replacement, unpublish, relabel, or manual release",
+    "no package or installer publication, deployment, live-relay contact, migration, schema mutation, or hosted/user/database/queue/object-data mutation",
+    "no issue, pull-request, permission, secret, credential, or repository-setting mutation other than the exact authorized non-secret confirmation-variable binding",
+    "immutable v0.1.15 and every older tag, release, asset, attestation, and historical evidence object remain unchanged"
+  ],
+  "resources": {
+    "local_full_elapsed_nanoseconds": 251900743059,
+    "local_target_admission_elapsed_nanoseconds": 35028438907,
+    "publication_full_elapsed_nanoseconds": 585778918855,
+    "publication_target_admission_elapsed_nanoseconds": 46140403802,
+    "publication_candidate_lifecycle": {
+      "elapsed_nanoseconds": 28674856563,
+      "sampled_child_cpu_nanoseconds": 160000000,
+      "peak_rss_kib": 74256
+    },
+    "publication_job_elapsed_seconds": {
+      "build_verify_package": 1351,
+      "pre_publication": 48,
+      "publish": 20,
+      "anonymous_public": 81
+    },
+    "publication_target_oracles": {
+      "distributed_elapsed_nanoseconds": 3003058642,
+      "outbound_elapsed_nanoseconds": 6505301133,
+      "stateful_elapsed_nanoseconds": 20477039875,
+      "service_elapsed_nanoseconds": 10680204346
+    },
+    "publication_pre_publication_oracles": {
+      "distributed_elapsed_nanoseconds": 4408979846,
+      "outbound_elapsed_nanoseconds": 7834865906,
+      "stateful_elapsed_nanoseconds": 22668952813
+    },
+    "hosted_public_oracles": {
+      "exact_distributed_elapsed_nanoseconds": 3067522215,
+      "exact_outbound_elapsed_nanoseconds": 6517291314,
+      "exact_stateful_elapsed_nanoseconds": 20692695953,
+      "latest_distributed_elapsed_nanoseconds": 3016350884,
+      "latest_outbound_elapsed_nanoseconds": 6535337898,
+      "latest_stateful_elapsed_nanoseconds": 20628340321
+    },
+    "independent_public_oracles": {
+      "exact_distributed_elapsed_nanoseconds": 2513088816,
+      "exact_outbound_elapsed_nanoseconds": 5890373124,
+      "exact_stateful_elapsed_nanoseconds": 13601308009,
+      "latest_distributed_elapsed_nanoseconds": 2458974602,
+      "latest_outbound_elapsed_nanoseconds": 5796521151,
+      "latest_stateful_elapsed_nanoseconds": 13625972077
+    },
+    "candidate_bytes": 16722144,
+    "archive_bytes": 7532929,
+    "checksum_bytes": 109,
+    "manifest_bytes": 3907,
+    "notice_bytes": 304296,
+    "license_bytes": 11336,
+    "campaign_raw_file_count_at_pre_E_reconciliation": 4296,
+    "campaign_raw_bytes_at_pre_E_reconciliation": 208071055,
+    "provider_cost_and_reliable_aggregate_runner_cpu_rss": "unavailable and not inferred"
+  },
+  "deviations_and_non_gate_failures": [
+    {
+      "classification": "not run",
+      "boundary": "narrow Rust regression selector",
+      "detail": "an initial cargo test --exact selector matched zero tests; the corrected release_workflow selector ran one passing test before R"
+    },
+    {
+      "classification": "unavailable",
+      "boundary": "initial local target-build invocation",
+      "detail": "the default shell PATH could not resolve the rustup-backed toolchain; no candidate or receipt was produced and two zero-byte child-log placeholders were retained"
+    },
+    {
+      "classification": "failed",
+      "boundary": "second local target-build invocation",
+      "detail": "the create-new receipt owner rejected collision with the retained child-log placeholders; the final distinct receipt path then freshly passed"
+    },
+    {
+      "classification": "failed",
+      "boundary": "independent verifier handoff invocation",
+      "detail": "the verifier rejected a relative executable path before any public download or project creation; the absolute-path invocation freshly passed"
+    },
+    {
+      "classification": "unavailable",
+      "boundary": "token-free GitHub attestation API",
+      "detail": "the pinned GitHub CLI required authentication and returned no attestation metadata; all four asset downloads remained anonymous and six attestation checks freshly passed with the existing read credential"
+    },
+    {
+      "classification": "failed",
+      "boundary": "final assembled changed-input profile startup",
+      "detail": "the first invocation inherited a PATH without the reconciled rustup-backed rustc and failed in the harness before selecting any gate; the same fresh profile with the explicit toolchain PATH then passed 2/2, and the final post-record invocation is reported externally"
+    }
+  ],
+  "recovery": {
+    "dry_run_dispatches_for_R": 1,
+    "canonical_run_attempts": 1,
+    "workflow_rerun": "not executed",
+    "exact_tag_recovery_dispatch": "not executed",
+    "content_changing_additive_patch": "not executed",
+    "publication_or_download_retry": "not executed",
+    "transient_verifier_mode_normalization": "one downloaded artifact copy changed from transport mode 0750 to declared 0755 only after exact byte and SHA-256 verification",
+    "irreversible_boundary": "annotated v0.1.16 tag push",
+    "externally_committed_defect_observed": false
+  },
+  "limitations_and_nonclaims": [
+    "tested public target is only x86_64-unknown-linux-musl",
+    "tested userlands are only pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31",
+    "no minimum-kernel, universal x86-64, generic Linux, reproducible-build, or broader target claim",
+    "local and hosted candidates differed while every receipt remained internally exact; no reproducible-build claim is made",
+    "the annotated Git tag is unsigned; the GitHub-owned release attestation is integrity evidence, not binary signing or general provenance",
+    "no task-function resource transfer, affine container, closure, general linear/session type, WebSocket, NIP-01 event flow, signing, key storage, relay deployment, or live-relay observation",
+    "no inbound TLS, DNSSEC, privacy, exactly-once work, hostile-code isolation, encrypted storage, replication, consensus, multi-tenant isolation, or service-level claim",
+    "installed binaries, deployments, package registries, hosted data, and user data were not inspected or mutated",
+    "provider monetary cost and reliable aggregate hosted CPU/RSS were unavailable"
+  ],
+  "raw_artifacts": {
+    "campaign_root": ".artifacts/campaign/202609021420/",
+    "local_focused_receipt": ".artifacts/lkjscript-dev/check/1788328173194577712-1703057-0/receipt.json",
+    "local_full_receipt": ".artifacts/lkjscript-dev/check/1788328327626951458-1706987-0/receipt.json",
+    "assembled_changed_input_failed_startup_receipt": {
+      "path": ".artifacts/lkjscript-dev/check/1788334518587443707-1757582-0/receipt.json",
+      "bytes": 883,
+      "sha256": "3aa6abad62d466a00e7225a1883a440c3329f040fe6285dd178d5f1aa37dc692",
+      "harness_digest": "verification_28bea04dfa5a7eca4f1499ebbee9cb64986bfa9321328fb84b3086a24a0f3918"
+    },
+    "assembled_changed_input_recovery_receipt": {
+      "path": ".artifacts/lkjscript-dev/check/1788334531770799916-1757655-0/receipt.json",
+      "bytes": 6679,
+      "sha256": "6266b74459dfbed11303d66ff59e5b2c9bc7cc09b65dacbd65e30ac007b1c89c",
+      "harness_digest": "verification_65891c400078da99d6225be958b235c9133bdeb20adb4c7f93672695cf60639c"
+    },
+    "local_target": ".artifacts/campaign/202609021420/target-admission/",
+    "local_packages": [
+      ".artifacts/campaign/202609021420/package-one/",
+      ".artifacts/campaign/202609021420/package-two/"
+    ],
+    "hosted_dry_run": ".artifacts/campaign/202609021420/hosted-dry-run/",
+    "hosted_publication": ".artifacts/campaign/202609021420/hosted-publication/",
+    "independent_anonymous": ".artifacts/campaign/202609021420/independent-public/",
+    "attestation_tool": ".artifacts/campaign/202609010950/tools/gh-2.98.0/"
+  },
+  "next_candidates": [
+    "workload-driven task-function resource transfer with call/result/cancellation/branch proof",
+    "million-owner compiler admission distinct from operational data/history scale",
+    "remaining authored operations only from a maintained workflow",
+    "Nostr WebSocket/session semantics only after connection, framing, subscription, reconnect, signing/key, authentication, replay, resource, cancellation, and raw-protocol authority close"
+  ]
+}

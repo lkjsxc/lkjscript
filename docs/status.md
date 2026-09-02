@@ -38,29 +38,31 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.15`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.15) is the current public and
+[`v0.1.16`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.16) is the current public and
 supported release. Its annotated tag object
-`d9a6e7812325810c5becae2e217e1b9a4a600c8f` selects source commit
-`2b428645471e032ba3cfb415bf81565d7ea0159e`; GitHub reports release `380401840` as immutable,
+`fd9879e967512e9269faf111d462140572fec137` selects source commit
+`b49d78e862b7cbba02c639f06ca4bd2e11db1f2d`; GitHub reports release `381033538` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 16,525,536-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 16,722,144-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,459,326 | `5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01` |
-| `SHA256SUMS` | 109 | `e50a7373b9d783b361cf2afa064c4dd1a41f5311052b7459ba3d55cde39fb6dc` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,532,929 | `2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5` |
+| `SHA256SUMS` | 109 | `d48b562bf620793c82706183620ee480ac45d0e79db89a77c2946d011e7f2ef4` |
 
 Release workflow
-[`33495319420`](https://github.com/lkjsxc/lkjscript/actions/runs/33495319420) passed all four jobs on
+[`33599176438`](https://github.com/lkjsxc/lkjscript/actions/runs/33599176438) passed all four jobs on
 attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
 and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
 distributed HTTP, outbound HTTPS/TLS/DNS, stateful HTTP, and maintained `lkjournal` service
-oracles. The service oracle used the exact candidate and service-receipt contract 5 to prove the
+oracles. The service oracle used the exact candidate and service-receipt contract 6 to project the
+maintained worker definition through six bounded pages with its independent oracle, then prove the
 resource-owned queue claim/info/renew/complete/fail lifecycle, stale replacement, retry,
 restart, backup/restore, unchanged semantic authority, and cleanup. A no-checkout job then verified
-the handoffs and passed all three transferred
+the handoffs and passed distributed-receipt contract 3 with its complete function-definition result
+plus the other two transferred
 application oracles before the write-isolated publication job ran. Anonymous exact-tag and
 `releases/latest` downloads independently passed
 checksum, attestation, strict extraction, static inspection, distributed HTTP, outbound
@@ -77,9 +79,10 @@ and deletion of raw attempt-token program authority. It also contains exact buil
 topology authoring, unified recipe
 lowering, the deployment-bound `HttpClient.get` and closed `nostr-relay-info` recipe, explicit
 higher-order generic authoring, bounded context traversal, and complete first-party ordered-data and
-durable-queue cutovers. Exact identities, classifications, resource observations, and raw-evidence
-pointers are retained in
-[`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
+durable-queue cutovers. It now also publishes the revision-pinned complete local-function definition
+projection and copied-binary inspect → plan → apply → reinspect proof. Exact identities,
+classifications, resource observations, and raw-evidence pointers are retained in
+[`202609021420-function-definition-release.json`](evidence/202609021420-function-definition-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -100,8 +103,8 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source is unreleased product snapshot `0.1.16`; immutable public latest and the supported
-download remain `v0.1.15`. Source adds revision-pinned local-function definition inspection without
+Current source, immutable public latest, and the supported download are product snapshot `0.1.16`.
+This snapshot adds revision-pinned local-function definition inspection without
 adding graph meaning or changing compact authoring. Semantic graph, witness, owner-summary,
 validation, authored/compact change, package-interface, compiler/bytecode, artifact,
 resident-runtime, queue-adapter, project creation, deployment, HTTP client, data-store,
@@ -110,7 +113,8 @@ identities remain unchanged. The product snapshot and executable-owned inspectio
 compatibility advance, and the sole function-definition projection contract is
 `lkjscript-function-definition-projection-1`. Contributor distributed-HTTP acceptance and service
 receipt owners advance only for their new copied-binary proof. No release contract or public object
-advanced.
+schema advanced; immutable distribution advanced additively through the new tag, release, assets,
+attestations, and exact/latest proof.
 Graph, package, artifact, deployment, and operational-data identities remain separate. This source
 campaign performed no deployment, hosted-data mutation, or live-relay contact, and the release
 campaign advanced no semantic or operational authority. The public product retains the same closed
@@ -166,7 +170,7 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.15` rejects predecessor PostgreSQL
+The closed HTTP recipe remains public behavior. Public `v0.1.16` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
@@ -398,6 +402,9 @@ observations, is bound by
 Its immutable product publication, exact service-to-public candidate chain, hosted and independently
 repeated anonymous exact/latest acceptance, and external-state closure are bound by
 [`202609011758-affine-resource-release.json`](evidence/202609011758-affine-resource-release.json).
+The current function-definition distribution closure, distributed-receipt v3 cutover, immutable
+publication, and hosted plus independently repeated exact/latest projection proof are bound by
+[`202609021420-function-definition-release.json`](evidence/202609021420-function-definition-release.json).
 The semantic lifecycle campaign record [202608270014](campaigns/202608270014.md) names its exact
 focused, product, full, and service results. The public binary campaign record
 [202608271521](campaigns/202608271521.md) and its

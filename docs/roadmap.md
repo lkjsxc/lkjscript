@@ -13,15 +13,12 @@ and first-party-data copied-binary HTTP acceptance, the current semantic-scale h
 100,100-owner full-lifecycle admission, exact-interface affine capability resources, and the
 resource-owned maintained durable-queue worker cutover, plus complete revision-pinned local-function
 definition projection with stateless paging and disjoint maintained proof are current architecture.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Current source is unreleased
-product `0.1.16`; immutable `v0.1.15` remains the supported public
-`x86_64-unknown-linux-musl` distribution. Its exact and latest downloads independently passed
-static, distributed HTTP, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine
-service/worker acceptance with one exact candidate identity through publication.
+PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
+`v0.1.16` are the supported public `x86_64-unknown-linux-musl` distribution. Its exact and latest
+downloads independently passed static inspection, distributed HTTP with complete function-definition
+projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker
+acceptance with one exact candidate identity through publication.
 Immutable v0.1.8 remains an unclosed historical recovery point.
-
-Before another independent product delta, close, block, or terminate publication of source 0.1.16;
-do not treat the source package version or target admission as a public release.
 
 Each future item requires a named maintained consumer, exact contract, independent oracle,
 measured reversal gate, and dependency-closed cutover/deletion plan.
