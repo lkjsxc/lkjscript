@@ -277,6 +277,57 @@ struct MaintainedCapabilityObservation {
     parameter_uses: Vec<String>,
 }
 
+fn has_capability_observation(
+    observations: &[MaintainedCapabilityObservation],
+    operation: &str,
+    parameter_uses: &[&str],
+) -> bool {
+    observations.iter().any(|observation| {
+        observation.operation.ends_with(operation)
+            && observation
+                .parameter_uses
+                .iter()
+                .map(String::as_str)
+                .eq(parameter_uses.iter().copied())
+    })
+}
+
+fn maintained_capability_shape_is_current(
+    entry: &[MaintainedCapabilityObservation],
+    helper: &[MaintainedCapabilityObservation],
+) -> bool {
+    entry.len() == 2
+        && has_capability_observation(entry, "op_2f02101a13d5b32d4be5e5ada08f8df4", &[])
+        && has_capability_observation(
+            entry,
+            "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
+            &["unrestricted", "unrestricted", "unrestricted"],
+        )
+        && helper.len() == 4
+        && has_capability_observation(helper, "op_1a5491eb1c3ef3d15ec28268b6f04afc", &["borrow"])
+        && has_capability_observation(
+            helper,
+            "op_f593ba236055aa1afa6c02eaf0db6a64",
+            &["consume", "unrestricted", "unrestricted"],
+        )
+        && has_capability_observation(
+            helper,
+            "op_679b43bb7dc0b298a7706d4e8a7bef23",
+            &[
+                "consume",
+                "unrestricted",
+                "unrestricted",
+                "unrestricted",
+                "unrestricted",
+            ],
+        )
+        && has_capability_observation(
+            helper,
+            "op_242e065f9738b454e2328ed0e558e6a0",
+            &["consume", "unrestricted", "unrestricted"],
+        )
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct MaintainedDefinitionIdentity {
     revision: String,
@@ -678,7 +729,10 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.definition_projection.logical_bytes == 0
         || result.definition_projection.pages < 2
         || result.definition_projection.rendered_output_bytes == 0
-        || result.definition_projection.capability_calls.len() != 1
+        || !maintained_capability_shape_is_current(
+            &result.definition_projection.capability_calls,
+            &result.definition_projection.helper_capability_calls,
+        )
         || result.definition_projection.matches != 1
         || result.definition_projection.helper_function != WORKER_HELPER_FUNCTION
         || result.definition_projection.helper_total_records == 0
@@ -702,7 +756,6 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
             .definition_projection
             .helper_relation_digest
             .is_empty()
-        || result.definition_projection.helper_capability_calls.len() < 4
         || result.definition_projection.helper_matches != 1
         || !result.definition_projection.handoff_relation
         || !result.definition_projection.helper_requirement_binding
@@ -4025,6 +4078,67 @@ mod tests {
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
         assert_eq!(SERVICE_CONTRACT_VERSION, 7);
+    }
+
+    #[test]
+    fn maintained_capability_shape_binds_entry_and_helper_operations() {
+        let entry = vec![
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_2f02101a13d5b32d4be5e5ada08f8df4".to_owned(),
+                parameter_uses: Vec::new(),
+            },
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_23bc0c498113c09a2ff0a4cf9c0a37ab".to_owned(),
+                parameter_uses: vec!["unrestricted".to_owned(); 3],
+            },
+        ];
+        let helper = vec![
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_1a5491eb1c3ef3d15ec28268b6f04afc".to_owned(),
+                parameter_uses: vec!["borrow".to_owned()],
+            },
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_f593ba236055aa1afa6c02eaf0db6a64".to_owned(),
+                parameter_uses: vec![
+                    "consume".to_owned(),
+                    "unrestricted".to_owned(),
+                    "unrestricted".to_owned(),
+                ],
+            },
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_679b43bb7dc0b298a7706d4e8a7bef23".to_owned(),
+                parameter_uses: vec![
+                    "consume".to_owned(),
+                    "unrestricted".to_owned(),
+                    "unrestricted".to_owned(),
+                    "unrestricted".to_owned(),
+                    "unrestricted".to_owned(),
+                ],
+            },
+            MaintainedCapabilityObservation {
+                operation: "pkg/op_242e065f9738b454e2328ed0e558e6a0".to_owned(),
+                parameter_uses: vec![
+                    "consume".to_owned(),
+                    "unrestricted".to_owned(),
+                    "unrestricted".to_owned(),
+                ],
+            },
+        ];
+        assert!(maintained_capability_shape_is_current(&entry, &helper));
+
+        let mut wrong_entry = entry.clone();
+        wrong_entry[1].parameter_uses[0] = "borrow".to_owned();
+        assert!(!maintained_capability_shape_is_current(
+            &wrong_entry,
+            &helper
+        ));
+
+        let mut duplicate_helper = helper.clone();
+        duplicate_helper.push(helper[0].clone());
+        assert!(!maintained_capability_shape_is_current(
+            &entry,
+            &duplicate_helper
+        ));
     }
 
     #[test]
