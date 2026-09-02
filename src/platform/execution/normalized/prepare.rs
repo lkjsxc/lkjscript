@@ -41,6 +41,11 @@ struct LoadedCompilationInputs {
     manifests: BTreeMap<PackageId, CompilationManifest>,
 }
 
+struct FunctionValidationInputs<'a> {
+    types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+    requirements: &'a [NormalizedRequirement],
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NormalizedPreparationWork {
     pub packages: u64,
@@ -301,13 +306,16 @@ impl NormalizedProgram {
         let variants = prepare_variants(&units, &indexes, &runtime_owners)?;
         let requirements = prepare_requirements(&units, &indexes, &runtime_owners)?;
         let operations = prepare_operations(&indexes, &runtime_owners)?;
+        let function_validation = FunctionValidationInputs {
+            types: &types,
+            requirements: &requirements,
+        };
         let functions = prepare_functions(
             &artifact,
             &units,
             &indexes,
             &runtime_owners,
-            &types,
-            &requirements,
+            &function_validation,
             &mut text_cache,
             &mut work,
         )?;
@@ -912,8 +920,7 @@ fn prepare_functions(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
-    requirements: &[NormalizedRequirement],
+    validation: &FunctionValidationInputs<'_>,
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<Vec<NormalizedFunction>, Diagnostic> {
@@ -983,8 +990,8 @@ fn prepare_functions(
             &body,
             units,
             runtime_owners,
-            types,
-            requirements,
+            validation.types,
+            validation.requirements,
         )?;
         functions[index.0 as usize] = Some(NormalizedFunction {
             declaration: *declaration,
