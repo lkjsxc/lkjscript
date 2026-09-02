@@ -226,14 +226,14 @@ definition, and output is unknown `change` input.
 
 The maintained `lkjournal` worker entry remains task function
 `decl_a914bb78de075ff44a857ac028d704f3`. Its definition digest is
-`definition_c3ac6329da4d07389a85e226188c8e6e2f730f955e541c56db8c7823da362c9c`:
+`definition_9f20053b6193a9914f7431283f13f2a0a728c1f652853fe9012428f06ab2098f`:
 84 logical records, comprising 9 contract, 15 body, 40 reference, and 18 fact records, with 18
 structural edges, 40 reference edges, depth 3, and 33,389 logical bytes. It retains claim and
 absent/live dispatch, then transfers the live lease exactly once into private task helper
 `decl_7f443401f4946c55fa239c5430e8ad93` with no later entry use.
 
 The helper digest is
-`definition_87a5cc259c2653f00c52be252191e1a1da7ea4b2a0a061707547ee757e4b3a18`:
+`definition_a4bb6b89924f04a2dc1c8c72d18ee0b0492153036abe8f828b810575e711eb6e`:
 153 logical records, comprising 3 contract, 36 body, 73 reference, and 39 fact records, with 39
 structural edges, 73 reference edges, depth 6, and 65,945 logical bytes. Its final consume lease
 parameter is bound to exact requirement `req_0cebded5cb056cda5484e39aa40594ad` and owns processing,
