@@ -1,0 +1,664 @@
+{
+  "schema": {
+    "identity": "lkjscript-requirement-bound-affine-task-handoff-evidence",
+    "version": 1
+  },
+  "campaign": "202609021736-requirement-bound-affine-task-handoff",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-02T12:04:31Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "0c105fd0bcffa730d26c33c7f838dbf9c38c3373",
+    "entry_tree": "8aab6a82ec7c33b4139d3c43c7ab1f861144f5d5",
+    "entry_origin_main": "0c105fd0bcffa730d26c33c7f838dbf9c38c3373",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "entry_worktree": [
+      {
+        "path": "AGENTS.md",
+        "state": "modified supplied policy correction",
+        "disposition": "committed unchanged as the first coherent unit"
+      },
+      {
+        "path": "docs/campaigns/202609021736.md",
+        "state": "untracked supplied mandate",
+        "sha256_before_terminal_record": "6980733dd5ff4ad4963e82fcb4238ca404610af0c62a396a53135e823b2c08a0",
+        "disposition": "initial body archived unchanged; closure changes only the top status and appends one terminal record"
+      }
+    ],
+    "implementation_commits": [
+      {
+        "sha": "4c22124f21ceae99123c29728c5385b8a721d559",
+        "tree": "190bfb6ba1aaeca66a42f7fc9152e42db84ae2ce",
+        "summary": "Clarify source and publication lifecycle policy"
+      },
+      {
+        "sha": "dab274970609127596a1c550936a06402b5bb634",
+        "tree": "f97852a0cd128db341ba09812a7fd35ac038ce73",
+        "summary": "Add requirement-bound affine task handoff"
+      },
+      {
+        "sha": "f4d8528a889b6afcd310926fe333dc5c593e9fe8",
+        "tree": "f7baca1c6dc03bdb056d1aab024b86a883bbee30",
+        "summary": "Bind maintained handoff target evidence"
+      },
+      {
+        "sha": "a3dfe165ec98c63b305e005db57d1f3c198695ae",
+        "tree": "67ffd3c4e7b28c305728a7f6b3ea04dedb751a85",
+        "summary": "Satisfy final affine handoff lint gates"
+      }
+    ],
+    "verified_head": "a3dfe165ec98c63b305e005db57d1f3c198695ae",
+    "verified_tree": "67ffd3c4e7b28c305728a7f6b3ea04dedb751a85",
+    "verified_origin_main": "0c105fd0bcffa730d26c33c7f838dbf9c38c3373",
+    "verified_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 4
+    },
+    "tracked_worktree_before_evidence": "clean",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "ignored": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "unreadable_preserved": [
+          ".artifacts/static-0.1.8/docker-exec/",
+          ".artifacts/static-0.1.8/docker-data/",
+          ".artifacts/campaigns/202608290721/docker-exec/",
+          ".artifacts/campaigns/202608290721/docker-data/"
+        ],
+        "disposition": "pre-existing ignored and root-owned historical material was not removed or rewritten; this campaign added only ignored evidence roots"
+      }
+    ],
+    "closure_note": "The containing evidence/lifecycle commit and its normal push cannot name their own final SHA here; the terminal handoff reports them."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true,
+    "target": "x86_64-unknown-linux-musl"
+  },
+  "authority_and_contract_cutover": {
+    "source_product": {
+      "before": "0.1.16",
+      "after": "0.1.17",
+      "state": "unreleased source-only"
+    },
+    "public_latest": {
+      "tag": "v0.1.16",
+      "release_id": 381033538,
+      "published_at": "2026-09-02T06:54:38Z",
+      "tag_object": "fd9879e967512e9269faf111d462140572fec137",
+      "source_commit": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+      "immutable": true,
+      "mutated": false
+    },
+    "capabilities_digest": {
+      "before": "7bbb0d3a2410911d815ee4159a3a9b0244c12eef0045db241565d449b9158d09",
+      "after": "f08ca638e56d0053cf42564fef8e3d21244e96efddc5e5978257e8c8b7e2ed28"
+    },
+    "advanced": {
+      "meaning_graph": { "from": 6, "to": 7 },
+      "validation_witness": { "from": 3, "to": 4 },
+      "owner_summary": { "from": 2, "to": 3 },
+      "semantic_validator": { "from": 6, "to": 7 },
+      "compact_change": { "from": 9, "to": 10 },
+      "authored_change": { "from": 7, "to": 8 },
+      "package_interface": { "from": 4, "to": 5 },
+      "compiler_unit": { "from": 2, "to": 3 },
+      "bytecode": { "from": 2, "to": 3 },
+      "artifact": { "from": 11, "to": 12 },
+      "resident_runtime": { "from": 2, "to": 3 },
+      "contract_registry": { "from": 6, "to": 7 },
+      "cli": { "from": 18, "to": 19 },
+      "function_definition_projection": { "from": 1, "to": 2 },
+      "maintained_service_receipt": { "from": 6, "to": 7 }
+    },
+    "unchanged": {
+      "semantic_state_contract": 1,
+      "logical_change_plan": 2,
+      "compilation_manifest": 3,
+      "package_transport": 1,
+      "deployment": 3,
+      "http_client_adapter": 1,
+      "durable_queue_adapter": 2,
+      "data_store": 1,
+      "data_backup": 1,
+      "durable_queue_data": "lkjscript-durable-queue-data-1",
+      "release_target_policy": 2,
+      "release_objects": "unchanged"
+    },
+    "validator": {
+      "before": "validator_contract_b944748162d053e881f56581a9e40729a38bb9bfb84226e61f27151bb8135c0a",
+      "after": "validator_contract_6fa94f64b8b57aac520c097765dfc2bb7a7b248872a3443b31000f90ca695375"
+    }
+  },
+  "semantic_contract": {
+    "classification": "fresh passed",
+    "canonical_authority": {
+      "field": "ParameterRecord.resource_requirement: Option<RequirementReference>",
+      "compact_field": "add.parameter requirement=REQUIREMENT",
+      "relation": "parameter_requirement",
+      "meaning": "one explicit exact package-qualified requirement identity; never inferred from a name, order, grant, or runtime handle"
+    },
+    "admitted_shape": [
+      "private same-package task callee reached through one direct named call",
+      "one final direct capability-resource parameter using consume",
+      "resource-free unrestricted preceding parameters and result",
+      "parameter binding and caller/callee task effects use the same exact requirement identity and interface",
+      "resource-bearing direct-call graph is acyclic and may forward through nested admitted helpers"
+    ],
+    "transfer": {
+      "argument_order": "left-to-right; ordinary arguments finish before the final resource argument",
+      "commitment": "the final consume load removes the caller lexical owner before entering the callee",
+      "failure": "call or callee failure, cancellation, and exhaustion do not recreate caller ownership; unwind drops remaining task-local handles without an implicit queue terminal transition",
+      "host_authority": "none; call frames share one task resource scope and recheck exact live requirement, interface, kind, and scope"
+    },
+    "rejected": [
+      "missing, extra, foreign, stale, or interface-mismatched requirement binding",
+      "unrestricted, borrowed, multiple, or nonfinal resource parameters",
+      "resource result or resource-containing parameter/result",
+      "public, package-visible, generic, pure, cross-package, indirect, function-value, or invoke resource signature",
+      "caller reuse, duplicate move, branch disagreement, self recursion, or mutual recursion",
+      "wrong-scope, wrong-kind, closed, copied, rebound, or revived runtime handle",
+      "Graph 6, compiler-unit 2, bytecode 2, Artifact 11, compact-change 9, and projection 1 predecessor forms"
+    ]
+  },
+  "maintained_migration": {
+    "classification": "fresh passed",
+    "path": "A bounded create-new Graph-6 snapshot exporter and Graph-7 importer were necessary for the one-way contract cutover; both were independently compared and removed from tracked source. The actual worker decomposition then used public compact plan/review/apply against one exact Graph-7 base.",
+    "standard_before": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261",
+      "semantic_state": "semantic_state_36f5b103cf76423d2edb48aafc708d543d878ca1c656b5775ebc6ad8bc531a69",
+      "semantic_root": "semantic_root_06ad47ec85b983f25720bf124565b95df67f81b6c1480229fdaf2ffdd3728673",
+      "package_revision": "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705",
+      "transport": "package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9",
+      "artifact_manifest": "artifact_manifest_a44c48ac71f99688c22b1fb3a39f9bafe36792e3a697546d8bd2e06644bcc55f",
+      "artifact_bundle": "artifact_bundle_bbdebe268c69488400dbd99d6da9056b6fa436e250910d8674ea64c431c03a05",
+      "owners": 431,
+      "tests": 13,
+      "artifact_bytes": 256500,
+      "artifact_sha256": "fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b",
+      "transport_bytes": 89720,
+      "transport_sha256": "14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791"
+    },
+    "standard_after": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69",
+      "semantic_state": "semantic_state_b604e13343bd58ec20057575e1c874b82e845530a21d8b073245d3ad7a9f2f2d",
+      "semantic_root": "semantic_root_6b235cdc9e875ed25f204e870842cd34c66213b183a20032ae2efbb3813aa251",
+      "package_revision": "package_revision_987d74de0827e4a710a0aaa6991075227d4e24830ee0654ff0a73b2717015b9f",
+      "transport": "package_transport_875deeb0623c0fe50e8f806c277c57df1fd7eb385a2af2b2224b43ec2b8176d4",
+      "compilation_manifest": "compilation_manifest_9a2eeab08bafd6f8273bc27ed8452613c1b8fec745015a4d987cbc0d0a74539c",
+      "artifact_manifest": "artifact_manifest_79922002c104e5be877aa783208e19854056069acf03ad1ebecfd8b642a03078",
+      "artifact_bundle": "artifact_bundle_aeb9b320e06726ec3c7d23910b9df49104901355affd2da151bf9e3233bcdeaa",
+      "owners": 431,
+      "compiler_units": 83,
+      "tests": 13,
+      "artifact_bytes": 256937,
+      "artifact_sha256": "060d8e2d719be53019e0eb0698d17103634b89455daecaa3b4653936f6dc15c6",
+      "transport_bytes": 89859,
+      "transport_sha256": "faf8bcfb876e393b81cf43657ee376ce318ebedebd945bd830f1e4f142af82da",
+      "semantic_disposition": "same 431 accepted public/implementation owners and 13 graph tests; only contract-bound encodings and derived identities moved"
+    },
+    "lkjournal_before": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "semantic_state": "semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1",
+      "semantic_root": "semantic_root_60568c25c94b2395539cc64148c6cb364fd31b0d8844306587e8f906f4489621",
+      "artifact_manifest": "artifact_manifest_7d151920e0160b901fc29a3b1c22c3915738d7ca30c83e412a49fff97447ee5b",
+      "artifact_bundle": "artifact_bundle_8c37417848ff93b9ffc752b4415ba841b7e3b1059a38a04d6d6cc0759df4106a",
+      "owners": 1579,
+      "compiler_units_with_dependencies": 143,
+      "tests": 18,
+      "artifact_bytes": 832550,
+      "artifact_sha256": "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728"
+    },
+    "lkjournal_after": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4",
+      "semantic_state": "semantic_state_21aa7470aef40286c899d77ea97c361ae98f4f3192917577d61954c89798a6a4",
+      "semantic_root": "semantic_root_d464f64ffed5c952353fac984c076cd2ecccdd660d2e3a49389b1805890254cd",
+      "revision_record": "revision_object_a024250fd6317446f7e75eaf96c872aa96bd7774064e867f1c2f80ee1632672b",
+      "validation_witness": "validation_witness_167c9d6925971deb10c8c3b71697e9a45aec379fa3d9d036ebfa89cf52c8d43c",
+      "validation_certificate": "validation_certificate_ba9462a1e7c9e31ec11fc8f12cfb2f3386344797e4a90672c72c87a8e0f7147b",
+      "receipt": "receipt_object_5735bf990fb9900067b0f9a9b88656fa942dcc5cb761174bcef5d1c152b08164",
+      "package_revision": "package_revision_85016db390d92b682b5f9aed9cffb188e6394344cac78d158e023fc6ecc69782",
+      "transport": "package_transport_331b8d37e0467d1797e92c2f9801dfc2345d9540b6233ba8f451c42dc89eb859",
+      "transport_bytes": 26982,
+      "transport_sha256": "2745126af51b63f8c50d5b375a03b393b42a2897a989590562e3802b37081a4d",
+      "compilation_manifest": "compilation_manifest_c0e8b241b5df8b8d4174d0ca87ee67a8b6466666d48418997609fb9be08ffc5a",
+      "artifact_manifest": "artifact_manifest_3670a7475898c9cd1027b29dcf6dd0c2b5014c8de5fefa445534bce58cb59b2a",
+      "artifact_bundle": "artifact_bundle_6028778ec08995e96a1c75ca76d00cb2e2e10d59ddbd4f7876b403ca219e7f94",
+      "owners": 1585,
+      "compiler_units_with_dependencies": 144,
+      "tests": 18,
+      "artifact_bytes": 835687,
+      "artifact_sha256": "40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071"
+    },
+    "public_plan_apply": {
+      "temporary_graph7_base": "rev_4cd1a36a91704dcb9e3af90939c2e9dbbc5c8e84d68087decea20041b31e6567",
+      "result": "rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4",
+      "plan": "plan_58b5aad2adc13fd2ee91dbfa285b909fbaa039a5eab132882d8d44553ce062d3a15aa4a0505a6c47e3703af74dc58da1e5fe5b413385567012fad2d4c79a7d23",
+      "transaction": "transaction_ad3014543fb9ca6628f75ecb10480049af77fbc3f5e5c8def2317d82a7c149c7",
+      "created": 54,
+      "updated": 1,
+      "deleted": 48,
+      "witness_updates": 551,
+      "compiler_units_selected": 3,
+      "raw_request": ".artifacts/campaign/202609021736/lkjournal-handoff.lkjc",
+      "raw_request_sha256": "c97ea21fddbedde3a64247432158345911feabf5af460ffbb98bc6f15b34be19",
+      "raw_plan": ".artifacts/campaign/202609021736/lkjournal-handoff-plan.log",
+      "raw_plan_sha256": "16e9fe4ac0db566b3f79f789310542556e2add4b59f92f84d9eb339d723886f7",
+      "raw_apply": ".artifacts/campaign/202609021736/lkjournal-handoff-apply.log",
+      "raw_apply_sha256": "482e44129e9cb24fc4595984760b27de372534f6c7b562de8d314ec467ed114d",
+      "receipt_note": "These raw semantic plan/apply observations predate the sparse-summary repair. The accepted semantic result is unchanged; final validation, revision-record, receipt, compiler, artifact, service, and full-profile identities above supersede their derived receipt fields."
+    },
+    "worker": {
+      "entry": "decl_a914bb78de075ff44a857ac028d704f3",
+      "helper": "decl_7f443401f4946c55fa239c5430e8ad93",
+      "helper_resource_parameter": "param_9ea74b106f9947a483a78569e7cde01f",
+      "exact_requirement": "req_0cebded5cb056cda5484e39aa40594ad",
+      "entry_disposition": "stable identity; retains clock, claim, and absent/live dispatch, then transfers one live lease with no post-transfer use",
+      "helper_disposition": "new private task helper; owns lease-info borrow, heartbeat/renewed match, and complete/fail consume"
+    },
+    "definition_projection": {
+      "before": {
+        "function": "decl_a914bb78de075ff44a857ac028d704f3",
+        "digest": "definition_eaaf72ff8b3d39f940af04405dc256bb081f27070918ec73f1624fa63f65e2be",
+        "total_records": 210,
+        "contract_records": 9,
+        "body_records": 48,
+        "reference_records": 99,
+        "fact_records": 51,
+        "maximum_depth": 8,
+        "logical_bytes": 88035,
+        "rendered_output_bytes": 97752,
+        "pages": 6
+      },
+      "entry_after": {
+        "digest": "definition_c3ac6329da4d07389a85e226188c8e6e2f730f955e541c56db8c7823da362c9c",
+        "total_records": 84,
+        "contract_records": 9,
+        "body_records": 15,
+        "reference_records": 40,
+        "fact_records": 18,
+        "maximum_depth": 3,
+        "logical_bytes": 33389,
+        "rendered_output_bytes": 38076,
+        "pages": 3
+      },
+      "helper_after": {
+        "digest": "definition_87a5cc259c2653f00c52be252191e1a1da7ea4b2a0a061707547ee757e4b3a18",
+        "total_records": 153,
+        "contract_records": 3,
+        "body_records": 36,
+        "reference_records": 73,
+        "fact_records": 39,
+        "maximum_depth": 6,
+        "logical_bytes": 65945,
+        "rendered_output_bytes": 73981,
+        "pages": 5
+      },
+      "bound": "both resulting definitions independently remain at or below 40 body records and below the predecessor's 48 body records",
+      "oracle_equal": true,
+      "digest_recomputed": true,
+      "changed_page_budgets": true,
+      "copied_binary_equal": true,
+      "authority_unchanged": true
+    },
+    "deletion": {
+      "classification": "fresh passed",
+      "removed": [
+        "categorical function-resource transfer rejection and diagnostic",
+        "Graph-6 owner, witness, package-interface, compiler-unit, bytecode, artifact, compact-change, and projection readers",
+        "48-owner monolithic worker body",
+        "temporary migration exporter/importer source",
+        "superseded packs, transports, fixtures, generated assets, and task-local-only prose"
+      ],
+      "search": "no tracked blanket transfer-ban or migration-tool path remains outside the immutable campaign body; product-surface and diff checks passed",
+      "operational_data_migration": false,
+      "deployment_descriptor_change": false
+    }
+  },
+  "distributed_authoring_and_inspection": {
+    "classification": "fresh passed",
+    "owner": "full.workspace_tests::copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecessors",
+    "copied_release_binary": {
+      "path_at_verification": "target/release/lkjscript",
+      "bytes": 16710080,
+      "mode": "0750",
+      "sha256": "e98e6f293ea0e807a06348c11695305413daac778831e1d8745e4160fba3ac49",
+      "retained": false,
+      "disposition": "The copied-binary tests used this exact release-build output and the later target harness cleanup removed target/. The full receipt retains its 16710080-byte, mode-0750 output observation; the exact independently admitted static-musl candidate remains retained under the campaign artifact root."
+    },
+    "proved": [
+      "fresh command project and exact owner discovery",
+      "inline and input-file compact plans normalize to the same identities and plan token",
+      "repeated plan is deterministic and reviewed apply advances exactly once",
+      "one-level and nested caller/forwarder/leaf affine handoffs check, build, and run through current compiler/runtime",
+      "all three complete definitions paginate through bounded stateless continuation and expose exact binding/call relations",
+      "stale base, predecessor resource/type/use, invalid signatures, invalid flows, and recursion leave revision and authority inventory unchanged"
+    ],
+    "generated": {
+      "change_grammar_sha256": "71d3769afa862765f859f7ac1aa007fa171b6385b0a07640bccf59c7ec8c8cd7",
+      "function_definition_sha256": "81066b02ff125d4ed9bfd4ff01cfafc51d9273efd667ee4ad07acd52fa70c11d",
+      "diagnostics_sha256": "98b812db4db8cc2ec980f374df008ada1b113247d48ea0d054324f0dfe997315",
+      "operations_sha256": "40a743171c32b9385778c732c664eeea0d858f4990b2a96791c04a4bb86b21ea",
+      "builtin_standard_sha256": "151cbdbc17b578212302c260749f6a1f65f6c5ec2116a875be4a8b9e59a1c0d9"
+    }
+  },
+  "negative_and_failure_proof": {
+    "classification": "fresh passed",
+    "semantic_oracle": {
+      "owner": "platform::kernel::affine_reference::independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus",
+      "production_reference_equal": true,
+      "maintained_positive_snapshots": ["standard", "lkjournal"],
+      "negative_mutations": [
+        "fabricated resource",
+        "post-consume escape",
+        "duplicate consume",
+        "resource invoke",
+        "foreign exact requirement",
+        "branch disagreement",
+        "resource result",
+        "missing function binding",
+        "wrong function binding",
+        "public resource helper",
+        "resource self recursion",
+        "resource function value",
+        "duplicate handoff",
+        "unrestricted resource operation parameter",
+        "resource container"
+      ]
+    },
+    "public_negative_matrix": [
+      "missing, extra, borrowed, unrestricted, nonfinal, multiple, public, package, pure, generic, result, effect-absent, and interface-mismatched resource signatures",
+      "caller reuse, duplicate consume, duplicate handoff, post-consume borrow, wrong exact requirement, branch disagreement, resource containment, self recursion, and mutual recursion",
+      "stale plan/base and Graph-6 resource/type/use predecessor forms"
+    ],
+    "derived_and_runtime": [
+      "compiler/artifact tests reject absent binding, public reclassification, predecessor contracts, malformed closure, and wrong runtime-owner semantics",
+      "normalized preparation rejects unsupported signature/call/cycle shapes before execution",
+      "VM and separately implemented canonical reference execution recheck exact requirement/interface/scope/kind at every resource handoff",
+      "resource-scope tests reject closed, foreign, copied, wrong-kind, wrong-interface, and revived queue lease handles",
+      "cancellation, instruction/allocation/call-depth exhaustion, possible-visibility failure, transaction rollback, process interruption, and output exhaustion remain typed and bounded",
+      "consume occurs before callee admission; no caller-restoration path exists, and scope unwind performs no implicit complete/fail/cancel queue operation"
+    ],
+    "rollback_and_cleanup": "failed and stale semantic requests preserve HEAD/inventory; execution errors roll back open generic transactions, release task-local resource slots, and do not replay live effects; final service and target receipts report complete cleanup"
+  },
+  "verification": {
+    "required_final": {
+      "full": {
+        "classification": "fresh passed",
+        "gates": "24/24",
+        "reused": 0,
+        "receipt": ".artifacts/lkjscript-dev/check/1788349898057169419-1914448-0/receipt.json",
+        "receipt_bytes": 56363,
+        "receipt_sha256": "3fa199838a121b9ec06df9c19c029f6d6bd834b8990cbec2be3cd729cd242010",
+        "receipt_digest": "verification_c0d921cae89a479a08544878029608166ee4060c3a813108de892021c49bf254",
+        "elapsed_nanoseconds": 326460801042
+      },
+      "focused_semantic_compiler_runtime_public": {
+        "classification": "fresh passed",
+        "owner": "final full.workspace_tests",
+        "results": [
+          "library 447 passed, 2 explicitly ignored",
+          "general service 9 passed",
+          "public CLI 28 passed, 1 explicitly ignored release-scale case",
+          "developer tooling 84 passed",
+          "controlled cross-process child tests 2 passed"
+        ]
+      },
+      "maintained_service": {
+        "classification": "fresh passed",
+        "receipt": ".artifacts/lkjscript-dev/service/1788350194521465806-1920592-0/receipt.json",
+        "receipt_bytes": 94655,
+        "receipt_sha256": "e5920bda708cf89861e1ad5757ec8000bf49753bc3f02e40715e72638f84b553",
+        "receipt_digest": "verification_2a2d182d0246e8194ee09997a5ac08dd04e25e0d7cbdfcc1a727191575d2a0bf",
+        "elapsed_nanoseconds": 7090262095,
+        "cleanup_complete": true
+      },
+      "target": {
+        "classification": "fresh passed",
+        "receipt": ".artifacts/campaign/202609021736/target-final2/admission/receipt.json",
+        "receipt_bytes": 70343,
+        "receipt_sha256": "f07be70b1cb8ee35e2948ba77fb49b1e10c027da31d222f766429ac4d56998c1",
+        "receipt_digest": "verification_9729402a3401455d3be1fa3b714ff6599df4ba24b0e033485018894c94ec7f1b",
+        "elapsed_nanoseconds": 85205447515,
+        "cleanup_complete": true
+      }
+    },
+    "full_gate_classifications": [
+      { "name": "fmt", "classification": "fresh passed" },
+      { "name": "clippy", "classification": "fresh passed" },
+      { "name": "workspace_tests", "classification": "fresh passed" },
+      { "name": "release_build", "classification": "fresh passed" },
+      { "name": "release_command_lifecycle", "classification": "fresh passed" },
+      { "name": "distributed_http_application", "classification": "fresh passed" },
+      { "name": "outbound_http_application", "classification": "fresh passed" },
+      { "name": "stateful_http_application", "classification": "fresh passed" },
+      { "name": "checker_self_test", "classification": "fresh passed" },
+      { "name": "rust_only_tooling", "classification": "fresh passed" },
+      { "name": "generated_public_guides", "classification": "fresh passed" },
+      { "name": "product_surface_audit", "classification": "fresh passed" },
+      { "name": "standard_package_test", "classification": "fresh passed" },
+      { "name": "application_package_test", "classification": "fresh passed" },
+      { "name": "standard_artifact_build", "classification": "fresh passed" },
+      { "name": "standard_artifact_compare", "classification": "fresh passed" },
+      { "name": "builtin_package_export", "classification": "fresh passed" },
+      { "name": "builtin_package_compare", "classification": "fresh passed" },
+      { "name": "builtin_transport_export", "classification": "fresh passed" },
+      { "name": "builtin_transport_compare", "classification": "fresh passed" },
+      { "name": "application_artifact_build", "classification": "fresh passed" },
+      { "name": "application_artifact_compare", "classification": "fresh passed" },
+      { "name": "service_acceptance", "classification": "fresh passed" },
+      { "name": "diff_check", "classification": "fresh passed" }
+    ],
+    "corrective_attempts": [
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788347292556385991-1867218-0/receipt.json",
+        "receipt_sha256": "18f589692a2db62e6f9c005e2a11322439d8a05327056831b36837af327de1a8",
+        "result": "focused harness could not find rustc under the non-login PATH",
+        "correction": "used the exact rust-toolchain executable directory for every subsequent first-party invocation"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788347297695462473-1867323-0/receipt.json",
+        "receipt_sha256": "bb1aba16b6514804a591915d4b04c50c9f911908949c6ca22486ebf0c3f715dc",
+        "result": "focused public CLI found stale generated-count and exit-status assertions",
+        "correction": "updated current executable-owned expectations; later focused passed 6/6"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788347899275553324-1879414-0/receipt.json",
+        "receipt_sha256": "adc0c5198eef7fff03425508773b60a84d68a97acade48b5fc81c4e3074074be",
+        "result": "product distributed oracle retained projection-1 expectations",
+        "correction": "migrated the verifier to projection 2; standalone distributed proof and later product/full gates passed"
+      },
+      {
+        "classification": "failed",
+        "raw_root": ".artifacts/campaign/202609021736/target/admission/",
+        "result": "first target admission reached a passed service run but the receipt reader still required one entry capability call instead of the migrated exact pair",
+        "correction": "commit f4d8528a binds exact clock/claim and exact four-call helper shapes; the next target admission passed"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/campaign/202609021736/target-final/admission/receipt.json",
+        "receipt_sha256": "70893a8d7a2b16b1dc167761f62729e4b68f52769327684a833fe9427740a36f",
+        "receipt_digest": "verification_2ea19b5ea18f2b4d65f7b2f97f3fc007cccfa9195311bef894037bec3fb63f9a",
+        "result": "target passed on f4d8528a, then final lint-only source changes invalidated its source binding"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788349241453760999-1903369-0/receipt.json",
+        "receipt_sha256": "c0ee811cdf78a2b09552410a8070755e562a5c2eb792e7ef787fbfc51aa79d40",
+        "result": "full passed 22 fresh gates, failed clippy, and skipped workspace_tests behind that prerequisite",
+        "correction": "commit a3dfe165 collapses the condition and groups normalized function-validation inputs; exact clippy and final full passed"
+      }
+    ],
+    "unavailable_required_gates": 0,
+    "skipped_required_gates_on_final_run": 0,
+    "reused_required_gates_on_final_run": 0
+  },
+  "target_admission": {
+    "classification": "fresh passed",
+    "source_commit": "a3dfe165ec98c63b305e005db57d1f3c198695ae",
+    "target": "x86_64-unknown-linux-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "candidate": {
+      "path": ".artifacts/campaign/202609021736/target-final2/lkjscript-x86_64-unknown-linux-musl",
+      "bytes": 16849120,
+      "mode": "0755",
+      "sha256": "83724693051bcfeac24e9291f2507c14ab8b9c624f32618ba8ed4bd42df87b5d",
+      "elf": "ELF64 little-endian x86-64 position-independent executable",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0,
+      "runtime_linkage": "static-musl"
+    },
+    "build_receipt": {
+      "path": ".artifacts/campaign/202609021736/target-final2/build-receipt.json",
+      "bytes": 2799,
+      "sha256": "52ab66ff4181b037746ddeb0d8d6908cb7b1b5435b11d6d3a42b494be31cec08",
+      "elapsed_nanoseconds": 145227925773,
+      "process_cpu_nanoseconds": 90000000,
+      "process_peak_rss_kib": 65268
+    },
+    "userlands": [
+      {
+        "role": "musl",
+        "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "expected_libc": "musl-1.2",
+        "candidate_commands": 12,
+        "classification": "fresh passed",
+        "cleanup_complete": true
+      },
+      {
+        "role": "older-glibc",
+        "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+        "expected_libc": "glibc-2.31",
+        "candidate_commands": 12,
+        "classification": "fresh passed",
+        "cleanup_complete": true
+      }
+    ],
+    "oracles": [
+      { "name": "distributed_http", "commands": 41, "runners": 2, "requests": 2, "classification": "fresh passed", "cleanup_complete": true },
+      { "name": "outbound_http", "commands": 13, "runners": 8, "requests": 17, "classification": "fresh passed", "cleanup_complete": true },
+      { "name": "stateful_http", "commands": 83, "runners": 3, "requests": 25, "classification": "fresh passed", "cleanup_complete": true },
+      { "name": "service_acceptance", "commands": 38, "runners": 5, "requests": 15, "classification": "fresh passed", "cleanup_complete": true }
+    ],
+    "cleanup_complete": true
+  },
+  "live_service_and_resource_observations": {
+    "classification": "fresh passed",
+    "artifact_fresh_build_equal": true,
+    "semantic_authority_before_after_equal": true,
+    "semantic_authority": {
+      "files": 18,
+      "bytes": 3154734,
+      "head_sha256": "68bdea49ce8dd0be0772c16771166066ab977c2d73ca9a3e229874a561abae8d",
+      "inventory_sha256": "5b147d916cecf11ffe73fa413c1127a8e49950ff3c0a28e3490f137298833ee2"
+    },
+    "routes_checked": 15,
+    "resource_revision": 1,
+    "history_entries": 2,
+    "object_bytes": 200000,
+    "workers_started": 2,
+    "productive_iterations": 4,
+    "queue_records_scanned": 3,
+    "completed_jobs": 2,
+    "retry": {
+      "state": "ready",
+      "attempts": 2,
+      "error_class": "empty-payload"
+    },
+    "stale": {
+      "state": "completed",
+      "attempts": 2,
+      "replacement_observed": true
+    },
+    "transition_authority_cleared": true,
+    "restart_read_equal": true,
+    "restored_read_equal": true,
+    "corrupt_backup_rejected": true,
+    "shutdown_cleanup_failures": 0,
+    "raw_secret_values_retained": false,
+    "external_live_contact": false,
+    "scope": "loopback services, isolated temporary data/queue authority, and pinned local containers only"
+  },
+  "external_state_at_assembly": {
+    "observed_at_utc": "2026-09-02T12:00:00Z",
+    "origin_main": "0c105fd0bcffa730d26c33c7f838dbf9c38c3373",
+    "open_issues": 0,
+    "open_pull_requests": 0,
+    "queued_workflows": 0,
+    "in_progress_workflows": 0,
+    "latest_workflow": {
+      "id": 33599176438,
+      "name": "Release",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "source_commit": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d"
+    },
+    "latest_release": {
+      "id": 381033538,
+      "tag": "v0.1.16",
+      "published_at": "2026-09-02T06:54:38Z",
+      "immutable": true
+    },
+    "normal_push": "pending at evidence assembly; fetched relation is 0 behind and 4 implementation commits ahead, and the final handoff records the result",
+    "forbidden_external_actions_performed": []
+  },
+  "limitations_and_nonclaims": {
+    "source_public_split": "source 0.1.17 is intentionally unreleased; immutable public latest remains v0.1.16 and this source-only campaign does not authorize publication",
+    "limitations": [
+      "one final consume-only resource parameter on private same-package task functions",
+      "direct named acyclic calls only",
+      "no resource results, borrow or multiple resource parameters, containers, public/package/cross-package signatures, closures, capture, function values, invoke, async, or parallel task handoff",
+      "target claim limited to the exact candidate and two pinned userlands",
+      "operational proof limited to isolated local queue/data authorities; no hosted or production observation",
+      "the existing historical stash and unreadable root-owned ignored artifact directories were preserved"
+    ],
+    "nonclaims": [
+      "exactly-once queue processing or implicit lease termination on unwind",
+      "latency, throughput, capacity distribution, or service level",
+      "memory safety beyond Rust and repository lint policy",
+      "hostile-code sandboxing or multi-tenant isolation",
+      "confidentiality or encrypted graph/operational storage",
+      "reproducible builds, general provenance, binary signing, or generic Linux portability"
+    ],
+    "next_candidates": [
+      "definition-extraction convenience only if repeated maintained workflows still justify it after this semantic cut",
+      "lightweight million-owner capacity evidence as a separate measured campaign",
+      "Nostr WebSocket/session semantics only after connection, framing, reconnect, key/auth/replay, consumer, and raw-oracle closure"
+    ]
+  }
+}
