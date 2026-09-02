@@ -393,7 +393,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         validate_affine_candidate(lowerer, function_id, helper)?;
     }
 
-    let changed_owners = canonical_owners(changed_owners.into_iter());
+    let changed_owners = canonical_owners(changed_owners);
     let changed_set = changed_owners.iter().copied().collect::<BTreeSet<_>>();
     let preserved_owners = canonical_owners(
         inventory

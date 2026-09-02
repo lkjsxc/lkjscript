@@ -1015,10 +1015,10 @@ fn oracle_requirement_reference(requirement: RequirementReference) -> String {
     format!("{}/{}", requirement.package, requirement.requirement)
 }
 
-fn oracle_type_object<'a>(
-    snapshot: &'a KernelSnapshot,
+fn oracle_type_object(
+    snapshot: &KernelSnapshot,
     digest: TypeObjectDigest,
-) -> Result<&'a super::kernel::TypeObject, Diagnostic> {
+) -> Result<&super::kernel::TypeObject, Diagnostic> {
     snapshot
         .types
         .get(&digest)
