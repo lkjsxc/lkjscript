@@ -157,6 +157,46 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
     validator.exhaustion.map_or(Ok(()), Err)
 }
 
+/// Infers one exact expression type in an existing function context without creating a second
+/// graph authority. Callers supply the same bounded read surface used by normal validation.
+pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
+    read: &R,
+    declaration: DeclarationId,
+    expression: ExpressionId,
+    effect: &FunctionEffect,
+    work: &mut usize,
+    maximum_steps: usize,
+) -> Result<TypeObjectDigest, Diagnostic> {
+    let (pure, requirements) = match effect {
+        FunctionEffect::Pure => (true, BTreeSet::new()),
+        FunctionEffect::Task { requirements } => {
+            (false, requirements.iter().copied().collect::<BTreeSet<_>>())
+        }
+    };
+    let mut diagnostics = Vec::new();
+    let mut validator = ExpressionValidator {
+        read,
+        diagnostics: &mut diagnostics,
+        work,
+        limits: ExpressionValidationLimits {
+            maximum_steps,
+            maximum_diagnostics: 1,
+        },
+        exhaustion: None,
+        ephemeral_types: BTreeMap::new(),
+    };
+    validator.infer(
+        expression,
+        &ExecutionContext {
+            declaration: Some(declaration),
+            pure,
+            requirements,
+            allow_task_function_value: false,
+        },
+        0,
+    )
+}
+
 struct ExpressionValidator<'a, 'b, R> {
     read: &'a R,
     diagnostics: &'b mut Vec<Diagnostic>,

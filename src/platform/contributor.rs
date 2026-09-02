@@ -3,12 +3,15 @@
 use super::change::ChangeBudget;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
-    BindingKind, DeclarationPayload, ExpressionChildRole, ExpressionOperation, FunctionEffect,
-    KernelSnapshot, OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageInterfaceRecord,
-    ParameterUse, RelationEndpoint, encode_owner, extract_relations, validate_full,
+    BindingKind, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionChildRole,
+    ExpressionOperation, FunctionEffect, KernelSnapshot, LocalValueReference, Name,
+    OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, ParameterParent, ParameterUse, RelationEndpoint, RequirementReference,
+    TypeForm, TypeObjectDigest, encode_owner, extract_relations, infer_function_expression_type,
+    validate_full,
 };
 use super::publication::GraphRepository;
-use super::semantic_id::DeclarationId;
+use super::semantic_id::{DeclarationId, ExpressionId, encode_hex};
 use super::witness::{
     BindingContainerRole, ExpressionRootRole, FullWitness, OwnershipEntry, OwnershipParent,
     OwnershipRole, rebuild_full_witness,
@@ -24,6 +27,7 @@ const DEFINITION_OWNER_DIGEST_DOMAIN: &str = "lkjscript.contributor.function-def
 const DEFINITION_FACT_DIGEST_DOMAIN: &str = "lkjscript.contributor.function-definition.facts.v1";
 const DEFINITION_RELATION_DIGEST_DOMAIN: &str =
     "lkjscript.contributor.function-definition.relations.v1";
+const EXTRACTION_MOVED_DIGEST_DOMAIN: &str = "lkjscript.function-extraction.moved-owners.v1";
 
 /// Bounded typed reconstruction of one accepted current semantic revision.
 ///
@@ -133,6 +137,47 @@ pub struct FunctionDefinitionOracle {
     pub certificate: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionExtractionOracleCapture {
+    pub source_kind: String,
+    pub source: String,
+    pub name: String,
+    pub ty: String,
+    pub use_mode: String,
+    pub requirement: Option<String>,
+    pub uses: Vec<String>,
+}
+
+/// Independent complete-authority derivation of one prospective extraction boundary.
+///
+/// This contributor-only path first reconstructs the definition with the full witness oracle,
+/// then derives closure and capture membership from that independent preorder. It does not call
+/// the production extraction traversal, candidate overlay, mapping, allocation, or plan encoder.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionExtractionOracle {
+    pub repository: String,
+    pub package: String,
+    pub revision: String,
+    pub function: String,
+    pub selected_root: String,
+    pub parent: String,
+    pub base_body_records: u64,
+    pub caller_body_records: u64,
+    pub helper_body_records: u64,
+    pub moved_digest: String,
+    pub moved_owners: Vec<String>,
+    pub preserved_owners: Vec<String>,
+    pub changed_owners: Vec<String>,
+    pub captures: Vec<FunctionExtractionOracleCapture>,
+    pub result_type: String,
+    pub effect: String,
+    pub requirements: Vec<String>,
+    pub affine_requirement: Option<String>,
+    pub generated_owners: u64,
+}
+
 /// The operation admission used when the current compact public request omits a custom budget.
 pub fn compact_change_default_maximum_operations() -> u64 {
     ChangeBudget::default().authored.maximum_operations
@@ -232,6 +277,22 @@ pub fn function_definition_oracle(
     reconstruct_function_definition(&read.value, &witness, view.revision(), function)
 }
 
+/// Derive an extraction contract from complete accepted authority without using production
+/// extraction planning.
+pub fn function_extraction_oracle(
+    project: &Path,
+    function: &str,
+    expression: &str,
+) -> Result<FunctionExtractionOracle, Diagnostic> {
+    let function = DeclarationId::parse(function)?;
+    let expression = ExpressionId::parse(expression)?;
+    let repository = GraphRepository::open(project)?;
+    let view = repository.view_current()?;
+    let read = view.reconstruct_full_oracle()?;
+    let witness = rebuild_full_witness(&read.value).map_err(first_oracle_diagnostic)?;
+    reconstruct_function_extraction(&read.value, &witness, view.revision(), function, expression)
+}
+
 /// Select the largest live local function by body-owner count, with exact identity as the stable
 /// tie-breaker, using the same complete typed-authority oracle input.
 pub fn largest_function_definition_oracle(
@@ -276,6 +337,1070 @@ pub fn largest_function_definition_oracle(
             "accepted typed authority contains no local function definitions",
         )
     })
+}
+
+#[derive(Clone)]
+struct ExtractionOracleLocalUse {
+    expression: ExpressionId,
+    value: LocalValueReference,
+    ordinal: usize,
+    selected: bool,
+}
+
+#[derive(Clone)]
+struct ExtractionOracleCapture {
+    source: LocalValueReference,
+    owner: OwnerKey,
+    name: Name,
+    ty: TypeObjectDigest,
+    first_use: usize,
+    uses: Vec<ExpressionId>,
+    requirement: Option<RequirementReference>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ExtractionOracleResource {
+    None,
+    Direct(DeclarationReference),
+    Contained,
+}
+
+fn reconstruct_function_extraction(
+    snapshot: &KernelSnapshot,
+    witness: &FullWitness,
+    revision: super::semantic_id::RevisionId,
+    function: DeclarationId,
+    selected: ExpressionId,
+) -> Result<FunctionExtractionOracle, Diagnostic> {
+    let definition = reconstruct_function_definition(snapshot, witness, revision, function)?;
+    let OwnerRecord::Declaration(declaration) = snapshot
+        .owners
+        .get(&OwnerKey::Declaration(function))
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_function",
+                "extraction oracle target disappeared from complete authority",
+            )
+        })?
+    else {
+        return Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_function",
+            "extraction oracle target is not a declaration",
+        ));
+    };
+    let DeclarationPayload::Function(function_record) = &declaration.payload else {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_function",
+            "extraction oracle target is not a local function",
+        ));
+    };
+    if !function_record.type_parameters.is_empty() {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_generic",
+            "extraction oracle does not admit a generic target",
+        ));
+    }
+    let selected_text = selected.to_string();
+    let selected_index = definition
+        .body_preorder
+        .iter()
+        .position(|owner| owner.owner == selected_text)
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_expression",
+                "selected expression is outside the independently reconstructed function body",
+            )
+        })?;
+    let selected_depth = definition.body_preorder[selected_index].depth;
+    if selected_index == 0 || selected_depth == 0 {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_whole_body",
+            "selected expression is not a proper subtree",
+        ));
+    }
+    oracle_require_acyclic_call_graph(
+        snapshot,
+        witness,
+        revision,
+        function,
+        &mut BTreeSet::new(),
+        &mut BTreeSet::new(),
+        &mut 0_u64,
+    )?;
+    let selected_end = definition.body_preorder[selected_index + 1..]
+        .iter()
+        .position(|owner| owner.depth <= selected_depth)
+        .map_or(definition.body_preorder.len(), |offset| {
+            selected_index + 1 + offset
+        });
+    let body_owners = definition
+        .body_preorder
+        .iter()
+        .map(|owner| owner.owner.parse::<OwnerKey>())
+        .collect::<Result<Vec<_>, _>>()?;
+    let selected_preorder = &body_owners[selected_index..selected_end];
+    let selected_set = selected_preorder.iter().copied().collect::<BTreeSet<_>>();
+    let defined_bindings = selected_set
+        .iter()
+        .filter(|owner| matches!(owner, OwnerKey::Binding(_)))
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut local_uses = Vec::new();
+    for (ordinal, owner) in body_owners.iter().copied().enumerate() {
+        let OwnerKey::Expression(expression) = owner else {
+            continue;
+        };
+        let Some(OwnerRecord::Expression(record)) = snapshot.owners.get(&owner) else {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_expression",
+                "independent body preorder names a missing expression record",
+            ));
+        };
+        if let ExpressionOperation::Local { value } = record.operation {
+            local_uses.push(ExtractionOracleLocalUse {
+                expression,
+                value,
+                ordinal,
+                selected: ordinal >= selected_index && ordinal < selected_end,
+            });
+        }
+    }
+    if local_uses.iter().any(|local_use| {
+        !local_use.selected && defined_bindings.contains(&extraction_local_owner(local_use.value))
+    }) {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_binding_escape",
+            "a binding defined in the selected subtree escapes its boundary",
+        ));
+    }
+
+    let mut grouped_uses = BTreeMap::<LocalValueReference, Vec<&ExtractionOracleLocalUse>>::new();
+    for local_use in local_uses.iter().filter(|local_use| local_use.selected) {
+        let owner = extraction_local_owner(local_use.value);
+        if !selected_set.contains(&owner) {
+            grouped_uses
+                .entry(local_use.value)
+                .or_default()
+                .push(local_use);
+        }
+    }
+    let function_parameters = function_record
+        .parameters
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut captures = Vec::new();
+    for (source, uses) in grouped_uses {
+        let owner = extraction_local_owner(source);
+        let (name, ty, parameter) = match source {
+            LocalValueReference::FunctionParameter(parameter)
+                if function_parameters.contains(&parameter) =>
+            {
+                let Some(OwnerRecord::Parameter(record)) =
+                    snapshot.owners.get(&OwnerKey::Parameter(parameter))
+                else {
+                    return Err(oracle_error(
+                        DiagnosticClass::Corrupt,
+                        "contributor_extraction_capture",
+                        "captured function parameter is missing",
+                    ));
+                };
+                if record.parent != ParameterParent::Function(function) {
+                    return Err(oracle_error(
+                        DiagnosticClass::Corrupt,
+                        "contributor_extraction_capture",
+                        "captured function parameter belongs to another declaration",
+                    ));
+                }
+                (record.name.clone(), record.ty, Some(record))
+            }
+            LocalValueReference::LexicalBinding(binding)
+            | LocalValueReference::MatchPayload(binding) => {
+                let Some(OwnerRecord::Binding(record)) =
+                    snapshot.owners.get(&OwnerKey::Binding(binding))
+                else {
+                    return Err(oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_capture",
+                        "free local binding is outside the target function",
+                    ));
+                };
+                let expected = match source {
+                    LocalValueReference::LexicalBinding(_) => BindingKind::Let,
+                    LocalValueReference::MatchPayload(_) => BindingKind::MatchPayload,
+                    _ => BindingKind::Transaction,
+                };
+                if record.kind != expected || !body_owners.contains(&owner) {
+                    return Err(oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_capture",
+                        "free local binding kind or function ownership disagrees",
+                    ));
+                }
+                let ty = match (record.declared_type, record.value) {
+                    (Some(ty), _) => ty,
+                    (None, Some(value)) => oracle_infer_expression_type(
+                        snapshot,
+                        function,
+                        value,
+                        &function_record.effect,
+                    )?,
+                    (None, None) => {
+                        return Err(oracle_error(
+                            DiagnosticClass::Semantic,
+                            "contributor_extraction_capture_type",
+                            "free local binding has no declared or inferable exact type",
+                        ));
+                    }
+                };
+                (record.name.clone(), ty, None)
+            }
+            LocalValueReference::TransactionBinding(_) => {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_transaction",
+                    "transaction binding cannot cross an extracted function boundary",
+                ));
+            }
+            LocalValueReference::OperationParameter(_)
+            | LocalValueReference::FunctionParameter(_) => {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_capture",
+                    "free local reference is not owned by the target function",
+                ));
+            }
+        };
+        if oracle_type_contains_parameter(snapshot, ty, &mut BTreeSet::new())? {
+            return Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_free_type",
+                "capture contains an unsupported free type parameter",
+            ));
+        }
+        let requirement = match oracle_resource_class(
+            snapshot,
+            ty,
+            &mut BTreeSet::new(),
+            &mut BTreeSet::new(),
+        )? {
+            ExtractionOracleResource::None => None,
+            ExtractionOracleResource::Contained => {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_resource_container",
+                    "capture contains a resource in an unsupported shape",
+                ));
+            }
+            ExtractionOracleResource::Direct(interface) => {
+                if uses.len() != 1 {
+                    return Err(oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_resource_use",
+                        "free capability resource must have exactly one selected use",
+                    ));
+                }
+                if local_uses.iter().any(|local_use| {
+                    !local_use.selected
+                        && local_use.value == source
+                        && local_use.ordinal > selected_index
+                }) {
+                    return Err(oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_resource_post_use",
+                        "free capability resource has a later caller use",
+                    ));
+                }
+                let requirement = oracle_capture_requirement(
+                    snapshot,
+                    source,
+                    parameter,
+                    function_record,
+                    interface,
+                )?;
+                if oracle_requirement(snapshot, requirement)?.interface != interface {
+                    return Err(oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_resource_requirement",
+                        "resource interface disagrees with its acquiring requirement",
+                    ));
+                }
+                Some(requirement)
+            }
+        };
+        captures.push(ExtractionOracleCapture {
+            source,
+            owner,
+            name,
+            ty,
+            first_use: uses[0].ordinal,
+            uses: uses.iter().map(|local_use| local_use.expression).collect(),
+            requirement,
+        });
+    }
+    if captures
+        .iter()
+        .filter(|capture| capture.requirement.is_some())
+        .count()
+        > 1
+    {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_multiple_resources",
+            "selected subtree has more than one free capability resource",
+        ));
+    }
+    captures.sort_by(|left, right| {
+        left.first_use
+            .cmp(&right.first_use)
+            .then_with(|| EncodedOwnerKey::new(left.owner).cmp(&EncodedOwnerKey::new(right.owner)))
+    });
+    let affine_index = captures
+        .iter()
+        .position(|capture| capture.requirement.is_some());
+    if let Some(index) = affine_index {
+        let capture = captures.remove(index);
+        captures.push(capture);
+    }
+    oracle_assign_capture_names(&mut captures)?;
+
+    let result =
+        oracle_infer_expression_type(snapshot, function, selected, &function_record.effect)?;
+    if oracle_type_contains_parameter(snapshot, result, &mut BTreeSet::new())?
+        || oracle_resource_class(snapshot, result, &mut BTreeSet::new(), &mut BTreeSet::new())?
+            != ExtractionOracleResource::None
+    {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_result",
+            "selected expression result is generic or resource-containing",
+        ));
+    }
+    let mut required = BTreeSet::new();
+    for owner in selected_preorder {
+        let OwnerKey::Expression(_) = owner else {
+            continue;
+        };
+        let Some(OwnerRecord::Expression(record)) = snapshot.owners.get(owner) else {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_effect",
+                "selected expression disappeared during independent effect analysis",
+            ));
+        };
+        match &record.operation {
+            ExpressionOperation::CapabilityCall { requirement, .. }
+            | ExpressionOperation::Transaction { requirement, .. } => {
+                required.insert(*requirement);
+            }
+            ExpressionOperation::Call {
+                function: called, ..
+            } => {
+                if let FunctionEffect::Task { requirements } =
+                    oracle_function_effect(snapshot, *called)?
+                {
+                    required.extend(requirements);
+                }
+            }
+            ExpressionOperation::FunctionValue { .. } | ExpressionOperation::Invoke { .. } => {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_closure",
+                    "function values and indirect invocation are outside extraction",
+                ));
+            }
+            _ => {}
+        }
+    }
+    required.extend(captures.iter().filter_map(|capture| capture.requirement));
+    let requirements = match &function_record.effect {
+        FunctionEffect::Pure if required.is_empty() => Vec::new(),
+        FunctionEffect::Pure => {
+            return Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_requirement",
+                "pure caller cannot supply selected task requirements",
+            ));
+        }
+        FunctionEffect::Task { requirements } => {
+            if required
+                .iter()
+                .any(|requirement| !requirements.contains(requirement))
+            {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_requirement",
+                    "selected subtree requires a task requirement absent from its caller",
+                ));
+            }
+            requirements
+                .iter()
+                .copied()
+                .filter(|requirement| required.contains(requirement))
+                .collect()
+        }
+    };
+    let effect = if requirements.is_empty() {
+        "pure"
+    } else {
+        "task"
+    };
+    let mut moved = selected_preorder.to_vec();
+    moved.sort_unstable_by_key(|owner| EncodedOwnerKey::new(*owner));
+    let moved_set = moved.iter().copied().collect::<BTreeSet<_>>();
+    let parent = definition.body_preorder[selected_index]
+        .parent
+        .parse::<OwnerKey>()?;
+    let mut changed = captures
+        .iter()
+        .flat_map(|capture| capture.uses.iter().copied())
+        .map(OwnerKey::Expression)
+        .collect::<BTreeSet<_>>();
+    changed.insert(parent);
+    let preserved = moved_set.difference(&changed).copied().collect::<Vec<_>>();
+    let mut changed = changed.into_iter().collect::<Vec<_>>();
+    changed.sort_unstable_by_key(|owner| EncodedOwnerKey::new(*owner));
+    let mut preserved = preserved;
+    preserved.sort_unstable_by_key(|owner| EncodedOwnerKey::new(*owner));
+    let moved_digest = oracle_moved_digest(snapshot, &moved)?;
+    let base_body_records = u64::try_from(body_owners.len()).unwrap_or(u64::MAX);
+    let helper_body_records = u64::try_from(moved.len()).unwrap_or(u64::MAX);
+    let generated_owners = u64::try_from(captures.len())
+        .unwrap_or(u64::MAX)
+        .saturating_mul(2)
+        .saturating_add(2);
+    let caller_body_records = base_body_records
+        .checked_sub(helper_body_records)
+        .and_then(|count| count.checked_add(u64::try_from(captures.len()).unwrap_or(u64::MAX) + 1))
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Resource,
+                "contributor_extraction_body_count",
+                "post-extraction body count overflowed",
+            )
+        })?;
+    Ok(FunctionExtractionOracle {
+        repository: snapshot.root.repository_id.to_string(),
+        package: snapshot.root.package_id.to_string(),
+        revision: revision.to_string(),
+        function: function.to_string(),
+        selected_root: selected.to_string(),
+        parent: parent.to_string(),
+        base_body_records,
+        caller_body_records,
+        helper_body_records,
+        moved_digest: format!("moved_{}", encode_hex(&moved_digest)),
+        moved_owners: moved.iter().map(ToString::to_string).collect(),
+        preserved_owners: preserved.iter().map(ToString::to_string).collect(),
+        changed_owners: changed.iter().map(ToString::to_string).collect(),
+        captures: captures
+            .iter()
+            .map(|capture| FunctionExtractionOracleCapture {
+                source_kind: oracle_local_reference_kind(capture.source).to_owned(),
+                source: capture.owner.to_string(),
+                name: capture.name.to_string(),
+                ty: capture.ty.to_string(),
+                use_mode: if capture.requirement.is_some() {
+                    "consume"
+                } else {
+                    "unrestricted"
+                }
+                .to_owned(),
+                requirement: capture.requirement.map(oracle_requirement_reference),
+                uses: capture.uses.iter().map(ToString::to_string).collect(),
+            })
+            .collect(),
+        result_type: result.to_string(),
+        effect: effect.to_owned(),
+        requirements: requirements
+            .iter()
+            .copied()
+            .map(oracle_requirement_reference)
+            .collect(),
+        affine_requirement: captures
+            .last()
+            .and_then(|capture| capture.requirement)
+            .map(oracle_requirement_reference),
+        generated_owners,
+    })
+}
+
+fn oracle_require_acyclic_call_graph(
+    snapshot: &KernelSnapshot,
+    witness: &FullWitness,
+    revision: super::semantic_id::RevisionId,
+    function: DeclarationId,
+    visiting: &mut BTreeSet<DeclarationId>,
+    complete: &mut BTreeSet<DeclarationId>,
+    work: &mut u64,
+) -> Result<(), Diagnostic> {
+    if complete.contains(&function) {
+        return Ok(());
+    }
+    if !visiting.insert(function) {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_recursive",
+            "extraction oracle does not admit a target with a recursive local call cycle",
+        ));
+    }
+    let declaration = match snapshot.owners.get(&OwnerKey::Declaration(function)) {
+        Some(OwnerRecord::Declaration(declaration)) => declaration,
+        _ => {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_call_graph",
+                "local call-graph declaration is missing or bound to another owner kind",
+            ));
+        }
+    };
+    if matches!(&declaration.payload, DeclarationPayload::External(_)) {
+        visiting.remove(&function);
+        complete.insert(function);
+        return Ok(());
+    }
+    if !matches!(&declaration.payload, DeclarationPayload::Function(_)) {
+        return Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_call_graph",
+            "local direct call names a declaration that is not callable",
+        ));
+    }
+    let definition = reconstruct_function_definition(snapshot, witness, revision, function)?;
+    *work = work
+        .checked_add(u64::try_from(definition.body_preorder.len()).unwrap_or(u64::MAX))
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Resource,
+                "contributor_extraction_call_graph_work",
+                "independent local call-graph work overflowed",
+            )
+        })?;
+    if *work > u64::try_from(super::kernel::contract::MAXIMUM_VALIDATION_WORK).unwrap_or(u64::MAX) {
+        return Err(oracle_error(
+            DiagnosticClass::Resource,
+            "contributor_extraction_call_graph_work",
+            "independent local call-graph work exceeded its finite validation boundary",
+        ));
+    }
+    let mut called = BTreeSet::new();
+    for owner in &definition.body_preorder {
+        let owner = owner.owner.parse::<OwnerKey>()?;
+        let Some(OwnerRecord::Expression(expression)) = snapshot.owners.get(&owner) else {
+            continue;
+        };
+        if let ExpressionOperation::Call { function, .. } = &expression.operation
+            && function.package == snapshot.root.package_id
+        {
+            called.insert(function.declaration);
+        }
+    }
+    for called in called {
+        oracle_require_acyclic_call_graph(
+            snapshot, witness, revision, called, visiting, complete, work,
+        )?;
+    }
+    visiting.remove(&function);
+    complete.insert(function);
+    Ok(())
+}
+
+fn oracle_infer_expression_type(
+    snapshot: &KernelSnapshot,
+    function: DeclarationId,
+    expression: ExpressionId,
+    effect: &FunctionEffect,
+) -> Result<TypeObjectDigest, Diagnostic> {
+    let mut work = 0_usize;
+    infer_function_expression_type(
+        snapshot,
+        function,
+        expression,
+        effect,
+        &mut work,
+        super::kernel::contract::MAXIMUM_VALIDATION_WORK,
+    )
+    .map_err(|diagnostic| {
+        oracle_error(
+            diagnostic.class,
+            "contributor_extraction_type",
+            format!(
+                "independent extraction type inference failed: {}",
+                diagnostic.message
+            ),
+        )
+    })
+}
+
+fn extraction_local_owner(value: LocalValueReference) -> OwnerKey {
+    match value {
+        LocalValueReference::FunctionParameter(parameter)
+        | LocalValueReference::OperationParameter(parameter) => OwnerKey::Parameter(parameter),
+        LocalValueReference::LexicalBinding(binding)
+        | LocalValueReference::MatchPayload(binding)
+        | LocalValueReference::TransactionBinding(binding) => OwnerKey::Binding(binding),
+    }
+}
+
+fn oracle_local_reference_kind(value: LocalValueReference) -> &'static str {
+    match value {
+        LocalValueReference::FunctionParameter(_) => "function-parameter",
+        LocalValueReference::OperationParameter(_) => "operation-parameter",
+        LocalValueReference::LexicalBinding(_) => "lexical-binding",
+        LocalValueReference::MatchPayload(_) => "match-payload",
+        LocalValueReference::TransactionBinding(_) => "transaction-binding",
+    }
+}
+
+fn oracle_assign_capture_names(captures: &mut [ExtractionOracleCapture]) -> Result<(), Diagnostic> {
+    let mut names = BTreeSet::new();
+    for capture in captures {
+        if names.insert(capture.name.clone()) {
+            continue;
+        }
+        let suffix = encode_hex(&EncodedOwnerKey::new(capture.owner).bytes());
+        let prefix_length = capture.name.as_str().len().min(
+            super::kernel::contract::MAXIMUM_NAME_BYTES
+                .saturating_sub(suffix.len().saturating_add(1)),
+        );
+        let prefix = &capture.name.as_str()[..prefix_length];
+        let resolved = Name::new(format!("{prefix}-{suffix}"))?;
+        if !names.insert(resolved.clone()) {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_capture_name",
+                "identity-derived capture name is not unique",
+            ));
+        }
+        capture.name = resolved;
+    }
+    Ok(())
+}
+
+fn oracle_moved_digest(
+    snapshot: &KernelSnapshot,
+    owners: &[OwnerKey],
+) -> Result<[u8; 32], Diagnostic> {
+    let mut hasher = Hasher::new_derive_key(EXTRACTION_MOVED_DIGEST_DOMAIN);
+    hasher.update(
+        &u64::try_from(owners.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    for owner in owners {
+        let record = snapshot.owners.get(owner).ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_moved_digest",
+                "moved owner disappeared during independent digest derivation",
+            )
+        })?;
+        let (_, bytes) = encode_owner(record)?;
+        hasher.update(&EncodedOwnerKey::new(*owner).bytes());
+        hasher.update(&u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(*hasher.finalize().as_bytes())
+}
+
+fn oracle_requirement_reference(requirement: RequirementReference) -> String {
+    format!("{}/{}", requirement.package, requirement.requirement)
+}
+
+fn oracle_type_object<'a>(
+    snapshot: &'a KernelSnapshot,
+    digest: TypeObjectDigest,
+) -> Result<&'a super::kernel::TypeObject, Diagnostic> {
+    snapshot
+        .types
+        .get(&digest)
+        .or_else(|| snapshot.dependency_types.get(&digest))
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_type_missing",
+                format!("type object '{digest}' is missing from complete authority"),
+            )
+        })
+}
+
+fn oracle_type_contains_parameter(
+    snapshot: &KernelSnapshot,
+    digest: TypeObjectDigest,
+    active: &mut BTreeSet<TypeObjectDigest>,
+) -> Result<bool, Diagnostic> {
+    if !active.insert(digest) {
+        return Ok(false);
+    }
+    let object = oracle_type_object(snapshot, digest)?;
+    let mut contains = matches!(object.form, TypeForm::TypeParameter { .. });
+    if !contains {
+        for child in object.child_types() {
+            if oracle_type_contains_parameter(snapshot, child, active)? {
+                contains = true;
+                break;
+            }
+        }
+    }
+    active.remove(&digest);
+    Ok(contains)
+}
+
+fn oracle_resource_class(
+    snapshot: &KernelSnapshot,
+    digest: TypeObjectDigest,
+    active_types: &mut BTreeSet<TypeObjectDigest>,
+    active_declarations: &mut BTreeSet<(super::kernel::PackageId, DeclarationId)>,
+) -> Result<ExtractionOracleResource, Diagnostic> {
+    if !active_types.insert(digest) {
+        return Ok(ExtractionOracleResource::None);
+    }
+    let object = oracle_type_object(snapshot, digest)?;
+    let class = match object.form {
+        TypeForm::CapabilityResource { interface } => ExtractionOracleResource::Direct(interface),
+        TypeForm::Named { declaration } => {
+            let key = (declaration.package, declaration.declaration);
+            if !active_declarations.insert(key) {
+                ExtractionOracleResource::None
+            } else {
+                let mut contained = false;
+                for member in oracle_named_member_types(snapshot, declaration)? {
+                    if oracle_resource_class(snapshot, member, active_types, active_declarations)?
+                        != ExtractionOracleResource::None
+                    {
+                        contained = true;
+                        break;
+                    }
+                }
+                active_declarations.remove(&key);
+                if contained {
+                    ExtractionOracleResource::Contained
+                } else {
+                    ExtractionOracleResource::None
+                }
+            }
+        }
+        _ => {
+            let mut contained = false;
+            for child in object.child_types() {
+                if oracle_resource_class(snapshot, child, active_types, active_declarations)?
+                    != ExtractionOracleResource::None
+                {
+                    contained = true;
+                    break;
+                }
+            }
+            if contained {
+                ExtractionOracleResource::Contained
+            } else {
+                ExtractionOracleResource::None
+            }
+        }
+    };
+    active_types.remove(&digest);
+    Ok(class)
+}
+
+fn oracle_named_member_types(
+    snapshot: &KernelSnapshot,
+    reference: DeclarationReference,
+) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+    if reference.package == snapshot.root.package_id {
+        let Some(OwnerRecord::Declaration(declaration)) = snapshot
+            .owners
+            .get(&OwnerKey::Declaration(reference.declaration))
+        else {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_named_type",
+                "local named type declaration is missing",
+            ));
+        };
+        return match &declaration.payload {
+            DeclarationPayload::Record { fields } => fields
+                .iter()
+                .map(
+                    |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
+                        Some(OwnerRecord::Field(record)) => Ok(record.ty),
+                        _ => Err(oracle_error(
+                            DiagnosticClass::Corrupt,
+                            "contributor_extraction_named_member",
+                            "local named record field is missing",
+                        )),
+                    },
+                )
+                .collect(),
+            DeclarationPayload::Variant { cases } => cases
+                .iter()
+                .map(|case| match snapshot.owners.get(&OwnerKey::Case(*case)) {
+                    Some(OwnerRecord::Case(record)) => Ok(record.payload),
+                    _ => Err(oracle_error(
+                        DiagnosticClass::Corrupt,
+                        "contributor_extraction_named_member",
+                        "local named variant case is missing",
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| values.into_iter().flatten().collect()),
+            _ => Ok(Vec::new()),
+        };
+    }
+    let record = oracle_dependency_owner(
+        snapshot,
+        reference.package,
+        OwnerKey::Declaration(reference.declaration),
+    )?;
+    match record {
+        PackageInterfaceRecord::Declaration(declaration) => match declaration.payload {
+            PackageInterfaceDeclarationPayload::Record { fields } => fields
+                .into_iter()
+                .map(|field| {
+                    match oracle_dependency_owner(
+                        snapshot,
+                        reference.package,
+                        OwnerKey::Field(field),
+                    )? {
+                        PackageInterfaceRecord::Field(record) => Ok(record.ty),
+                        _ => Err(oracle_error(
+                            DiagnosticClass::Corrupt,
+                            "contributor_extraction_named_member",
+                            "dependency named record field is missing",
+                        )),
+                    }
+                })
+                .collect(),
+            PackageInterfaceDeclarationPayload::Variant { cases } => cases
+                .into_iter()
+                .map(|case| {
+                    match oracle_dependency_owner(
+                        snapshot,
+                        reference.package,
+                        OwnerKey::Case(case),
+                    )? {
+                        PackageInterfaceRecord::Case(record) => Ok(record.payload),
+                        _ => Err(oracle_error(
+                            DiagnosticClass::Corrupt,
+                            "contributor_extraction_named_member",
+                            "dependency named variant case is missing",
+                        )),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| values.into_iter().flatten().collect()),
+            _ => Ok(Vec::new()),
+        },
+        _ => Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_named_type",
+            "dependency named type declaration is missing",
+        )),
+    }
+}
+
+fn oracle_dependency_owner(
+    snapshot: &KernelSnapshot,
+    package: super::kernel::PackageId,
+    owner: OwnerKey,
+) -> Result<PackageInterfaceRecord, Diagnostic> {
+    let dependency = snapshot.dependencies.get(&package).ok_or_else(|| {
+        oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_dependency",
+            format!("package '{package}' is not an exact dependency"),
+        )
+    })?;
+    snapshot
+        .dependency_interfaces
+        .get(&dependency.package_revision)
+        .and_then(|interface| interface.get(&owner))
+        .cloned()
+        .ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_dependency_owner",
+                format!("dependency owner '{package}/{owner}' is missing"),
+            )
+        })
+}
+
+fn oracle_capture_requirement(
+    snapshot: &KernelSnapshot,
+    source: LocalValueReference,
+    parameter: Option<&super::kernel::ParameterRecord>,
+    function: &super::kernel::FunctionDeclaration,
+    interface: DeclarationReference,
+) -> Result<RequirementReference, Diagnostic> {
+    if let Some(parameter) = parameter {
+        if parameter.use_mode != ParameterUse::Consume {
+            return Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured capability parameter is not consume-only",
+            ));
+        }
+        return parameter.resource_requirement.ok_or_else(|| {
+            oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured capability parameter lacks an exact requirement",
+            )
+        });
+    }
+    let binding = match source {
+        LocalValueReference::LexicalBinding(binding)
+        | LocalValueReference::MatchPayload(binding) => binding,
+        _ => {
+            return Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured capability binding has unsupported provenance",
+            ));
+        }
+    };
+    let Some(OwnerRecord::Binding(binding)) = snapshot.owners.get(&OwnerKey::Binding(binding))
+    else {
+        return Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_resource_source",
+            "captured capability binding is missing",
+        ));
+    };
+    if matches!(source, LocalValueReference::MatchPayload(_)) {
+        let FunctionEffect::Task { requirements } = &function.effect else {
+            return Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured match payload has no task requirement provenance",
+            ));
+        };
+        let mut candidates = Vec::new();
+        for requirement in requirements {
+            if oracle_requirement(snapshot, *requirement)?.interface == interface {
+                candidates.push(*requirement);
+            }
+        }
+        return match candidates.as_slice() {
+            [requirement] => Ok(*requirement),
+            [] => Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured match payload has no exact caller requirement for its resource interface",
+            )),
+            _ => Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_ambiguity",
+                "captured match payload has more than one caller requirement for its resource interface",
+            )),
+        };
+    }
+    let Some(value) = binding.value else {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_resource_source",
+            "captured capability binding has no acquiring value",
+        ));
+    };
+    match snapshot.owners.get(&OwnerKey::Expression(value)) {
+        Some(OwnerRecord::Expression(record)) => match record.operation {
+            ExpressionOperation::CapabilityCall { requirement, .. } => Ok(requirement),
+            _ => Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_resource_source",
+                "captured capability binding is not acquired by one capability call",
+            )),
+        },
+        _ => Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_resource_source",
+            "captured capability acquiring expression is missing",
+        )),
+    }
+}
+
+fn oracle_requirement(
+    snapshot: &KernelSnapshot,
+    reference: RequirementReference,
+) -> Result<super::kernel::RequirementRecord, Diagnostic> {
+    if reference.package == snapshot.root.package_id {
+        return match snapshot
+            .owners
+            .get(&OwnerKey::Requirement(reference.requirement))
+        {
+            Some(OwnerRecord::Requirement(record)) => Ok(record.clone()),
+            _ => Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_requirement",
+                "local requirement record is missing",
+            )),
+        };
+    }
+    match oracle_dependency_owner(
+        snapshot,
+        reference.package,
+        OwnerKey::Requirement(reference.requirement),
+    )? {
+        PackageInterfaceRecord::Requirement(record) => Ok(record),
+        _ => Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_requirement",
+            "dependency requirement record is missing",
+        )),
+    }
+}
+
+fn oracle_function_effect(
+    snapshot: &KernelSnapshot,
+    reference: DeclarationReference,
+) -> Result<FunctionEffect, Diagnostic> {
+    if reference.package == snapshot.root.package_id {
+        return match snapshot
+            .owners
+            .get(&OwnerKey::Declaration(reference.declaration))
+        {
+            Some(OwnerRecord::Declaration(declaration)) => match &declaration.payload {
+                DeclarationPayload::Function(function) => Ok(function.effect.clone()),
+                DeclarationPayload::External(_) => Ok(FunctionEffect::Pure),
+                _ => Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_call",
+                    "local direct call names a non-callable declaration",
+                )),
+            },
+            _ => Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_extraction_call",
+                "local direct-call declaration is missing",
+            )),
+        };
+    }
+    match oracle_dependency_owner(
+        snapshot,
+        reference.package,
+        OwnerKey::Declaration(reference.declaration),
+    )? {
+        PackageInterfaceRecord::Declaration(declaration) => match declaration.payload {
+            PackageInterfaceDeclarationPayload::Function(function) => Ok(function.effect),
+            PackageInterfaceDeclarationPayload::External(_) => Ok(FunctionEffect::Pure),
+            _ => Err(oracle_error(
+                DiagnosticClass::Semantic,
+                "contributor_extraction_call",
+                "dependency direct call names a non-callable declaration",
+            )),
+        },
+        _ => Err(oracle_error(
+            DiagnosticClass::Corrupt,
+            "contributor_extraction_call",
+            "dependency direct-call declaration is missing",
+        )),
+    }
 }
 
 fn reconstruct_function_definition(
@@ -1100,8 +2225,9 @@ fn hash_endpoint(hasher: &mut Hasher, endpoint: RelationEndpoint) {
 mod tests {
     use super::{
         GraphRepository, compact_change_default_maximum_operations, function_definition_oracle,
-        largest_function_definition_oracle, semantic_inventory,
+        function_extraction_oracle, largest_function_definition_oracle, semantic_inventory,
     };
+    use crate::platform::kernel::{DeclarationPayload, ExpressionOperation, OwnerKey, OwnerRecord};
     use std::path::Path;
 
     #[test]
@@ -1122,6 +2248,383 @@ mod tests {
     #[test]
     fn compact_change_default_is_the_current_batch_authority() {
         assert_eq!(compact_change_default_maximum_operations(), 1_000);
+    }
+
+    #[test]
+    fn function_extraction_oracle_derives_a_proper_capture_boundary_read_only() {
+        let temporary = tempfile::tempdir().expect("temporary extraction oracle repository");
+        let project = temporary.path().join("meaning");
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let created = GraphRepository::create(&project, &snapshot, None)
+            .expect("create extraction oracle repository");
+        let (function, selected, body_root) = snapshot
+            .owners
+            .iter()
+            .find_map(|(owner, record)| {
+                let OwnerKey::Declaration(function) = owner else {
+                    return None;
+                };
+                let OwnerRecord::Declaration(declaration) = record else {
+                    return None;
+                };
+                let DeclarationPayload::Function(body) = &declaration.payload else {
+                    return None;
+                };
+                if declaration.name.as_str() != "with_binding" {
+                    return None;
+                }
+                let Some(OwnerRecord::Expression(expression)) =
+                    snapshot.owners.get(&OwnerKey::Expression(body.body))
+                else {
+                    return None;
+                };
+                let ExpressionOperation::Let { body, .. } = expression.operation else {
+                    return None;
+                };
+                Some((*function, body, expression.id))
+            })
+            .expect("with_binding extraction boundary");
+        let before = std::fs::read(project.join("HEAD")).expect("oracle HEAD before");
+        let oracle =
+            function_extraction_oracle(&project, &function.to_string(), &selected.to_string())
+                .expect("derive extraction oracle");
+        assert_eq!(oracle.revision, created.current.head.revision.to_string());
+        assert_eq!(oracle.base_body_records, 4);
+        assert_eq!(oracle.caller_body_records, 5);
+        assert_eq!(oracle.helper_body_records, 1);
+        assert_eq!(oracle.moved_owners, vec![selected.to_string()]);
+        assert!(oracle.preserved_owners.is_empty());
+        assert_eq!(oracle.changed_owners.len(), 2);
+        assert_eq!(oracle.captures.len(), 1);
+        assert_eq!(oracle.captures[0].source_kind, "lexical-binding");
+        assert_eq!(oracle.captures[0].name, "local");
+        assert_eq!(oracle.captures[0].uses, vec![selected.to_string()]);
+        assert_eq!(oracle.captures[0].use_mode, "unrestricted");
+        assert_eq!(oracle.effect, "pure");
+        assert!(oracle.requirements.is_empty());
+        assert_eq!(oracle.generated_owners, 4);
+        let whole_oracle =
+            function_extraction_oracle(&project, &function.to_string(), &body_root.to_string())
+                .expect_err("oracle rejects the complete function body");
+        assert_eq!(whole_oracle.code, "contributor_extraction_whole_body");
+        let repository = GraphRepository::open(&project).expect("open extraction repository");
+        let whole_request = crate::platform::change::AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            changes: vec![crate::platform::change::AuthoredChange::ExtractFunction {
+                symbol: "$whole-helper".to_owned(),
+                function: crate::platform::change::DeclarationSelector::Id {
+                    declaration: function,
+                },
+                expression: body_root,
+                name: crate::platform::kernel::Name::new("whole-helper")
+                    .expect("rejected helper name"),
+            }],
+            budget: crate::platform::change::ChangeBudget::default(),
+        };
+        let whole_production = repository
+            .prepare_authored_change(
+                &whole_request,
+                crate::platform::publication::PublicationOptions::default(),
+            )
+            .expect_err("production rejects the complete function body");
+        assert_eq!(whole_production[0].code, "change_extract_whole_body");
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("oracle HEAD after"),
+            before
+        );
+    }
+
+    #[test]
+    fn recursive_extraction_boundary_is_rejected_by_production_and_disjoint_oracle() {
+        let temporary = tempfile::tempdir().expect("temporary recursive extraction repository");
+        let project = temporary.path().join("meaning");
+        let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let (function, selected) = snapshot
+            .owners
+            .iter()
+            .find_map(|(owner, record)| {
+                let OwnerKey::Declaration(function) = owner else {
+                    return None;
+                };
+                let OwnerRecord::Declaration(declaration) = record else {
+                    return None;
+                };
+                let DeclarationPayload::Function(body) = &declaration.payload else {
+                    return None;
+                };
+                if declaration.name.as_str() != "with_binding" {
+                    return None;
+                }
+                let Some(OwnerRecord::Expression(expression)) =
+                    snapshot.owners.get(&OwnerKey::Expression(body.body))
+                else {
+                    return None;
+                };
+                let ExpressionOperation::Let { body, .. } = expression.operation else {
+                    return None;
+                };
+                Some((*function, body))
+            })
+            .expect("recursive extraction fixture");
+        let package = snapshot.root.package_id;
+        let Some(OwnerRecord::Expression(expression)) =
+            snapshot.owners.get_mut(&OwnerKey::Expression(selected))
+        else {
+            panic!("recursive selected expression")
+        };
+        expression.operation = ExpressionOperation::Call {
+            function: crate::platform::kernel::DeclarationReference {
+                package,
+                declaration: function,
+            },
+            type_arguments: Vec::new(),
+            arguments: Vec::new(),
+        };
+        let created = GraphRepository::create(&project, &snapshot, None)
+            .expect("create valid recursive extraction repository");
+        let before = std::fs::read(project.join("HEAD")).expect("recursive HEAD before");
+        let oracle =
+            function_extraction_oracle(&project, &function.to_string(), &selected.to_string())
+                .expect_err("disjoint oracle rejects recursive target");
+        assert_eq!(oracle.code, "contributor_extraction_recursive");
+        let request = crate::platform::change::AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            changes: vec![crate::platform::change::AuthoredChange::ExtractFunction {
+                symbol: "$recursive-helper".to_owned(),
+                function: crate::platform::change::DeclarationSelector::Id {
+                    declaration: function,
+                },
+                expression: selected,
+                name: crate::platform::kernel::Name::new("recursive-helper")
+                    .expect("recursive helper name"),
+            }],
+            budget: crate::platform::change::ChangeBudget::default(),
+        };
+        let production = created
+            .repository
+            .prepare_authored_change(
+                &request,
+                crate::platform::publication::PublicationOptions::default(),
+            )
+            .expect_err("production rejects recursive target");
+        assert_eq!(production[0].code, "change_extract_recursive_target");
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("recursive HEAD after"),
+            before
+        );
+    }
+
+    #[test]
+    fn maintained_affine_extraction_plan_matches_disjoint_oracle_and_is_read_only() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let before = std::fs::read(project.join("HEAD")).expect("lkjournal HEAD before oracle");
+        let function = "decl_a914bb78de075ff44a857ac028d704f3"
+            .parse::<crate::platform::semantic_id::DeclarationId>()
+            .expect("maintained worker function identity");
+        let selected = "expr_9c71a3f66a11506528fec58a584c31a6"
+            .parse::<crate::platform::semantic_id::ExpressionId>()
+            .expect("maintained handoff expression identity");
+        let oracle =
+            function_extraction_oracle(&project, &function.to_string(), &selected.to_string())
+                .expect("derive affine extraction oracle");
+        let repository = GraphRepository::open(&project).expect("open maintained repository");
+        let view = repository.view_current().expect("open maintained revision");
+        let request = crate::platform::change::AuthoredChangeSet {
+            base: view.revision(),
+            preconditions: Vec::new(),
+            changes: vec![crate::platform::change::AuthoredChange::ExtractFunction {
+                symbol: "$affine-review-helper".to_owned(),
+                function: crate::platform::change::DeclarationSelector::Id {
+                    declaration: function,
+                },
+                expression: selected,
+                name: crate::platform::kernel::Name::new("process-acquired-lease-review")
+                    .expect("review helper name"),
+            }],
+            budget: crate::platform::change::ChangeBudget::default(),
+        };
+        let mut prepared = view
+            .prepare_authored_change(
+                &request,
+                crate::platform::publication::PublicationOptions::default(),
+            )
+            .expect("prepare maintained affine extraction");
+        let definition_digest =
+            crate::platform::cli::function_definition_digest_for_extraction(&view, function)
+                .expect("bind maintained public definition");
+        prepared
+            .logical_plan
+            .extraction
+            .as_mut()
+            .expect("affine extraction evidence")
+            .base_definition = Some(definition_digest);
+        let extraction = prepared
+            .logical_plan
+            .extraction
+            .as_ref()
+            .expect("affine extraction evidence");
+        assert_eq!(oracle.base_body_records, 15);
+        assert_eq!(oracle.caller_body_records, 15);
+        assert_eq!(oracle.helper_body_records, 3);
+        assert_eq!(extraction.caller_body_records, oracle.caller_body_records);
+        assert_eq!(extraction.helper_body_records, oracle.helper_body_records);
+        assert_eq!(
+            format!(
+                "moved_{}",
+                crate::platform::semantic_id::encode_hex(&extraction.moved_digest)
+            ),
+            oracle.moved_digest
+        );
+        assert_eq!(
+            extraction
+                .moved_owners
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            oracle.moved_owners
+        );
+        assert_eq!(
+            extraction
+                .preserved_owners
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            oracle.preserved_owners
+        );
+        assert_eq!(
+            extraction
+                .changed_owners
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            oracle.changed_owners
+        );
+        assert_eq!(extraction.captures.len(), 2);
+        for (capture, expected) in extraction.captures.iter().zip(&oracle.captures) {
+            assert_eq!(
+                super::extraction_local_owner(capture.source).to_string(),
+                expected.source
+            );
+            assert_eq!(capture.name.as_str(), expected.name);
+            assert_eq!(capture.ty.to_string(), expected.ty);
+            assert_eq!(
+                match capture.use_mode {
+                    crate::platform::kernel::ParameterUse::Unrestricted => "unrestricted",
+                    crate::platform::kernel::ParameterUse::Borrow => "borrow",
+                    crate::platform::kernel::ParameterUse::Consume => "consume",
+                },
+                expected.use_mode
+            );
+            assert_eq!(
+                capture
+                    .resource_requirement
+                    .map(super::oracle_requirement_reference),
+                expected.requirement
+            );
+            assert_eq!(
+                capture
+                    .rewritten_uses
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                expected.uses
+            );
+        }
+        assert_eq!(
+            extraction.captures[1].use_mode,
+            crate::platform::kernel::ParameterUse::Consume
+        );
+        let crate::platform::kernel::FunctionEffect::Task { requirements } = &extraction.effect
+        else {
+            panic!("affine extraction helper must be task effect")
+        };
+        assert_eq!(
+            requirements
+                .iter()
+                .copied()
+                .map(super::oracle_requirement_reference)
+                .collect::<Vec<_>>(),
+            oracle.requirements
+        );
+        assert_eq!(
+            extraction.generated_owners.len(),
+            usize::try_from(oracle.generated_owners).expect("generated owner count")
+        );
+        assert!(extraction.base_definition.is_some());
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("lkjournal HEAD after oracle"),
+            before
+        );
+    }
+
+    #[test]
+    fn maintained_resource_boundaries_are_rejected_by_production_and_disjoint_oracle() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let before = std::fs::read(project.join("HEAD")).expect("lkjournal HEAD before rejection");
+        let function = "decl_a914bb78de075ff44a857ac028d704f3"
+            .parse::<crate::platform::semantic_id::DeclarationId>()
+            .expect("maintained worker function identity");
+        let repository = GraphRepository::open(&project).expect("open maintained repository");
+        let view = repository.view_current().expect("open maintained revision");
+        for (label, expression, oracle_code, production_code) in [
+            (
+                "resource-result",
+                "expr_76ab37fa588f1e250b5b2044bfb15645",
+                "contributor_extraction_result",
+                "change_extract_resource_result",
+            ),
+            (
+                "resource-container",
+                "expr_041383ce5f6ff91ad343b3bad7954b61",
+                "contributor_extraction_resource_container",
+                "change_extract_resource_container",
+            ),
+        ] {
+            let selected = expression
+                .parse::<crate::platform::semantic_id::ExpressionId>()
+                .expect("maintained rejected expression identity");
+            let oracle =
+                function_extraction_oracle(&project, &function.to_string(), &selected.to_string())
+                    .expect_err("disjoint oracle must reject resource boundary");
+            assert_eq!(
+                oracle.class,
+                crate::platform::diagnostic::DiagnosticClass::Semantic,
+                "{label}"
+            );
+            assert_eq!(oracle.code, oracle_code, "{label}");
+            let request = crate::platform::change::AuthoredChangeSet {
+                base: view.revision(),
+                preconditions: Vec::new(),
+                changes: vec![crate::platform::change::AuthoredChange::ExtractFunction {
+                    symbol: ["$", label, "-helper"].concat(),
+                    function: crate::platform::change::DeclarationSelector::Id {
+                        declaration: function,
+                    },
+                    expression: selected,
+                    name: crate::platform::kernel::Name::new(format!("{label}-helper"))
+                        .expect("rejected helper name"),
+                }],
+                budget: crate::platform::change::ChangeBudget::default(),
+            };
+            let production = view
+                .prepare_authored_change(
+                    &request,
+                    crate::platform::publication::PublicationOptions::default(),
+                )
+                .expect_err("production planner must reject resource boundary");
+            assert_eq!(
+                production[0].class,
+                crate::platform::diagnostic::DiagnosticClass::Semantic,
+                "{label}"
+            );
+            assert_eq!(production[0].code, production_code, "{label}");
+        }
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("lkjournal HEAD after rejection"),
+            before
+        );
     }
 
     #[test]

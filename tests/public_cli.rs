@@ -729,7 +729,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "change.plan-record")
             .count(),
-        29
+        34
     );
     assert!(change_section.iter().any(|record| {
         record.operation == "change.plan-record-field"
@@ -769,13 +769,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "rename.owner",
             "move.declaration",
             "replace.body",
+            "extract.function",
         ]
     );
     let operation_fields = change_section
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 102);
+    assert_eq!(operation_fields.len(), 106);
     assert_eq!(
         operation_fields
             .iter()
@@ -800,8 +801,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 26);
+    assert_eq!(field_forms.len(), 27);
     for (name, syntax) in [
+        ("exact_expression", "expr_HEX"),
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
         ("runner_kind", "command|http"),
@@ -1072,6 +1074,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("data_verify_bytes", "resource"),
         ("data_head_visibility_unknown", "infrastructure"),
         ("data_head_durability_unknown", "infrastructure"),
+        ("change_extract_generic_target", "semantic"),
+        ("change_extract_resource_post_use", "semantic"),
+        ("change_extract_capture_limit", "resource"),
+        ("change_extract_ownership", "corrupt"),
+        ("change_plan_file_extraction_counts", "source"),
     ] {
         assert!(diagnostics_section.iter().any(|record| {
             record.operation == "diagnostic"
@@ -1083,7 +1090,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.direct-operation")
         .collect::<Vec<_>>();
-    assert_eq!(direct.len(), 1);
+    assert_eq!(direct.len(), 2);
     assert_eq!(compact_field(direct[0], "name"), Some("rename.owner"));
     assert_eq!(
         compact_field(direct[0], "plan-usage"),
@@ -1097,6 +1104,41 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
         )
     );
+    assert_eq!(compact_field(direct[1], "name"), Some("extract.function"));
+    assert_eq!(
+        compact_field(direct[1], "plan-usage"),
+        Some(
+            "change plan extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]"
+        )
+    );
+    assert_eq!(
+        compact_field(direct[1], "apply-usage"),
+        Some(
+            "change apply extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
+        )
+    );
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.extraction-limit")
+            .count(),
+        7
+    );
+    for (name, value) in [
+        ("maximum-extraction-moved-owners", "4096"),
+        ("maximum-extraction-captures", "4096"),
+        ("maximum-extraction-capture-uses", "4096"),
+        ("maximum-extraction-requirements", "4096"),
+        ("maximum-extraction-preserved-owners", "4096"),
+        ("maximum-extraction-changed-owners", "4097"),
+        ("maximum-extraction-generated-owners", "8194"),
+    ] {
+        assert!(change_section.iter().any(|record| {
+            record.operation == "change.extraction-limit"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "value") == Some(value)
+        }));
+    }
     assert!(change_section.iter().any(|record| {
         record.operation == "change.operation-field"
             && compact_field(record, "operation") == Some("delete.owner")
@@ -3293,9 +3335,14 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
     let request = format!(
         "request base={initial_revision} idempotency=public-affine-resource-1 intent=author-affine-resource\n\
          type.capability-resource as=@lease interface=$lease_interface\n\
+         type.named as=@lease_result declaration=$lease_result\n\
          type.function as=@task_port result=unit\n\
          create.interface as=$lease_interface module={application} name=LeaseAuthority visibility=private\n\
+         create.variant as=$lease_result module={application} name=LeaseResult visibility=private\n\
+         add.case as=$lease_some variant=$lease_result name=some payload=@lease\n\
+         add.case as=$lease_none variant=$lease_result name=none\n\
          add.operation as=$acquire interface=$lease_interface name=acquire result=@lease idempotency=non-idempotent external-visibility=possible\n\
+         add.operation as=$acquire_result interface=$lease_interface name=acquire-result result=@lease_result idempotency=non-idempotent external-visibility=possible\n\
          add.operation as=$observe interface=$lease_interface name=observe result=unit idempotency=idempotent external-visibility=none\n\
          add.parameter as=$observed_lease operation=$observe name=lease type=@lease use=borrow\n\
          add.operation as=$finish interface=$lease_interface name=finish result=unit idempotency=non-idempotent external-visibility=possible\n\
@@ -3305,6 +3352,10 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
          requirement.operation parent=$lease_requirement index=0 operation=$acquire\n\
          requirement.operation parent=$lease_requirement index=1 operation=$observe\n\
          requirement.operation parent=$lease_requirement index=2 operation=$finish\n\
+         requirement.operation parent=$lease_requirement index=3 operation=$acquire_result\n\
+         add.requirement as=$lease_requirement_two component=$component name=lease-authority-two interface=$lease_interface\n\
+         requirement.operation parent=$lease_requirement_two index=0 operation=$acquire_result\n\
+         requirement.operation parent=$lease_requirement_two index=1 operation=$finish\n\
          expression.capability-call as=$acquired requirement=$lease_requirement operation=$acquire\n\
          expression.local as=$leaf_borrow_local value=$leaf_lease\n\
          expression.capability-call as=$leaf_observed requirement=$lease_requirement operation=$observe\n\
@@ -3315,7 +3366,11 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
          expression.sequence as=$leaf_body\n\
          expression.argument parent=$leaf_body index=0 expression=$leaf_observed\n\
          expression.argument parent=$leaf_body index=1 expression=$leaf_finished\n\
-         create.function as=$leaf module={application} name=finish-lease visibility=private result=unit effect=task body=$leaf_body\n\
+         expression.unit as=$leaf_done\n\
+         expression.sequence as=$leaf_root\n\
+         expression.argument parent=$leaf_root index=0 expression=$leaf_body\n\
+         expression.argument parent=$leaf_root index=1 expression=$leaf_done\n\
+         create.function as=$leaf module={application} name=finish-lease visibility=private result=unit effect=task body=$leaf_root\n\
          add.parameter as=$leaf_lease function=$leaf name=lease type=@lease use=consume requirement=$lease_requirement\n\
          effect.requirement parent=$leaf index=0 requirement=$lease_requirement\n\
          expression.local as=$forward_lease_local value=$forward_lease\n\
@@ -3334,6 +3389,34 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
          expression.binding parent=$task_body index=0 as=$lease_binding name=lease value=$acquired type=@lease\n\
          create.function as=$task module={application} name=affine-task visibility=private result=unit effect=task body=$task_body\n\
          effect.requirement parent=$task index=0 requirement=$lease_requirement\n\
+         expression.capability-call as=$multi_acquired_first requirement=$lease_requirement operation=$acquire\n\
+         expression.capability-call as=$multi_acquired_second requirement=$lease_requirement operation=$acquire\n\
+         expression.local as=$multi_first_local value=$multi_first_binding\n\
+         expression.capability-call as=$multi_first_finished requirement=$lease_requirement operation=$finish\n\
+         expression.argument parent=$multi_first_finished index=0 expression=$multi_first_local\n\
+         expression.local as=$multi_second_local value=$multi_second_binding\n\
+         expression.capability-call as=$multi_second_finished requirement=$lease_requirement operation=$finish\n\
+         expression.argument parent=$multi_second_finished index=0 expression=$multi_second_local\n\
+         expression.sequence as=$multi_selected\n\
+         expression.argument parent=$multi_selected index=0 expression=$multi_first_finished\n\
+         expression.argument parent=$multi_selected index=1 expression=$multi_second_finished\n\
+         expression.let as=$multi_inner body=$multi_selected\n\
+         expression.binding parent=$multi_inner index=0 as=$multi_second_binding name=second-lease value=$multi_acquired_second type=@lease\n\
+         expression.let as=$multi_body body=$multi_inner\n\
+         expression.binding parent=$multi_body index=0 as=$multi_first_binding name=first-lease value=$multi_acquired_first type=@lease\n\
+         create.function as=$multi_task module={application} name=multi-affine-task visibility=private result=unit effect=task body=$multi_body\n\
+         effect.requirement parent=$multi_task index=0 requirement=$lease_requirement\n\
+         expression.capability-call as=$ambiguous_acquired requirement=$lease_requirement operation=$acquire_result\n\
+         expression.local as=$ambiguous_lease_local value=$ambiguous_lease\n\
+         expression.capability-call as=$ambiguous_finished requirement=$lease_requirement operation=$finish\n\
+         expression.argument parent=$ambiguous_finished index=0 expression=$ambiguous_lease_local\n\
+         expression.unit as=$ambiguous_none_body\n\
+         expression.match as=$ambiguous_body value=$ambiguous_acquired\n\
+         expression.match-arm parent=$ambiguous_body index=0 case=$lease_some as=$ambiguous_lease name=lease type=@lease body=$ambiguous_finished\n\
+         expression.match-arm parent=$ambiguous_body index=1 case=$lease_none body=$ambiguous_none_body\n\
+         create.function as=$ambiguous_task module={application} name=ambiguous-task visibility=private result=unit effect=task body=$ambiguous_body\n\
+         effect.requirement parent=$ambiguous_task index=0 requirement=$lease_requirement\n\
+         effect.requirement parent=$ambiguous_task index=1 requirement=$lease_requirement_two\n\
          add.port as=$port component=$component name=run type=@task_port function=$task\n"
     );
     let request_path = temporary.path().join("affine-resource.lkjc");
@@ -3398,6 +3481,7 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
         "$observed_lease",
         "$finished_lease",
         "$lease_requirement",
+        "$lease_requirement_two",
         "$lease_binding",
         "$leaf",
         "$leaf_lease",
@@ -3405,6 +3489,10 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
         "$forward_tag",
         "$forward_lease",
         "$task",
+        "$multi_task",
+        "$multi_selected",
+        "$ambiguous_task",
+        "$ambiguous_finished",
         "$port",
     ] {
         assert!(identities.contains_key(expected), "missing {expected}");
@@ -3432,6 +3520,194 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
 
     let after_apply_inventory = content_inventory(&project);
     let requirement_identity = format!("{authored_package}/{}", identities["$lease_requirement"]);
+
+    for (name, function, expression, expected) in [
+        (
+            "resource-result",
+            identities["$task"].as_str(),
+            identities["$acquired"].as_str(),
+            "change_extract_resource_result",
+        ),
+        (
+            "resource-post-use",
+            identities["$leaf"].as_str(),
+            identities["$leaf_observed"].as_str(),
+            "change_extract_resource_post_use",
+        ),
+        (
+            "resource-multiple-use",
+            identities["$leaf"].as_str(),
+            identities["$leaf_body"].as_str(),
+            "change_extract_resource_use",
+        ),
+        (
+            "resource-ambiguity",
+            identities["$ambiguous_task"].as_str(),
+            identities["$ambiguous_finished"].as_str(),
+            "change_extract_resource_ambiguity",
+        ),
+        (
+            "multiple-resources",
+            identities["$multi_task"].as_str(),
+            identities["$multi_selected"].as_str(),
+            "change_extract_multiple_resources",
+        ),
+    ] {
+        let request = format!(
+            "request base={accepted}\nextract.function as=$rejected_helper function={function} expression={expression} name={name}\n"
+        );
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &request,
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(expected)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), after_apply_inventory, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            accepted,
+            "{name}"
+        );
+    }
+
+    let extraction_project = temporary.path().join("affine-extraction");
+    copy_regular_tree(&project, &extraction_project);
+    let extraction_request = format!(
+        "request base={accepted} idempotency=affine-extraction intent=consume-capture\n\
+         extract.function as=$extracted_helper function={} expression={} name=finish-acquired-lease\n",
+        identities["$task"], identities["$caller_handoff"]
+    );
+    let extraction_request_path = temporary.path().join("affine-extraction.lkjc");
+    std::fs::write(&extraction_request_path, &extraction_request)
+        .expect("write affine extraction request");
+    let extraction_plan_path = temporary.path().join("affine-extraction.logical-plan");
+    let extraction_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&extraction_project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&extraction_request_path),
+            "--output",
+            path(&extraction_plan_path),
+        ],
+    );
+    let extraction_token = compact_field(compact_record(&extraction_plan, "plan"), "token")
+        .expect("affine extraction plan token")
+        .to_owned();
+    let extraction_helper = extraction_plan
+        .iter()
+        .find(|record| {
+            record.operation == "identity"
+                && compact_field(record, "symbol") == Some("$extracted_helper")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .expect("affine extraction helper identity")
+        .to_owned();
+    let decoded_extraction = decode_logical_change_plan(BufReader::new(
+        File::open(&extraction_plan_path).expect("open affine extraction plan"),
+    ))
+    .expect("decode affine extraction plan");
+    assert_eq!(decoded_extraction.token, extraction_token);
+    assert_eq!(decoded_extraction.counts.extractions, 1);
+    assert_eq!(decoded_extraction.counts.extraction_captures, 1);
+    assert_eq!(decoded_extraction.counts.extraction_uses, 1);
+    let extraction_plan_text =
+        std::fs::read_to_string(&extraction_plan_path).expect("read affine extraction plan");
+    assert!(extraction_plan_text.contains("moved-owners=3"));
+    assert!(
+        extraction_plan_text
+            .contains("caller-body-records=5 helper-body-records=3 captures=1 requirements=1")
+    );
+    assert!(extraction_plan_text.contains("affine-present=true"));
+    assert!(extraction_plan_text.contains(&format!(
+        "source-kind=lexical-binding source={} ",
+        identities["$lease_binding"]
+    )));
+    assert!(extraction_plan_text.contains(&format!(
+        "use=consume requirement-present=true requirement-package={authored_package} requirement={}",
+        identities["$lease_requirement"]
+    )));
+    let extracted = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&extraction_project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&extraction_request_path),
+            "--plan",
+            &extraction_token,
+        ],
+    );
+    assert_eq!(compact_field(&extracted[0], "status"), Some("accepted"));
+    let extracted_revision = compact_field(compact_record(&extracted, "revision"), "result")
+        .expect("affine extracted revision")
+        .to_owned();
+    assert_ne!(extracted_revision, accepted);
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&extraction_project), "check"],
+    );
+    let helper_definition = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&extraction_project),
+            "inspect",
+            "owner",
+            "task_function",
+            &extraction_helper,
+            "--detail",
+            "definition",
+            "--limit",
+            "100",
+            "--bytes",
+            "65536",
+        ],
+    );
+    assert_eq!(
+        compact_field(
+            compact_record(&helper_definition, "projection"),
+            "body-records"
+        ),
+        Some("3")
+    );
+    assert!(helper_definition.iter().any(|record| {
+        record.operation == "definition.parameter"
+            && compact_field(record, "name") == Some("lease")
+            && compact_field(record, "use") == Some("consume")
+            && compact_field(record, "requirement") == Some(requirement_identity.as_str())
+    }));
+    assert!(helper_definition.iter().any(|record| {
+        record.operation == "definition.expression"
+            && compact_field(record, "id") == Some(identities["$caller_handoff"].as_str())
+    }));
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &extraction_project),
+        extracted_revision
+    );
+    assert_eq!(content_inventory(&project), after_apply_inventory);
+
     for (function_symbol, bound_resource, callee_symbol) in [
         ("$task", false, Some("$forward")),
         ("$forward", true, Some("$leaf")),
@@ -5684,6 +5960,647 @@ fn reviewed_change_plan_direct_and_record_export_match_and_apply_reprepares() {
         Some(accepted.as_str())
     );
     assert_eq!(current_revision(&project), accepted);
+}
+
+#[test]
+fn copied_binary_extracts_one_function_with_stable_identity_and_atomic_failures() {
+    let temporary = tempfile::TempDir::new().expect("isolated function-extraction workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("app");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "minimal",
+            "--name",
+            "function-extraction",
+        ],
+    );
+    let initial = compact_field(compact_record(&created, "revision"), "id")
+        .expect("minimal extraction base")
+        .to_owned();
+    let colliding_capture_name = "x".repeat(120);
+    let creation = format!(
+        "request base={initial}\n\
+         create.module as=$module name=application\n\
+         expression.text as=$value value=hello\n\
+         expression.local as=$first value=$binding\n\
+         expression.local as=$second value=$binding\n\
+         expression.sequence as=$selected\n\
+         expression.argument parent=$selected index=0 expression=$first\n\
+         expression.argument parent=$selected index=1 expression=$second\n\
+         expression.let as=$body body=$selected\n\
+         expression.binding parent=$body index=0 as=$binding name=value value=$value type=text\n\
+         create.function as=$main module=$module name=main visibility=private result=text effect=pure body=$body\n\
+         type.parameter as=@generic_item parameter=$generic_type\n\
+         expression.local as=$generic_selected value=$generic_value\n\
+         expression.sequence as=$generic_body\n\
+         expression.argument parent=$generic_body index=0 expression=$generic_selected\n\
+         create.function as=$generic module=$module name=generic-identity visibility=private result=@generic_item effect=pure body=$generic_body\n\
+         add.type-parameter as=$generic_type function=$generic name=Item\n\
+         add.parameter as=$generic_value function=$generic name=value type=@generic_item\n\
+         expression.unit as=$recursive_prefix\n\
+         expression.call as=$recursive_call function=$recursive\n\
+         expression.sequence as=$recursive_body\n\
+         expression.argument parent=$recursive_body index=0 expression=$recursive_prefix\n\
+         expression.argument parent=$recursive_body index=1 expression=$recursive_call\n\
+         create.function as=$recursive module=$module name=recursive visibility=private result=unit effect=pure body=$recursive_body\n\
+         expression.text as=$collision_first_value value=first\n\
+         expression.text as=$collision_second_value value=second\n\
+         expression.local as=$collision_first value=$collision_first_binding\n\
+         expression.local as=$collision_second value=$collision_second_binding\n\
+         expression.sequence as=$collision_selected\n\
+         expression.argument parent=$collision_selected index=0 expression=$collision_first\n\
+         expression.argument parent=$collision_selected index=1 expression=$collision_second\n\
+         expression.let as=$collision_inner body=$collision_selected\n\
+         expression.binding parent=$collision_inner index=0 as=$collision_second_binding name={colliding_capture_name} value=$collision_second_value type=text\n\
+         expression.let as=$collision_body body=$collision_inner\n\
+         expression.binding parent=$collision_body index=0 as=$collision_first_binding name={colliding_capture_name} value=$collision_first_value type=text\n\
+         create.function as=$collision_function module=$module name=colliding-captures visibility=private result=text effect=pure body=$collision_body\n\
+         expression.call as=$actual function=$main\n\
+         expression.text as=$expected value=hello\n\
+         create.test as=$test module=$module name=main-test visibility=private actual=$actual expected=$expected\n\
+         type.function as=@main result=text\n\
+         create.component as=$component module=$module name=Application visibility=private\n\
+         add.port as=$port component=$component name=main type=@main function=$main\n\
+         create.target as=$target name=main component=$component port=$port runner=command\n"
+    );
+    let creation_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &creation,
+        ],
+    );
+    let creation_token = compact_field(compact_record(&creation_plan, "plan"), "token")
+        .expect("fixture creation plan")
+        .to_owned();
+    let fixture = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &creation,
+            "--plan",
+            &creation_token,
+        ],
+    );
+    let base = compact_field(compact_record(&fixture, "revision"), "result")
+        .expect("extraction fixture revision")
+        .to_owned();
+    let identities = fixture
+        .iter()
+        .filter(|record| record.operation == "identity")
+        .filter_map(|record| {
+            Some((
+                compact_field(record, "symbol")?.to_owned(),
+                compact_field(record, "id")?.to_owned(),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let function = identities["$main"].clone();
+    let selected = identities["$selected"].clone();
+    let body = identities["$body"].clone();
+    let actual = identities["$actual"].clone();
+    let generic = identities["$generic"].clone();
+    let generic_selected = identities["$generic_selected"].clone();
+    let recursive = identities["$recursive"].clone();
+    let recursive_prefix = identities["$recursive_prefix"].clone();
+    let collision_function = identities["$collision_function"].clone();
+    let collision_selected = identities["$collision_selected"].clone();
+    let component = identities["$component"].clone();
+    for selected_owner in ["$selected", "$first", "$second"] {
+        assert!(identities.contains_key(selected_owner));
+    }
+
+    let before_run = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "run", "main"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&before_run, "execution"), "value"),
+        Some("\"hello\"")
+    );
+    assert_eq!(
+        compact_field(compact_record(&before_run, "execution"), "differential"),
+        Some("equal")
+    );
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+
+    let collision_inventory = content_inventory(&project);
+    let collision_plan_path = temporary.path().join("collision.logical-plan");
+    let collision_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "extract.function",
+            "--base",
+            &base,
+            "--as",
+            "$collision_helper",
+            "--function",
+            &collision_function,
+            "--expression",
+            &collision_selected,
+            "--name",
+            "collision-helper",
+            "--output",
+            path(&collision_plan_path),
+        ],
+    );
+    assert!(compact_field(compact_record(&collision_plan, "plan"), "token").is_some());
+    let collision_records = parse_records(
+        "collision logical plan",
+        &std::fs::read(&collision_plan_path).expect("read collision logical plan"),
+    )
+    .expect("parse collision logical plan");
+    let capture_names = collision_records
+        .iter()
+        .filter(|record| record.operation == "logical-plan.extraction-capture")
+        .map(|record| {
+            compact_field(record, "name")
+                .expect("extraction capture name")
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(capture_names.len(), 2);
+    assert_eq!(capture_names[0], colliding_capture_name);
+    assert_eq!(capture_names[1].len(), 128);
+    assert_eq!(&capture_names[1][..93], "x".repeat(93));
+    assert_eq!(&capture_names[1][93..94], "-");
+    assert!(
+        capture_names[1][94..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    );
+    assert_eq!(content_inventory(&project), collision_inventory);
+
+    let extraction = format!(
+        "request base={base} idempotency=public-function-extraction intent=identity-preserving-cutover\n\
+         extract.function as=$helper function={function} expression={selected} name=read-value\n"
+    );
+    let extraction_path = temporary.path().join("extract.lkjc");
+    std::fs::write(&extraction_path, &extraction).expect("write extraction request");
+    let before_plan = content_inventory(&project);
+    let record_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&extraction_path),
+        ],
+    );
+    let direct_plan_path = temporary.path().join("extract.logical-plan");
+    let direct_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "extract.function",
+            "--base",
+            &base,
+            "--as",
+            "$helper",
+            "--function",
+            &function,
+            "--expression",
+            &selected,
+            "--name",
+            "read-value",
+            "--idempotency",
+            "public-function-extraction",
+            "--intent",
+            "identity-preserving-cutover",
+            "--output",
+            path(&direct_plan_path),
+        ],
+    );
+    let plan = compact_field(compact_record(&record_plan, "plan"), "token")
+        .expect("record extraction plan")
+        .to_owned();
+    assert_eq!(
+        compact_field(compact_record(&direct_plan, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    assert_eq!(
+        record_plan
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| compact_record_values(record))
+            .collect::<Vec<_>>(),
+        direct_plan
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| compact_record_values(record))
+            .collect::<Vec<_>>()
+    );
+    let helper = compact_field(
+        record_plan
+            .iter()
+            .find(|record| {
+                record.operation == "identity" && compact_field(record, "symbol") == Some("$helper")
+            })
+            .expect("helper identity record"),
+        "id",
+    )
+    .expect("helper identity")
+    .to_owned();
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&direct_plan_path).expect("open extraction logical plan"),
+    ))
+    .expect("strictly decode extraction plan");
+    assert_eq!(decoded.token, plan);
+    assert_eq!(decoded.counts.extractions, 1);
+    assert_eq!(decoded.counts.extraction_captures, 1);
+    assert_eq!(decoded.counts.extraction_uses, 2);
+    assert_eq!(decoded.counts.extraction_owners, 11);
+    let plan_text = std::fs::read_to_string(&direct_plan_path).expect("read extraction plan");
+    assert!(plan_text.contains(&format!("logical-plan.extraction function={function} ")));
+    assert!(plan_text.contains(&format!("selected-root={selected}")));
+    assert!(plan_text.contains("moved-owners=3"));
+    assert!(
+        plan_text.contains("caller-body-records=5 helper-body-records=3 captures=1 requirements=0")
+    );
+    assert!(plan_text.contains("affine-present=false"));
+    assert_eq!(content_inventory(&project), before_plan);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        base
+    );
+
+    let negative_requests = [
+        (
+            "absent-function",
+            format!(
+                "request base={base}\nextract.function as=$helper function=decl_00000000000000000000000000000001 expression={selected} name=absent-function\n"
+            ),
+            "change_authored_owner_missing",
+        ),
+        (
+            "whole-body",
+            format!(
+                "request base={base}\nextract.function as=$helper function={function} expression={body} name=whole-body\n"
+            ),
+            "change_extract_whole_body",
+        ),
+        (
+            "foreign-expression",
+            format!(
+                "request base={base}\nextract.function as=$helper function={function} expression=expr_00000000000000000000000000000001 name=foreign-expression\n"
+            ),
+            "change_extract_expression_foreign",
+        ),
+        (
+            "nondescendant-expression",
+            format!(
+                "request base={base}\nextract.function as=$helper function={function} expression={actual} name=nondescendant-expression\n"
+            ),
+            "change_extract_expression_foreign",
+        ),
+        (
+            "non-function",
+            format!(
+                "request base={base}\nextract.function as=$helper function={component} expression={selected} name=non-function\n"
+            ),
+            "change_extract_function_kind",
+        ),
+        (
+            "generic-target",
+            format!(
+                "request base={base}\nextract.function as=$helper function={generic} expression={generic_selected} name=generic-helper\n"
+            ),
+            "change_extract_generic_target",
+        ),
+        (
+            "recursive-target",
+            format!(
+                "request base={base}\nextract.function as=$helper function={recursive} expression={recursive_prefix} name=recursive-helper\n"
+            ),
+            "change_extract_recursive_target",
+        ),
+        (
+            "helper-collision",
+            format!(
+                "request base={base}\nextract.function as=$helper function={function} expression={selected} name=main\n"
+            ),
+            "change_extract_helper_collision",
+        ),
+        (
+            "same-request-conflict",
+            format!(
+                "request base={base}\nextract.function as=$helper function={function} expression={selected} name=read-value\nrename.owner owner={function} name=renamed-main\n"
+            ),
+            "change_extract_conflict",
+        ),
+        (
+            "multiple",
+            format!(
+                "request base={base}\nextract.function as=$first-helper function={function} expression={selected} name=read-first\nextract.function as=$second-helper function={function} expression={selected} name=read-second\n"
+            ),
+            "change_extract_multiple",
+        ),
+    ];
+    for (name, request, expected) in negative_requests {
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &request,
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(expected)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), before_plan, "{name}");
+    }
+    let malformed = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "extract.function",
+            "--base",
+            &base,
+            "--as",
+            "$helper",
+            "--function",
+            &function,
+            "--expression",
+            "expression-not-an-id",
+            "--name",
+            "read-value",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&malformed, "diagnostic"), "code"),
+        Some("semantic_identity_domain")
+    );
+    for alias in [
+        vec!["extract.function"],
+        vec![
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "extract-function",
+        ],
+    ] {
+        let rejected = compact_failure_output(command_at(&copied_binary, temporary.path(), &alias));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("cli_usage")
+        );
+    }
+    assert_eq!(content_inventory(&project), before_plan);
+
+    let stale_project = temporary.path().join("stale-app");
+    copy_regular_tree(&project, &stale_project);
+    let rename_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&stale_project),
+            "change",
+            "plan",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &function,
+            "--name",
+            "advanced-main",
+        ],
+    );
+    let rename_token = compact_field(compact_record(&rename_plan, "plan"), "token")
+        .expect("stale fixture rename plan")
+        .to_owned();
+    let renamed = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&stale_project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &function,
+            "--name",
+            "advanced-main",
+            "--plan",
+            &rename_token,
+        ],
+    );
+    let advanced = compact_field(compact_record(&renamed, "revision"), "result")
+        .expect("advanced stale fixture revision")
+        .to_owned();
+    let stale_inventory = content_inventory(&stale_project);
+    let stale = compact_failure_output_with_status(
+        command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&stale_project),
+                "change",
+                "apply",
+                "--input-file",
+                path(&extraction_path),
+                "--plan",
+                &plan,
+            ],
+        ),
+        7,
+    );
+    assert!(stale.iter().any(|record| {
+        record.operation == "diagnostic"
+            && compact_field(record, "code") == Some("change_authored_stale_base")
+    }));
+    assert_eq!(content_inventory(&stale_project), stale_inventory);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &stale_project),
+        advanced
+    );
+
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&extraction_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    assert!(applied.iter().any(|record| {
+        record.operation == "identity"
+            && compact_field(record, "symbol") == Some("$helper")
+            && compact_field(record, "id") == Some(helper.as_str())
+    }));
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted extraction revision")
+        .to_owned();
+    assert_ne!(accepted, base);
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    let after_run = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "run", "main"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&after_run, "execution"), "value"),
+        Some("\"hello\"")
+    );
+    assert_eq!(
+        compact_field(compact_record(&after_run, "execution"), "differential"),
+        Some("equal")
+    );
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
+    );
+    for (declaration, expected_body_records) in [(&function, "5"), (&helper, "3")] {
+        let inspected = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "inspect",
+                "owner",
+                "pure_function",
+                declaration,
+                "--detail",
+                "definition",
+                "--limit",
+                "100",
+                "--bytes",
+                "65536",
+            ],
+        );
+        assert_eq!(
+            compact_field(compact_record(&inspected, "projection"), "body-records"),
+            Some(expected_body_records)
+        );
+        if declaration == &helper {
+            assert!(inspected.iter().any(|record| {
+                record.operation == "definition.expression"
+                    && compact_field(record, "id") == Some(selected.as_str())
+            }));
+            for owner in ["$first", "$second"] {
+                assert!(inspected.iter().any(|record| {
+                    record.operation == "definition.expression"
+                        && compact_field(record, "id") == Some(identities[owner].as_str())
+                }));
+            }
+        }
+    }
+    let semantic_head =
+        std::fs::read(project.join("HEAD")).expect("semantic HEAD before cache recovery");
+    std::fs::write(project.join("derived/compiler/CURRENT"), b"broken")
+        .expect("corrupt extraction-derived compiler cache");
+    let recovered = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    let compilation = compact_record(&recovered, "compilation");
+    assert_eq!(compact_field(compilation, "cache"), Some("clean-recovery"));
+    assert_eq!(
+        compact_field(compilation, "recovered-class"),
+        Some("corrupt")
+    );
+    assert_eq!(
+        std::fs::read(project.join("HEAD")).expect("semantic HEAD after cache recovery"),
+        semantic_head
+    );
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
+    );
+    let exact_current = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&exact_current, "compilation"), "cache"),
+        Some("exact-current")
+    );
+    let replay = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&extraction_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&replay, "result"), "status"),
+        Some("already-accepted")
+    );
+    assert_eq!(
+        compact_field(compact_record(&replay, "revision"), "result"),
+        Some(accepted.as_str())
+    );
 }
 
 #[test]

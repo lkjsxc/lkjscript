@@ -3,31 +3,41 @@
 use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
-    AuthoredAllocation, ChangeBudget, ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
+    AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, ImpactReason, ImpactReasonKind,
+    LogicalChangePlanEvidence,
 };
-use crate::platform::contract::{capabilities_snapshot, registry_snapshot};
+use crate::platform::contract::{
+    MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
+    MAXIMUM_FUNCTION_EXTRACTION_CAPTURES, MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS,
+    MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS, MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS,
+    MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS, MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS,
+    capabilities_snapshot, registry_snapshot,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, ExactOwnerKey,
-    IdentityKind, Name, OwnerKey, OwnerKind, OwnerObjectDigest, PackageId, PackageRevisionDigest,
-    RelationEdge, RelationEndpoint, RelationKind, RetirementObjectDigest, RetirementRecord,
-    SemanticStateDigest, TypeObjectDigest, encode_dependency, encode_retirement,
+    FunctionEffect, IdentityKind, LocalValueReference, Name, OwnerKey, OwnerKind,
+    OwnerObjectDigest, PackageId, PackageRevisionDigest, ParameterUse, RelationEdge,
+    RelationEndpoint, RelationKind, RetirementObjectDigest, RetirementRecord, SemanticStateDigest,
+    TypeObjectDigest, encode_dependency, encode_retirement,
 };
 use crate::platform::publication::{
     DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, PreparedAuthoredPublication,
     RetirementDiffEntry, SemanticDiffBody, SemanticDiffDigest, SummaryDimensions,
     TransactionDigest,
 };
-use crate::platform::semantic_id::{RepositoryId, RevisionId, encode_hex};
+use crate::platform::semantic_id::{
+    DeclarationId, ExpressionId, ParameterId, RepositoryId, RequirementId, RevisionId, encode_hex,
+};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-2";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 2;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v2";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-3";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 3;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v3";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -140,6 +150,52 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
         ]
     ),
     plan_record!("logical-plan.binding", ["transaction", "semantic-diff"]),
+    plan_record!(
+        "logical-plan.extraction",
+        [
+            "function",
+            "base-definition",
+            "selected-root",
+            "moved-digest",
+            "moved-owners",
+            "helper",
+            "helper-name",
+            "result",
+            "effect",
+            "caller-body-records",
+            "helper-body-records",
+            "captures",
+            "requirements",
+            "preserved-owners",
+            "changed-owners",
+            "generated-owners",
+            "affine-present"
+        ]
+    ),
+    plan_record!(
+        "logical-plan.extraction-requirement",
+        ["index", "package", "requirement"]
+    ),
+    plan_record!(
+        "logical-plan.extraction-capture",
+        [
+            "index",
+            "source-kind",
+            "source",
+            "parameter",
+            "name",
+            "type",
+            "use",
+            "requirement-present",
+            "requirement-package",
+            "requirement"
+        ]
+    ),
+    plan_record!(
+        "logical-plan.extraction-use",
+        ["capture", "index", "expression"]
+    ),
+    plan_record!("logical-plan.extraction-owner", ["class", "index", "owner"]),
     plan_record!("logical-plan.allocation", ["domain", "ordinal", "owner"]),
     plan_record!(
         "logical-plan.owner",
@@ -255,13 +311,27 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
             "structural-owners",
             "semantic-owners",
             "tests",
-            "reasons"
+            "reasons",
+            "extractions",
+            "extraction-requirements",
+            "extraction-captures",
+            "extraction-uses",
+            "extraction-owners"
         ]
     ),
     plan_record!("logical-plan.digest", ["request", "prepared", "token"]),
 ];
 
 const FIXED_LOGICAL_PLAN_RECORDS: u64 = 18;
+const DEFAULT_EXTRACTION_OWNER_RECORDS: u64 = MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
+    + MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
+    + MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
+    + MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS;
+const DEFAULT_EXTRACTION_RECORDS: u64 = 1
+    + MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
+    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
+    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
+    + DEFAULT_EXTRACTION_OWNER_RECORDS;
 const DEFAULT_ALLOCATIONS: u64 = 100_000;
 const DEFAULT_OWNER_CHANGES: u64 = 100_000;
 const DEFAULT_TYPE_ADDITIONS: u64 = 100_000;
@@ -277,6 +347,7 @@ const DEFAULT_IMPACT_REASONS: u64 = 110_000;
 /// change admissions. Requests may declare larger engine budgets, but their actual logical plan
 /// must still fit this independent complete-review boundary.
 pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
+    + DEFAULT_EXTRACTION_RECORDS
     + DEFAULT_ALLOCATIONS
     + DEFAULT_OWNER_CHANGES
     + DEFAULT_TYPE_ADDITIONS
@@ -292,7 +363,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_387;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_512;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
 const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
@@ -301,8 +372,18 @@ const MAXIMUM_RETIREMENT_RECORD_BYTES: u64 = 1_225;
 const MAXIMUM_RELATION_RECORD_BYTES: u64 = 331;
 const MAXIMUM_SELECTION_RECORD_BYTES: u64 = 85;
 const MAXIMUM_REASON_RECORD_BYTES: u64 = 206;
+const MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES: u64 = 766;
+const MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES: u64 = 141;
+const MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES: u64 = 528;
+const MAXIMUM_EXTRACTION_USE_RECORD_BYTES: u64 = 101;
+const MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES: u64 = 102;
 
 pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORDS_BYTES
+    + MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES
+    + MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS * MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES
+    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURES * MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES
+    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES * MAXIMUM_EXTRACTION_USE_RECORD_BYTES
+    + DEFAULT_EXTRACTION_OWNER_RECORDS * MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES
     + DEFAULT_ALLOCATIONS * MAXIMUM_ALLOCATION_RECORD_BYTES
     + DEFAULT_OWNER_CHANGES * MAXIMUM_OWNER_RECORD_BYTES
     + DEFAULT_TYPE_ADDITIONS * MAXIMUM_TYPE_RECORD_BYTES
@@ -427,6 +508,7 @@ impl<'a> LogicalChangePlan<'a> {
         }
         validate_evidence(
             &publication.logical_plan,
+            owners,
             dependencies,
             retirements,
             &prepared.receipt,
@@ -699,6 +781,9 @@ where
             ("semantic-diff", prepared.semantic_diff_digest.to_string()),
         ],
     )?;
+    if let Some(extraction) = &evidence.extraction {
+        encode_extraction(extraction, encoder)?;
+    }
     for allocation in &evidence.allocations {
         encoder.append(
             "logical-plan.allocation",
@@ -799,9 +884,234 @@ where
             ),
             ("tests", count(evidence.tests.len())?),
             ("reasons", count(evidence.reasons.len())?),
+            (
+                "extractions",
+                usize::from(evidence.extraction.is_some()).to_string(),
+            ),
+            (
+                "extraction-requirements",
+                evidence
+                    .extraction
+                    .as_ref()
+                    .map_or(0, extraction_requirement_count)
+                    .to_string(),
+            ),
+            (
+                "extraction-captures",
+                evidence
+                    .extraction
+                    .as_ref()
+                    .map_or(0, |value| value.captures.len())
+                    .to_string(),
+            ),
+            (
+                "extraction-uses",
+                evidence
+                    .extraction
+                    .as_ref()
+                    .map_or(0, |value| {
+                        value
+                            .captures
+                            .iter()
+                            .map(|capture| capture.rewritten_uses.len())
+                            .sum::<usize>()
+                    })
+                    .to_string(),
+            ),
+            (
+                "extraction-owners",
+                evidence
+                    .extraction
+                    .as_ref()
+                    .map_or(0, extraction_owner_record_count)
+                    .to_string(),
+            ),
         ],
     )?;
     Ok(())
+}
+
+fn encode_extraction<F>(
+    extraction: &FunctionExtractionEvidence,
+    encoder: &mut PlanEncoder<'_, F>,
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(&[u8]) -> Result<(), Diagnostic>,
+{
+    let base_definition = extraction.base_definition.ok_or_else(|| {
+        plan_corrupt(
+            "change_logical_plan_extraction_definition",
+            "function extraction lacks its exact public base-definition digest",
+        )
+    })?;
+    let requirements = match &extraction.effect {
+        FunctionEffect::Pure => Vec::new(),
+        FunctionEffect::Task { requirements } => requirements.clone(),
+    };
+    let affine_present = extraction
+        .captures
+        .iter()
+        .any(|capture| capture.resource_requirement.is_some());
+    encoder.append(
+        "logical-plan.extraction",
+        &[
+            ("function", extraction.function.to_string()),
+            (
+                "base-definition",
+                format!("definition_{}", encode_hex(&base_definition)),
+            ),
+            ("selected-root", extraction.selected_root.to_string()),
+            (
+                "moved-digest",
+                format!("moved_{}", encode_hex(&extraction.moved_digest)),
+            ),
+            ("moved-owners", count(extraction.moved_owners.len())?),
+            ("helper", extraction.helper.to_string()),
+            ("helper-name", extraction.helper_name.to_string()),
+            ("result", extraction.result.to_string()),
+            (
+                "effect",
+                match extraction.effect {
+                    FunctionEffect::Pure => "pure",
+                    FunctionEffect::Task { .. } => "task",
+                }
+                .to_owned(),
+            ),
+            (
+                "caller-body-records",
+                extraction.caller_body_records.to_string(),
+            ),
+            (
+                "helper-body-records",
+                extraction.helper_body_records.to_string(),
+            ),
+            ("captures", count(extraction.captures.len())?),
+            ("requirements", count(requirements.len())?),
+            (
+                "preserved-owners",
+                count(extraction.preserved_owners.len())?,
+            ),
+            ("changed-owners", count(extraction.changed_owners.len())?),
+            (
+                "generated-owners",
+                count(extraction.generated_owners.len())?,
+            ),
+            ("affine-present", affine_present.to_string()),
+        ],
+    )?;
+    for (index, requirement) in requirements.iter().enumerate() {
+        encoder.append(
+            "logical-plan.extraction-requirement",
+            &[
+                ("index", index.to_string()),
+                ("package", requirement.package.to_string()),
+                ("requirement", requirement.requirement.to_string()),
+            ],
+        )?;
+    }
+    for (capture_index, capture) in extraction.captures.iter().enumerate() {
+        let (source_kind, source) = extraction_local_reference(capture.source);
+        encoder.append(
+            "logical-plan.extraction-capture",
+            &[
+                ("index", capture_index.to_string()),
+                ("source-kind", source_kind.to_owned()),
+                ("source", source.to_string()),
+                ("parameter", capture.parameter.to_string()),
+                ("name", capture.name.to_string()),
+                ("type", capture.ty.to_string()),
+                (
+                    "use",
+                    match capture.use_mode {
+                        ParameterUse::Unrestricted => "unrestricted",
+                        ParameterUse::Borrow => "borrow",
+                        ParameterUse::Consume => "consume",
+                    }
+                    .to_owned(),
+                ),
+                (
+                    "requirement-present",
+                    capture.resource_requirement.is_some().to_string(),
+                ),
+                (
+                    "requirement-package",
+                    capture
+                        .resource_requirement
+                        .map_or_else(String::new, |value| value.package.to_string()),
+                ),
+                (
+                    "requirement",
+                    capture
+                        .resource_requirement
+                        .map_or_else(String::new, |value| value.requirement.to_string()),
+                ),
+            ],
+        )?;
+    }
+    for (capture_index, capture) in extraction.captures.iter().enumerate() {
+        for (index, expression) in capture.rewritten_uses.iter().enumerate() {
+            encoder.append(
+                "logical-plan.extraction-use",
+                &[
+                    ("capture", capture_index.to_string()),
+                    ("index", index.to_string()),
+                    ("expression", expression.to_string()),
+                ],
+            )?;
+        }
+    }
+    for (class, owners) in [
+        ("moved", &extraction.moved_owners),
+        ("preserved", &extraction.preserved_owners),
+        ("changed", &extraction.changed_owners),
+        ("generated", &extraction.generated_owners),
+    ] {
+        for (index, owner) in owners.iter().enumerate() {
+            encoder.append(
+                "logical-plan.extraction-owner",
+                &[
+                    ("class", class.to_owned()),
+                    ("index", index.to_string()),
+                    ("owner", owner.to_string()),
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn extraction_local_reference(value: LocalValueReference) -> (&'static str, OwnerKey) {
+    match value {
+        LocalValueReference::FunctionParameter(parameter) => {
+            ("function-parameter", OwnerKey::Parameter(parameter))
+        }
+        LocalValueReference::OperationParameter(parameter) => {
+            ("operation-parameter", OwnerKey::Parameter(parameter))
+        }
+        LocalValueReference::LexicalBinding(binding) => {
+            ("lexical-binding", OwnerKey::Binding(binding))
+        }
+        LocalValueReference::MatchPayload(binding) => ("match-payload", OwnerKey::Binding(binding)),
+        LocalValueReference::TransactionBinding(binding) => {
+            ("transaction-binding", OwnerKey::Binding(binding))
+        }
+    }
+}
+
+fn extraction_requirement_count(extraction: &FunctionExtractionEvidence) -> usize {
+    match &extraction.effect {
+        FunctionEffect::Pure => 0,
+        FunctionEffect::Task { requirements } => requirements.len(),
+    }
+}
+
+fn extraction_owner_record_count(extraction: &FunctionExtractionEvidence) -> usize {
+    extraction
+        .moved_owners
+        .len()
+        .saturating_add(extraction.preserved_owners.len())
+        .saturating_add(extraction.changed_owners.len())
+        .saturating_add(extraction.generated_owners.len())
 }
 
 fn encode_budget<F>(
@@ -1319,6 +1629,24 @@ pub struct LogicalPlanCounts {
     pub semantic_owners: u64,
     pub tests: u64,
     pub reasons: u64,
+    pub extractions: u64,
+    pub extraction_requirements: u64,
+    pub extraction_captures: u64,
+    pub extraction_uses: u64,
+    pub extraction_owners: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ExtractionExpectedCounts {
+    selected: ExpressionId,
+    helper: DeclarationId,
+    moved: u64,
+    captures: u64,
+    requirements: u64,
+    preserved: u64,
+    changed: u64,
+    generated: u64,
+    affine: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1421,6 +1749,18 @@ struct PlanDecoder {
     last_semantic: Option<OwnerKey>,
     last_test: Option<OwnerKey>,
     last_reason: Option<ImpactReason>,
+    extraction_expected: Option<ExtractionExpectedCounts>,
+    last_extraction_use: Option<(u64, u64)>,
+    last_extraction_owner: Option<(u8, u64, OwnerKey)>,
+    extraction_owner_counts: [u64; 4],
+    extraction_owners: [BTreeSet<OwnerKey>; 4],
+    extraction_requirements: BTreeSet<crate::platform::kernel::RequirementReference>,
+    extraction_capture_sources: BTreeSet<OwnerKey>,
+    extraction_capture_parameters: BTreeSet<OwnerKey>,
+    extraction_capture_names: BTreeSet<Name>,
+    extraction_capture_uses: BTreeSet<OwnerKey>,
+    extraction_affine_capture: Option<u64>,
+    extraction_affine_requirement: Option<crate::platform::kernel::RequirementReference>,
 }
 
 impl PlanDecoder {
@@ -1450,6 +1790,18 @@ impl PlanDecoder {
             last_semantic: None,
             last_test: None,
             last_reason: None,
+            extraction_expected: None,
+            last_extraction_use: None,
+            last_extraction_owner: None,
+            extraction_owner_counts: [0; 4],
+            extraction_owners: std::array::from_fn(|_| BTreeSet::new()),
+            extraction_requirements: BTreeSet::new(),
+            extraction_capture_sources: BTreeSet::new(),
+            extraction_capture_parameters: BTreeSet::new(),
+            extraction_capture_names: BTreeSet::new(),
+            extraction_capture_uses: BTreeSet::new(),
+            extraction_affine_capture: None,
+            extraction_affine_requirement: None,
         }
     }
 
@@ -1524,8 +1876,8 @@ impl PlanDecoder {
                 ));
             }
             self.next_fixed += 1;
-        } else if (16..=26).contains(&descriptor_index) {
-            if descriptor_index < self.phase || self.phase >= 27 {
+        } else if (16..=31).contains(&descriptor_index) {
+            if descriptor_index < self.phase || self.phase >= 32 {
                 return Err(plan_source_error(
                     "change_plan_file_order",
                     format!(
@@ -1535,22 +1887,22 @@ impl PlanDecoder {
                 ));
             }
             self.phase = descriptor_index;
-        } else if descriptor_index == 27 {
-            if self.phase >= 27 || self.declared_counts.is_some() {
+        } else if descriptor_index == 32 {
+            if self.phase >= 32 || self.declared_counts.is_some() {
                 return Err(plan_source_error(
                     "change_plan_file_counts_duplicate",
                     "logical plan contains a duplicate or misplaced counts record",
                 ));
             }
-            self.phase = 27;
-        } else if descriptor_index == 28 {
-            if self.phase != 27 || self.declared_counts.is_none() {
+            self.phase = 32;
+        } else if descriptor_index == 33 {
+            if self.phase != 32 || self.declared_counts.is_none() {
                 return Err(plan_source_error(
                     "change_plan_file_digest_order",
                     "logical plan digest must follow exactly one counts record",
                 ));
             }
-            self.phase = 28;
+            self.phase = 33;
             self.trailer_seen = true;
         } else {
             return Err(plan_source_error(
@@ -1562,7 +1914,7 @@ impl PlanDecoder {
             ));
         }
 
-        if descriptor_index != 28 {
+        if descriptor_index != 33 {
             self.hasher.update(line);
         }
         self.validate_typed(descriptor_index, record)
@@ -1602,18 +1954,23 @@ impl PlanDecoder {
                 self.budget.validate()?;
                 Ok(())
             }
-            16 => self.decode_allocation(record),
-            17 => self.decode_owner(record),
-            18 => self.decode_type(record),
-            19 => self.decode_dependency(record),
-            20 => self.decode_retirement(record),
-            21 => self.decode_relation(record, false),
-            22 => self.decode_relation(record, true),
-            23 => self.decode_selection(record, SelectionKind::Structural),
-            24 => self.decode_selection(record, SelectionKind::Semantic),
-            25 => self.decode_selection(record, SelectionKind::Test),
-            26 => self.decode_reason(record),
-            27 => {
+            16 => self.decode_extraction(record),
+            17 => self.decode_extraction_requirement(record),
+            18 => self.decode_extraction_capture(record),
+            19 => self.decode_extraction_use(record),
+            20 => self.decode_extraction_owner(record),
+            21 => self.decode_allocation(record),
+            22 => self.decode_owner(record),
+            23 => self.decode_type(record),
+            24 => self.decode_dependency(record),
+            25 => self.decode_retirement(record),
+            26 => self.decode_relation(record, false),
+            27 => self.decode_relation(record, true),
+            28 => self.decode_selection(record, SelectionKind::Structural),
+            29 => self.decode_selection(record, SelectionKind::Semantic),
+            30 => self.decode_selection(record, SelectionKind::Test),
+            31 => self.decode_reason(record),
+            32 => {
                 let counts = decode_counts(record)?;
                 if counts != self.counts {
                     return Err(plan_source_error(
@@ -1621,15 +1978,342 @@ impl PlanDecoder {
                         "logical plan counts disagree with the preceding exact records",
                     ));
                 }
+                self.validate_extraction_counts()?;
                 self.declared_counts = Some(counts);
                 Ok(())
             }
-            28 => self.decode_trailer(record),
+            33 => self.decode_trailer(record),
             _ => Err(plan_source_error(
                 "change_plan_file_record_unknown",
                 "logical plan descriptor has no typed decoder",
             )),
         }
+    }
+
+    fn decode_extraction(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        if self.extraction_expected.is_some() {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_duplicate",
+                "logical plan contains more than one extraction header",
+            ));
+        }
+        field(record, 0).parse::<DeclarationId>()?;
+        parse_domain_digest(field(record, 1), "definition_", "base definition")?;
+        let selected = field(record, 2).parse::<ExpressionId>()?;
+        parse_domain_digest(field(record, 3), "moved_", "moved-owner digest")?;
+        let moved = parse_u64(field(record, 4), "moved owner count")?;
+        let helper = field(record, 5).parse::<DeclarationId>()?;
+        Name::new(field(record, 6))?;
+        field(record, 7).parse::<TypeObjectDigest>()?;
+        let effect = field(record, 8);
+        if !matches!(effect, "pure" | "task") {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_effect",
+                "extraction effect must be pure or task",
+            ));
+        }
+        let caller_body = parse_u64(field(record, 9), "caller body record count")?;
+        let helper_body = parse_u64(field(record, 10), "helper body record count")?;
+        let captures = parse_u64(field(record, 11), "extraction capture count")?;
+        let requirements = parse_u64(field(record, 12), "extraction requirement count")?;
+        let preserved = parse_u64(field(record, 13), "preserved owner count")?;
+        let changed = parse_u64(field(record, 14), "changed owner count")?;
+        let generated = parse_u64(field(record, 15), "generated owner count")?;
+        let affine = parse_bool(field(record, 16), "affine capture presence")?;
+        let expected_generated = captures.saturating_mul(2).saturating_add(2);
+        if moved == 0
+            || moved > MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
+            || caller_body == 0
+            || caller_body > MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS
+            || helper_body != moved
+            || captures > MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
+            || requirements > MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
+            || preserved > MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
+            || changed > MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
+            || generated > MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS
+            || generated != expected_generated
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_counts",
+                "extraction counts exceed their exact bounds or disagree with generated/body structure",
+            ));
+        }
+        if (effect == "pure" && requirements != 0) || (effect == "task" && requirements == 0) {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_effect",
+                "extraction effect and exact requirement count disagree",
+            ));
+        }
+        self.extraction_expected = Some(ExtractionExpectedCounts {
+            selected,
+            helper,
+            moved,
+            captures,
+            requirements,
+            preserved,
+            changed,
+            generated,
+            affine,
+        });
+        increment(&mut self.counts.extractions, "extraction")
+    }
+
+    fn require_extraction_header(&self) -> Result<ExtractionExpectedCounts, Diagnostic> {
+        self.extraction_expected.ok_or_else(|| {
+            plan_source_error(
+                "change_plan_file_extraction_header",
+                "extraction detail record precedes its extraction header",
+            )
+        })
+    }
+
+    fn decode_extraction_requirement(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        let expected = self.require_extraction_header()?;
+        let index = parse_u64(field(record, 0), "extraction requirement index")?;
+        if index != self.counts.extraction_requirements || index >= expected.requirements {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_requirement_order",
+                "extraction requirements are duplicated, missing, or out of canonical order",
+            ));
+        }
+        let requirement = crate::platform::kernel::RequirementReference {
+            package: field(record, 1).parse::<PackageId>()?,
+            requirement: field(record, 2).parse::<RequirementId>()?,
+        };
+        if !self.extraction_requirements.insert(requirement) {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_requirement_order",
+                "extraction requirements contain an exact duplicate outside caller order",
+            ));
+        }
+        increment(
+            &mut self.counts.extraction_requirements,
+            "extraction requirement",
+        )
+    }
+
+    fn decode_extraction_capture(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        let expected = self.require_extraction_header()?;
+        let index = parse_u64(field(record, 0), "extraction capture index")?;
+        if index != self.counts.extraction_captures || index >= expected.captures {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_capture_order",
+                "extraction captures are duplicated, missing, or out of canonical order",
+            ));
+        }
+        let source = field(record, 2).parse::<OwnerKey>()?;
+        let source_valid = match field(record, 1) {
+            "function-parameter" => matches!(source, OwnerKey::Parameter(_)),
+            "lexical-binding" | "match-payload" => matches!(source, OwnerKey::Binding(_)),
+            _ => false,
+        };
+        if !source_valid {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_capture_source",
+                "extraction capture source kind and exact owner domain disagree",
+            ));
+        }
+        let parameter = OwnerKey::Parameter(field(record, 3).parse::<ParameterId>()?);
+        let name = Name::new(field(record, 4))?;
+        if !self.extraction_capture_sources.insert(source)
+            || !self.extraction_capture_parameters.insert(parameter)
+            || !self.extraction_capture_names.insert(name)
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_capture_identity",
+                "extraction capture sources and generated parameters must be exact and unique",
+            ));
+        }
+        field(record, 5).parse::<TypeObjectDigest>()?;
+        let use_mode = match field(record, 6) {
+            "unrestricted" => ParameterUse::Unrestricted,
+            "borrow" => ParameterUse::Borrow,
+            "consume" => ParameterUse::Consume,
+            _ => {
+                return Err(plan_source_error(
+                    "change_plan_file_extraction_capture_use",
+                    "extraction capture use must be unrestricted, borrow, or consume",
+                ));
+            }
+        };
+        let requirement_present = parse_bool(field(record, 7), "capture requirement presence")?;
+        if requirement_present {
+            let requirement = crate::platform::kernel::RequirementReference {
+                package: field(record, 8).parse::<PackageId>()?,
+                requirement: field(record, 9).parse::<RequirementId>()?,
+            };
+            if use_mode != ParameterUse::Consume || self.extraction_affine_capture.is_some() {
+                return Err(plan_source_error(
+                    "change_plan_file_extraction_affine",
+                    "extraction permits at most one requirement-bound consume capture",
+                ));
+            }
+            self.extraction_affine_capture = Some(index);
+            self.extraction_affine_requirement = Some(requirement);
+        } else if !field(record, 8).is_empty()
+            || !field(record, 9).is_empty()
+            || use_mode != ParameterUse::Unrestricted
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_capture_requirement",
+                "resource-free extraction capture must be unrestricted with empty requirement fields",
+            ));
+        }
+        increment(&mut self.counts.extraction_captures, "extraction capture")
+    }
+
+    fn decode_extraction_use(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        let expected = self.require_extraction_header()?;
+        let capture = parse_u64(field(record, 0), "extraction use capture index")?;
+        let index = parse_u64(field(record, 1), "extraction use index")?;
+        if capture >= expected.captures
+            || self.last_extraction_use.is_some_and(|previous| {
+                capture < previous.0
+                    || capture > previous.0.saturating_add(1)
+                    || (capture == previous.0 && index != previous.1 + 1)
+            })
+            || self.last_extraction_use.is_none() && (capture != 0 || index != 0)
+            || self
+                .last_extraction_use
+                .is_some_and(|previous| capture > previous.0 && index != 0)
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_use_order",
+                "extraction capture uses are duplicated, missing, or out of canonical order",
+            ));
+        }
+        let expression = OwnerKey::Expression(field(record, 2).parse::<ExpressionId>()?);
+        if !self.extraction_capture_uses.insert(expression)
+            || self.counts.extraction_uses >= MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_use_identity",
+                "extraction capture uses exceed their bound or contain an exact duplicate",
+            ));
+        }
+        self.last_extraction_use = Some((capture, index));
+        increment(&mut self.counts.extraction_uses, "extraction capture use")
+    }
+
+    fn decode_extraction_owner(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        self.require_extraction_header()?;
+        let class = match field(record, 0) {
+            "moved" => 0_u8,
+            "preserved" => 1,
+            "changed" => 2,
+            "generated" => 3,
+            _ => {
+                return Err(plan_source_error(
+                    "change_plan_file_extraction_owner_class",
+                    "extraction owner class is unknown",
+                ));
+            }
+        };
+        let index = parse_u64(field(record, 1), "extraction owner index")?;
+        let owner = field(record, 2).parse::<OwnerKey>()?;
+        let class_index = usize::from(class);
+        let expected_count = [
+            self.require_extraction_header()?.moved,
+            self.require_extraction_header()?.preserved,
+            self.require_extraction_header()?.changed,
+            self.require_extraction_header()?.generated,
+        ][class_index];
+        if index != self.extraction_owner_counts[class_index]
+            || index >= expected_count
+            || self.last_extraction_owner.is_some_and(|previous| {
+                class < previous.0
+                    || (class == previous.0
+                        && canonical_owner_cmp(previous.2, owner) != Ordering::Less)
+            })
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_owner_order",
+                "extraction owners are duplicated, missing, or out of canonical class/owner order",
+            ));
+        }
+        self.extraction_owner_counts[class_index] = self.extraction_owner_counts[class_index]
+            .checked_add(1)
+            .ok_or_else(|| {
+                plan_resource_error(
+                    "change_plan_file_count_overflow",
+                    "extraction owner count overflowed",
+                )
+            })?;
+        self.extraction_owners[class_index].insert(owner);
+        self.last_extraction_owner = Some((class, index, owner));
+        increment(&mut self.counts.extraction_owners, "extraction owner")
+    }
+
+    fn validate_extraction_counts(&self) -> Result<(), Diagnostic> {
+        let Some(expected) = self.extraction_expected else {
+            if self.counts.extractions == 0
+                && self.counts.extraction_requirements == 0
+                && self.counts.extraction_captures == 0
+                && self.counts.extraction_uses == 0
+                && self.counts.extraction_owners == 0
+            {
+                return Ok(());
+            }
+            return Err(plan_source_error(
+                "change_plan_file_extraction_header",
+                "extraction records exist without an exact header",
+            ));
+        };
+        if self.counts.extractions != 1
+            || self.counts.extraction_requirements != expected.requirements
+            || self.counts.extraction_captures != expected.captures
+            || self.extraction_owner_counts
+                != [
+                    expected.moved,
+                    expected.preserved,
+                    expected.changed,
+                    expected.generated,
+                ]
+            || expected.affine != self.extraction_affine_capture.is_some()
+            || self
+                .extraction_affine_capture
+                .is_some_and(|index| index + 1 != expected.captures)
+            || (expected.captures != 0
+                && self
+                    .last_extraction_use
+                    .is_none_or(|(capture, _)| capture + 1 != expected.captures))
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_counts",
+                "extraction header counts or final affine position disagree with detail records",
+            ));
+        }
+        let [moved, preserved, changed, generated] = &self.extraction_owners;
+        let changed_moved = changed
+            .intersection(moved)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if !moved.contains(&OwnerKey::Expression(expected.selected))
+            || !preserved.is_subset(moved)
+            || !preserved.is_disjoint(changed)
+            || !moved.is_disjoint(generated)
+            || !changed.is_disjoint(generated)
+            || !generated.contains(&OwnerKey::Declaration(expected.helper))
+            || preserved
+                .union(&changed_moved)
+                .copied()
+                .collect::<BTreeSet<_>>()
+                != *moved
+            || changed.difference(moved).count() != 1
+            || !self.extraction_capture_sources.is_disjoint(moved)
+            || !self.extraction_capture_parameters.is_subset(generated)
+            || !self.extraction_capture_uses.is_subset(moved)
+            || !self.extraction_capture_uses.is_subset(changed)
+            || self
+                .extraction_affine_requirement
+                .is_some_and(|requirement| !self.extraction_requirements.contains(&requirement))
+        {
+            return Err(plan_source_error(
+                "change_plan_file_extraction_owner_sets",
+                "extraction identity and capture sets disagree across exact review records",
+            ));
+        }
+        Ok(())
     }
 
     fn decode_allocation(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
@@ -1897,7 +2581,7 @@ impl PlanDecoder {
     }
 
     fn finish(self) -> Result<DecodedLogicalPlan, Diagnostic> {
-        if !self.trailer_seen || self.phase != 28 {
+        if !self.trailer_seen || self.phase != 33 {
             return Err(plan_source_error(
                 "change_plan_file_incomplete",
                 "logical plan file is missing its counts or digest trailer",
@@ -2319,7 +3003,28 @@ fn decode_counts(record: &CompactRecord) -> Result<LogicalPlanCounts, Diagnostic
         semantic_owners: parse_u64(field(record, 8), "semantic owner count")?,
         tests: parse_u64(field(record, 9), "test count")?,
         reasons: parse_u64(field(record, 10), "reason count")?,
+        extractions: parse_u64(field(record, 11), "extraction count")?,
+        extraction_requirements: parse_u64(field(record, 12), "extraction requirement count")?,
+        extraction_captures: parse_u64(field(record, 13), "extraction capture count")?,
+        extraction_uses: parse_u64(field(record, 14), "extraction use count")?,
+        extraction_owners: parse_u64(field(record, 15), "extraction owner count")?,
     })
+}
+
+fn parse_domain_digest(value: &str, prefix: &str, label: &str) -> Result<[u8; 32], Diagnostic> {
+    let encoded = value.strip_prefix(prefix).ok_or_else(|| {
+        plan_source_error(
+            "change_plan_file_extraction_digest",
+            format!("extraction {label} must start with '{prefix}'"),
+        )
+    })?;
+    if encoded.len() != 64 {
+        return Err(plan_source_error(
+            "change_plan_file_extraction_digest",
+            format!("extraction {label} must contain 64 lowercase hexadecimal characters"),
+        ));
+    }
+    decode_hex_32(encoded)
 }
 
 fn parse_request_commitment(value: &str) -> Result<ChangeRequestCommitment, Diagnostic> {
@@ -2513,11 +3218,15 @@ fn relation_kind_order(kind: RelationKind) -> usize {
 
 fn validate_evidence(
     evidence: &LogicalChangePlanEvidence,
+    owners: &[OwnerDiffEntry],
     dependencies: &[DependencyDiffEntry],
     retirements: &[RetirementDiffEntry],
     receipt: &crate::platform::publication::PublicationReceipt,
 ) -> Result<(), Diagnostic> {
     evidence.budget.validate()?;
+    if let Some(extraction) = &evidence.extraction {
+        validate_extraction_evidence(extraction, owners, &evidence.allocations)?;
+    }
     if evidence
         .allocations
         .windows(2)
@@ -2665,6 +3374,209 @@ fn validate_evidence(
     Ok(())
 }
 
+fn validate_extraction_evidence(
+    extraction: &FunctionExtractionEvidence,
+    owners: &[OwnerDiffEntry],
+    allocations: &[AuthoredAllocation],
+) -> Result<(), Diagnostic> {
+    let moved_count = u64::try_from(extraction.moved_owners.len()).unwrap_or(u64::MAX);
+    let capture_count = u64::try_from(extraction.captures.len()).unwrap_or(u64::MAX);
+    let preserved_count = u64::try_from(extraction.preserved_owners.len()).unwrap_or(u64::MAX);
+    let changed_count = u64::try_from(extraction.changed_owners.len()).unwrap_or(u64::MAX);
+    let generated_count = u64::try_from(extraction.generated_owners.len()).unwrap_or(u64::MAX);
+    let capture_use_count = extraction.captures.iter().fold(0_u64, |total, capture| {
+        total.saturating_add(u64::try_from(capture.rewritten_uses.len()).unwrap_or(u64::MAX))
+    });
+    let requirements = match &extraction.effect {
+        FunctionEffect::Pure => &[][..],
+        FunctionEffect::Task { requirements } => requirements.as_slice(),
+    };
+    let requirement_count = u64::try_from(requirements.len()).unwrap_or(u64::MAX);
+    let expected_generated = capture_count.saturating_mul(2).saturating_add(2);
+    if extraction.base_definition.is_none()
+        || extraction.function == extraction.helper
+        || moved_count == 0
+        || moved_count > MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
+        || capture_count > MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
+        || capture_use_count > MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
+        || requirement_count > MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
+        || preserved_count > MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
+        || changed_count > MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
+        || generated_count > MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS
+        || generated_count != expected_generated
+        || extraction.helper_body_records != moved_count
+        || extraction.caller_body_records == 0
+        || extraction.caller_body_records > MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_bounds",
+            "function extraction evidence is incomplete or exceeds an exact review boundary",
+        ));
+    }
+    if !strict_owner_slice(&extraction.moved_owners)
+        || !strict_owner_slice(&extraction.preserved_owners)
+        || !strict_owner_slice(&extraction.changed_owners)
+        || !strict_owner_slice(&extraction.generated_owners)
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_order",
+            "function extraction owner sets are not unique in canonical owner order",
+        ));
+    }
+    let moved = extraction
+        .moved_owners
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let preserved = extraction
+        .preserved_owners
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let changed = extraction
+        .changed_owners
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let generated = extraction
+        .generated_owners
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let selected = OwnerKey::Expression(extraction.selected_root);
+    let helper = OwnerKey::Declaration(extraction.helper);
+    let changed_moved = changed
+        .intersection(&moved)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if !moved.contains(&selected)
+        || !preserved.is_subset(&moved)
+        || !preserved.is_disjoint(&changed)
+        || !moved.is_disjoint(&generated)
+        || !changed.is_disjoint(&generated)
+        || !generated.contains(&helper)
+        || preserved
+            .union(&changed_moved)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            != moved
+        || changed.difference(&moved).count() != 1
+        || moved.contains(&OwnerKey::Declaration(extraction.function))
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_owner_sets",
+            "function extraction moved, preserved, changed, and generated owner sets disagree",
+        ));
+    }
+    if requirements.is_empty() != matches!(extraction.effect, FunctionEffect::Pure)
+        || requirements.iter().copied().collect::<BTreeSet<_>>().len() != requirements.len()
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_requirements",
+            "function extraction effect does not contain one unique exact caller-ordered requirement sequence",
+        ));
+    }
+    let requirement_set = requirements.iter().copied().collect::<BTreeSet<_>>();
+    let mut sources = BTreeSet::new();
+    let mut parameters = BTreeSet::new();
+    let mut names = BTreeSet::new();
+    let mut uses = BTreeSet::new();
+    let mut affine = None;
+    for (index, capture) in extraction.captures.iter().enumerate() {
+        let source = local_reference_owner(capture.source);
+        let parameter = OwnerKey::Parameter(capture.parameter);
+        if !sources.insert(capture.source)
+            || !parameters.insert(capture.parameter)
+            || !names.insert(capture.name.clone())
+            || moved.contains(&source)
+            || !generated.contains(&parameter)
+            || capture.rewritten_uses.is_empty()
+            || capture.rewritten_uses.iter().any(|expression| {
+                let owner = OwnerKey::Expression(*expression);
+                !uses.insert(*expression) || !moved.contains(&owner) || !changed.contains(&owner)
+            })
+        {
+            return Err(plan_corrupt(
+                "change_logical_plan_extraction_captures",
+                "function extraction capture sources, parameters, names, or rewritten uses disagree",
+            ));
+        }
+        match (capture.use_mode, capture.resource_requirement) {
+            (ParameterUse::Unrestricted, None) => {}
+            (ParameterUse::Consume, Some(requirement))
+                if affine.is_none() && requirement_set.contains(&requirement) =>
+            {
+                affine = Some(index);
+            }
+            _ => {
+                return Err(plan_corrupt(
+                    "change_logical_plan_extraction_affine",
+                    "function extraction admits only unrestricted captures and at most one exact requirement-bound consume capture",
+                ));
+            }
+        }
+    }
+    if affine.is_some_and(|index| index + 1 != extraction.captures.len()) {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_affine_order",
+            "function extraction consume capture is not final",
+        ));
+    }
+    let changed_entries = owners
+        .iter()
+        .map(|entry| (entry.owner, entry))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    if extraction.preserved_owners.iter().any(|owner| {
+        changed_entries.get(owner).is_some_and(|entry| {
+            entry.objects.before.is_none()
+                || entry.objects.after.is_none()
+                || entry.objects.before != entry.objects.after
+        })
+    }) || extraction.changed_owners.iter().any(|owner| {
+        changed_entries
+            .get(owner)
+            .is_none_or(|entry| entry.objects.before.is_none() || entry.objects.after.is_none())
+    }) || extraction.generated_owners.iter().any(|owner| {
+        changed_entries.get(owner).is_none_or(|entry| {
+            entry.objects.before.is_some()
+                || entry.objects.after.is_none()
+                || !entry.classes.contains(&OwnerChangeClass::Created)
+        })
+    }) {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_diff",
+            "function extraction identity classes disagree with the exact semantic owner diff",
+        ));
+    }
+    let allocated = allocations
+        .iter()
+        .map(|allocation| allocation.owner)
+        .collect::<BTreeSet<_>>();
+    if !generated.is_subset(&allocated) {
+        return Err(plan_corrupt(
+            "change_logical_plan_extraction_allocations",
+            "function extraction generated owners lack exact authored allocations",
+        ));
+    }
+    Ok(())
+}
+
+fn local_reference_owner(value: LocalValueReference) -> OwnerKey {
+    match value {
+        LocalValueReference::FunctionParameter(parameter)
+        | LocalValueReference::OperationParameter(parameter) => OwnerKey::Parameter(parameter),
+        LocalValueReference::LexicalBinding(binding)
+        | LocalValueReference::MatchPayload(binding)
+        | LocalValueReference::TransactionBinding(binding) => OwnerKey::Binding(binding),
+    }
+}
+
+fn strict_owner_slice(owners: &[OwnerKey]) -> bool {
+    owners
+        .windows(2)
+        .all(|pair| canonical_owner_cmp(pair[0], pair[1]) == Ordering::Less)
+}
+
 fn strict_relations(relations: &BTreeSet<RelationEdge>) -> bool {
     relations
         .iter()
@@ -2798,7 +3710,7 @@ mod tests {
 
     #[test]
     fn reviewed_change_plan_every_body_field_changes_the_prepared_commitment() {
-        for descriptor in &LOGICAL_PLAN_RECORD_DESCRIPTORS[..28] {
+        for descriptor in &LOGICAL_PLAN_RECORD_DESCRIPTORS[..33] {
             for changed in 0..descriptor.fields.len() {
                 let baseline = descriptor
                     .fields
@@ -2825,6 +3737,38 @@ mod tests {
         bind_internal_registry(&mut first, &"a".repeat(64));
         bind_internal_registry(&mut second, &"b".repeat(64));
         assert_ne!(first.finalize(), second.finalize());
+    }
+
+    #[test]
+    fn extraction_plan_requirements_preserve_caller_order() {
+        let mut decoder = PlanDecoder::new();
+        decoder.extraction_expected = Some(ExtractionExpectedCounts {
+            selected: "expr_00000000000000000000000000000001".parse().unwrap(),
+            helper: "decl_00000000000000000000000000000001".parse().unwrap(),
+            moved: 1,
+            captures: 0,
+            requirements: 2,
+            preserved: 1,
+            changed: 1,
+            generated: 2,
+            affine: false,
+        });
+        for (index, requirement) in [
+            "req_ffffffffffffffffffffffffffffffff",
+            "req_00000000000000000000000000000001",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let source = format!(
+                "logical-plan.extraction-requirement index={index} package=pkg_00000000000000000000000000000001 requirement={requirement}\n"
+            );
+            let records =
+                parse_records("caller-ordered extraction requirements", source.as_bytes()).unwrap();
+            decoder.decode_extraction_requirement(&records[0]).unwrap();
+        }
+        assert_eq!(decoder.counts.extraction_requirements, 2);
+        assert_eq!(decoder.extraction_requirements.len(), 2);
     }
 
     #[test]
@@ -2870,8 +3814,8 @@ mod tests {
                 .maximum_relation_edges
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 740_018);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_387);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 772_790);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 308_621_464);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -2884,7 +3828,7 @@ mod tests {
             ],
             MAXIMUM_ALLOCATION_RECORD_BYTES,
         );
-        let mut owner_fields = LOGICAL_PLAN_RECORD_DESCRIPTORS[17]
+        let mut owner_fields = LOGICAL_PLAN_RECORD_DESCRIPTORS[22]
             .fields
             .iter()
             .map(|field| (*field, "false"))
@@ -2979,6 +3923,79 @@ mod tests {
                 ("relation", "test_execution_dependency"),
             ],
             MAXIMUM_REASON_RECORD_BYTES,
+        );
+        let declaration = format!("decl_{}", "f".repeat(32));
+        let expression = format!("expr_{}", "f".repeat(32));
+        let definition = format!("definition_{}", "f".repeat(64));
+        let moved = format!("moved_{}", "f".repeat(64));
+        let parameter = format!("param_{}", "f".repeat(32));
+        let requirement = format!("req_{}", "f".repeat(32));
+        let type_object = format!("type_object_{}", "f".repeat(64));
+        assert_record_maximum(
+            "logical-plan.extraction",
+            &[
+                ("function", &declaration),
+                ("base-definition", &definition),
+                ("selected-root", &expression),
+                ("moved-digest", &moved),
+                ("moved-owners", "4096"),
+                ("helper", &declaration),
+                ("helper-name", &name),
+                ("result", &type_object),
+                ("effect", "task"),
+                ("caller-body-records", "4096"),
+                ("helper-body-records", "4096"),
+                ("captures", "4096"),
+                ("requirements", "4096"),
+                ("preserved-owners", "4096"),
+                ("changed-owners", "4097"),
+                ("generated-owners", "8194"),
+                ("affine-present", "false"),
+            ],
+            MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES,
+        );
+        assert_record_maximum(
+            "logical-plan.extraction-requirement",
+            &[
+                ("index", "4095"),
+                ("package", &package),
+                ("requirement", &requirement),
+            ],
+            MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES,
+        );
+        assert_record_maximum(
+            "logical-plan.extraction-capture",
+            &[
+                ("index", "4095"),
+                ("source-kind", "function-parameter"),
+                ("source", &parameter),
+                ("parameter", &parameter),
+                ("name", &name),
+                ("type", &type_object),
+                ("use", "consume"),
+                ("requirement-present", "true"),
+                ("requirement-package", &package),
+                ("requirement", &requirement),
+            ],
+            MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES,
+        );
+        assert_record_maximum(
+            "logical-plan.extraction-use",
+            &[
+                ("capture", "4095"),
+                ("index", "4095"),
+                ("expression", &expression),
+            ],
+            MAXIMUM_EXTRACTION_USE_RECORD_BYTES,
+        );
+        assert_record_maximum(
+            "logical-plan.extraction-owner",
+            &[
+                ("class", "preserved"),
+                ("index", "8193"),
+                ("owner", &parameter),
+            ],
+            MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES,
         );
         let worst_controls =
             "\u{7f}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
@@ -3091,7 +4108,7 @@ mod tests {
         let six_digits = "999999";
         add(
             "logical-plan.counts",
-            &LOGICAL_PLAN_RECORD_DESCRIPTORS[27]
+            &LOGICAL_PLAN_RECORD_DESCRIPTORS[32]
                 .fields
                 .iter()
                 .map(|field| (*field, six_digits))

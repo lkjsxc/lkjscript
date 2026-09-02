@@ -89,9 +89,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-7";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 7;
-pub const CLI_CONTRACT_VERSION: u16 = 19;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-8";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 8;
+pub const CLI_CONTRACT_VERSION: u16 = 20;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -111,6 +111,17 @@ pub const MAXIMUM_FUNCTION_DEFINITION_FACT_READS: u64 = 32_768;
 pub const MAXIMUM_FUNCTION_DEFINITION_DEPTH: u64 = 256;
 pub const MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES: usize = 8 * 1_048_576;
 pub const MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES: usize = 8 * 1_024;
+
+pub const MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS: u64 = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS;
+pub const MAXIMUM_FUNCTION_EXTRACTION_CAPTURES: u64 = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS;
+pub const MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES: u64 = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS;
+pub const MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS: u64 = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS;
+pub const MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS: u64 =
+    MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS;
+pub const MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS: u64 =
+    MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS + 1;
+pub const MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS: u64 =
+    MAXIMUM_FUNCTION_EXTRACTION_CAPTURES * 2 + 2;
 
 const MAXIMUM_FUNCTION_DEFINITION_POINT_MAP_PATH_PAGES: u64 = 18;
 pub const MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS: u64 =
@@ -761,7 +772,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR07", "LKJABG01"],
+            magic_values: &["LKJACR08", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1323,7 +1334,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Change,
             "Prepare, optionally export, or atomically apply one review-bound logical semantic change plan.",
-            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
+            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
             (ControlModel::ChangeRequest, ControlModel::CompactResult),
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -1856,6 +1867,51 @@ const fn diagnostic(
     }
 }
 
+const fn extraction_semantic_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Semantic,
+        "The selected function-extraction boundary is not semantically admissible.",
+        "Inspect the exact base definition and choose a supported proper subtree, captures, and private helper name.",
+    )
+}
+
+const fn extraction_resource_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Resource,
+        "Function-extraction analysis or its result exceeded an executable-owned finite bound.",
+        "Select a smaller proper subtree or split the refactor into later exact-base changes.",
+    )
+}
+
+const fn extraction_corrupt_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Corrupt,
+        "Canonical graph meaning and the exact derived structure required for extraction disagree.",
+        "Preserve the repository and report the exact diagnostic; do not retry a semantic write.",
+    )
+}
+
+const fn extraction_plan_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Source,
+        "An extraction review record is malformed, noncanonical, incomplete, or internally inconsistent.",
+        "Regenerate the complete logical plan with the exact executable and request; do not edit plan bytes.",
+    )
+}
+
+const fn extraction_review_corrupt_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Corrupt,
+        "Prepared function-extraction evidence disagrees with the exact semantic diff, allocations, or review contract.",
+        "Retain the request and repository and use a verified executable; do not retry a write.",
+    )
+}
+
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
         DiagnosticDescriptor {
@@ -2326,6 +2382,95 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "A package dependency no longer has the expected semantic and package revisions.",
             "Inspect the exact dependency binding at the observed base and rebuild the request.",
         ),
+        extraction_semantic_diagnostic("change_extract_affine_shape"),
+        extraction_resource_diagnostic("change_extract_affine_work"),
+        extraction_semantic_diagnostic("change_extract_binding_escape"),
+        extraction_resource_diagnostic("change_extract_body_count"),
+        extraction_resource_diagnostic("change_extract_call_graph_depth"),
+        extraction_resource_diagnostic("change_extract_call_graph_work"),
+        extraction_semantic_diagnostic("change_extract_call_kind"),
+        extraction_semantic_diagnostic("change_extract_call_missing"),
+        extraction_resource_diagnostic("change_extract_caller_body_limit"),
+        extraction_semantic_diagnostic("change_extract_capture_foreign"),
+        extraction_resource_diagnostic("change_extract_capture_limit"),
+        extraction_semantic_diagnostic("change_extract_capture_type"),
+        extraction_resource_diagnostic("change_extract_capture_use_limit"),
+        extraction_semantic_diagnostic("change_extract_closure"),
+        extraction_semantic_diagnostic("change_extract_conflict"),
+        extraction_semantic_diagnostic("change_extract_dependency_missing"),
+        extraction_resource_diagnostic("change_extract_depth"),
+        extraction_semantic_diagnostic("change_extract_existing_function"),
+        extraction_resource_diagnostic("change_extract_expression_count"),
+        extraction_semantic_diagnostic("change_extract_expression_foreign"),
+        extraction_semantic_diagnostic("change_extract_free_type"),
+        extraction_semantic_diagnostic("change_extract_function_kind"),
+        extraction_semantic_diagnostic("change_extract_function_missing"),
+        extraction_semantic_diagnostic("change_extract_generic_target"),
+        extraction_semantic_diagnostic("change_extract_helper_collision"),
+        extraction_semantic_diagnostic("change_extract_missing_requirement"),
+        extraction_resource_diagnostic("change_extract_moved_owners"),
+        extraction_semantic_diagnostic("change_extract_multiple"),
+        extraction_semantic_diagnostic("change_extract_multiple_resources"),
+        extraction_resource_diagnostic("change_extract_ordinal"),
+        extraction_semantic_diagnostic("change_extract_recursive_target"),
+        extraction_resource_diagnostic("change_extract_requirement_limit"),
+        extraction_semantic_diagnostic("change_extract_resource_ambiguity"),
+        extraction_semantic_diagnostic("change_extract_resource_container"),
+        extraction_semantic_diagnostic("change_extract_resource_post_use"),
+        extraction_semantic_diagnostic("change_extract_resource_provenance"),
+        extraction_semantic_diagnostic("change_extract_resource_requirement"),
+        extraction_semantic_diagnostic("change_extract_resource_result"),
+        extraction_semantic_diagnostic("change_extract_resource_source"),
+        extraction_semantic_diagnostic("change_extract_resource_use"),
+        extraction_semantic_diagnostic("change_extract_result_type"),
+        extraction_semantic_diagnostic("change_extract_structural_alias"),
+        extraction_semantic_diagnostic("change_extract_transaction_capture"),
+        extraction_semantic_diagnostic("change_extract_whole_body"),
+        extraction_corrupt_diagnostic("change_extract_affine_requirement"),
+        extraction_corrupt_diagnostic("change_extract_binding_kind"),
+        extraction_corrupt_diagnostic("change_extract_binding_record"),
+        extraction_corrupt_diagnostic("change_extract_call_graph_alias"),
+        extraction_corrupt_diagnostic("change_extract_call_graph_binding"),
+        extraction_corrupt_diagnostic("change_extract_call_graph_expression"),
+        extraction_corrupt_diagnostic("change_extract_call_graph_function"),
+        extraction_corrupt_diagnostic("change_extract_capture_changed"),
+        extraction_corrupt_diagnostic("change_extract_capture_kind"),
+        extraction_corrupt_diagnostic("change_extract_capture_name"),
+        extraction_corrupt_diagnostic("change_extract_capture_parameter"),
+        extraction_corrupt_diagnostic("change_extract_capture_record"),
+        extraction_corrupt_diagnostic("change_extract_capture_scope"),
+        extraction_corrupt_diagnostic("change_extract_effect_inventory"),
+        extraction_corrupt_diagnostic("change_extract_expression_cache"),
+        extraction_corrupt_diagnostic("change_extract_expression_inventory"),
+        extraction_corrupt_diagnostic("change_extract_expression_record"),
+        extraction_corrupt_diagnostic("change_extract_function_record"),
+        extraction_corrupt_diagnostic("change_extract_moved_digest"),
+        extraction_corrupt_diagnostic("change_extract_named_member"),
+        extraction_corrupt_diagnostic("change_extract_named_type"),
+        extraction_corrupt_diagnostic("change_extract_owner_cache"),
+        extraction_corrupt_diagnostic("change_extract_ownership"),
+        extraction_corrupt_diagnostic("change_extract_parent_edge"),
+        extraction_corrupt_diagnostic("change_extract_parent_kind"),
+        extraction_corrupt_diagnostic("change_extract_parent_missing"),
+        extraction_corrupt_diagnostic("change_extract_resource_binding"),
+        extraction_corrupt_diagnostic("change_extract_type_missing"),
+        extraction_plan_diagnostic("change_plan_file_extraction_affine"),
+        extraction_plan_diagnostic("change_plan_file_extraction_capture_identity"),
+        extraction_plan_diagnostic("change_plan_file_extraction_capture_order"),
+        extraction_plan_diagnostic("change_plan_file_extraction_capture_requirement"),
+        extraction_plan_diagnostic("change_plan_file_extraction_capture_source"),
+        extraction_plan_diagnostic("change_plan_file_extraction_capture_use"),
+        extraction_plan_diagnostic("change_plan_file_extraction_counts"),
+        extraction_plan_diagnostic("change_plan_file_extraction_digest"),
+        extraction_plan_diagnostic("change_plan_file_extraction_duplicate"),
+        extraction_plan_diagnostic("change_plan_file_extraction_effect"),
+        extraction_plan_diagnostic("change_plan_file_extraction_header"),
+        extraction_plan_diagnostic("change_plan_file_extraction_owner_class"),
+        extraction_plan_diagnostic("change_plan_file_extraction_owner_order"),
+        extraction_plan_diagnostic("change_plan_file_extraction_owner_sets"),
+        extraction_plan_diagnostic("change_plan_file_extraction_requirement_order"),
+        extraction_plan_diagnostic("change_plan_file_extraction_use_identity"),
+        extraction_plan_diagnostic("change_plan_file_extraction_use_order"),
         diagnostic(
             "change_delete_policy",
             DiagnosticClass::Source,
@@ -2650,6 +2795,16 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Prepared selected tests disagree with validation evidence.",
             "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_affine"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_affine_order"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_allocations"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_bounds"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_captures"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_definition"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_diff"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_order"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_owner_sets"),
+        extraction_review_corrupt_diagnostic("change_logical_plan_extraction_requirements"),
         diagnostic(
             "change_plan_file_read",
             DiagnosticClass::Source,
@@ -4558,6 +4713,52 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     )?);
                 }
             }
+            for (name, value, unit) in [
+                (
+                    "maximum-extraction-moved-owners",
+                    MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS,
+                    "owners",
+                ),
+                (
+                    "maximum-extraction-captures",
+                    MAXIMUM_FUNCTION_EXTRACTION_CAPTURES,
+                    "captures",
+                ),
+                (
+                    "maximum-extraction-capture-uses",
+                    MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
+                    "uses",
+                ),
+                (
+                    "maximum-extraction-requirements",
+                    MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS,
+                    "requirements",
+                ),
+                (
+                    "maximum-extraction-preserved-owners",
+                    MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS,
+                    "owners",
+                ),
+                (
+                    "maximum-extraction-changed-owners",
+                    MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS,
+                    "owners",
+                ),
+                (
+                    "maximum-extraction-generated-owners",
+                    MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS,
+                    "owners",
+                ),
+            ] {
+                records.push(compact_record(
+                    "change.extraction-limit",
+                    &[
+                        ("name", name.to_owned()),
+                        ("value", value.to_string()),
+                        ("unit", unit.to_owned()),
+                    ],
+                )?);
+            }
             for form in CompactChangeFieldForm::ALL {
                 records.push(compact_record(
                     "change.field-form",
@@ -5620,8 +5821,11 @@ fn validate_compact_change_inventory(
         .filter(|operation| operation.direct)
         .map(|operation| operation.name)
         .collect::<Vec<_>>();
-    if direct_operations != ["rename.owner"] {
-        return Err("rename.owner must be the sole direct compact change operation".to_owned());
+    if direct_operations != ["rename.owner", "extract.function"] {
+        return Err(
+            "rename.owner and extract.function must be the exact direct compact change operations"
+                .to_owned(),
+        );
     }
     Ok(())
 }

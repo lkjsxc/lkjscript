@@ -7,6 +7,7 @@ mod data_oracle;
 mod distributed_http;
 mod error;
 mod evidence;
+mod extraction_oracle;
 mod http_probe;
 mod measure;
 mod outbound_http;
@@ -41,6 +42,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("check") => check::command(arguments),
         Some("data-oracle") => data_oracle::command(arguments),
         Some("distributed-http") => distributed_http::command(arguments),
+        Some("function-extraction-oracle") => extraction_oracle::command(arguments),
         Some("policy") => check::policy_command(arguments),
         Some("scale") => scale::command(arguments),
         Some("measure") => measure::command(arguments),
@@ -51,7 +53,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|verifier|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev function-extraction-oracle --project PATH --function DECL --expression EXPR [--output ABSENT_PATH] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|verifier|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
             );
             Ok(0)
         }

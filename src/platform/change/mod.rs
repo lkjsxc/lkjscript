@@ -45,7 +45,8 @@ pub use impact::{
     SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
 };
 pub use logical_plan::{
-    AuthoredAllocation, LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
+    AuthoredAllocation, FunctionExtractionCapture, FunctionExtractionEvidence,
+    LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
 };
 pub use overlay::KernelOverlay;
 pub use prepare::{

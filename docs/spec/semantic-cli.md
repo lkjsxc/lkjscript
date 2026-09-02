@@ -237,6 +237,38 @@ change apply (--input RECORDS | --input-file PATH) --plan TOKEN
 One direct adapter exists for exact owner rename. Its full usage and the exhaustive compact record,
 type, expression, precondition, selector, and field vocabularies are capability-owned.
 
+The second and only other direct change adapter is `extract.function`. It requires an exact base,
+one existing local nongeneric function selected exactly or by an unambiguous module/name, one exact
+live expression that is a proper structural subtree of that function, one request-local helper
+symbol, and one absent helper name in the same module. Record and direct forms normalize to the same
+typed operation. A request admits at most one extraction, and another operation may not edit the
+target, selected closure, parent edge, inferred capture sources, or generated helper.
+
+Extraction materializes the complete base definition before planning. The movable set is the
+selected expression and every structural descendant under its unique incoming edge. Free function
+parameters, lexical bindings, and match payloads become private-helper parameters ordered by first
+canonical use and then typed owner key. Repeated source names receive one bounded deterministic
+owner-derived spelling. Declaration, type, constant, operation, requirement, and package references
+remain exact references. The helper result is the inferred exact resource-free subtree type. Its
+effect is pure when the subtree needs no task authority; otherwise it contains the least exact
+subset of caller requirements in caller order.
+
+At most one free capability resource is admitted. It must have direct resource type, exact
+acquiring-requirement provenance, exactly one consuming use inside the subtree, no later caller
+use, and the existing private same-package acyclic affine handoff shape. It becomes the final
+consume parameter and final local-read call argument. Resource containers or results, borrowed or
+multiple resources, ambiguous or mismatched provenance, escaping bindings, transaction captures,
+closures, generic or recursive targets, and cross-package helpers reject before review.
+
+The rewrite retains the target declaration and every movable owner identity. It reparents the
+selected root as the helper body, rewrites only captured local-reference records to generated
+parameters, and replaces the exact parent slot with one generated direct call whose arguments are
+effect-free local reads. The logical plan binds the base definition and moved-owner digests,
+capture/use mapping, inferred contract and affine provenance, moved/preserved/changed/generated
+owners, caller/helper body counts, ordinary semantic diff, impact, selected tests, and prepared
+commitment. Apply rederives all facts against the exact base before the publication lock; stale,
+invalid, malformed, cancelled, exhausted, or interrupted work does not advance authority.
+
 Compact change records support `pure` and exact-requirement `task` function effects. Their public
 dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
 record types, lexical bindings, structural and nominal record construction/projection, typed lists,

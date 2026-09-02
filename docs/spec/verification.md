@@ -32,6 +32,15 @@ representative pure, task, generic, transaction, nominal-match, capability, and 
 the maintained worker and the largest maintained function. Corrupt ownership and exact-fit/one-over
 admission cases remain finite implementation tests rather than repaired oracle results.
 
+Function-extraction acceptance uses a second derivation over that independently reconstructed
+definition. It cannot call production extraction traversal, capture mapping, identity allocation,
+rewrite, or logical-plan helpers. For each admitted root it must agree on the movable owner set and
+digest, unique parent, free and escaping locals, canonical capture order and names, exact types and
+uses, result, least effect and caller-ordered requirement subset, affine provenance, body counts,
+and preserved/changed/generated owner classes. Finite negative agreement includes whole or foreign
+roots, generic and recursive targets, resource results and containers, ambiguous provenance, and
+unsafe affine boundaries.
+
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
 predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
@@ -94,6 +103,14 @@ unchanged function contract. It then checks, deterministically builds, serves on
 observes that response. Stale continuation/base/plan, mutated token, and projection-as-change input
 must reject without advancing authority, and the temporary project, service root, request files,
 artifacts, and copied candidate must be removed.
+
+The copied executable must also discover the sole `extract.function` operation, normalize its
+record and direct forms identically, export and strictly decode the complete logical review, and
+apply it once at an exact base. Pure fixtures execute equally before and after in production and
+the canonical reference tier. Task fixtures prove least-effect closure and the existing affine
+handoff rules without replaying live effects. Selected subtree identities must move intact; stale,
+conflicting, malformed, predecessor, bounded-exhaustion, cancellation, pre-visibility interruption,
+and derived-cache-failure cases must leave either the complete old or complete new authority.
 
 Test names and retained evidence must map these properties to exact mechanisms. An internal unit
 fixture alone is not copied-binary or maintained-consumer completion.

@@ -21,17 +21,17 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, FieldId, ModuleId, OperationId, ParameterId, PortId,
-    RequirementId, RevisionId,
+    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId,
+    PortId, RequirementId, RevisionId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-10";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 10;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-8";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 8;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-11";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 11;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-9";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 9;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -89,10 +89,11 @@ pub(crate) enum CompactChangeOperation {
     RenameOwner,
     MoveDeclaration,
     ReplaceBody,
+    ExtractFunction,
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 25] = [
+    pub(crate) const ALL: [Self; 26] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -118,6 +119,7 @@ impl CompactChangeOperation {
         Self::RenameOwner,
         Self::MoveDeclaration,
         Self::ReplaceBody,
+        Self::ExtractFunction,
     ];
 }
 
@@ -149,10 +151,11 @@ pub(crate) enum CompactChangeFieldForm {
     ParameterUse,
     RequirementReference,
     ImplementationName,
+    ExactExpression,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 26] = [
+    pub(crate) const ALL: [Self; 27] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -179,6 +182,7 @@ impl CompactChangeFieldForm {
         Self::ParameterUse,
         Self::RequirementReference,
         Self::ImplementationName,
+        Self::ExactExpression,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -209,6 +213,7 @@ impl CompactChangeFieldForm {
             Self::ParameterUse => "parameter_use",
             Self::RequirementReference => "requirement_reference",
             Self::ImplementationName => "implementation_name",
+            Self::ExactExpression => "exact_expression",
         }
     }
 
@@ -240,6 +245,7 @@ impl CompactChangeFieldForm {
             Self::ParameterUse => "unrestricted|borrow|consume",
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
+            Self::ExactExpression => "expr_HEX",
         }
     }
 }
@@ -955,6 +961,36 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
         ],
         direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::ExtractFunction,
+        name: "extract.function",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "expression",
+                required: true,
+                form: FieldForm::ExactExpression,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: Some(CompactChangeDirectOperation {
+            plan_usage: "change plan extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]",
+            apply_usage: "change apply extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN",
+        }),
     },
 ];
 
@@ -2596,6 +2632,12 @@ impl Decoder {
                     body: self.decode_expression(&body)?,
                 })
             }
+            CompactChangeOperation::ExtractFunction => Ok(AuthoredChange::ExtractFunction {
+                symbol: symbol(record, "as")?,
+                function: parse_declaration_selector(record, "function")?,
+                expression: parse_field::<ExpressionId>(record, "expression")?,
+                name: parse_name(record, "name")?,
+            }),
         }
     }
 

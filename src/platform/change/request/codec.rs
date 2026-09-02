@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR07";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR08";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -636,6 +636,18 @@ impl Writer {
                 self.tag(35)?;
                 self.declaration_selector(function, definitions)?;
                 self.expression(body, definitions, 1)
+            }
+            AuthoredChange::ExtractFunction {
+                symbol,
+                function,
+                expression,
+                name,
+            } => {
+                self.tag(36)?;
+                self.symbol(symbol, definitions)?;
+                self.declaration_selector(function, definitions)?;
+                self.raw(&expression.bytes())?;
+                self.name(name)
             }
         }
     }
@@ -1460,7 +1472,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "fd6dbb89245fc17a0c8dbbb33d7ac33ed87c256651f642e28704b175875f3937"
+            "55c6bfff8315a05bf27523d5bf30cb2d0b4e4dd05659a517b9e06e63203917fc"
         );
     }
 

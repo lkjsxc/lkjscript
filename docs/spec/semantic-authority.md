@@ -88,6 +88,12 @@ Request-local labels, operational budgets, witness maintenance, compiler schedul
 storage packing, receipt paths, timing, and physical work observations do not enter logical plan
 identity. They may affect admission or reporting but not accepted program meaning.
 
+Function extraction is typed authored intent, not a stored refactor recipe. Its review evidence
+binds one exact base definition, structural closure, capture and requirement derivation, stable
+owner identities, generated owners, and the resulting semantic diff. Accepted authority contains
+only the rewritten graph. The request, plan, closure witness, definition projection, and extraction
+oracle remain derived evidence and cannot select or advance `HEAD`.
+
 ## Dependencies, compilation, and artifacts
 
 An accepted dependency binding names exact package, semantic revision, logical package revision,

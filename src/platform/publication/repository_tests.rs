@@ -4026,6 +4026,269 @@ fn reviewed_change_plan_owned_body_closure_matches_complete_before_after_oracle(
 }
 
 #[test]
+fn reviewed_function_extraction_matches_disjoint_oracle_and_preserves_moved_identity() {
+    let temporary = tempfile::tempdir().expect("temporary extraction repository");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None)
+        .expect("create extraction repository");
+    let (function, selected) = logical
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            let OwnerKey::Declaration(function) = owner else {
+                return None;
+            };
+            let OwnerRecord::Declaration(declaration) = record else {
+                return None;
+            };
+            let DeclarationPayload::Function(value) = &declaration.payload else {
+                return None;
+            };
+            if declaration.name.as_str() != "with_binding" {
+                return None;
+            }
+            let Some(OwnerRecord::Expression(root)) =
+                logical.owners.get(&OwnerKey::Expression(value.body))
+            else {
+                return None;
+            };
+            let ExpressionOperation::Let { body, .. } = &root.operation else {
+                return None;
+            };
+            Some((*function, *body))
+        })
+        .expect("proper extraction fixture root");
+    let oracle = crate::platform::contributor::function_extraction_oracle(
+        &destination,
+        &function.to_string(),
+        &selected.to_string(),
+    )
+    .expect("derive disjoint extraction oracle");
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::ExtractFunction {
+            symbol: "$helper".to_owned(),
+            function: DeclarationSelector::Id {
+                declaration: function,
+            },
+            expression: selected,
+            name: Name::new("read-local").expect("helper name"),
+        }],
+    };
+    let mut exhausted_request = request.clone();
+    exhausted_request.budget.validation.maximum_expression_steps = 1;
+    let exhausted = created
+        .repository
+        .prepare_authored_change(&exhausted_request, PublicationOptions::default())
+        .expect_err("exhausted extraction must reject before publication");
+    assert_eq!(exhausted[0].class, DiagnosticClass::Resource);
+    assert_eq!(exhausted[0].code, "change_extract_call_graph_work");
+    assert_eq!(
+        created.repository.current().unwrap().head,
+        created.current.head
+    );
+    let normalized =
+        crate::platform::control::normalize_change_request(request, PublicationOptions::default())
+            .expect("normalize extraction request");
+    let mut prepared = created
+        .repository
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .expect("prepare extraction request");
+    let definition_digest = crate::platform::cli::function_definition_digest_for_extraction(
+        &created
+            .repository
+            .view_current()
+            .expect("open extraction definition base"),
+        function,
+    )
+    .expect("bind public extraction definition");
+    prepared
+        .logical_plan
+        .extraction
+        .as_mut()
+        .expect("prepared extraction evidence")
+        .base_definition = Some(definition_digest);
+    let extraction = prepared
+        .logical_plan
+        .extraction
+        .as_ref()
+        .expect("extraction review evidence");
+    assert!(extraction.base_definition.is_some());
+    assert_eq!(extraction.function, function);
+    assert_eq!(extraction.selected_root, selected);
+    assert_eq!(extraction.caller_body_records, oracle.caller_body_records);
+    assert_eq!(extraction.helper_body_records, oracle.helper_body_records);
+    assert_eq!(
+        format!(
+            "moved_{}",
+            crate::platform::semantic_id::encode_hex(&extraction.moved_digest)
+        ),
+        oracle.moved_digest
+    );
+    assert_eq!(
+        extraction
+            .moved_owners
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        oracle.moved_owners
+    );
+    assert_eq!(
+        extraction
+            .preserved_owners
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        oracle.preserved_owners
+    );
+    assert_eq!(
+        extraction
+            .changed_owners
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        oracle.changed_owners
+    );
+    assert_eq!(extraction.result.to_string(), oracle.result_type);
+    assert!(matches!(extraction.effect, FunctionEffect::Pure));
+    assert_eq!(extraction.captures.len(), oracle.captures.len());
+    let capture = &extraction.captures[0];
+    let source = match capture.source {
+        LocalValueReference::LexicalBinding(binding) => OwnerKey::Binding(binding),
+        _ => panic!("fixture capture must be lexical"),
+    };
+    assert_eq!(source.to_string(), oracle.captures[0].source);
+    assert_eq!(capture.name.as_str(), oracle.captures[0].name);
+    assert_eq!(capture.ty.to_string(), oracle.captures[0].ty);
+    assert_eq!(
+        capture.use_mode,
+        crate::platform::kernel::ParameterUse::Unrestricted
+    );
+    assert_eq!(
+        capture
+            .rewritten_uses
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        oracle.captures[0].uses
+    );
+    assert_eq!(
+        u64::try_from(extraction.generated_owners.len()).unwrap(),
+        oracle.generated_owners
+    );
+
+    let plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &prepared)
+            .expect("construct extraction review plan");
+    let mut emitted = 0_u64;
+    let cancelled = crate::platform::control::encode_logical_change_plan(&plan, |_| {
+        emitted = emitted.saturating_add(1);
+        if emitted == 3 {
+            return Err(crate::platform::diagnostic::Diagnostic::new(
+                DiagnosticClass::Cancelled,
+                "change_extraction_test_cancelled",
+                "injected extraction review cancellation",
+            ));
+        }
+        Ok(())
+    })
+    .expect_err("cancelled extraction review must stop before publication");
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(cancelled.code, "change_extraction_test_cancelled");
+    assert_eq!(
+        created.repository.current().unwrap().head,
+        created.current.head
+    );
+    let mut plan_bytes = Vec::new();
+    let encoded = crate::platform::control::encode_logical_change_plan(&plan, |record| {
+        plan_bytes.extend_from_slice(record);
+        Ok(())
+    })
+    .expect("encode extraction review plan");
+    let decoded =
+        crate::platform::control::decode_logical_change_plan(std::io::Cursor::new(&plan_bytes))
+            .expect("strictly decode extraction review plan");
+    assert_eq!(decoded.token, encoded.token.to_string());
+    assert_eq!(decoded.counts.extractions, 1);
+    assert_eq!(decoded.counts.extraction_captures, 1);
+    assert_eq!(decoded.counts.extraction_uses, 1);
+
+    let generated = extraction
+        .generated_owners
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let helper = OwnerKey::Declaration(extraction.helper);
+    assert_eq!(prepared.allocated.get("$helper"), Some(&helper));
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish fixture extraction");
+    let after = created
+        .repository
+        .view_current()
+        .expect("open extracted revision")
+        .reconstruct_full_oracle()
+        .expect("reconstruct extracted authority")
+        .value;
+    let observed_generated = after
+        .owners
+        .keys()
+        .filter(|owner| !logical.owners.contains_key(owner))
+        .copied()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(observed_generated, generated);
+    assert!(after.owners.contains_key(&OwnerKey::Expression(selected)));
+    let OwnerRecord::Declaration(helper_record) = &after.owners[&helper] else {
+        panic!("generated helper declaration expected")
+    };
+    let DeclarationPayload::Function(helper_function) = &helper_record.payload else {
+        panic!("generated helper function expected")
+    };
+    assert_eq!(helper_function.body, selected);
+    assert_eq!(helper_function.parameters, vec![capture.parameter]);
+    let OwnerRecord::Expression(moved_root) = &after.owners[&OwnerKey::Expression(selected)] else {
+        panic!("moved expression expected")
+    };
+    assert_eq!(
+        moved_root.operation,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(capture.parameter)
+        }
+    );
+    let calls = after
+        .owners
+        .values()
+        .filter_map(|record| match record {
+            OwnerRecord::Expression(expression) => match &expression.operation {
+                ExpressionOperation::Call {
+                    function: called,
+                    arguments,
+                    ..
+                } if called.declaration == extraction.helper => Some(arguments.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].len(), 1);
+    let OwnerRecord::Expression(argument) = &after.owners[&OwnerKey::Expression(calls[0][0])]
+    else {
+        panic!("generated local argument expected")
+    };
+    assert_eq!(
+        argument.operation,
+        ExpressionOperation::Local {
+            value: capture.source
+        }
+    );
+}
+
+#[test]
 fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
@@ -7013,6 +7276,139 @@ fn deterministic_owned_closure_publication_interruptions_reopen_old_or_new_compl
                 PublicationOutcome::AlreadyAccepted { .. }
             ));
         }
+    }
+}
+
+#[test]
+fn function_extraction_publication_interruptions_reopen_old_or_new_complete_head() {
+    for (ordinal, point, expects_new, leaves_head_stage) in [
+        (0, PublicationPoint::BeforeObjectStage, false, false),
+        (1, PublicationPoint::AfterFirstObjectStage, false, false),
+        (2, PublicationPoint::AfterPacksSealed, false, false),
+        (3, PublicationPoint::AfterHeadFileSynced, false, true),
+        (4, PublicationPoint::AfterHeadRenamed, true, false),
+        (5, PublicationPoint::AfterHeadDirectorySynced, true, false),
+    ] {
+        let temporary = tempfile::tempdir().expect("temporary extraction repository parent");
+        let destination = temporary.path().join(format!("meaning-{ordinal}"));
+        let logical = crate::platform::kernel::tests::witness_snapshot();
+        let created =
+            GraphRepository::create(&destination, &logical, None).expect("create repository");
+        let (function, selected) = logical
+            .owners
+            .iter()
+            .find_map(|(owner, record)| {
+                let OwnerKey::Declaration(function) = owner else {
+                    return None;
+                };
+                let OwnerRecord::Declaration(declaration) = record else {
+                    return None;
+                };
+                let DeclarationPayload::Function(value) = &declaration.payload else {
+                    return None;
+                };
+                if declaration.name.as_str() != "with_binding" {
+                    return None;
+                }
+                let Some(OwnerRecord::Expression(root)) =
+                    logical.owners.get(&OwnerKey::Expression(value.body))
+                else {
+                    return None;
+                };
+                let ExpressionOperation::Let { body, .. } = &root.operation else {
+                    return None;
+                };
+                Some((*function, *body))
+            })
+            .expect("proper extraction fixture root");
+        let request = AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::ExtractFunction {
+                symbol: "$helper".to_owned(),
+                function: DeclarationSelector::Id {
+                    declaration: function,
+                },
+                expression: selected,
+                name: Name::new("read-local").expect("helper name"),
+            }],
+        };
+        let prepared = created
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect("prepare interrupted extraction");
+        let extraction = prepared
+            .logical_plan
+            .extraction
+            .as_ref()
+            .expect("prepared extraction evidence");
+        let helper = extraction.helper;
+        let error = created
+            .repository
+            .publish_with_fault(&prepared.publication, point)
+            .expect_err("injected extraction interruption");
+        assert_eq!(
+            error.code, "publication_repository_injected_interruption",
+            "unexpected diagnostic at {point:?}"
+        );
+
+        let reopened = GraphRepository::open(&destination).expect("interrupted repository reopens");
+        let current = reopened.current().expect("complete accepted current");
+        assert_eq!(
+            current.head,
+            if expects_new {
+                prepared.publication.head
+            } else {
+                created.current.head
+            },
+            "wrong visible side of extraction interruption at {point:?}"
+        );
+        assert_eq!(
+            reopened.head_staging_leftovers().unwrap().len(),
+            usize::from(leaves_head_stage),
+            "unexpected HEAD-stage classification at {point:?}"
+        );
+        match reopened
+            .reconcile(&prepared.publication)
+            .expect("exact extraction reconciliation")
+            .status
+        {
+            ReconciliationStatus::Accepted { accepted, observed } if expects_new => {
+                assert_eq!(accepted.head, prepared.publication.head);
+                assert_eq!(observed, prepared.publication.head);
+            }
+            ReconciliationStatus::NotStarted { current } if !expects_new => {
+                assert_eq!(current, Some(created.current.head));
+            }
+            other => panic!("unexpected reconciliation {other:?} at {point:?}"),
+        }
+        let outcome = reopened
+            .publish(&prepared.publication)
+            .expect("exact extraction retry");
+        if expects_new {
+            assert!(matches!(
+                outcome,
+                PublicationOutcome::AlreadyAccepted { .. }
+            ));
+        } else {
+            assert!(matches!(outcome, PublicationOutcome::Accepted { .. }));
+        }
+        let after = reopened
+            .view_current()
+            .expect("open retried extraction")
+            .reconstruct_full_oracle()
+            .expect("reconstruct complete extracted authority")
+            .value;
+        assert!(after.owners.contains_key(&OwnerKey::Expression(selected)));
+        let OwnerRecord::Declaration(helper_record) = &after.owners[&OwnerKey::Declaration(helper)]
+        else {
+            panic!("complete generated helper declaration expected")
+        };
+        let DeclarationPayload::Function(helper_function) = &helper_record.payload else {
+            panic!("complete generated helper function expected")
+        };
+        assert_eq!(helper_function.body, selected);
     }
 }
 

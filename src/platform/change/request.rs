@@ -3,6 +3,7 @@
 mod codec;
 mod creation;
 mod deletion;
+mod extraction;
 mod precondition;
 
 pub use creation::{
@@ -243,6 +244,12 @@ pub enum AuthoredChange {
         function: DeclarationSelector,
         body: AuthoredExpression,
     },
+    ExtractFunction {
+        symbol: String,
+        function: DeclarationSelector,
+        expression: ExpressionId,
+        name: Name,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -432,6 +439,7 @@ pub struct AuthoredLowering {
     pub allocated: BTreeMap<String, OwnerKey>,
     pub allocations: Vec<AuthoredAllocation>,
     pub dependency_befores: BTreeMap<PackageId, DependencyRecord>,
+    pub extraction: Option<super::FunctionExtractionEvidence>,
     pub work: AuthoredLoweringWork,
 }
 
@@ -495,6 +503,30 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     lowerer.work.allocated_identities = u64::try_from(definition_count).unwrap_or(u64::MAX);
     precondition::evaluate(&mut lowerer, &request.preconditions)?;
     lowerer.check_budget("authored preconditions")?;
+    let extraction_count = request
+        .changes
+        .iter()
+        .filter(|change| matches!(change, AuthoredChange::ExtractFunction { .. }))
+        .count();
+    if extraction_count > 1 {
+        return Err(request_error(
+            DiagnosticClass::Semantic,
+            "change_extract_multiple",
+            "one authored request may contain at most one extract.function operation",
+        ));
+    }
+    for change in &request.changes {
+        if let AuthoredChange::ExtractFunction {
+            symbol,
+            function,
+            expression,
+            name,
+        } = change
+        {
+            extraction::lower(&mut lowerer, symbol, function, *expression, name)?;
+        }
+    }
+    lowerer.check_budget("function extraction lowering")?;
     for change in &request.changes {
         if let AuthoredChange::CreateModule { symbol, name } = change {
             let module = lowerer.module_symbol(symbol)?;
@@ -722,6 +754,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddDependency { .. }
             | AuthoredChange::ReplaceDependency { .. }
             | AuthoredChange::DeleteDependency { .. } => {}
+            AuthoredChange::ExtractFunction { .. } => {}
             AuthoredChange::SetDeclarationVisibility { .. }
             | AuthoredChange::SetFunctionContract { .. }
             | AuthoredChange::SetExternalContract { .. }
@@ -882,6 +915,9 @@ fn collect_symbol_definitions(
             }
             AuthoredChange::CreateAnnotation { symbol, .. } => {
                 creation::collect_annotation_symbols(symbol, &mut definitions)?
+            }
+            AuthoredChange::ExtractFunction { symbol, .. } => {
+                define_symbol(&mut definitions, symbol, SymbolKind::Declaration)?;
             }
             AuthoredChange::AddField { .. }
             | AuthoredChange::AddCase { .. }
@@ -1079,6 +1115,7 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
     Ok(*hasher.finalize().as_bytes())
 }
 
+#[derive(Clone)]
 struct WorkingOwner {
     before: Option<crate::platform::kernel::OwnerObjectDigest>,
     original: Option<OwnerRecord>,
@@ -1086,6 +1123,7 @@ struct WorkingOwner {
     deleted: bool,
 }
 
+#[derive(Clone)]
 struct WorkingDependency {
     before: Option<DependencyObjectDigest>,
     original: Option<DependencyRecord>,
@@ -1122,6 +1160,10 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     types: TypeObjectInterner,
     type_additions: BTreeSet<TypeObjectDigest>,
     next_anonymous_expression_ordinal: u64,
+    next_generated_parameter_ordinal: u64,
+    extraction: Option<super::FunctionExtractionEvidence>,
+    extraction_protected: BTreeSet<OwnerKey>,
+    admitting_extraction: bool,
     work: AuthoredLoweringWork,
     budget: ChangeBudget,
 }
@@ -1147,6 +1189,26 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     "expression allocation ordinal was exhausted",
                 )
             })?;
+        let next_generated_parameter_ordinal = inputs
+            .definitions
+            .values()
+            .filter(|definition| {
+                matches!(
+                    definition.kind,
+                    SymbolKind::FunctionParameter | SymbolKind::OperationParameter
+                )
+            })
+            .map(|definition| definition.ordinal)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_authored_parameter_ordinal",
+                    "generated parameter allocation ordinal was exhausted",
+                )
+            })?;
         Ok(Self {
             base,
             witness,
@@ -1170,6 +1232,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             ),
             type_additions: BTreeSet::new(),
             next_anonymous_expression_ordinal,
+            next_generated_parameter_ordinal,
+            extraction: None,
+            extraction_protected: BTreeSet::new(),
+            admitting_extraction: false,
             work: AuthoredLoweringWork::default(),
             budget: inputs.budget,
         })
@@ -1497,6 +1563,39 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(expression)
     }
 
+    fn generated_parameter_identity(&mut self) -> Result<ParameterId, Diagnostic> {
+        let allocated_identities =
+            self.work
+                .allocated_identities
+                .checked_add(1)
+                .ok_or_else(|| {
+                    request_error(
+                        DiagnosticClass::Resource,
+                        "change_budget_allocated_identities",
+                        "allocated identity observation overflowed",
+                    )
+                })?;
+        self.budget.check_allocated_identities(
+            usize::try_from(allocated_identities).unwrap_or(usize::MAX),
+        )?;
+        let ordinal = self.next_generated_parameter_ordinal;
+        self.next_generated_parameter_ordinal = ordinal.checked_add(1).ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Resource,
+                "change_authored_parameter_ordinal",
+                "generated parameter allocation ordinal was exhausted",
+            )
+        })?;
+        self.work.allocated_identities = allocated_identities;
+        let parameter = ParameterId::allocate(&self.allocation_seed, ordinal);
+        self.allocations.push(AuthoredAllocation {
+            domain: IdentityKind::Parameter,
+            ordinal,
+            owner: OwnerKey::Parameter(parameter),
+        });
+        Ok(parameter)
+    }
+
     fn namespace_owner(&mut self, key: NamespaceKey) -> Result<OwnerKey, Diagnostic> {
         if !self.namespace.contains_key(&key) {
             let read = self.witness.read_namespace(&key)?;
@@ -1681,6 +1780,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     pub(super) fn admit_owner_edit(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
+        if !self.admitting_extraction && self.extraction_protected.contains(&owner) {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_extract_conflict",
+                format!("another authored operation touches extraction-protected owner {owner:?}"),
+            ));
+        }
         if self.owner_edits.contains(&owner) {
             return Ok(());
         }
@@ -1826,6 +1932,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 self.allocations
             },
             dependency_befores,
+            extraction: self.extraction,
             work: self.work,
         })
     }

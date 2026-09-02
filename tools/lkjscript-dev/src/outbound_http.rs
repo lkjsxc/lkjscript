@@ -1464,11 +1464,11 @@ fn run_workflow(
     let capability_records = compact_records("capabilities", &capabilities.stdout)?;
     let product = required_record(&capability_records, "product")?;
     if required_field(product, "name")? != "lkjscript"
-        || required_field(product, "version")? != "0.1.17"
+        || required_field(product, "version")? != "0.1.18"
     {
         return Err(AcceptanceFailure::acceptance(
             "capabilities_product",
-            "candidate did not advertise exact lkjscript 0.1.17 source",
+            "candidate did not advertise exact lkjscript 0.1.18 source",
         ));
     }
     let product_version = required_field(product, "version")?.to_owned();

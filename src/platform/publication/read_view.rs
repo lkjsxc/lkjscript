@@ -486,6 +486,7 @@ fn logical_plan_evidence(
     mut analysis: PreparedChangeAnalysis,
     allocations: Vec<AuthoredAllocation>,
     mut dependency_befores: BTreeMap<PackageId, DependencyRecord>,
+    extraction: Option<crate::platform::change::FunctionExtractionEvidence>,
 ) -> Result<LogicalChangePlanEvidence, Vec<Diagnostic>> {
     if analysis.validation.structurally_checked != analysis.summaries.plan.structurally_checked
         || analysis.validation.semantically_checked != analysis.summaries.plan.semantically_checked
@@ -623,6 +624,7 @@ fn logical_plan_evidence(
         semantically_checked: std::mem::take(&mut analysis.validation.semantically_checked),
         tests: std::mem::take(&mut analysis.summaries.plan.tests),
         reasons: std::mem::take(&mut analysis.summaries.plan.reasons),
+        extraction,
     })
 }
 
@@ -726,12 +728,17 @@ impl RepositoryView {
             allocated,
             allocations,
             dependency_befores,
+            extraction,
             work: lowering_work,
         } = lowering;
         let prepared =
             self.prepare_change_with_prior_work(edits, options, lowering_work, request.budget)?;
-        let logical_plan =
-            logical_plan_evidence(prepared.analysis, allocations, dependency_befores)?;
+        let logical_plan = logical_plan_evidence(
+            prepared.analysis,
+            allocations,
+            dependency_befores,
+            extraction,
+        )?;
         Ok(PreparedAuthoredPublication {
             publication: prepared.publication,
             allocated,

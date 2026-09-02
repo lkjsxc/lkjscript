@@ -4,7 +4,10 @@ use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
     BuiltinOwnerSelector, inspect_builtin_owner, parse_interface_owner_kind, query_builtin_owners,
 };
-use super::change::{AuthoredChange, AuthoredChangeSet, BoundOwnerSummary, OwnerSelector};
+use super::change::{
+    AuthoredChange, AuthoredChangeSet, BoundOwnerSummary, DeclarationSelector, ModuleSelector,
+    OwnerSelector,
+};
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
 use super::contract::{
     CapabilitiesSnapshot, FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
@@ -48,7 +51,9 @@ use super::publication::{
     PublicationOutcome as GraphPublicationOutcome, RepositoryDefinitionReader, RepositoryReadWork,
     RepositoryView,
 };
-use super::semantic_id::{RepositoryId, RevisionId, encode_hex};
+use super::semantic_id::{
+    DeclarationId, ExpressionId, ModuleId, RepositoryId, RevisionId, encode_hex,
+};
 use super::storage::contract::MAXIMUM_PACK_BYTES;
 use super::witness::{
     BindingContainerRole, ExpressionRootRole, OwnershipEntry, OwnershipParent, OwnershipRole,
@@ -1057,6 +1062,10 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
         Some(CompactChangeOperation::RenameOwner) => {
             decode_direct_rename(action, &adapter_arguments[1..]).map_err(single_diagnostic)?
         }
+        Some(CompactChangeOperation::ExtractFunction) => {
+            decode_direct_extract_function(action, &adapter_arguments[1..])
+                .map_err(single_diagnostic)?
+        }
         Some(_) => {
             return Err(single_diagnostic(internal_error(
                 "registered direct change operation has no typed CLI adapter",
@@ -1188,6 +1197,98 @@ fn decode_direct_rename(
     })
 }
 
+fn decode_direct_extract_function(
+    action: ChangeAction,
+    options: &[String],
+) -> Result<ChangeCommandRequest, Diagnostic> {
+    let allowed = match action {
+        ChangeAction::Plan => &[
+            "--base",
+            "--as",
+            "--function",
+            "--expression",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--output",
+        ][..],
+        ChangeAction::Apply => &[
+            "--base",
+            "--as",
+            "--function",
+            "--expression",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--plan",
+        ][..],
+    };
+    ensure_options(options, allowed, &[])?;
+    let base = required_option(options, "--base")?
+        .parse::<RevisionId>()
+        .map_err(|diagnostic| direct_option_error("--base", diagnostic))?;
+    let symbol = required_option(options, "--as")?;
+    let function_text = required_option(options, "--function")?;
+    let function = direct_declaration_selector(&function_text)
+        .map_err(|diagnostic| direct_option_error("--function", diagnostic))?;
+    let expression = required_option(options, "--expression")?
+        .parse::<ExpressionId>()
+        .map_err(|diagnostic| direct_option_error("--expression", diagnostic))?;
+    let name = Name::new(required_option(options, "--name")?)
+        .map_err(|diagnostic| direct_option_error("--name", diagnostic))?;
+    let publication_options = PublicationOptions {
+        idempotency_key: option_value(options, "--idempotency")?,
+        intent: option_value(options, "--intent")?,
+    };
+    let semantic = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::ExtractFunction {
+            symbol,
+            function,
+            expression,
+            name,
+        }],
+        budget: Default::default(),
+    };
+    let normalized = normalize_change_request(semantic, publication_options)?;
+    let reviewed = option_value(options, "--plan")?
+        .map(|value| value.parse::<ChangePlanToken>())
+        .transpose()?;
+    Ok(ChangeCommandRequest {
+        normalized,
+        reviewed,
+        input_file: None,
+        output_file: option_value(options, "--output")?,
+    })
+}
+
+fn direct_declaration_selector(value: &str) -> Result<DeclarationSelector, Diagnostic> {
+    if let Ok(declaration) = value.parse::<DeclarationId>() {
+        return Ok(DeclarationSelector::Id { declaration });
+    }
+    let (module, name) = value.split_once('/').ok_or_else(|| {
+        usage_error(
+            "function selector must be an exact decl_HEX identity or a MODULE/NAME qualification",
+        )
+    })?;
+    if module.is_empty() || name.is_empty() || name.contains('/') {
+        return Err(usage_error(
+            "function selector must contain exactly one nonempty MODULE/NAME qualification",
+        ));
+    }
+    let module = match module.parse::<ModuleId>() {
+        Ok(module) => ModuleSelector::Id { module },
+        Err(_) => ModuleSelector::Name {
+            name: Name::new(module)?,
+        },
+    };
+    Ok(DeclarationSelector::Qualified {
+        module,
+        name: Name::new(name)?,
+    })
+}
+
 fn require_reviewed_change_request(
     action: ChangeAction,
     reviewed: Option<ChangePlanToken>,
@@ -1238,10 +1339,18 @@ fn execute_normalized_change(
     } else {
         None
     };
-    let prepared = match retry_base {
-        Some(view) => view.prepare_authored_change(&normalized.semantic, normalized.options)?,
-        None => repository.prepare_authored_change(&normalized.semantic, normalized.options)?,
+    let base_view = match retry_base {
+        Some(view) => view,
+        None => repository.view_current().map_err(single_diagnostic)?,
     };
+    let mut prepared =
+        base_view.prepare_authored_change(&normalized.semantic, normalized.options)?;
+    if let Some(extraction) = &mut prepared.logical_plan.extraction {
+        extraction.base_definition = Some(
+            function_definition_digest_for_extraction(&base_view, extraction.function)
+                .map_err(single_diagnostic)?,
+        );
+    }
     let logical_plan =
         LogicalChangePlan::new(request_commitment, &prepared).map_err(single_diagnostic)?;
     if action == ChangeAction::Plan {
@@ -4359,6 +4468,36 @@ fn materialize_function_definition(
         view.current().witness.validator_contract.to_string(),
         view.current().witness.certificate.to_string(),
     )
+}
+
+/// Reuses the exact public definition materializer for extraction review binding. The digest is
+/// derived evidence and never participates in semantic owner allocation or publication authority.
+pub(crate) fn function_definition_digest_for_extraction(
+    view: &RepositoryView,
+    function: DeclarationId,
+) -> Result<[u8; 32], Diagnostic> {
+    let owner = KernelOwnerKey::Declaration(function);
+    let record = view.definition_reader().owner(owner)?.ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "change_extract_function_missing",
+            "extraction target disappeared before definition review binding",
+        )
+    })?;
+    let kind = record.kind();
+    if !matches!(
+        kind,
+        KernelOwnerKind::PureFunction | KernelOwnerKind::TaskFunction
+    ) {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "change_extract_function_kind",
+            "extraction target is not a local function definition",
+        ));
+    }
+    let mut cancellation = || Ok(());
+    materialize_function_definition(view, kind, owner, &mut cancellation)
+        .map(|projection| projection.digest.bytes())
 }
 
 fn definition_visibility_name(value: DeclarationVisibility) -> &'static str {
