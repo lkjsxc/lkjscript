@@ -431,6 +431,12 @@ sandbox or multi-tenant isolation boundary.
 
 The contributor-only `lkjscript-dev check` harness owns gate dependencies, exact input
 fingerprints, fresh/reused classification, bounded child logs, required outputs, and receipts.
+The identity-preserving extraction closure uses a public copied-binary plan/apply/reinspect path,
+an independently materialized closure/capture/effect/resource oracle, exact moved-owner comparison,
+pure production/reference equality, maintained clean/incremental and service proof, and exact static
+target admission. Its identities, negative and interruption matrix, gate classifications, resource
+observations, cleanup, and raw pointers are owned by
+[`202609022319-identity-preserving-function-extraction.json`](evidence/202609022319-identity-preserving-function-extraction.json).
 The requirement-bound handoff closure uses public copied-binary plan/apply/inspection, a disjoint
 affine call-graph oracle, strict Artifact 12 preparation, the split maintained definition oracle,
 and live service/queue-state observation. Its exact identities, negative matrix, gate

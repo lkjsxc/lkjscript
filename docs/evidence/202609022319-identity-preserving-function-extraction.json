@@ -1,0 +1,617 @@
+{
+  "schema": {
+    "identity": "lkjscript-identity-preserving-function-extraction-evidence",
+    "version": 1
+  },
+  "campaign": "202609022319-identity-preserving-function-extraction",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-02T17:29:54Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "7530f5e8a3dfcf6e4cee5a1d8615e5a4e1b88e47",
+    "entry_tree": "7e6f818f0bf3e408d9a52d38f0699438af058b1e",
+    "entry_origin_main": "7530f5e8a3dfcf6e4cee5a1d8615e5a4e1b88e47",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "8a00d3810d26389e7d2f89692c54b25cf04d25a9",
+        "tree": "f40beca8f551152b22e3024b1b6c718ca1505bc4",
+        "summary": "Archive function extraction campaign mandate"
+      },
+      {
+        "sha": "baf6501258e05406fc2312d323c6ea3c1ee251bc",
+        "tree": "6a54966f166c971946fb1e780170a1bcbe770fb3",
+        "summary": "Add identity-preserving function extraction"
+      },
+      {
+        "sha": "83a276cbaecc7363e6ea9eb240ed75c65c33dfe6",
+        "tree": "945e80a77fa0b8071e966af6325b8094bb61a4c1",
+        "summary": "Extract maintained resource update helper"
+      },
+      {
+        "sha": "5eb3e636b435edb792b99545ea61b4f52ab22b74",
+        "tree": "72ceb5e8ff05f2e7e3e4f9d33ea3b5e7b924cded",
+        "summary": "Satisfy function extraction lint gates"
+      },
+      {
+        "sha": "dfa98d88c061e3ef38b97b8632b60efa6a44ea9c",
+        "tree": "40fbd47b9deab8d49d472a7035cc86e8e2d7c987",
+        "summary": "Correct revision-bound definition evidence"
+      }
+    ],
+    "verified_head": "dfa98d88c061e3ef38b97b8632b60efa6a44ea9c",
+    "verified_tree": "40fbd47b9deab8d49d472a7035cc86e8e2d7c987",
+    "origin_main_at_assembly": "7530f5e8a3dfcf6e4cee5a1d8615e5a4e1b88e47",
+    "verified_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 5
+    },
+    "tracked_worktree_before_evidence": "clean",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "ignored": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "disposition": "pre-existing ignored and root-owned historical material was preserved; this campaign added only bounded ignored evidence and derived state"
+      }
+    ],
+    "closure_note": "The containing evidence/lifecycle commit and its normal push cannot name their own final SHA here; the terminal handoff reports them."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true,
+    "target": "x86_64-unknown-linux-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152"
+  },
+  "authority_and_contract_cutover": {
+    "source_product": {
+      "before": "0.1.17",
+      "after": "0.1.18",
+      "state": "unreleased source-only"
+    },
+    "public_latest": {
+      "tag": "v0.1.16",
+      "release_id": 381033538,
+      "published_at": "2026-09-02T06:54:38Z",
+      "tag_object": "fd9879e967512e9269faf111d462140572fec137",
+      "source_commit": "b49d78e862b7cbba02c639f06ca4bd2e11db1f2d",
+      "immutable": true,
+      "mutated": false
+    },
+    "capabilities_digest": {
+      "before": "f08ca638e56d0053cf42564fef8e3d21244e96efddc5e5978257e8c8b7e2ed28",
+      "after": "553f004534cfd61ea0db89e9eeaaeb5186b60053a234a24a2b697e0ced9daca6"
+    },
+    "advanced": {
+      "compact_change": { "from": 10, "to": 11 },
+      "authored_change_codec": { "from": 8, "to": 9 },
+      "logical_change_plan": { "from": 2, "to": 3 },
+      "contract_registry": { "from": 7, "to": 8 },
+      "cli": { "from": 19, "to": 20 }
+    },
+    "unchanged": {
+      "meaning_graph": 7,
+      "validation_witness": 4,
+      "owner_summary": 3,
+      "semantic_validator": 7,
+      "package_interface": 5,
+      "compiler_unit": 3,
+      "bytecode": 3,
+      "artifact": 12,
+      "resident_runtime": 3,
+      "function_definition_projection": 2,
+      "maintained_service_receipt": 7,
+      "release_target_policy": 2,
+      "deployment": 3,
+      "data_store": 1,
+      "durable_queue_data": "lkjscript-durable-queue-data-1"
+    },
+    "standard_package": {
+      "classification": "fresh passed",
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69",
+      "semantic_state": "semantic_state_b604e13343bd58ec20057575e1c874b82e845530a21d8b073245d3ad7a9f2f2d",
+      "package_revision": "package_revision_987d74de0827e4a710a0aaa6991075227d4e24830ee0654ff0a73b2717015b9f",
+      "transport": "package_transport_875deeb0623c0fe50e8f806c277c57df1fd7eb385a2af2b2224b43ec2b8176d4",
+      "artifact_manifest": "artifact_manifest_79922002c104e5be877aa783208e19854056069acf03ad1ebecfd8b642a03078",
+      "meaning_and_derived_assets_unchanged": true
+    }
+  },
+  "operation_contract": {
+    "classification": "fresh passed",
+    "name": "extract.function",
+    "top_level_operation_added": false,
+    "aliases_added": false,
+    "fields": ["as", "function", "expression", "name"],
+    "shared_controls": ["base", "idempotency", "intent", "input", "input-file", "output", "plan"],
+    "scope": "one exact nongeneric local function, one proper unaliased structural subtree, one explicit absent private same-module helper name",
+    "inference": "ordered free-local captures, exact resource-free result, least pure/task effect, caller-ordered exact requirement subset, and at most one final consume-only exact-requirement affine capture",
+    "rewrite": "preserve movable owners, reparent the selected root, rewrite only free-local reads, replace the exact parent slot with one direct call and effect-free local arguments",
+    "review": "bind base-definition and moved-owner digests, capture/use mapping, inferred contract, affine provenance, preserved/changed/generated owners, body counts, impact, selected tests, and prepared commitment",
+    "failure": "malformed, conflicting, stale, exhausted, cancelled, interrupted, corrupt, ambiguous, recursive, escaping, foreign, or resource-unsafe work cannot advance HEAD or operational authority",
+    "bounds": {
+      "moved_owners": 4096,
+      "captures": 4096,
+      "capture_uses": 4096,
+      "requirements": 4096,
+      "preserved_owners": 4096,
+      "changed_owners": 4097,
+      "generated_owners": 8194,
+      "definition_body_records": 4096,
+      "definition_edges": 16384,
+      "definition_fact_reads": 32768,
+      "definition_depth": 256,
+      "definition_logical_bytes": 8388608,
+      "compact_input_bytes": 4194304,
+      "compact_input_records": 10000
+    },
+    "predecessor_rejection": [
+      "LKJACR07 authored-change input",
+      "logical-change-plan 2 input",
+      "extract-function alias",
+      "top-level extract.function command",
+      "noncanonical or unknown compact records"
+    ]
+  },
+  "feasibility": {
+    "classification": "fresh passed",
+    "application_revision": "rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4",
+    "target": {
+      "function": "decl_0693166bd7c29bee83d2ead289148f65",
+      "name": "update-resource",
+      "module": "mod_50e2d3318b93f572dad082bd4f42c526",
+      "effect": "task",
+      "requirements": ["clock", "streams", "data"],
+      "body_records": 192,
+      "definition_digest": "definition_77a9b2d927e3f90d42f65e671cd7e54aea37f1e0c15f6b72aa3bdefee626a65d"
+    },
+    "selection_rule": "smallest maximum resulting body count, then fewest captures, then fewest changed existing owners, then canonical expression-owner key",
+    "selected_root": "expr_22692186086bc39d6caf2cfe244879c8",
+    "parent": "expr_37b4663f8b92b220669dbddef666b58c",
+    "caller_body_records": 96,
+    "helper_body_records": 101,
+    "threshold_records": 144,
+    "moved_owners": 101,
+    "moved_digest": "moved_63b2787ffd6cb61afc72be0ae6754545747103c233293995acc69db4dda780ba",
+    "preserved_owners": 84,
+    "changed_existing_owners": 18,
+    "generated_owners": 10,
+    "captures": [
+      { "name": "actor", "source": "bind_b9fd381a8759e905bf9d01e4de7a2a4f", "use": "unrestricted", "uses": 3 },
+      { "name": "id", "source": "bind_832892ef4c64702b1054d239197a0b17", "use": "unrestricted", "uses": 7 },
+      { "name": "input", "source": "bind_62a1c2ca9e40f4fd852a4c2ee0b36d8f", "use": "unrestricted", "uses": 6 },
+      { "name": "entry", "source": "bind_bad96348f516f67db479e2dc51b0e6c1", "use": "unrestricted", "uses": 1 }
+    ],
+    "result_type": "type_object_3747859720c37e26cea3eca11fae00395ed338914acf550cd603235ddb096036",
+    "helper_effect": "task",
+    "helper_requirements": ["pkg_20000000000000000000000000000001/req_fe4b0ab0984c222e526138e1b98673a2"],
+    "affine_capture": null,
+    "oracle": {
+      "path": ".artifacts/campaign/202609022319/candidate/pre-cutover-oracle.json",
+      "sha256": "07753866bab319fdc7fe9f280bb244cbdd25cb94ea123b48fa4faeb2db57a2b7",
+      "implementation_disjoint": true,
+      "read_only": true
+    }
+  },
+  "maintained_cutover": {
+    "classification": "fresh passed",
+    "writer": "copied release-mode lkjscript change plan/apply",
+    "request": {
+      "path": ".artifacts/campaign/202609022319/extraction-request.lkjc",
+      "sha256": "ef98196e0f20cde73bb15e5413df63ae0b7614c92a17ca6725adc9e90edebe91"
+    },
+    "plan": {
+      "path": ".artifacts/campaign/202609022319/candidate/maintained-extraction.logical-plan",
+      "sha256": "73c56418fa1dd63d737aafd108fc2f5870608bc4e55dce1095c59a11be8a2031",
+      "bytes": 156913,
+      "records": 644,
+      "token": "plan_f4f6006eba7d766a4464c761e94f5b71bfa7ca41a55db3266f18204ba93b76511588c5bbf1cb7e1f69b054a397e41c1d5524b7721243f011d603534050c440d5"
+    },
+    "helper": {
+      "declaration": "decl_53936ef7d46ee491d41aef8c37cdffef",
+      "name": "commit-resource-update",
+      "visibility": "private",
+      "module": "mod_50e2d3318b93f572dad082bd4f42c526"
+    },
+    "publication": {
+      "base_revision": "rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4",
+      "result_revision": "rev_8a40a1eadb7db23e755306dbee5f11f372ca834af24fcaac39ddac4d02d60aaf",
+      "semantic_state": "semantic_state_592e1b154a4382a7c8eec6ce159d44582c7bb76189fbd09f46867d7ec9ea870b",
+      "semantic_root": "semantic_root_f6b07a41f9b87423eed1610a56c29e86ac26547e62fda0a9463415d5d52dc9be",
+      "revision_record": "revision_object_8a9ffa6daf813928874d8e85a36c1d6e504751910c5476f003b759cee5c109ba",
+      "validation_witness": "validation_witness_f6561751ffcb542a78d5dff43aa7c685b0977fde45d3dca592701da6b175770a",
+      "validation_certificate": "validation_certificate_5fe79761f06024df006ed132f7139e07ec429de1a5d634d5f44ef2516503fcbf",
+      "receipt": "receipt_object_2c83bd57d06bffe3aeded9681d66db2f52c79d88e3bbe81a8fd585de84bdead1",
+      "transaction": "transaction_d50e8f8b7fc8ccbc9d1c3a471fe3a1bbbd4cdcbf672c5264a50db0fa07e72273",
+      "semantic_diff": "semantic_diff_a61d760d008a5a0b94f21f5f3795acea191c7c87bc7745d825a35b85d1c65410",
+      "created_owners": 10,
+      "updated_owners": 18,
+      "deleted_owners": 0,
+      "witness_updates": 224,
+      "compiler_units_changed": 3,
+      "atomic_visibility": true
+    },
+    "identity_result": {
+      "target_function_preserved": true,
+      "selected_root_preserved": true,
+      "all_101_movable_owners_preserved": true,
+      "predecessor_192_body_ownership_shape_deleted": true,
+      "delete_and_recreate_fallback": false,
+      "tracked_application_specific_migrator": false
+    },
+    "definitions_after": {
+      "caller": {
+        "function": "decl_0693166bd7c29bee83d2ead289148f65",
+        "digest": "definition_40a06a243c17a9dce775cf8ae2dea20a5c8321625b3a6f0fc12bd7fb604d5da8",
+        "total_records": 404,
+        "body_records": 96,
+        "contract_records": 17,
+        "reference_records": 177,
+        "fact_records": 101,
+        "maximum_depth": 17,
+        "logical_bytes": 168470
+      },
+      "helper": {
+        "function": "decl_53936ef7d46ee491d41aef8c37cdffef",
+        "digest": "definition_1ee80b65ef0f9cc90fa5f5c62e4fe6e8b50ddcf29914038c996ad0c32c57e723",
+        "total_records": 425,
+        "body_records": 101,
+        "contract_records": 5,
+        "reference_records": 206,
+        "fact_records": 106,
+        "maximum_depth": 15,
+        "logical_bytes": 181807
+      },
+      "largest": {
+        "function": "decl_97e3d3c28142723096e5b121c0205ef2",
+        "digest": "definition_a7358713faaa1848f0d66fb604981a8db89e67dd5e2b91e0e2268db33368ea43",
+        "body_records": 148
+      }
+    },
+    "unrelated_worker_definitions": {
+      "entry": "decl_a914bb78de075ff44a857ac028d704f3",
+      "entry_body_records": 15,
+      "entry_revision_bound_digest": "definition_9f20053b6193a9914f7431283f13f2a0a728c1f652853fe9012428f06ab2098f",
+      "helper": "decl_7f443401f4946c55fa239c5430e8ad93",
+      "helper_body_records": 36,
+      "helper_revision_bound_digest": "definition_a4bb6b89924f04a2dc1c8c72d18ee0b0492153036abe8f828b810575e711eb6e",
+      "meaning_unchanged": true
+    },
+    "application_artifact": {
+      "owners": 1595,
+      "package_revision": "package_revision_75a9b45112274941cbadf804c32c06ccf68e0211371519536f97fb9898a8a171",
+      "package_transport": "package_transport_7a7a2c54cb4083247cf22220d2d934b2eab367e6cbb01ceee53f0f4ce9e18c4a",
+      "package_transport_bytes": 26982,
+      "package_transport_sha256": "d391635070315cea44328e0ecc5c503b23e9715c799578f934bce787d0c91648",
+      "compilation_manifest": "compilation_manifest_df851ca8fa8c1c655a006f88328c7f77e7439febeba3a4bc7a217891e95e3245",
+      "artifact_manifest": "artifact_manifest_0331c59ddd5699d27392b3445d9765250c6ba18b40cd588f7f31831314f6469b",
+      "artifact_bundle": "artifact_bundle_1c8183031bd952243015f78896f6ad8f3046287c47399be4fbabe177eab5d1fd",
+      "artifact_bytes": 839851,
+      "artifact_sha256": "c08dedb8312c4613873df5e4bf45e6e4a2e9a6464fa162d9dc5c561f3c4b3340",
+      "packages": 2,
+      "closure_objects": 2812,
+      "compiler_units": 145,
+      "graph_tests": 18,
+      "production_reference_equal": true,
+      "clean_incremental_equal": true
+    }
+  },
+  "independent_and_negative_proof": {
+    "classification": "fresh passed",
+    "production_oracle_agreement": [
+      "movable owner set and digest",
+      "free and escaping locals",
+      "capture order, collision spelling, type, use, and rewritten uses",
+      "result type, effect, requirement order, and affine provenance",
+      "preserved, changed, and generated owners",
+      "caller/helper body counts and diagnostics"
+    ],
+    "positive_cases": [
+      "pure lexical capture",
+      "nested proper subtree",
+      "task effect subset",
+      "ordinary captures",
+      "one exact-requirement final consume affine capture",
+      "stable identity and evaluation position",
+      "production/reference value and failure equality"
+    ],
+    "negative_cases": [
+      "absent, foreign, nonfunction, bodyless, and generic target",
+      "absent, foreign, nondescendant, whole-body, and structurally aliased expression",
+      "helper collision, capture collision spelling, escaping binding, recursion, and cycle",
+      "resource-containing ordinary capture or result",
+      "borrow-only, multiple, foreign, mismatched, contained, or post-use resource",
+      "missing effect requirement and cross-package/private violation",
+      "same-request conflict and multiple extraction",
+      "malformed, noncanonical, predecessor, alias, and top-level command input",
+      "material extraction, definition, authored-input, logical-plan, validation, and output bounds",
+      "stale plan, cancellation, pre-visibility interruption, and derived-cache failure"
+    ],
+    "publication_interruption": "every injected previsibility interruption reopens the old complete HEAD; every postvisibility observation sees the new complete HEAD",
+    "derived_failure": "accepted revision remains visible and check performs clean recovery without changing semantic HEAD",
+    "live_effect_policy": "task effects executed once through production; reference execution was confined to pure behavior"
+  },
+  "exact_final_copied_binary_workflow": {
+    "classification": "fresh passed",
+    "binary_sha256": "fc26f138e670d7be27a419ac623de1a0a92db292ef43b3ec89ca6572898acdaa",
+    "root": ".artifacts/campaign/202609022319/final-copied-extraction/",
+    "repository": "repo_ad62ef3f5cd277da80f0458bfd700c91",
+    "package": "pkg_7b59242eb7c3b4b2f0fe81065aba96fb",
+    "base_revision": "rev_40c96c9a1c38cca8df5a3b21b9843f8692a8f8a716992952f816bc08f4d6a309",
+    "accepted_revision": "rev_92dbae9d16aa7b3361508960d45992cf0438dd5259efb7449fa29e8fc506ec67",
+    "function": "decl_c01cde3a926a30cfea5c7786d0a87842",
+    "selected_root": "expr_57b768ede74c53690289267ac43bbd94",
+    "helper": "decl_80730b888e630bc51c6976e0fefcab1e",
+    "before_body_records": 6,
+    "caller_body_records": 5,
+    "helper_body_records": 3,
+    "moved_owners": 3,
+    "preserved_owners": 1,
+    "changed_owners": 3,
+    "generated_owners": 4,
+    "capture": "value",
+    "effect": "pure",
+    "requirements": 0,
+    "direct_file_plan_equal": true,
+    "paged_definition_resume": true,
+    "helper_collision_no_mutation": true,
+    "top_level_alias_rejected": true,
+    "before_after_value": "\"hello\"",
+    "production_reference_equal": true,
+    "check_passed": true,
+    "build_passed": true,
+    "idempotent_replay": "already-accepted",
+    "request_sha256": "a24c59572171b2f5f9343776ba3e1f0dde713cc02c64946b07500a98e68456cc",
+    "logical_plan_sha256": "130c73c6fceb07847dbbcded372dc7af106aca7863cef6773287099d6e579ae5",
+    "logical_plan_bytes": 23948,
+    "logical_plan_records": 96,
+    "artifact_sha256": "98f0950e6370c3d297b4d7b1f5a9975d7073fb84289713bda9de4b3adfb7462a",
+    "artifact_bytes": 9435,
+    "runtime_resources_cleaned": true,
+    "ignored_project_retained_as_raw_evidence": true
+  },
+  "verification": {
+    "focused": {
+      "classification": "fresh passed",
+      "facts": [
+        "cargo fmt --all --check passed",
+        "production/disjoint-oracle extraction tests passed 3/3",
+        "maintained affine extraction oracle passed",
+        "maintained resource-boundary negatives passed",
+        "copied-binary public extraction test passed",
+        "maintained copied candidate check passed 18/18 with differential equality",
+        "maintained build was byte-equal to the checked-in artifact"
+      ]
+    },
+    "target_build": {
+      "classification": "fresh passed",
+      "source_commit": "dfa98d88c061e3ef38b97b8632b60efa6a44ea9c",
+      "candidate": ".artifacts/campaign/202609022319/final-candidate-v4/lkjscript",
+      "candidate_bytes": 17332448,
+      "candidate_sha256": "fc26f138e670d7be27a419ac623de1a0a92db292ef43b3ec89ca6572898acdaa",
+      "runtime_linkage": "static-musl",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0,
+      "build_receipt": ".artifacts/campaign/202609022319/final-candidate-v4/build-receipt.json",
+      "build_receipt_sha256": "8fc90db24eb48249f14e11a4dfb09f0e6568bcd3bbce9f39317c9ed0e787ed8a"
+    },
+    "target_admission": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609022319/target-admission-final-v3/receipt.json",
+      "receipt_sha256": "ded85258afc06f67548531f82779a8265c6b5d0c52dd65f9f6043469fc01df7b",
+      "receipt_digest": "verification_b722b3c8a40a45815146c057c6f19e3e61fcc04c1190245950e70ee9dbb68a57",
+      "userlands": ["Alpine 3.22.5 / musl 1.2", "Debian 11 / glibc 2.31"],
+      "commands_per_userland": 12,
+      "oracles": ["distributed_http", "outbound_http", "stateful_http", "service_acceptance"],
+      "cleanup_complete": true
+    },
+    "product": {
+      "classification": "fresh passed",
+      "passed": 19,
+      "selected": 19,
+      "reused": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788369964961026375-2174307-0/receipt.json",
+      "receipt_sha256": "8be2f81d782629ac99bd7ad08ae510324b8764ade39829c07c01b007cf55f8d5",
+      "receipt_digest": "verification_87ff5ba858eb60650baaab7fd9ac87e0ef8bc38ab64b994aaedd76d6e40b8108"
+    },
+    "service": {
+      "classification": "fresh passed",
+      "passed": 9,
+      "selected": 9,
+      "reused": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788369979011270512-2175330-0/receipt.json",
+      "receipt_sha256": "c3f7acbdf22a3e343eb8479269c2750e4c701abe238c1a6cee785516e8cc5ece",
+      "receipt_digest": "verification_8aa4c79369d63a52375e1b9d76850670b5e02ba753cfcde61af8cfa7dc3e86c1"
+    },
+    "full": {
+      "classification": "fresh passed",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "skipped": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788370001402977353-2177616-0/receipt.json",
+      "receipt_sha256": "fe69abfd51889fcea5b9dcd9925d7ffb3b6e4f5a3b891e9196797ecf484e1550",
+      "receipt_digest": "verification_79597bce59840a28b0c7a81d367d6ca16fffa4ece95b565ffcac7db21a4d086b"
+    },
+    "final_service_observation": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1788370015179942410-2179331-0/receipt.json",
+      "receipt_sha256": "09302115b559a3ed04d441e26226f5f1900124217660e4ff952aedac43b5764f",
+      "receipt_digest": "verification_7ff322944be7e7b287d69cbae7a5e2610ffe8843e56aad821b66cfb674b4dc65",
+      "routes_checked": 15,
+      "workers_started": 2,
+      "productive_iterations": 4,
+      "completed_jobs": 2,
+      "stale_replacement_observed": true,
+      "retry_observed": true,
+      "restart_read_equal": true,
+      "restored_read_equal": true,
+      "corrupt_backup_rejected": true,
+      "semantic_authority_unchanged": true,
+      "shutdown_cleanup_failures": 0,
+      "cleanup_complete": true
+    },
+    "invalidated_or_failed_observations": [
+      {
+        "classification": "unavailable",
+        "observation": "first target-build invocation could not resolve cargo in the child PATH",
+        "effect": "no candidate or receipt was published; corrected invocation used the observed pinned toolchain"
+      },
+      {
+        "classification": "failed",
+        "observation": "first full profile on 83a276cb passed 22 fresh gates, failed clippy, and skipped workspace_tests because of the failed prerequisite",
+        "receipt": ".artifacts/lkjscript-dev/check/1788368944888407547-2154117-0/receipt.json",
+        "receipt_sha256": "b9eec3afdb602fb3dea9904ce8a34ce65bffd36e2e4aa9a37e66fa2ca8a84e7b",
+        "receipt_digest": "verification_da1d1ea8d9b10059c435bd6085c64a036173acc2ba5fe6c0d4df1963639ca487",
+        "correction": "5eb3e636 removed one redundant conversion and one needless oracle lifetime; exact clippy and all final gates passed"
+      },
+      {
+        "classification": "fresh passed",
+        "observation": "earlier target, product, service, and full receipts passed but were invalidated by later lint or current-truth inputs",
+        "disposition": "not used as final proof"
+      }
+    ]
+  },
+  "measurements": {
+    "pre_cutover_definition_projection": {
+      "total_records": 787,
+      "body_records": 192,
+      "contract_records": 17,
+      "reference_records": 362,
+      "fact_records": 197,
+      "structural_edges": 197,
+      "reference_edges": 362,
+      "fact_reads": 197,
+      "maximum_depth": 28,
+      "logical_bytes": 332648,
+      "rendered_output_bytes": 334032,
+      "map_pages_read": 1710,
+      "map_bytes_read": 12324826,
+      "map_entries_visited": 9150,
+      "catalog_lookups": 2104,
+      "store_objects_read": 2104,
+      "store_bytes_read": 12420241,
+      "canonical_records_decoded": 197,
+      "witness_records_decoded": 394
+    },
+    "maintained_plan": {
+      "bytes": 156913,
+      "records": 644,
+      "allocations": 10,
+      "logical_plan_owner_records": 100,
+      "relations_removed": 18,
+      "relations_added": 36,
+      "structural_owners": 28,
+      "semantic_owners": 90,
+      "impact_reasons": 108,
+      "selected_tests": 0,
+      "captures": 4,
+      "capture_uses": 17,
+      "requirements": 1,
+      "extraction_owner_evidence_records": 213
+    },
+    "maintained_publication": {
+      "created_owners": 10,
+      "updated_owners": 18,
+      "deleted_owners": 0,
+      "witness_updates": 224,
+      "compiler_units_changed": 3
+    },
+    "post_cutover_definition_logical_bytes": {
+      "caller": 168470,
+      "helper": 181807,
+      "largest_maintained": 256727
+    },
+    "maintained_artifact": {
+      "bytes": 839851,
+      "manifest_object_bytes": 568240,
+      "closure_objects": 2812,
+      "compiler_units": 145
+    },
+    "target_build": {
+      "wall_nanoseconds": 228566418,
+      "child_cpu_nanoseconds": 90000000,
+      "child_peak_rss_kib": 64452,
+      "candidate_bytes": 17332448
+    },
+    "target_admission": {
+      "wall_nanoseconds": 40117498511,
+      "sampled_command_cpu_nanoseconds": 850000000,
+      "maximum_sampled_command_peak_rss_kib": 48072,
+      "retained_evidence_root_bytes_after_cleanup": 4041124
+    },
+    "final_profiles": {
+      "product_wall_nanoseconds": 11177241271,
+      "product_sampled_gate_cpu_nanoseconds": 2870000000,
+      "product_maximum_gate_peak_rss_kib": 69336,
+      "service_wall_nanoseconds": 18937944181,
+      "service_sampled_gate_cpu_nanoseconds": 950000000,
+      "service_maximum_gate_peak_rss_kib": 69172,
+      "full_wall_nanoseconds": 129219252532,
+      "full_sampled_gate_cpu_nanoseconds": 3760000000,
+      "full_maximum_gate_peak_rss_kib": 69400
+    },
+    "final_copied_extraction_raw_bytes": 17480027,
+    "measurement_scope": "process-owner samples and retained-file byte counts only; no broader performance or capacity inference"
+  },
+  "ife_disposition": {
+    "IFE-1": "fresh passed: one discovered bounded extract.function intent; direct/file normalization and malformed, alias, conflict, stale, and exhaustion rejection",
+    "IFE-2": "fresh passed: independent oracle agrees on closure, captures, types, uses, effect, requirements, affine provenance, generated and unaffected owners",
+    "IFE-3": "fresh passed: stable movable identities and evaluation position; pure differential equality and existing task/resource semantics",
+    "IFE-4": "fresh passed: exact copied static candidate discovers, pages, plans direct/file-equal, applies, reinspects, checks, builds, runs, rejects failures, and replays idempotently",
+    "IFE-5": "fresh passed: mandated current lkjournal target split to 96/101 records through the selected root with maintained service/state/recovery/cleanup proof",
+    "IFE-6": "fresh passed: source 0.1.18, justified contracts and lkjournal identities advanced, 192-record shape removed, no private migrator or fallback retained",
+    "IFE-7": "fresh passed: focused/oracle, copied-binary, clean/incremental, generated, product, service, target, and zero-reuse full proof",
+    "IFE-8": "fresh passed pending the containing evidence/lifecycle commit and its conditionally authorized normal fast-forward push"
+  },
+  "external_actions": {
+    "fetch": "fresh passed; origin/main remained 7530f5e8a3dfcf6e4cee5a1d8615e5a4e1b88e47 with local branch 0 behind and 5 implementation commits ahead before evidence closure",
+    "push": "conditionally authorized normal fast-forward push pending after the containing evidence/lifecycle commit",
+    "workflow_dispatch": "not run",
+    "tag_or_release": "not run",
+    "package_publication": "not run",
+    "deployment": "not run",
+    "hosted_data_mutation": "not run",
+    "live_external_protocol": "not run",
+    "published_object_mutation": "not run"
+  },
+  "limitations": [
+    "private same-module nongeneric helper only",
+    "one explicit proper subtree and one extraction per request",
+    "at most one exact-requirement final consume-only affine capture",
+    "no borrowed or multiple affine capture, resource result/container, closure, recursion, cross-module, cross-package, public helper, async, or session semantics",
+    "no sandboxing, multi-tenant isolation, signing, reproducibility, generic portability, capacity, performance, or service-level claim",
+    "source 0.1.18 remains unreleased and immutable v0.1.16 remains the supported public release"
+  ],
+  "next_candidates": [
+    "lightweight million-owner capacity boundary",
+    "private affine resource-result protocol from a maintained workload",
+    "fully closed Nostr WebSocket/session slice only after its ownership and raw-oracle prerequisites"
+  ]
+}
