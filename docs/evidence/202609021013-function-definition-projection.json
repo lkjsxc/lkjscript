@@ -1,0 +1,652 @@
+{
+  "schema": {
+    "identity": "lkjscript-function-definition-projection-evidence",
+    "version": 1
+  },
+  "campaign": "202609021013-function-definition-projection",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-02T04:25:34Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "eca5d6862846f60e5792913757ebb940da717ca6",
+    "entry_tree": "bde5655dc3aed7c7f3015abd13af6e68622e9072",
+    "entry_origin_main": "eca5d6862846f60e5792913757ebb940da717ca6",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "3f581f793c7d2e26b6c35ab22a780186436c4894",
+        "summary": "Add revision-pinned function definition projection"
+      },
+      {
+        "sha": "c8e11170b721cffa9e080d1d8cd577380fcd5c4d",
+        "summary": "Update stateful guide-count acceptance"
+      }
+    ],
+    "verified_head": "c8e11170b721cffa9e080d1d8cd577380fcd5c4d",
+    "verified_tree": "69b0cf8d6e22a58ff6d9b1de674e757ab3011870",
+    "verified_origin_main": "eca5d6862846f60e5792913757ebb940da717ca6",
+    "verified_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 2
+    },
+    "tracked_worktree_before_evidence": "clean",
+    "push_dry_run": "safe fast-forward eca5d686..c8e11170 main -> main",
+    "supplied_mandate": {
+      "path": "docs/campaigns/202609021013.md",
+      "entry_state": "untracked supplied work",
+      "entry_sha256": "8389b8e9308da9ec8cb4ad90015928079ada8e7e89f9f83aa81c2044b62af4e9",
+      "disposition": "initial body archived byte-for-byte; closure changes only status and appends one terminal record"
+    },
+    "preserved_work": [
+      {
+        "path": "AGENTS.md",
+        "mode": "0640",
+        "bytes": 19581,
+        "sha256": "d751eba677a0be00b20b25261e8323eec7a9b49d675485a5eaa56aff83d42111",
+        "disposition": "applicable repository policy remained unchanged"
+      },
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "ignored": [
+          ".artifacts/",
+          "target/",
+          "packages/standard/LOCK",
+          "packages/standard/catalog/",
+          "packages/standard/derived/",
+          "applications/lkjournal/LOCK",
+          "applications/lkjournal/catalog/",
+          "applications/lkjournal/derived/"
+        ],
+        "unreadable_preserved": [
+          ".artifacts/static-0.1.8/docker-exec/",
+          ".artifacts/static-0.1.8/docker-data/",
+          ".artifacts/campaigns/202608290721/docker-exec/",
+          ".artifacts/campaigns/202608290721/docker-data/"
+        ],
+        "disposition": "pre-existing ignored and root-owned historical material was not read, removed, or rewritten; campaign receipts were added only below ignored artifact owners"
+      }
+    ],
+    "closure_note": "The containing evidence/lifecycle commit and its normal push result cannot be named inside their own content; the terminal handoff reports them."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true
+  },
+  "identity_cutover": {
+    "source_product": {
+      "before": "0.1.15",
+      "after": "0.1.16",
+      "release_state": "unreleased source-only"
+    },
+    "public_latest": {
+      "tag": "v0.1.15",
+      "release_id": 380401840,
+      "tag_object": "d9a6e7812325810c5becae2e217e1b9a4a600c8f",
+      "source_commit": "2b428645471e032ba3cfb415bf81565d7ea0159e",
+      "immutable": true,
+      "mutated": false
+    },
+    "capabilities_digest": {
+      "before": "855a26b1e6b5ad01be305c6fc8f61b68697cf6fe8e4feddc38d3bf394a1bc23b",
+      "after": "7bbb0d3a2410911d815ee4159a3a9b0244c12eef0045db241565d449b9158d09"
+    },
+    "advanced": {
+      "cli": {
+        "from": 17,
+        "to": 18
+      },
+      "contract_registry": {
+        "from": "lkjscript-contract-registry-5",
+        "to": "lkjscript-contract-registry-6"
+      },
+      "function_definition_projection": {
+        "from": "absent",
+        "to": "lkjscript-function-definition-projection-1"
+      },
+      "distributed_http_acceptance": {
+        "from": 2,
+        "to": 3
+      },
+      "maintained_service_receipt": {
+        "from": 5,
+        "to": 6
+      },
+      "generated_document_count": {
+        "from": 7,
+        "to": 8
+      }
+    },
+    "unchanged": {
+      "meaning_graph": 6,
+      "validation_witness": 3,
+      "owner_summary": 2,
+      "semantic_validator": 6,
+      "authored_change": 7,
+      "compact_change": 9,
+      "package_interface": 4,
+      "compiler_unit": 2,
+      "bytecode": 2,
+      "artifact": 11,
+      "resident_runtime": 2,
+      "durable_queue_adapter": 2,
+      "project_creation": 3,
+      "deployment": 3,
+      "http_client_adapter": 1,
+      "data_store": 1,
+      "data_backup": 1,
+      "durable_queue_data": "lkjscript-durable-queue-data-1",
+      "package_transport": 1,
+      "release_target_policy": 2,
+      "release_objects": "unchanged"
+    }
+  },
+  "public_contract": {
+    "classification": "fresh passed",
+    "grammar": "inspect owner KIND ID --detail definition [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]",
+    "scope": "one live local pure_function or task_function with a body at one accepted immutable revision",
+    "summary_omission": "inspect owner KIND ID remains summary-only",
+    "sections": [
+      "definition and revision header",
+      "function contract in semantic field order",
+      "structural body preorder by canonical slot and explicit index",
+      "references ordered by role and typed target",
+      "validation facts in body order"
+    ],
+    "reference_cutoff": "named local/package/declaration/interface/operation/requirement/field/type/parameter owners are exact references and are not recursively expanded",
+    "continuation": {
+      "prefix": "icont_",
+      "stateless": true,
+      "maximum_encoded_bytes": 320,
+      "binding": [
+        "repository",
+        "package",
+        "revision",
+        "function",
+        "projection contract",
+        "complete definition digest",
+        "ordering",
+        "section",
+        "exclusive resume key",
+        "integrity digest"
+      ],
+      "excluded": [
+        "body bytes",
+        "frontier",
+        "cursor",
+        "cache",
+        "process state",
+        "page item budget",
+        "page byte budget"
+      ]
+    },
+    "authority": "accepted-revision-derived read-only transport; projection bytes and continuations are not authored change input and never select HEAD",
+    "excluded_output": [
+      "storage bytes or paths",
+      "indexes or caches",
+      "compiler or artifact operands",
+      "runtime handles",
+      "deployment grants, secrets, or environment",
+      "operational data or queue transition tokens",
+      "object bytes",
+      "evidence paths"
+    ],
+    "generated_guide": {
+      "path": "docs/generated/function-definition.md",
+      "sha256": "cf743eb941d903a87c015402f57a884f77a4fa2944c53dfb297918d30db64c9e"
+    }
+  },
+  "admissions": {
+    "classification": "fresh passed",
+    "logical": {
+      "body_records": 4096,
+      "combined_structural_reference_edges": 16384,
+      "fact_reads": 32768,
+      "body_depth": 256,
+      "canonical_logical_bytes": 8388608,
+      "literal_fragment_bytes": 8192
+    },
+    "page": {
+      "default_items": 50,
+      "maximum_items": 10000,
+      "minimum_output_bytes": 1536,
+      "default_output_bytes": 65536,
+      "maximum_output_bytes": 4194304
+    },
+    "derived_physical": {
+      "point_map_path_pages": 18,
+      "canonical_record_reads": 16385,
+      "ownership_reads": 16384,
+      "map_pages": 1179666,
+      "map_bytes": 77310590976,
+      "map_entries": 12884312052,
+      "store_objects": 1228819,
+      "store_bytes": 148181745664
+    },
+    "proof": {
+      "exact_fit_and_one_over": [
+        "body records",
+        "combined edges",
+        "fact reads",
+        "depth",
+        "logical bytes",
+        "map pages/bytes/entries",
+        "store objects/bytes",
+        "canonical/decode reads",
+        "page records",
+        "page bytes"
+      ],
+      "materialization": "complete closure and every logical/physical admission are validated before rendering success",
+      "page_resume": "changed item and byte budgets reproduced the same complete records, ordering, counts, and digest without omission or duplication"
+    }
+  },
+  "maintained_oracle": {
+    "classification": "fresh passed",
+    "application": "lkjournal",
+    "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+    "package": "pkg_20000000000000000000000000000001",
+    "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+    "worker": {
+      "module": "mod_0510586a801c429b7a4a49a217de7fab",
+      "function": "decl_a914bb78de075ff44a857ac028d704f3",
+      "definition_digest": "definition_eaaf72ff8b3d39f940af04405dc256bb081f27070918ec73f1624fa63f65e2be",
+      "records": {
+        "total": 210,
+        "contract": 9,
+        "body": 48,
+        "references": 99,
+        "facts": 51
+      },
+      "edges": {
+        "structural": 51,
+        "references": 99
+      },
+      "maximum_depth": 8,
+      "logical_bytes": 88035,
+      "rendered_output_bytes": 97752,
+      "pages": 6,
+      "oracle_digests": {
+        "owner_order": "definition_oracle_owners_ba4bc853bba9837e8b39f1e2d840cb30226aa3f2d03eabe5ef681a78066e0c31",
+        "facts": "definition_oracle_facts_baf9351671ad6cfe1b364fad0085d4a0f5b94559b1dde29d3de2b8245dd6ccc2",
+        "relations": "definition_oracle_relations_98155a1aa7cbb3b2a2bb23b352b1b3792eef711c129c4dc04160b5e3000cba5b"
+      },
+      "generic_observations": {
+        "requirement": "jobs",
+        "matches": 2,
+        "sequence": [
+          {
+            "name": "clock.now",
+            "operation": "op_2f02101a13d5b32d4be5e5ada08f8df4",
+            "uses": []
+          },
+          {
+            "name": "claim",
+            "operation": "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
+            "uses": ["unrestricted", "unrestricted", "unrestricted"]
+          },
+          {
+            "name": "lease-info",
+            "operation": "op_1a5491eb1c3ef3d15ec28268b6f04afc",
+            "uses": ["borrow"]
+          },
+          {
+            "name": "heartbeat",
+            "operation": "op_f593ba236055aa1afa6c02eaf0db6a64",
+            "uses": ["consume", "unrestricted", "unrestricted"]
+          },
+          {
+            "name": "complete",
+            "operation": "op_679b43bb7dc0b298a7706d4e8a7bef23",
+            "uses": ["consume", "unrestricted", "unrestricted", "unrestricted", "unrestricted"]
+          },
+          {
+            "name": "fail",
+            "operation": "op_242e065f9738b454e2328ed0e558e6a0",
+            "uses": ["consume", "unrestricted", "unrestricted"]
+          }
+        ],
+        "conclusion": "generic records and exact references show absent/live claim, lease-info borrow, heartbeat consume, renewed live-state match, and complete/fail consume"
+      },
+      "oracle_equal": true,
+      "digest_recomputed_from_raw_records": true,
+      "changed_page_budgets": true,
+      "copied_binary_equal": true,
+      "authority_unchanged": true
+    },
+    "largest_function": {
+      "function": "decl_0693166bd7c29bee83d2ead289148f65",
+      "body_records": 192,
+      "definition_digest": "definition_7494a67ac0a3538d57e108eddd6e6b9379949b6717b0267f5563415ab1ebd0a2",
+      "admitted": true
+    },
+    "oracle_separation": "complete typed reconstruction shares canonical authority but no production point traversal, ordering, rendering, paging, token, or expected-result helper",
+    "receipt": {
+      "path": ".artifacts/lkjscript-dev/service/1788322767985444780-1669359-0/receipt.json",
+      "bytes": 90435,
+      "sha256": "9f53237b5b207afb8b399732a7dc1d10a92cc8c8fa7b37f50f7cbf7d0bd42fb7"
+    }
+  },
+  "copied_binary_http": {
+    "classification": "fresh passed",
+    "candidate_sha256": "c6cc5b3d1b2cf10243e6dfc7a8902fc9f8c1b137cbe5d573f80468f360c8bde6",
+    "function": "decl_4c3a9c61d93f5567448aa80dee55cef7",
+    "initial_revision": "rev_47b57adcb5e3d9ffe70233b1444df5bbae3cc67f28d806fe41366cc6c0136dec",
+    "accepted_revision": "rev_c0e6019c7bab0104c906c33b1c715b4f0bf25cf69fd1e5683c4d0a15a17721ee",
+    "initial_definition_digest": "definition_9074d862a26a421e31ce6f98b1a864a1e53f5a2cafb640a2b10cb96f58fc9a6f",
+    "accepted_definition_digest": "definition_a0835b24649abefebfbc55da733efef57658332fcf9e57f2fcee8e8e1499ef72",
+    "initial_records": 9,
+    "accepted_records": 9,
+    "initial_pages": 4,
+    "accepted_pages": 4,
+    "initial_logical_bytes": 3717,
+    "accepted_logical_bytes": 3727,
+    "initial_literal_sha256": "9fab386152f9f1472746a47ea010c11e6f395e633ff3f7303bea7bfdf86fa18a",
+    "accepted_literal_sha256": "a2ab3c627cb792d859512e4f2e6a49de7bf79699f53f2488c5eff84026133664",
+    "workflow": [
+      "offline capability discovery",
+      "locate and project response-text",
+      "changed-budget stateless paging",
+      "construct ordinary compact replace.body input",
+      "direct and file plan equality",
+      "review and apply exact plan",
+      "reinspect accepted child",
+      "check",
+      "clean and exact-current build equality",
+      "loopback serve and response observation",
+      "complete cleanup"
+    ],
+    "contract_unchanged": true,
+    "intended_body_change_only": true,
+    "digest_recomputed_from_raw_records": true,
+    "malformed_continuation_rejected": true,
+    "stale_continuation_rejected": true,
+    "stale_base_and_plan_rejected": true,
+    "projection_input_rejected": true,
+    "authority_unchanged_before_apply": true,
+    "commands": 41,
+    "runners": 2,
+    "requests": 2,
+    "cleanup_complete": true,
+    "receipt": {
+      "path": ".artifacts/campaign/202609021013/target-admission/distributed-http/receipt.json",
+      "bytes": 68480,
+      "sha256": "69e213dc69e1a98748dfbbf1c81244e19bc50a03e8cdbb115e9b0e8508abe9ec"
+    }
+  },
+  "negative_and_containment_proof": {
+    "classification": "fresh passed",
+    "rejections": [
+      "missing or retired owner",
+      "non-function owner",
+      "foreign or dependency package body",
+      "malformed typed identity",
+      "missing, shared/cyclic, foreign, or wrong-role structural child",
+      "duplicate or noncanonical structural ownership",
+      "owner-summary or fact mismatch",
+      "body/edge/fact/depth/logical/map/object/decode/page one-over exhaustion",
+      "malformed, padded, truncated, oversized, mutated, predecessor, foreign, stale, selector-mismatched, projection-mismatched, or impossible continuation",
+      "projection records supplied to change",
+      "body/full/raw/source/recursive/JSON aliases",
+      "materialization and rendering cancellation"
+    ],
+    "atomicity": "success, rejection, corruption, exhaustion, stale resume, and cancellation leave semantic HEAD, graph inventory, cache, generated application output, descriptors, operational data, queue/object state, and filesystem authority unchanged",
+    "predecessor_rejection": "fresh passed",
+    "projection_as_change_rejection": "fresh passed",
+    "cancellation_cleanup": "fresh passed",
+    "forbidden_output_scan": "fresh passed"
+  },
+  "maintained_identity_equality": {
+    "classification": "fresh passed",
+    "git_tree_equality": {
+      "packages_standard": "8e8514e9df477e0114fb3eaade60393041bfd233",
+      "applications_lkjournal": "32bb8228cf578284afb87ecea4d057061bb09bac",
+      "standard_generated": "ce962b9c2dc05be1b42137d01e4928c4eff4cdc2",
+      "lkjournal_generated": "eaba58393031aa0ef5828ff8c009960011b845b6"
+    },
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261",
+      "head_sha256": "ea6bc114923a9dddf13b53e4ce3fa7d5aa84b9f5f6731b0a622c01902e910862",
+      "transport_sha256": "14b2fda54bf7f544fd40625b48c6099197cff5469b8ba48fc38f90fb2f202791",
+      "artifact_sha256": "fe9e633c71d07bd434d2055ca5197250fcb0a15e36bfd734c48d735880a3e79b"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704",
+      "head_sha256": "55431ab1337650ec8aef1df0237b65bcad525a218acebeec8fca04fd40b90ab3",
+      "artifact_sha256": "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728"
+    },
+    "diff_from_entry": "no changes under packages/standard or applications/lkjournal",
+    "operational_or_deployment_mutation": false
+  },
+  "verification": {
+    "required": {
+      "focused": {
+        "classification": "fresh passed",
+        "gates": "6/6",
+        "reused": 0,
+        "receipt": ".artifacts/lkjscript-dev/check/1788322805108468178-1669785-0/receipt.json",
+        "receipt_bytes": 15131,
+        "receipt_sha256": "eaaa6d4815812f663c972940b5cc39caa52ad6d533068546ef36084555f5ac2b",
+        "harness_digest": "verification_70a08c301031649784ddc7d26f28b8182230ce4c442075c934316fc9215f7b15"
+      },
+      "product": {
+        "classification": "fresh passed",
+        "gates": "19/19",
+        "reused": 0,
+        "receipt": ".artifacts/lkjscript-dev/check/1788322919104140532-1671668-0/receipt.json",
+        "receipt_bytes": 45577,
+        "receipt_sha256": "e3155da7efb3d1e262dc8cf558f443139141cff96f7f6e5e1c3ecf1054862706",
+        "harness_digest": "verification_8b2352559d30adf9b159584c6a8267fcc3e44c7ab5671acb94ce152138559581"
+      },
+      "full": {
+        "classification": "fresh passed",
+        "gates": "24/24",
+        "reused": 0,
+        "receipt": ".artifacts/lkjscript-dev/check/1788322356869014411-1663244-0/receipt.json",
+        "receipt_bytes": 56360,
+        "receipt_sha256": "5d9c0113d4055a78b193ef30253fae0ed1314f583f7ed88d44581cfb16ae8260",
+        "harness_digest": "verification_80c6a6c7c28dc2cdff68dcf898ebb450cf2534a24f60f729d886c2778abe043d"
+      },
+      "maintained_application": {
+        "classification": "fresh passed",
+        "owner": "full.service_acceptance plus exact-target service oracle"
+      },
+      "generated_guides": {
+        "classification": "fresh passed",
+        "owner": "product/full.generated_public_guides"
+      },
+      "unchanged_assets": {
+        "classification": "fresh passed",
+        "owner": "product/full standard, built-in transport/artifact, and lkjournal artifact compare gates"
+      },
+      "predecessor_rejection": {
+        "classification": "fresh passed",
+        "owner": "focused/full public CLI and workspace tests"
+      },
+      "clean_incremental": {
+        "classification": "fresh passed",
+        "owner": "release command lifecycle, distributed HTTP, stateful HTTP, and maintained service gates"
+      },
+      "target": {
+        "classification": "fresh passed",
+        "receipt": ".artifacts/campaign/202609021013/target-admission/receipt.json",
+        "receipt_bytes": 70006,
+        "receipt_sha256": "d443c4521958e751ea882213a7a9d053ac700013d2af6e6c5fe3862f425fc2ac",
+        "receipt_digest": "verification_b802fb2c791b060676c45db492fc07ecb7e8c8e726a14ce80018fb1f9fe2b4fa"
+      }
+    },
+    "corrective_runs": [
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788321189602775339-1647590-0/receipt.json",
+        "result": "focused 5/6; stale public test expected a 64 KiB complete capability projection and seven generated guides",
+        "correction": "public assertions now use the 4 MiB executable response contract and eight owned guides"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788321504999610189-1653669-0/receipt.json",
+        "result": "product 18/19; current prose leaked internal compatibility catalog wording",
+        "correction": "moved internal numbers back to executable/evidence owners; product-surface audit now has zero violations"
+      },
+      {
+        "classification": "failed",
+        "receipt": ".artifacts/lkjscript-dev/check/1788322104429917188-1657541-0/receipt.json",
+        "result": "full 23/24; stateful verifier retained the predecessor seven-guide count",
+        "correction": "commit c8e11170 updates the verifier-owned count; direct stateful proof and final full both passed with cleanup"
+      }
+    ],
+    "all_required_final_inputs_stable": true,
+    "unavailable_required_gates": 0,
+    "skipped_required_gates": 0
+  },
+  "target_admission": {
+    "classification": "fresh passed",
+    "source_commit": "c8e11170b721cffa9e080d1d8cd577380fcd5c4d",
+    "target": "x86_64-unknown-linux-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "candidate": {
+      "path": ".artifacts/campaign/202609021013/lkjscript-x86_64-unknown-linux-musl",
+      "bytes": 16713952,
+      "mode": "0755",
+      "sha256": "c6cc5b3d1b2cf10243e6dfc7a8902fc9f8c1b137cbe5d573f80468f360c8bde6",
+      "elf": "ELF64 little-endian x86-64 position-independent executable",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0,
+      "runtime_linkage": "static-musl"
+    },
+    "build_receipt": {
+      "path": ".artifacts/campaign/202609021013/build-receipt.json",
+      "bytes": 2786,
+      "sha256": "d24d03d2023147740d471d9f1338578025b0d71dad0446ad00484f9f1563df3b",
+      "elapsed_nanoseconds": 131866175781,
+      "process_cpu_nanoseconds": 100000000,
+      "process_peak_rss_kib": 65184
+    },
+    "userlands": [
+      {
+        "role": "musl",
+        "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "expected_libc": "musl-1.2",
+        "candidate_commands": 12,
+        "classification": "fresh passed",
+        "cleanup_complete": true
+      },
+      {
+        "role": "older-glibc",
+        "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+        "expected_libc": "glibc-2.31",
+        "candidate_commands": 12,
+        "classification": "fresh passed",
+        "cleanup_complete": true
+      }
+    ],
+    "oracles": [
+      {
+        "name": "distributed_http",
+        "classification": "fresh passed",
+        "commands": 41,
+        "runners": 2,
+        "requests": 2,
+        "cleanup_complete": true
+      },
+      {
+        "name": "outbound_http",
+        "classification": "fresh passed",
+        "commands": 13,
+        "runners": 8,
+        "requests": 17,
+        "cleanup_complete": true
+      },
+      {
+        "name": "stateful_http",
+        "classification": "fresh passed",
+        "commands": 83,
+        "runners": 3,
+        "requests": 25,
+        "cleanup_complete": true
+      },
+      {
+        "name": "service_acceptance",
+        "classification": "fresh passed",
+        "commands": 36,
+        "runners": 5,
+        "requests": 15,
+        "cleanup_complete": true
+      }
+    ],
+    "cleanup_complete": true
+  },
+  "external_state_at_assembly": {
+    "origin_main": "eca5d6862846f60e5792913757ebb940da717ca6",
+    "open_issues": 0,
+    "open_pull_requests": 0,
+    "queued_workflows": 0,
+    "in_progress_workflows": 0,
+    "latest_successful_run": {
+      "id": 33495319420,
+      "attempt": 1,
+      "source_commit": "2b428645471e032ba3cfb415bf81565d7ea0159e"
+    },
+    "latest_release": {
+      "id": 380401840,
+      "tag": "v0.1.15",
+      "immutable": true,
+      "archive_asset_id": 539383016,
+      "archive_bytes": 7459326,
+      "archive_sha256": "5a16f67272784e93948cc779d13fab7b4ae8c5f42bf9b8860517bb72eae51f01"
+    },
+    "normal_push": "pending at evidence assembly; dry run proved a safe fast-forward and the final handoff records the result",
+    "other_external_mutations": []
+  },
+  "resource_observations": {
+    "full_profile_elapsed_nanoseconds": 212030408046,
+    "maintained_service_elapsed_nanoseconds": 7273870414,
+    "maintained_service_commands": 36,
+    "maintained_service_runners": 5,
+    "maintained_service_requests": 15,
+    "definition_dimensions": "records, structural/reference edges, fact reads, depth, canonical logical bytes, map/object/decode reads, rendered records/bytes, and continuation bytes remain separate",
+    "no_benchmark_claim": true
+  },
+  "limitations_and_nonclaims": {
+    "source_public_split": "source 0.1.16 is unreleased; immutable public latest remains v0.1.15 and a later publication campaign must close before another independent product delta",
+    "limitations": [
+      "one live local function per projection",
+      "dependency implementations and recursively referenced declarations remain undisclosed",
+      "no whole-project source/export/import or projection round-trip authoring",
+      "no mutable inspection session, body cache, or query index",
+      "no task-function resource transfer, closures, affine containers, or general session/linear semantics",
+      "no million-owner definition admission or historical query",
+      "target claim limited to the exact candidate and two pinned userlands"
+    ],
+    "nonclaims": [
+      "latency, throughput, or service level",
+      "memory safety beyond Rust/toolchain policy",
+      "hostile-code sandboxing or multi-tenant isolation",
+      "confidentiality or encrypted graph/operational storage",
+      "reproducible builds, general provenance, or code signing",
+      "generic Linux portability or another target"
+    ],
+    "next_candidates": [
+      "immutable 0.1.16 publication",
+      "task-function resource transfer only from maintained need",
+      "separate million-owner compiler and operational data/history decisions",
+      "remaining authored operations from observed workflows",
+      "Nostr WebSocket/session only after general connection, resource, key/auth/replay, consumer, and raw-protocol proof"
+    ]
+  }
+}
