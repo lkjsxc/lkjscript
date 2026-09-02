@@ -118,10 +118,11 @@ state only when the objective depends on it, and refresh it immediately before m
 active or externally committed work remains incomplete, close, recover, or terminate it before
 stacking an independent objective.
 
-When a completed source campaign has advanced the root product snapshot and its release path is
-ready, the source/public split is coherent incomplete work. Unless the user explicitly selects a
-source-only train, close, block, or terminate publication before stacking another product delta; do
-not advance the root product version merely to mark source progress.
+A source/public version split is a fact, not automatically active publication work. Treat
+publication as active closure only when an applicable mandate, explicit user instruction,
+deliberate release train, or current justified repository contract requires it. Once publication
+or another irreversible external campaign has begun, finish, recover, block, or terminate it before
+unrelated work. Do not let version movement alone create a recurring feature-to-release ratchet.
 
 ## Campaign design and cutover discipline
 
