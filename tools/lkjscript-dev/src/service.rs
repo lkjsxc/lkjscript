@@ -45,7 +45,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071";
+    "c08dedb8312c4613873df5e4bf45e6e4a2e9a6464fa162d9dc5c561f3c4b3340";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -2882,8 +2882,8 @@ fn verify_maintained_function_definition(
                     ),
                 )
             })?;
-        let largest_admitted = largest.function == "decl_0693166bd7c29bee83d2ead289148f65"
-            && largest.body_preorder.len() == 192;
+        let largest_admitted = largest.function == "decl_97e3d3c28142723096e5b121c0205ef2"
+            && largest.body_preorder.len() == 148;
         require(
             largest_admitted,
             "definition_largest_function",

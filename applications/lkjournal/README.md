@@ -20,12 +20,12 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4`;
-- semantic state: `semantic_state_21aa7470aef40286c899d77ea97c361ae98f4f3192917577d61954c89798a6a4`;
-- package revision: `package_revision_85016db390d92b682b5f9aed9cffb188e6394344cac78d158e023fc6ecc69782`;
-- artifact manifest: `artifact_manifest_3670a7475898c9cd1027b29dcf6dd0c2b5014c8de5fefa445534bce58cb59b2a`;
-- artifact bundle: `artifact_bundle_6028778ec08995e96a1c75ca76d00cb2e2e10d59ddbd4f7876b403ca219e7f94`;
-- 1,585 live root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_8a40a1eadb7db23e755306dbee5f11f372ca834af24fcaac39ddac4d02d60aaf`;
+- semantic state: `semantic_state_592e1b154a4382a7c8eec6ce159d44582c7bb76189fbd09f46867d7ec9ea870b`;
+- package revision: `package_revision_75a9b45112274941cbadf804c32c06ccf68e0211371519536f97fb9898a8a171`;
+- artifact manifest: `artifact_manifest_0331c59ddd5699d27392b3445d9765250c6ba18b40cd588f7f31831314f6469b`;
+- artifact bundle: `artifact_bundle_1c8183031bd952243015f78896f6ad8f3046287c47399be4fbabe177eab5d1fd`;
+- 1,595 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
 
@@ -47,6 +47,12 @@ tests. All 18 must agree between normalized bytecode and the canonical reference
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
 not change accepted `HEAD`.
 
+Package-visible task function `decl_0693166bd7c29bee83d2ead289148f65` (`update-resource`) retains
+its stable identity and delegates the exact data-only commit subtree to private same-module helper
+`decl_53936ef7d46ee491d41aef8c37cdffef` (`commit-resource-update`). Their definition bodies contain
+96 and 101 records respectively; the moved root remains
+`expr_22692186086bc39d6caf2cfe244879c8`.
+
 The normalized artifact contains target `serve`
 (`target_e6f0a45c5f938ba39a19de585e8fc0d7`) and target `work`
 (`target_3608e4377fe1adb3ef15e610a9b5e0e5`), their component/port meaning, and declared requirements.
@@ -54,9 +60,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 835,687-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 839,851-byte
 artifact bundle above (SHA-256
-`40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071`). `serve` resolves target
+`c08dedb8312c4613873df5e4bf45e6e4a2e9a6464fa162d9dc5c561f3c4b3340`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after first-party data/queue/object preflight. It does not discover this typed

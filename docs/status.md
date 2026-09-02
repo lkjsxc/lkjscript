@@ -14,13 +14,13 @@ closure selected by `HEAD`. No maintained project contains a predecessor `.lkjsc
 | Consumer | Exact current identity |
 |---|---|
 | standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69`; state `semantic_state_b604e13343bd58ec20057575e1c874b82e845530a21d8b073245d3ad7a9f2f2d` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4`; state `semantic_state_21aa7470aef40286c899d77ea97c361ae98f4f3192917577d61954c89798a6a4` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_8a40a1eadb7db23e755306dbee5f11f372ca834af24fcaac39ddac4d02d60aaf`; state `semantic_state_592e1b154a4382a7c8eec6ce159d44582c7bb76189fbd09f46867d7ec9ea870b` |
 | built-in standard dependency | package revision `package_revision_987d74de0827e4a710a0aaa6991075227d4e24830ee0654ff0a73b2717015b9f`; transport `package_transport_875deeb0623c0fe50e8f806c277c57df1fd7eb385a2af2b2224b43ec2b8176d4`; artifact manifest `artifact_manifest_79922002c104e5be877aa783208e19854056069acf03ad1ebecfd8b642a03078` |
 
 The standard package owns 431 live semantic owners, 83 compiler units, and 13 graph tests. Its
-current artifact has 817 closure objects and 256,937 bytes. `lkjournal` owns 1,585 live semantic
-owners and one exact standard dependency; its two-package artifact has 144 compiler units, 2,801
-closure objects, and 835,687 bytes. Its complete dependency closure runs 18 graph tests. Both
+current artifact has 817 closure objects and 256,937 bytes. `lkjournal` owns 1,595 live semantic
+owners and one exact standard dependency; its two-package artifact has 145 compiler units, 2,812
+closure objects, and 839,851 bytes. Its complete dependency closure runs 18 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
@@ -29,7 +29,7 @@ Maintained derived assets are:
 |---|---|---|
 | `packages/standard/generated/standard.lkjp` | exact built-in package transport, 89,859 bytes | `faf8bcfb876e393b81cf43657ee376ce318ebedebd945bd830f1e4f142af82da` |
 | `packages/standard/generated/standard.lkja` | current standard artifact bundle, 256,937 bytes | `060d8e2d719be53019e0eb0698d17103634b89455daecaa3b4653936f6dc15c6` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 835,687 bytes | `40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 839,851 bytes | `c08dedb8312c4613873df5e4bf45e6e4a2e9a6464fa162d9dc5c561f3c4b3340` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -103,20 +103,22 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source is unreleased product snapshot `0.1.17`; immutable public latest and the supported
+Current source is unreleased product snapshot `0.1.18`; immutable public latest and the supported
 download remain `v0.1.16`. Source admits one exact-requirement-bound final consume resource
-parameter on a private same-package acyclic task helper and cuts the maintained worker across that
-direct-call boundary. Graph 7, validation witness 4, owner summary 3, validator 7, package interface
-5, compiler-unit/bytecode 3, Artifact 12, compact change 10, authored change 8, resident runtime 3,
-registry 7, CLI 19, function-definition projection 2, and service receipt 7 own changed encodings or
-behavior. Revision, receipt, transaction, semantic-diff, package transport, project creation,
+parameter on a private same-package acyclic task helper and one identity-preserving private
+same-module function extraction. Graph 7, validation witness 4, owner summary 3, validator 7,
+package interface 5, compiler-unit/bytecode 3, Artifact 12, resident runtime 3, function-definition
+projection 2, and service receipt 7 remain current and unchanged by extraction. Compact change 11,
+authored change 9, logical change plan 3, registry 8, and CLI 20 advance for its public request,
+review, discovery, and diagnostic behavior. Revision, receipt, transaction, semantic-diff, package
+transport, project creation,
 deployment, HTTP client, data-store, logical-backup, queue-data, object, HTTP, and adapter contracts
 retain their independent owners.
 
-The standard package's graph encoding and derived identities advance while its 431-owner meaning
-remains generation-neutral equal. `lkjournal` intentionally advances meaning and artifacts for the
-worker split. Deployment descriptors, targets, grants, queue rows/schema/backup format, object and
-HTTP authority, and immutable release objects remain unchanged. This source campaign performed no
+The standard package and all of its semantic and derived identities remain exact. `lkjournal`
+intentionally advances meaning and artifacts for the identity-preserving extraction after retaining
+the earlier worker split. Deployment descriptors, targets, grants, queue rows/schema/backup format,
+object and HTTP authority, and immutable release objects remain unchanged. This source campaign performed no
 deployment, hosted-data mutation, workflow dispatch, tag/release action, or live-relay contact.
 Graph, package, artifact, deployment, distribution, and operational-data identities remain
 separate. The source product retains the same closed
@@ -125,7 +127,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`f08ca638e56d0053cf42564fef8e3d21244e96efddc5e5978257e8c8b7e2ed28` in current source.
+`553f004534cfd61ea0db89e9eeaaeb5186b60053a234a24a2b697e0ced9daca6` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -238,16 +240,39 @@ parameter is bound to exact requirement `req_0cebded5cb056cda5484e39aa40594ad` a
 `lease-info` borrow, heartbeat consume, renewed-state match, and complete/fail consume. The disjoint
 complete-authority oracle agrees on both definitions, the call and parameter-requirement relations,
 and absence of post-transfer entry use. Both are below the 40-body-record bound and the 48-record
-predecessor. The independently selected largest maintained function is
-`decl_0693166bd7c29bee83d2ead289148f65`, with 192 body records and definition digest
-`definition_77a9b2d927e3f90d42f65e671cd7e54aea37f1e0c15f6b72aa3bdefee626a65d`;
-it remains within every fixed admission. All three projections leave the complete maintained repository
-tree and generated application bytes unchanged.
+predecessor.
+
+The formerly largest maintained function `decl_0693166bd7c29bee83d2ead289148f65`
+(`update-resource`) retains its identity and now has definition digest
+`definition_40a06a243c17a9dce775cf8ae2dea20a5c8321625b3a6f0fc12bd7fb604d5da8`:
+404 logical records, including 17 contract, 96 body, 177 reference, and 101 fact records, with depth
+17 and 168,470 logical bytes. Its exact data-only subtree rooted at
+`expr_22692186086bc39d6caf2cfe244879c8` retains all 101 movable owner identities under generated
+private helper `decl_53936ef7d46ee491d41aef8c37cdffef` (`commit-resource-update`). The helper
+captures unrestricted locals `actor`, `id`, `input`, and `entry` in first-use order, owns only the
+exact `data` task requirement, and has digest
+`definition_1ee80b65ef0f9cc90fa5f5c62e4fe6e8b50ddcf29914038c996ad0c32c57e723`:
+425 logical records, including 5 contract, 101 body, 206 reference, and 106 fact records, with depth
+15 and 181,807 logical bytes. The predecessor 192-body-record ownership shape is gone; the 96- and
+101-record results are both below its 144-record feasibility threshold. The independently selected
+largest maintained definition is now `decl_97e3d3c28142723096e5b121c0205ef2`, with 148 body records
+and digest `definition_a7358713faaa1848f0d66fb604981a8db89e67dd5e2b91e0e2268db33368ea43`.
 
 `change plan` and `change apply` share typed lowering and a reviewed logical-plan
 commitment; apply is the only normal existing-project semantic writer. Exact idempotent apply
 reconciliation reprepares the historical logical base without allowing append-only type-object
 storage to alter reviewed effects. A stale plan request remains stale.
+
+`extract.function` is the sole graph-native refactor operation. It selects one exact live
+nongeneric local function, one proper unaliased structural expression root, and one absent private
+same-module helper name. Planning independently bounds and reports the movable closure, free-local
+captures and uses, inferred resource-free result, least effect and caller-ordered requirement
+subset, optional final consume-only affine provenance, preserved/changed/generated owners, resulting
+body counts, impact, tests, and prepared commitment. Apply rederives those facts under the
+publication lock. Malformed, stale, conflicting, ambiguous, escaping, recursive, resource-unsafe,
+foreign, or exhausted requests leave accepted and operational authority unchanged. There is no
+automatic root selection, delete-and-recreate fallback, stored recipe, top-level alias, or
+application-specific migrator.
 
 `check`, `build`, and `run` share one normalized preparation path:
 
@@ -370,9 +395,11 @@ sandbox or multi-tenant isolation boundary.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
   remain private until a complete public workflow exists. Exact staged built-in dependencies,
   components, requirements, function-backed ports, and command/HTTP targets can be created. Existing
-  function contracts can be changed, and pure functions support explicit type parameters, named
-  values, invocation, interface/external creation, operation parameters, dependency replacement,
-  and requirement rebinding. Expression-backed ports, dependency removal, general package
+  function contracts can be changed, and one proper subtree of a nongeneric local function can be
+  extracted into a private same-module helper with inferred captures and identity continuity. Pure
+  functions support explicit type parameters, named values, invocation, interface/external creation,
+  operation parameters, dependency replacement, and requirement rebinding. General move, rebind,
+  signature editing, inline, expression-backed ports, dependency removal, general package
   resolution, and additional runners remain private or absent.
 - Affine resources are lexical and task-local. They may be dropped, may cross the direct payload of
   one nominal variant, and may move through one exact-requirement-bound final consume parameter on

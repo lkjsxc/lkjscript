@@ -155,10 +155,11 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source is unreleased product snapshot 0.1.17; immutable public latest remains
-v0.1.16. The source adds requirement-bound affine task handoff and a maintained worker split. It
-does not enter the distribution path above, alter the immutable release, or select deployment or
-operational data.
+unchanged. Current source is unreleased product snapshot 0.1.18; immutable public latest remains
+v0.1.16. The source retains requirement-bound affine task handoff and the maintained worker split,
+and adds one identity-preserving private same-module function-extraction operation plus its
+maintained `update-resource` cutover. It does not enter the distribution path above, alter the
+immutable release, or select deployment or operational data.
 Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
@@ -205,13 +206,34 @@ authority and compares owner/fact/relation inventories without production traver
 rendering, paging, or token code. No source projection, body index, mutable session, application
 dumper, or `change` reader exists.
 
+Function extraction consumes that projection only as derived observation; accepted meaning remains
+the graph candidate prepared from typed intent:
+
+```text
+exact base + local function + proper expression root + private name
+                              │
+               independent bounded closure analysis
+                              │ captures / effect / requirements / affine provenance
+                              ▼
+stable moved owners ── reparent under generated helper
+original parent slot ── replace with generated direct call and local reads
+                              │
+                reviewed plan + exact reprepare
+                              ▼
+               one GraphRepository visibility change
+```
+
+Movable owners retain identity. Only free-local reads are rebound to generated parameters; the
+selected parent relation is replaced at the same evaluation position. Plans and oracle witnesses are
+derived and cannot select or advance semantic authority.
+
 ## Layer ownership
 
 | Layer | Primary code | Owns | Does not own |
 |---|---|---|---|
 | Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, built-in/deployment discovery, response bounds, exit mapping | semantic records or repository layout |
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, exact-interface resource/use meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, runtime handles, artifacts, deployment |
-| Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
+| Authored change | `platform/change`, logical-plan control | typed intent, deterministic allocation, bounded extraction/capture/effect closure, impact/test selection, reviewed semantic effects | publication visibility, source text, stored refactor recipes, or derived cache identity |
 | Inspection and query | `platform/cli.rs`, `platform/normalized_query`, publication read views | exact-owner summary, complete bounded local-function definition projection, namespace, relation, and bounded local-context reads with stateless logical continuations | mutable cursors, body/query indexes, repair, dependency bodies, source export, or authoring authority |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
@@ -297,6 +319,13 @@ identities deterministically, prepares a complete candidate and witness delta, s
 and tests, and produces logical review records. `change apply` repeats that path, checks both token
 commitments, enters the publication lock, rechecks the base, writes immutable accepted objects,
 and changes `HEAD` once.
+
+For `extract.function`, both paths materialize the complete selected definition, establish one
+structural incoming edge, infer ordered free-local captures and the minimal effect/requirement
+contract, and preserve movable identities while replacing one parent edge. The review binds the
+base-definition and moved-owner digests, exact owner sets and mappings, resulting body counts, and
+optional affine provenance. Conflicts, stale bases, interruption, exhaustion, or derived-cache
+failure cannot partially publish the rewrite.
 
 Before publication, apply may observe an exact base compilation manifest. Only after accepted
 authority is visible does it pass the in-memory `PreparedPublication.compiler_units` to

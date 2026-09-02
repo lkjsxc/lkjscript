@@ -2751,7 +2751,7 @@ mod tests {
         );
         let largest =
             largest_function_definition_oracle(&project).expect("largest maintained definition");
-        assert_eq!(largest.function, "decl_0693166bd7c29bee83d2ead289148f65");
-        assert_eq!(largest.body_preorder.len(), 192);
+        assert_eq!(largest.function, "decl_97e3d3c28142723096e5b121c0205ef2");
+        assert_eq!(largest.body_preorder.len(), 148);
     }
 }

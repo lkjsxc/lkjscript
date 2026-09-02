@@ -13,10 +13,11 @@ and first-party-data copied-binary HTTP acceptance, the current semantic-scale h
 100,100-owner full-lifecycle admission, exact-interface affine capability resources, and the
 resource-owned maintained durable-queue worker cutover, plus complete revision-pinned local-function
 definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
-bound consume-only private task-function handoff with the maintained worker split are current
-architecture.
+bound consume-only private task-function handoff with the maintained worker split, plus one bounded
+identity-preserving graph-native function extraction and the maintained `update-resource` split are
+current architecture.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are distinct: source is unreleased product 0.1.17, while v0.1.16 remains the supported
+`v0.1.16` are distinct: source is unreleased product 0.1.18, while v0.1.16 remains the supported
 public `x86_64-unknown-linux-musl` distribution. Its exact and latest
 downloads independently passed static inspection, distributed HTTP with complete function-definition
 projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker
@@ -50,7 +51,7 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O observations
    before any deletion, packing, or compaction mechanism.
 5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
-   and member/case edits, extraction, inline, and repair only from maintained workflows. Keep typed
+   and member/case edits, inline, and repair only from maintained workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
    and predecessor rejection in each vertical slice.
 6. **Additional platform releases one target at a time.** Treat each architecture and operating
