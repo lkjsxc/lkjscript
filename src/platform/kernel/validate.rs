@@ -1,4 +1,4 @@
-//! Implementation-disjoint full validator for normalized Graph 6 authority.
+//! Implementation-disjoint full validator for normalized Graph 7 authority.
 
 use super::affine::validate_affine_meaning;
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
@@ -6,8 +6,8 @@ use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference,
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
 use super::owner::{
-    BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent, ParameterUse,
-    PortImplementation,
+    BindingKind, DeclarationPayload, DeclarationVisibility, FunctionEffect, OwnerRecord,
+    ParameterParent, ParameterUse, PortImplementation,
 };
 use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
@@ -480,6 +480,14 @@ impl FullValidator<'_> {
                             OwnerKey::Declaration(declaration),
                             "function parameter",
                         );
+                        if let Some(requirement) = parameter.resource_requirement {
+                            self.require_exact_kind(
+                                requirement.package,
+                                OwnerKey::Requirement(requirement.requirement),
+                                &[OwnerKind::Requirement],
+                                "function parameter resource requirement",
+                            );
+                        }
                     }
                     ParameterParent::Operation(operation) => {
                         self.require_parent_listed(
@@ -779,22 +787,56 @@ impl FullValidator<'_> {
                     let direct = snapshot_type_is_direct_resource(self.snapshot, parameter.ty);
                     match parameter.parent {
                         ParameterParent::Function(_) => {
-                            if contains {
+                            if direct {
+                                if parameter.use_mode != ParameterUse::Consume {
+                                    self.error(
+                                        "kernel_affine_function_resource_use",
+                                        format!(
+                                            "direct resource function parameter {owner:?} must consume"
+                                        ),
+                                    );
+                                }
+                                if parameter.resource_requirement.is_none() {
+                                    self.error(
+                                        "kernel_affine_function_resource_requirement",
+                                        format!(
+                                            "direct resource function parameter {owner:?} requires one exact requirement binding"
+                                        ),
+                                    );
+                                }
+                            } else if contains {
                                 self.error(
-                                    "kernel_affine_function_parameter",
+                                    "kernel_affine_function_parameter_container",
                                     format!(
-                                        "function parameter {owner:?} cannot contain a capability resource"
+                                        "function parameter {owner:?} may contain a resource only as its direct type"
+                                    ),
+                                );
+                            } else if parameter.use_mode != ParameterUse::Unrestricted {
+                                self.error(
+                                    "kernel_affine_function_parameter_use",
+                                    format!(
+                                        "nonresource function parameter {owner:?} must be unrestricted"
                                     ),
                                 );
                             }
-                            if parameter.use_mode != ParameterUse::Unrestricted {
+                            if !direct && parameter.resource_requirement.is_some() {
                                 self.error(
-                                    "kernel_affine_function_parameter_use",
-                                    format!("function parameter {owner:?} must be unrestricted"),
+                                    "kernel_affine_parameter_requirement_extra",
+                                    format!(
+                                        "nonresource function parameter {owner:?} cannot bind a resource requirement"
+                                    ),
                                 );
                             }
                         }
                         ParameterParent::Operation(_) => {
+                            if parameter.resource_requirement.is_some() {
+                                self.error(
+                                    "kernel_affine_parameter_requirement_extra",
+                                    format!(
+                                        "operation parameter {owner:?} cannot bind a function resource requirement"
+                                    ),
+                                );
+                            }
                             if direct {
                                 if parameter.use_mode == ParameterUse::Unrestricted {
                                     self.error(
@@ -904,6 +946,104 @@ impl FullValidator<'_> {
                                     "function declaration {owner:?} cannot return a capability resource"
                                 ),
                             );
+                        }
+                        let resource_parameters = function
+                            .parameters
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(index, parameter)| {
+                                let Some(OwnerRecord::Parameter(record)) =
+                                    self.snapshot.owners.get(&OwnerKey::Parameter(*parameter))
+                                else {
+                                    return None;
+                                };
+                                snapshot_type_is_direct_resource(self.snapshot, record.ty)
+                                    .then_some((index, *parameter, record))
+                            })
+                            .collect::<Vec<_>>();
+                        if !resource_parameters.is_empty() {
+                            if resource_parameters.len() != 1 {
+                                self.error(
+                                    "kernel_affine_function_resource_count",
+                                    format!(
+                                        "function declaration {owner:?} must have exactly one direct resource parameter"
+                                    ),
+                                );
+                            }
+                            let (index, parameter, record) = resource_parameters[0];
+                            if index.saturating_add(1) != function.parameters.len() {
+                                self.error(
+                                    "kernel_affine_function_resource_order",
+                                    format!(
+                                        "resource parameter {parameter} must be final in its function signature"
+                                    ),
+                                );
+                            }
+                            if declaration.visibility != DeclarationVisibility::Private {
+                                self.error(
+                                    "kernel_affine_function_resource_visibility",
+                                    format!(
+                                        "resource-bearing function declaration {owner:?} must be private"
+                                    ),
+                                );
+                            }
+                            if !function.type_parameters.is_empty() {
+                                self.error(
+                                    "kernel_affine_function_resource_generic",
+                                    format!(
+                                        "resource-bearing function declaration {owner:?} cannot be generic"
+                                    ),
+                                );
+                            }
+                            let FunctionEffect::Task { requirements } = &function.effect else {
+                                self.error(
+                                    "kernel_affine_function_resource_effect",
+                                    format!(
+                                        "resource-bearing function declaration {owner:?} must be a task"
+                                    ),
+                                );
+                                continue;
+                            };
+                            let Some(requirement) = record.resource_requirement else {
+                                continue;
+                            };
+                            if requirement.package != self.snapshot.root.package_id {
+                                self.error(
+                                    "kernel_affine_function_resource_package",
+                                    format!(
+                                        "resource parameter {parameter} must bind a same-package requirement"
+                                    ),
+                                );
+                            }
+                            if !requirements.contains(&requirement) {
+                                self.error(
+                                    "kernel_affine_function_resource_effect",
+                                    format!(
+                                        "resource parameter {parameter} binding is absent from its function effect"
+                                    ),
+                                );
+                            }
+                            let Some(interface) =
+                                snapshot_resource_interface(self.snapshot, record.ty)
+                            else {
+                                continue;
+                            };
+                            match self
+                                .snapshot
+                                .owners
+                                .get(&OwnerKey::Requirement(requirement.requirement))
+                            {
+                                Some(OwnerRecord::Requirement(bound))
+                                    if requirement.package == self.snapshot.root.package_id
+                                        && bound.interface == interface => {}
+                                Some(OwnerRecord::Requirement(_)) => self.error(
+                                    "kernel_affine_function_resource_interface",
+                                    format!(
+                                        "resource parameter {parameter} type disagrees with its exact requirement interface"
+                                    ),
+                                ),
+                                _ => {}
+                            }
                         }
                     }
                     DeclarationPayload::Constant { ty, .. }

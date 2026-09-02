@@ -1,17 +1,17 @@
-//! Implementation-disjoint finite oracle for Graph 6 affine capability flow.
+//! Implementation-disjoint finite oracle for Graph 7 affine capability flow.
 //!
 //! This test oracle reads only complete `KernelSnapshot` values. It deliberately does not call the
 //! production affine validator or reuse its provenance, transfer, or branch-merge structures.
 
 use super::{
-    BindingKind, DeclarationPayload, DeclarationReference, ExpressionOperation, FunctionEffect,
-    KernelSnapshot, LocalValueReference, OperationRecord, OperationReference, OwnerKey,
-    OwnerRecord, PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceRecord,
-    ParameterRecord, ParameterUse, RequirementRecord, RequirementReference, TypeForm,
-    TypeObjectDigest,
+    BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility,
+    ExpressionOperation, FunctionEffect, KernelSnapshot, LocalValueReference, OperationRecord,
+    OperationReference, OwnerKey, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, ParameterRecord, ParameterUse, RequirementRecord, RequirementReference,
+    TypeForm, TypeObjectDigest,
 };
 use crate::platform::publication::GraphRepository;
-use crate::platform::semantic_id::{BindingId, ExpressionId, OperationId, ParameterId};
+use crate::platform::semantic_id::{DeclarationId, ExpressionId, OperationId, ParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -40,7 +40,14 @@ enum Value {
     Affine(Right),
 }
 
-type Live = BTreeMap<BindingId, Slot>;
+type Live = BTreeMap<LocalValueReference, Slot>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ResourceSignature {
+    parameter: ParameterId,
+    parameter_count: usize,
+    right: Right,
+}
 
 struct Reference<'a> {
     snapshot: &'a KernelSnapshot,
@@ -48,11 +55,13 @@ struct Reference<'a> {
 
 impl Reference<'_> {
     fn accepts(&self) -> bool {
-        if !self.shapes_are_legal() {
+        if !self.shapes_are_legal() || !self.resource_calls_are_acyclic() {
             return false;
         }
-        self.snapshot.owners.values().all(|owner| {
-            let OwnerRecord::Declaration(declaration) = owner else {
+        self.snapshot.owners.iter().all(|(owner, record)| {
+            let (OwnerKey::Declaration(declaration_id), OwnerRecord::Declaration(declaration)) =
+                (owner, record)
+            else {
                 return true;
             };
             let DeclarationPayload::Function(function) = &declaration.payload else {
@@ -61,22 +70,57 @@ impl Reference<'_> {
             if !matches!(function.effect, FunctionEffect::Task { .. }) {
                 return true;
             }
-            self.eval(function.body, &mut Live::new()).is_ok()
+            let mut live = Live::new();
+            if let Some(signature) = self
+                .resource_signature(DeclarationReference {
+                    package: self.snapshot.root.package_id,
+                    declaration: *declaration_id,
+                })
+                .ok()
+                .flatten()
+            {
+                live.insert(
+                    LocalValueReference::FunctionParameter(signature.parameter),
+                    Slot {
+                        right: signature.right,
+                        live: true,
+                    },
+                );
+            }
+            self.eval(function.body, &mut live).is_ok()
         })
     }
 
     fn shapes_are_legal(&self) -> bool {
         self.snapshot.owners.iter().all(|(key, owner)| match owner {
             OwnerRecord::Parameter(parameter) => match parameter.parent {
-                super::ParameterParent::Function(_) => {
-                    parameter.use_mode == ParameterUse::Unrestricted
-                        && !self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                super::ParameterParent::Function(declaration) => {
+                    let shape = self.resource_type(parameter.ty, &mut BTreeSet::new());
+                    match shape {
+                        Some((Shape::Direct, _)) => {
+                            parameter.use_mode == ParameterUse::Consume
+                                && parameter.resource_requirement.is_some()
+                                && self
+                                    .resource_signature(DeclarationReference {
+                                        package: self.snapshot.root.package_id,
+                                        declaration,
+                                    })
+                                    .is_ok()
+                        }
+                        Some((Shape::Variant, _)) => false,
+                        None => {
+                            !self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                                && parameter.use_mode == ParameterUse::Unrestricted
+                                && parameter.resource_requirement.is_none()
+                        }
+                    }
                 }
                 super::ParameterParent::Operation(operation) => {
                     let direct = self.resource_type(parameter.ty, &mut BTreeSet::new());
                     match direct {
                         Some((Shape::Direct, interface)) => {
                             parameter.use_mode != ParameterUse::Unrestricted
+                                && parameter.resource_requirement.is_none()
                                 && self.local_operation(operation).is_some_and(|record| {
                                     interface.package == self.snapshot.root.package_id
                                         && interface.declaration == record.declaration
@@ -85,6 +129,7 @@ impl Reference<'_> {
                         _ => {
                             !self.contains_resource(parameter.ty, &mut BTreeSet::new())
                                 && parameter.use_mode == ParameterUse::Unrestricted
+                                && parameter.resource_requirement.is_none()
                         }
                     }
                 }
@@ -110,9 +155,23 @@ impl Reference<'_> {
             OwnerRecord::Declaration(declaration) => match &declaration.payload {
                 DeclarationPayload::External(external) => {
                     !self.contains_resource(external.result, &mut BTreeSet::new())
+                        && external.parameters.iter().all(|parameter| {
+                            self.parameter(self.snapshot.root.package_id, *parameter)
+                                .is_some_and(|parameter| {
+                                    !self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                                        && parameter.use_mode == ParameterUse::Unrestricted
+                                        && parameter.resource_requirement.is_none()
+                                })
+                        })
                 }
                 DeclarationPayload::Function(function) => {
                     !self.contains_resource(function.result, &mut BTreeSet::new())
+                        && matches!(key, OwnerKey::Declaration(declaration) if self
+                            .resource_signature(DeclarationReference {
+                                package: self.snapshot.root.package_id,
+                                declaration: *declaration,
+                            })
+                            .is_ok())
                 }
                 DeclarationPayload::Constant { ty, .. } => {
                     !self.contains_resource(*ty, &mut BTreeSet::new())
@@ -158,10 +217,16 @@ impl Reference<'_> {
             | ExpressionOperation::I64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
-            | ExpressionOperation::Constant { .. }
-            | ExpressionOperation::FunctionValue { .. } => Ok(Value::Plain),
+            | ExpressionOperation::Constant { .. } => Ok(Value::Plain),
+            ExpressionOperation::FunctionValue { function, .. } => {
+                if self.resource_signature(*function)?.is_some() {
+                    Err(())
+                } else {
+                    Ok(Value::Plain)
+                }
+            }
             ExpressionOperation::Local { value } => {
-                if lexical(*value).is_some_and(|binding| live.contains_key(&binding)) {
+                if resource_owner(*value).is_some_and(|owner| live.contains_key(&owner)) {
                     Err(())
                 } else {
                     Ok(Value::Plain)
@@ -200,16 +265,21 @@ impl Reference<'_> {
                         let declared = record.declared_type.ok_or(())?;
                         if self.resource_type(declared, &mut BTreeSet::new())
                             != Some((right.shape, right.interface))
-                            || live.insert(*binding, Slot { right, live: true }).is_some()
+                            || live
+                                .insert(
+                                    LocalValueReference::LexicalBinding(*binding),
+                                    Slot { right, live: true },
+                                )
+                                .is_some()
                         {
                             return Err(());
                         }
-                        scoped.push(*binding);
+                        scoped.push(LocalValueReference::LexicalBinding(*binding));
                     }
                 }
                 let result = self.eval(*body, live)?;
-                for binding in scoped {
-                    live.remove(&binding);
+                for owner in scoped {
+                    live.remove(&owner);
                 }
                 Ok(result)
             }
@@ -220,12 +290,11 @@ impl Reference<'_> {
                 }
                 Ok(result)
             }
-            ExpressionOperation::Call { arguments, .. } => {
-                for argument in arguments {
-                    self.plain(*argument, live)?;
-                }
-                Ok(Value::Plain)
-            }
+            ExpressionOperation::Call {
+                function,
+                arguments,
+                ..
+            } => self.function_call(*function, arguments, live),
             ExpressionOperation::Invoke { callee, arguments } => {
                 self.plain(*callee, live)?;
                 for argument in arguments {
@@ -296,9 +365,10 @@ impl Reference<'_> {
                             return Err(());
                         }
                         let binding = arm.payload_binding.ok_or(())?;
+                        let owner = LocalValueReference::MatchPayload(binding);
                         if branch
                             .insert(
-                                binding,
+                                owner,
                                 Slot {
                                     right: Right {
                                         shape: Shape::Direct,
@@ -311,11 +381,11 @@ impl Reference<'_> {
                         {
                             return Err(());
                         }
-                        scoped = Some(binding);
+                        scoped = Some(owner);
                     }
                     let value = self.eval(arm.body, &mut branch)?;
-                    if let Some(binding) = scoped {
-                        branch.remove(&binding);
+                    if let Some(owner) = scoped {
+                        branch.remove(&owner);
                     }
                     states.push(branch);
                     values.push(value);
@@ -388,6 +458,246 @@ impl Reference<'_> {
         }))
     }
 
+    fn function_call(
+        &self,
+        function: DeclarationReference,
+        arguments: &[ExpressionId],
+        live: &mut Live,
+    ) -> Result<Value, ()> {
+        let Some(signature) = self.resource_signature(function)? else {
+            for argument in arguments {
+                self.plain(*argument, live)?;
+            }
+            return Ok(Value::Plain);
+        };
+        if function.package != self.snapshot.root.package_id
+            || arguments.len() != signature.parameter_count
+        {
+            return Err(());
+        }
+        let (resource, ordinary) = arguments.split_last().ok_or(())?;
+        for argument in ordinary {
+            self.plain(*argument, live)?;
+        }
+        let right = self.take(*resource, live, ParameterUse::Consume)?;
+        if right != signature.right {
+            return Err(());
+        }
+        Ok(Value::Plain)
+    }
+
+    fn resource_signature(
+        &self,
+        reference: DeclarationReference,
+    ) -> Result<Option<ResourceSignature>, ()> {
+        if reference.package != self.snapshot.root.package_id {
+            let Some(PackageInterfaceRecord::Declaration(declaration)) = self.foreign_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+            ) else {
+                return Ok(None);
+            };
+            let parameters = match &declaration.payload {
+                PackageInterfaceDeclarationPayload::Function(signature) => &signature.parameters,
+                PackageInterfaceDeclarationPayload::External(signature) => &signature.parameters,
+                _ => return Ok(None),
+            };
+            if parameters.iter().any(|parameter| {
+                self.parameter(reference.package, *parameter)
+                    .is_none_or(|parameter| {
+                        self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                            || parameter.use_mode != ParameterUse::Unrestricted
+                            || parameter.resource_requirement.is_some()
+                    })
+            }) {
+                return Err(());
+            }
+            return Ok(None);
+        }
+
+        let Some(OwnerRecord::Declaration(declaration)) = self
+            .snapshot
+            .owners
+            .get(&OwnerKey::Declaration(reference.declaration))
+        else {
+            return Err(());
+        };
+        let function = match &declaration.payload {
+            DeclarationPayload::Function(function) => function,
+            DeclarationPayload::External(signature) => {
+                if signature.parameters.iter().any(|parameter| {
+                    self.parameter(reference.package, *parameter)
+                        .is_none_or(|parameter| {
+                            self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                                || parameter.use_mode != ParameterUse::Unrestricted
+                                || parameter.resource_requirement.is_some()
+                        })
+                }) {
+                    return Err(());
+                }
+                return Ok(None);
+            }
+            _ => return Ok(None),
+        };
+
+        let mut resource = None;
+        for (index, parameter) in function.parameters.iter().copied().enumerate() {
+            let record = self.parameter(reference.package, parameter).ok_or(())?;
+            if record.parent != super::ParameterParent::Function(reference.declaration) {
+                return Err(());
+            }
+            match self.resource_type(record.ty, &mut BTreeSet::new()) {
+                Some((Shape::Direct, interface)) => {
+                    if resource.is_some()
+                        || index.saturating_add(1) != function.parameters.len()
+                        || record.use_mode != ParameterUse::Consume
+                    {
+                        return Err(());
+                    }
+                    let requirement = record.resource_requirement.ok_or(())?;
+                    resource = Some(ResourceSignature {
+                        parameter,
+                        parameter_count: function.parameters.len(),
+                        right: Right {
+                            shape: Shape::Direct,
+                            requirement,
+                            interface,
+                        },
+                    });
+                }
+                Some((Shape::Variant, _)) => return Err(()),
+                None => {
+                    if self.contains_resource(record.ty, &mut BTreeSet::new())
+                        || record.use_mode != ParameterUse::Unrestricted
+                        || record.resource_requirement.is_some()
+                    {
+                        return Err(());
+                    }
+                }
+            }
+        }
+        let Some(resource) = resource else {
+            return Ok(None);
+        };
+        if declaration.visibility != DeclarationVisibility::Private
+            || !function.type_parameters.is_empty()
+            || self.contains_resource(function.result, &mut BTreeSet::new())
+        {
+            return Err(());
+        }
+        let FunctionEffect::Task { requirements } = &function.effect else {
+            return Err(());
+        };
+        if resource.right.requirement.package != self.snapshot.root.package_id
+            || !requirements.contains(&resource.right.requirement)
+            || self
+                .requirement(resource.right.requirement)
+                .is_none_or(|requirement| requirement.interface != resource.right.interface)
+        {
+            return Err(());
+        }
+        Ok(Some(resource))
+    }
+
+    fn resource_calls_are_acyclic(&self) -> bool {
+        let mut nodes = BTreeSet::new();
+        for (owner, record) in &self.snapshot.owners {
+            let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
+                (owner, record)
+            else {
+                continue;
+            };
+            if !matches!(record.payload, DeclarationPayload::Function(_)) {
+                continue;
+            }
+            match self.resource_signature(DeclarationReference {
+                package: self.snapshot.root.package_id,
+                declaration: *declaration,
+            }) {
+                Ok(Some(_)) => {
+                    nodes.insert(*declaration);
+                }
+                Ok(None) => {}
+                Err(()) => return false,
+            }
+        }
+        let mut edges = BTreeMap::<DeclarationId, BTreeSet<DeclarationId>>::new();
+        let mut incoming = nodes
+            .iter()
+            .copied()
+            .map(|node| (node, 0_usize))
+            .collect::<BTreeMap<_, _>>();
+        for node in &nodes {
+            let Some(OwnerRecord::Declaration(record)) =
+                self.snapshot.owners.get(&OwnerKey::Declaration(*node))
+            else {
+                return false;
+            };
+            let DeclarationPayload::Function(function) = &record.payload else {
+                return false;
+            };
+            let Some(callees) = self.resource_callees(function.body) else {
+                return false;
+            };
+            for callee in callees {
+                if !nodes.contains(&callee) {
+                    return false;
+                }
+                if edges.entry(*node).or_default().insert(callee) {
+                    let Some(count) = incoming.get_mut(&callee) else {
+                        return false;
+                    };
+                    *count = count.saturating_add(1);
+                }
+            }
+        }
+        let mut ready = incoming
+            .iter()
+            .filter_map(|(node, count)| (*count == 0).then_some(*node))
+            .collect::<BTreeSet<_>>();
+        let mut visited = 0_usize;
+        while let Some(node) = ready.pop_first() {
+            visited = visited.saturating_add(1);
+            for callee in edges.get(&node).into_iter().flatten() {
+                let Some(count) = incoming.get_mut(callee) else {
+                    return false;
+                };
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    ready.insert(*callee);
+                }
+            }
+        }
+        visited == nodes.len()
+    }
+
+    fn resource_callees(&self, body: ExpressionId) -> Option<BTreeSet<DeclarationId>> {
+        let mut pending = vec![body];
+        let mut visited = BTreeSet::new();
+        let mut callees = BTreeSet::new();
+        while let Some(expression) = pending.pop() {
+            if !visited.insert(expression) {
+                continue;
+            }
+            let Some(OwnerRecord::Expression(record)) =
+                self.snapshot.owners.get(&OwnerKey::Expression(expression))
+            else {
+                return None;
+            };
+            if let ExpressionOperation::Call { function, .. } = &record.operation {
+                match self.resource_signature(*function) {
+                    Ok(Some(_)) if function.package == self.snapshot.root.package_id => {
+                        callees.insert(function.declaration);
+                    }
+                    Ok(Some(_)) | Err(()) => return None,
+                    Ok(None) => {}
+                }
+            }
+            pending.extend(record.children().into_iter().map(|child| child.expression));
+        }
+        Some(callees)
+    }
+
     fn plain(&self, expression: ExpressionId, live: &mut Live) -> Result<(), ()> {
         if self.eval(expression, live)? == Value::Plain {
             Ok(())
@@ -410,8 +720,8 @@ impl Reference<'_> {
         let ExpressionOperation::Local { value } = record.operation else {
             return Err(());
         };
-        let binding = lexical(value).ok_or(())?;
-        let slot = live.get_mut(&binding).ok_or(())?;
+        let owner = resource_owner(value).ok_or(())?;
+        let slot = live.get_mut(&owner).ok_or(())?;
         if !slot.live {
             return Err(());
         }
@@ -429,8 +739,8 @@ impl Reference<'_> {
         if let Some(OwnerRecord::Expression(record)) =
             self.snapshot.owners.get(&OwnerKey::Expression(expression))
             && let ExpressionOperation::Local { value } = record.operation
-            && let Some(binding) = lexical(value)
-            && let Some(slot) = live.get_mut(&binding)
+            && let Some(owner) = resource_owner(value)
+            && let Some(slot) = live.get_mut(&owner)
         {
             if !slot.live {
                 return Err(());
@@ -684,11 +994,14 @@ impl Reference<'_> {
     }
 }
 
-fn lexical(value: LocalValueReference) -> Option<BindingId> {
+fn resource_owner(value: LocalValueReference) -> Option<LocalValueReference> {
     match value {
-        LocalValueReference::LexicalBinding(binding)
-        | LocalValueReference::MatchPayload(binding) => Some(binding),
-        _ => None,
+        LocalValueReference::FunctionParameter(_)
+        | LocalValueReference::LexicalBinding(_)
+        | LocalValueReference::MatchPayload(_) => Some(value),
+        LocalValueReference::OperationParameter(_) | LocalValueReference::TransactionBinding(_) => {
+            None
+        }
     }
 }
 
@@ -964,6 +1277,217 @@ fn mutate_function_escape(snapshot: &mut KernelSnapshot) {
     function.result = resource;
 }
 
+fn maintained_resource_helper(
+    snapshot: &KernelSnapshot,
+) -> (DeclarationId, ParameterId, RequirementReference) {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
+                (owner, record)
+            else {
+                return None;
+            };
+            let DeclarationPayload::Function(function) = &record.payload else {
+                return None;
+            };
+            if record.name.as_str() != "process-lease" {
+                return None;
+            }
+            let parameter = *function.parameters.last()?;
+            let requirement = match snapshot.owners.get(&OwnerKey::Parameter(parameter)) {
+                Some(OwnerRecord::Parameter(parameter)) => parameter.resource_requirement?,
+                _ => return None,
+            };
+            Some((*declaration, parameter, requirement))
+        })
+        .expect("maintained resource helper")
+}
+
+fn mutate_missing_function_binding(snapshot: &mut KernelSnapshot) {
+    let (_, parameter, _) = maintained_resource_helper(snapshot);
+    let Some(OwnerRecord::Parameter(record)) =
+        snapshot.owners.get_mut(&OwnerKey::Parameter(parameter))
+    else {
+        panic!("maintained resource helper parameter");
+    };
+    record.resource_requirement = None;
+}
+
+fn mutate_wrong_function_binding(snapshot: &mut KernelSnapshot) {
+    let (_, parameter, requirement) = maintained_resource_helper(snapshot);
+    let replacement = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            let (OwnerKey::Requirement(candidate), OwnerRecord::Requirement(_)) = (owner, record)
+            else {
+                return None;
+            };
+            let reference = RequirementReference {
+                package: snapshot.root.package_id,
+                requirement: *candidate,
+            };
+            (reference != requirement).then_some(reference)
+        })
+        .expect("foreign maintained requirement");
+    let Some(OwnerRecord::Parameter(record)) =
+        snapshot.owners.get_mut(&OwnerKey::Parameter(parameter))
+    else {
+        panic!("maintained resource helper parameter");
+    };
+    record.resource_requirement = Some(replacement);
+}
+
+fn mutate_public_resource_helper(snapshot: &mut KernelSnapshot) {
+    let (helper, _, _) = maintained_resource_helper(snapshot);
+    let Some(OwnerRecord::Declaration(record)) =
+        snapshot.owners.get_mut(&OwnerKey::Declaration(helper))
+    else {
+        panic!("maintained resource helper declaration");
+    };
+    record.visibility = DeclarationVisibility::Public;
+}
+
+fn mutate_resource_self_recursion(snapshot: &mut KernelSnapshot) {
+    let (helper, parameter, _) = maintained_resource_helper(snapshot);
+    let ordinary = ExpressionId::migrate(b"affine-reference-self-recursion-ordinary", 0);
+    let local = ExpressionId::migrate(b"affine-reference-self-recursion-local", 0);
+    let call = ExpressionId::migrate(b"affine-reference-self-recursion-call", 0);
+    let ordinary_record =
+        super::ExpressionRecord::new(ordinary, ExpressionOperation::I64 { value: 0 })
+            .expect("self-recursion ordinary argument");
+    let local_record = super::ExpressionRecord::new(
+        local,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(parameter),
+        },
+    )
+    .expect("self-recursion local");
+    let call_record = super::ExpressionRecord::new(
+        call,
+        ExpressionOperation::Call {
+            function: DeclarationReference {
+                package: snapshot.root.package_id,
+                declaration: helper,
+            },
+            type_arguments: Vec::new(),
+            arguments: vec![ordinary, local],
+        },
+    )
+    .expect("self-recursion call");
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(ordinary),
+                OwnerRecord::Expression(ordinary_record)
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(local),
+                OwnerRecord::Expression(local_record)
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(call),
+                OwnerRecord::Expression(call_record)
+            )
+            .is_none()
+    );
+    let Some(OwnerRecord::Declaration(record)) =
+        snapshot.owners.get_mut(&OwnerKey::Declaration(helper))
+    else {
+        panic!("maintained resource helper declaration");
+    };
+    let DeclarationPayload::Function(function) = &mut record.payload else {
+        panic!("maintained resource helper function");
+    };
+    function.body = call;
+}
+
+fn mutate_resource_function_value(snapshot: &mut KernelSnapshot) {
+    let (helper, _, _) = maintained_resource_helper(snapshot);
+    let call = snapshot.owners.iter().find_map(|(owner, record)| {
+        let (OwnerKey::Expression(expression), OwnerRecord::Expression(record)) = (owner, record)
+        else {
+            return None;
+        };
+        matches!(
+            record.operation,
+            ExpressionOperation::Call {
+                function: DeclarationReference { declaration, .. },
+                ..
+            } if declaration == helper
+        )
+        .then_some(*expression)
+    });
+    let Some(OwnerRecord::Expression(record)) = snapshot.owners.get_mut(&OwnerKey::Expression(
+        call.expect("maintained resource handoff call"),
+    )) else {
+        panic!("maintained resource handoff expression");
+    };
+    record.operation = ExpressionOperation::FunctionValue {
+        function: DeclarationReference {
+            package: snapshot.root.package_id,
+            declaration: helper,
+        },
+        type_arguments: Vec::new(),
+    };
+}
+
+fn mutate_duplicate_handoff(snapshot: &mut KernelSnapshot) {
+    let (helper, _, _) = maintained_resource_helper(snapshot);
+    let call = snapshot.owners.iter().find_map(|(owner, record)| {
+        let (OwnerKey::Expression(expression), OwnerRecord::Expression(record)) = (owner, record)
+        else {
+            return None;
+        };
+        matches!(
+            record.operation,
+            ExpressionOperation::Call {
+                function: DeclarationReference { declaration, .. },
+                ..
+            } if declaration == helper
+        )
+        .then_some(*expression)
+    });
+    let call = call.expect("maintained resource handoff call");
+    let clone_id = ExpressionId::migrate(b"affine-reference-duplicate-handoff", 0);
+    let Some(OwnerRecord::Expression(record)) = snapshot.owners.get(&OwnerKey::Expression(call))
+    else {
+        panic!("maintained resource handoff expression");
+    };
+    let clone = super::ExpressionRecord::new(clone_id, record.operation.clone())
+        .expect("duplicate-handoff mutation expression");
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(clone_id),
+                OwnerRecord::Expression(clone)
+            )
+            .is_none()
+    );
+    let Some(OwnerRecord::Expression(record)) =
+        snapshot.owners.get_mut(&OwnerKey::Expression(call))
+    else {
+        panic!("maintained resource handoff expression");
+    };
+    record.operation = ExpressionOperation::Sequence {
+        items: vec![clone_id, clone_id],
+    };
+}
+
 type SnapshotMutation = (&'static str, fn(&mut KernelSnapshot));
 
 #[test]
@@ -975,7 +1499,7 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         assert!(Reference { snapshot }.accepts(), "reference accepts {name}");
     }
 
-    let journal_mutations: [SnapshotMutation; 7] = [
+    let journal_mutations: [SnapshotMutation; 13] = [
         ("fabricated resource", mutate_fabricated_resource),
         ("post-consume escape", mutate_post_consume_escape),
         ("duplicate consume", mutate_duplicate_consume),
@@ -983,6 +1507,12 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         ("foreign requirement", mutate_foreign_requirement),
         ("branch join", mutate_branch_join),
         ("function escape", mutate_function_escape),
+        ("missing function binding", mutate_missing_function_binding),
+        ("wrong function binding", mutate_wrong_function_binding),
+        ("public resource helper", mutate_public_resource_helper),
+        ("resource self recursion", mutate_resource_self_recursion),
+        ("resource function value", mutate_resource_function_value),
+        ("duplicate handoff", mutate_duplicate_handoff),
     ];
     for (name, mutate) in journal_mutations {
         let mut candidate = journal.clone();

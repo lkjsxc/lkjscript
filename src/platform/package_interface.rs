@@ -1,4 +1,4 @@
-//! Derived, implementation-free package interface records for exact Graph 6 dependencies.
+//! Derived, implementation-free package interface records for exact Graph 7 dependencies.
 //!
 //! These records are not accepted program authority. They are deterministic projections of one
 //! validated package revision. Exact dependency bindings select one storage-independent package
@@ -31,10 +31,10 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-4";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 4;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF04";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v4";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-5";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 5;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF05";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v5";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;

@@ -16,10 +16,12 @@ before comparing the expected value. Skipped, unavailable, cancelled, exhausted,
 not a pass. Live effects are not duplicated for differential evidence.
 
 Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
-share bounded snapshot decoding but cannot share production provenance, transfer, consume, or
-branch-merge logic or encoded expected results. It must agree on both maintained graphs and on
-fabrication, unrestricted resource parameters, borrow/consume, duplicate and post-consume use,
-foreign requirement, branch mismatch, function escape, and forbidden containment mutations.
+share bounded snapshot decoding but cannot share production provenance, transfer, consume,
+resource-call graph, or branch-merge logic or encoded expected results. It must agree on both
+maintained graphs and on fabrication, unrestricted resource parameters, borrow/consume, duplicate
+and post-consume use, exact requirement/interface binding, one-level and nested direct handoff,
+left-to-right argument commitment, caller reuse, branch mismatch, function escape, self/mutual
+recursion, and forbidden signature or containment mutations.
 
 Function-definition projection acceptance uses complete typed reconstruction as a disjoint oracle.
 The oracle may decode the same canonical authority, but it cannot call production point traversal,
@@ -76,10 +78,12 @@ Verification must prove:
 - stale and competing semantic publication accepts at most one exact base result; and
 - predecessor markers and removed commands never enter alternate dispatch.
 
-A copied executable must also discover and inspect exact-interface resource types and parameter-use
-modes, normalize direct and input-file affine requests identically, accept a publicly authored
-acquire/borrow/consume task, and reject predecessor type/use spellings and raw queue transition
-signatures with an unchanged complete authority inventory.
+A copied executable must also discover and inspect exact-interface resource types, parameter-use
+modes, and parameter requirement binding; normalize direct and input-file affine requests
+identically; author nested private task helpers and a caller solely through compact plan/apply;
+inspect their complete definitions; check/build the accepted direct handoff; and reject stale,
+predecessor, missing/wrong binding, unsupported signature, caller-reuse, duplicate-transfer,
+branch-mismatch, indirect-call, and recursive forms with an unchanged complete authority inventory.
 
 The copied executable must discover function-definition inspection offline, force multiple pages
 with changed resume budgets, and independently recompute the complete digest from raw compact
@@ -115,12 +119,14 @@ opened and that canonical typed meaning authority is unchanged before/after. Thi
 product/service gate has no database server, container, connection secret, or host database-library
 prerequisite.
 
-The same copied candidate must project the maintained affine worker and the independently selected
-largest maintained function from an isolated full authority copy before running live effects. The
-worker comparison derives its `jobs` acquisition, absent/live and renewed-state matches,
-`lease-info` borrow, heartbeat consume, and complete/fail consume from generic definition records,
-exact references, and the disjoint typed oracle. Small and changed page budgets must cover the exact
-logical inventory once, with matching complete digest/counts and unchanged repository tree,
+The same copied candidate must project the maintained affine worker entry, its private helper, and
+the independently selected largest maintained function from an isolated full authority copy before
+running live effects. The comparison derives the entry's `jobs` acquisition, absent/live match,
+single consume transfer, and no post-transfer use; then derives the helper's exact parameter-
+requirement relation, `lease-info` borrow, renewed-state match, heartbeat consume, and complete/fail
+consume from generic definition records, exact references, and the disjoint typed oracle. Entry and
+helper must each remain at or below 40 body records. Small and changed page budgets must cover each
+exact logical inventory once, with matching complete digest/counts and unchanged repository tree,
 semantic `HEAD`, generated application bundle, descriptor, data, queue, and object authority.
 
 ## Exact release-target admission

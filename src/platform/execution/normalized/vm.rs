@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 6 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 7 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -267,7 +267,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph6_dense_bytecode_2",
+                production_tier: "graph7_dense_bytecode_3",
             },
         };
         let result = (|| {
@@ -831,6 +831,7 @@ impl Machine<'_> {
         }) {
             return Err(capabilities_unbound());
         }
+        self.validate_call_resources(function, &arguments)?;
         self.observation.calls = self.observation.calls.saturating_add(1);
         match &function.body {
             NormalizedFunctionBody::Code(code) => {
@@ -850,6 +851,61 @@ impl Machine<'_> {
                 self.push(value)
             }
         }
+    }
+
+    fn validate_call_resources(
+        &self,
+        function: &super::prepare::NormalizedFunction,
+        arguments: &[NormalizedValue],
+    ) -> Result<(), ExecutionError> {
+        for (index, (parameter, argument)) in function.parameters.iter().zip(arguments).enumerate()
+        {
+            match parameter.resource_requirement {
+                Some(requirement) => {
+                    if index.saturating_add(1) != function.parameters.len()
+                        || parameter.use_mode != ParameterUse::Consume
+                        || self.affine_value_shape(argument) != Some(AffineValueShape::Direct)
+                    {
+                        return Err(runtime_error(
+                            "normalized_resource_call_shape",
+                            "resource-bearing call does not use one final consume parameter and direct handle",
+                        ));
+                    }
+                    let NormalizedValue::Resource(handle) = argument else {
+                        return Err(runtime_error(
+                            "normalized_resource_call_value",
+                            "resource-bearing call argument is not one exact runtime handle",
+                        ));
+                    };
+                    let requirement_record = self
+                        .program
+                        .requirements
+                        .get(requirement.0 as usize)
+                        .ok_or_else(|| {
+                            runtime_error(
+                                "normalized_resource_call_requirement",
+                                "resource parameter requirement escaped the prepared table",
+                            )
+                        })?;
+                    self.resources.validate_queue_lease_transfer(
+                        requirement_record.reference,
+                        requirement_record.interface,
+                        *handle,
+                    )?;
+                }
+                None => {
+                    if parameter.use_mode != ParameterUse::Unrestricted
+                        || value_contains_affine_resource(argument)
+                    {
+                        return Err(runtime_error(
+                            "normalized_resource_call_parameter",
+                            "ordinary function parameter use or value contains unbound affine authority",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn call_code(

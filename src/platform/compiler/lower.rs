@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 6 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 7 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -330,6 +330,10 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 parameter: *parameter,
                 ty: self.tables.ty(parameter_record.ty)?,
                 use_mode: parameter_record.use_mode,
+                resource_requirement: parameter_record
+                    .resource_requirement
+                    .map(|requirement| self.tables.requirement(requirement))
+                    .transpose()?,
             });
         }
         let task_requirements = match effect {
@@ -381,6 +385,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 parameter: *parameter,
                 ty: self.tables.ty(parameter_record.ty)?,
                 use_mode: parameter_record.use_mode,
+                resource_requirement: None,
             });
         }
         Ok(CompiledOperationLayout {
@@ -701,6 +706,68 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             .collect()
     }
 
+    fn function_parameter_uses(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<Vec<ParameterUse>, Diagnostic> {
+        let parameters = if function.package == self.package {
+            match self.required_owner(
+                OwnerKey::Declaration(function.declaration),
+                "call references a missing local function",
+            )? {
+                OwnerRecord::Declaration(record) => match record.payload {
+                    DeclarationPayload::Function(signature) => signature.parameters,
+                    DeclarationPayload::External(signature) => signature.parameters,
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_call_function_kind",
+                            "call declaration has a non-callable payload",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_call_function_kind",
+                        "call declaration identity names another owner kind",
+                    ));
+                }
+            }
+        } else {
+            match self.exact_package_interface_owner(
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
+                        signature,
+                    ) => signature.parameters,
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::External(
+                        signature,
+                    ) => signature.parameters,
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_call_function_kind",
+                            "dependency call declaration has a non-callable payload",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_call_function_kind",
+                        "dependency call declaration identity names another owner kind",
+                    ));
+                }
+            }
+        };
+        parameters
+            .into_iter()
+            .map(|parameter| {
+                self.exact_parameter(function.package, parameter)
+                    .map(|record| record.use_mode)
+            })
+            .collect()
+    }
+
     fn case_payload_is_resource(&mut self, reference: CaseReference) -> Result<bool, Diagnostic> {
         let Some(payload) = self.exact_case(reference)?.payload else {
             return Ok(false);
@@ -889,14 +956,21 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 type_arguments,
                 arguments,
             } => {
+                let parameter_uses = self.unit.function_parameter_uses(function)?;
+                if parameter_uses.len() != arguments.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_call_argument_count",
+                        "call arguments disagree with the exact function signature",
+                    ));
+                }
                 let function = self.unit.tables.declaration(function)?;
                 let type_arguments = type_arguments
                     .into_iter()
                     .map(|ty| self.unit.tables.ty(ty))
                     .collect::<Result<Vec<_>, _>>()?;
                 let argument_count = u32_count("call arguments", arguments.len())?;
-                for argument in arguments {
-                    self.expression(argument, depth)?;
+                for (argument, use_mode) in arguments.into_iter().zip(parameter_uses) {
+                    self.expression_with_use(argument, depth, use_mode)?;
                 }
                 self.push(CompiledInstruction::Call {
                     function,

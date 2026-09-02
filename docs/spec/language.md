@@ -46,19 +46,33 @@ a literal, constant, decoder, external, pure function, callback, or constructor.
 requirement capability call whose result has the same exact interface may acquire one. The runtime
 value retains that acquiring requirement as authority.
 
-Every operation parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`.
-Nonresource parameters must be unrestricted. A direct capability-resource parameter must be an
-explicit borrow or consume. Function parameters and results containing resources reject; resource
-transfer across graph function, generic-function, port, or capture boundaries is not implemented.
+Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
+parameters must be unrestricted. A direct capability-resource operation parameter must be an
+explicit borrow or consume. One private, same-package, nongeneric task function may instead have
+exactly one final direct capability-resource parameter with `consume` use. That parameter carries
+one canonical `resource_requirement` reference to a requirement in the function effect whose exact
+interface matches the resource type. The binding is graph meaning and is never inferred from a
+name, order, deployment grant, or runtime handle. Resource results and every other
+resource-containing function signature reject.
 
 Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
 owner and preserves it. A consume moves that owner; every later use on a reachable path rejects
-before publication. Dropping an unconsumed resource is allowed. A nominal variant may contain one
-direct resource payload: matching consumes the outer owner and makes the payload live only in the
-selected arm. A join retains an owner only when every reachable arm retains the same provenance.
-Records, structural records, lists, maps, options, results, streams, function values, constants,
-tests, and nested nominal values cannot contain a resource. Partial moves, affine containers,
-resource polymorphism, closures, and general linear must-use semantics are absent.
+before publication. For an admitted direct resource-bearing call, all unrestricted arguments
+finish first and evaluation of the final argument commits transfer of one exact live owner. The
+callee may borrow it, consume it through the bound requirement, drop it, or forward it through
+another admitted direct call. Caller and callee must use the same exact requirement identity, and
+the resource-bearing direct-call graph must be acyclic. A call failure, cancellation, or resource
+exhaustion after transfer does not restore caller ownership; unwinding drops remaining task-local
+authority without an implicit external queue transition.
+
+Dropping an unconsumed resource is allowed. A nominal variant may contain one direct resource
+payload: matching consumes the outer owner and makes the payload live only in the selected arm. A
+join retains an owner only when every reachable arm retains the same provenance. Records,
+structural records, lists, maps, options, results, streams, function values, constants, tests, and
+nested nominal values cannot contain a resource. Multiple, borrowed, nonfinal, public,
+package-visible, cross-package, generic, indirect, recursive, captured, or result-bearing resource
+function forms reject. Partial moves, affine containers, resource polymorphism, closures, async or
+detached tasks, and general linear must-use semantics are absent.
 
 ## Declarations, effects, and capabilities
 

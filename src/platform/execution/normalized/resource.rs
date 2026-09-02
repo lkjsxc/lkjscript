@@ -234,6 +234,25 @@ impl NormalizedResourceScope {
         }
     }
 
+    pub(crate) fn validate_queue_lease_transfer(
+        &self,
+        authority: RequirementReference,
+        interface: DeclarationReference,
+        handle: NormalizedResourceHandle,
+    ) -> Result<(), ExecutionError> {
+        self.validate_capability_handle(
+            handle,
+            NormalizedResourceKind::QueueLease,
+            authority,
+            interface,
+        )?;
+        match lock_unpoisoned(&self.state).entries.get(&handle.slot) {
+            Some(ResourceEntry::QueueLease(_)) => Ok(()),
+            Some(ResourceEntry::ByteStream(_)) => Err(resource_kind_entry()),
+            Some(ResourceEntry::ReservedQueueLease) | None => Err(closed_resource()),
+        }
+    }
+
     pub(crate) fn read_byte_stream(
         &self,
         authority: RequirementReference,
@@ -639,5 +658,54 @@ mod tests {
         );
         drop(reservation);
         assert_eq!(first.live_resources(), 0);
+    }
+
+    #[test]
+    fn queue_lease_transfer_rechecks_exact_live_authority_without_consuming_it() {
+        let first = NormalizedResourceScope::with_id(NormalizedResourceScopeId(109));
+        let second = NormalizedResourceScope::with_id(NormalizedResourceScopeId(110));
+        let handle = first
+            .reserve_queue_lease(authority(0), interface(0))
+            .expect("lease reservation")
+            .commit(queue_lease())
+            .expect("lease commit");
+
+        first
+            .validate_queue_lease_transfer(authority(0), interface(0), handle)
+            .expect("exact live handoff validation");
+        assert_eq!(first.live_resources(), 1);
+        assert_eq!(
+            first
+                .validate_queue_lease_transfer(authority(1), interface(0), handle)
+                .expect_err("foreign requirement")
+                .code,
+            "normalized_resource_authority"
+        );
+        assert_eq!(
+            first
+                .validate_queue_lease_transfer(authority(0), interface(1), handle)
+                .expect_err("foreign interface")
+                .code,
+            "normalized_resource_interface"
+        );
+        assert_eq!(
+            second
+                .validate_queue_lease_transfer(authority(0), interface(0), handle)
+                .expect_err("foreign task scope")
+                .code,
+            "normalized_resource_foreign_scope"
+        );
+
+        first
+            .consume_queue_lease(authority(0), interface(0), handle)
+            .expect("terminal consume after handoff validation");
+        assert_eq!(first.live_resources(), 0);
+        assert_eq!(
+            first
+                .validate_queue_lease_transfer(authority(0), interface(0), handle)
+                .expect_err("copied or revived closed handle")
+                .code,
+            "normalized_resource_closed"
+        );
     }
 }

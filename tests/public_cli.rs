@@ -775,7 +775,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 101);
+    assert_eq!(operation_fields.len(), 102);
     assert_eq!(
         operation_fields
             .iter()
@@ -792,6 +792,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
+            ("add.parameter", "requirement"),
         ]
     );
     let field_forms = change_section
@@ -799,9 +800,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 25);
+    assert_eq!(field_forms.len(), 26);
     for (name, syntax) in [
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
+        ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
         ("runner_kind", "command|http"),
     ] {
         assert!(change_section.iter().any(|record| {
@@ -865,6 +867,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         record.operation == "query.relation-kind"
             && compact_field(record, "name") == Some("function_call")
     }));
+    assert!(query.iter().any(|record| {
+        record.operation == "query.relation-kind"
+            && compact_field(record, "name") == Some("parameter_requirement")
+    }));
     assert_eq!(
         query
             .iter()
@@ -884,7 +890,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        27
+        28
     );
     assert_eq!(
         query
@@ -3244,7 +3250,7 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
 }
 
 #[test]
-fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_authority() {
+fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecessors() {
     let temporary = tempfile::TempDir::new().expect("isolated affine-resource workspace");
     let copied_binary = temporary.path().join("lkjscript");
     copy_executable(&binary(), &copied_binary);
@@ -3300,16 +3306,31 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
          requirement.operation parent=$lease_requirement index=1 operation=$observe\n\
          requirement.operation parent=$lease_requirement index=2 operation=$finish\n\
          expression.capability-call as=$acquired requirement=$lease_requirement operation=$acquire\n\
-         expression.local as=$borrow_local value=$lease_binding\n\
-         expression.capability-call as=$observed requirement=$lease_requirement operation=$observe\n\
-         expression.argument parent=$observed index=0 expression=$borrow_local\n\
-         expression.local as=$consume_local value=$lease_binding\n\
-         expression.capability-call as=$finished requirement=$lease_requirement operation=$finish\n\
-         expression.argument parent=$finished index=0 expression=$consume_local\n\
-         expression.sequence as=$steps\n\
-         expression.argument parent=$steps index=0 expression=$observed\n\
-         expression.argument parent=$steps index=1 expression=$finished\n\
-         expression.let as=$task_body body=$steps\n\
+         expression.local as=$leaf_borrow_local value=$leaf_lease\n\
+         expression.capability-call as=$leaf_observed requirement=$lease_requirement operation=$observe\n\
+         expression.argument parent=$leaf_observed index=0 expression=$leaf_borrow_local\n\
+         expression.local as=$leaf_consume_local value=$leaf_lease\n\
+         expression.capability-call as=$leaf_finished requirement=$lease_requirement operation=$finish\n\
+         expression.argument parent=$leaf_finished index=0 expression=$leaf_consume_local\n\
+         expression.sequence as=$leaf_body\n\
+         expression.argument parent=$leaf_body index=0 expression=$leaf_observed\n\
+         expression.argument parent=$leaf_body index=1 expression=$leaf_finished\n\
+         create.function as=$leaf module={application} name=finish-lease visibility=private result=unit effect=task body=$leaf_body\n\
+         add.parameter as=$leaf_lease function=$leaf name=lease type=@lease use=consume requirement=$lease_requirement\n\
+         effect.requirement parent=$leaf index=0 requirement=$lease_requirement\n\
+         expression.local as=$forward_lease_local value=$forward_lease\n\
+         expression.call as=$forward_body function=$leaf\n\
+         expression.argument parent=$forward_body index=0 expression=$forward_lease_local\n\
+         create.function as=$forward module={application} name=forward-lease visibility=private result=unit effect=task body=$forward_body\n\
+         add.parameter as=$forward_tag function=$forward name=tag type=text\n\
+         add.parameter as=$forward_lease function=$forward name=lease type=@lease use=consume requirement=$lease_requirement\n\
+         effect.requirement parent=$forward index=0 requirement=$lease_requirement\n\
+         expression.text as=$caller_tag value=ordered\n\
+         expression.local as=$caller_lease_local value=$lease_binding\n\
+         expression.call as=$caller_handoff function=$forward\n\
+         expression.argument parent=$caller_handoff index=0 expression=$caller_tag\n\
+         expression.argument parent=$caller_handoff index=1 expression=$caller_lease_local\n\
+         expression.let as=$task_body body=$caller_handoff\n\
          expression.binding parent=$task_body index=0 as=$lease_binding name=lease value=$acquired type=@lease\n\
          create.function as=$task module={application} name=affine-task visibility=private result=unit effect=task body=$task_body\n\
          effect.requirement parent=$task index=0 requirement=$lease_requirement\n\
@@ -3378,6 +3399,11 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
         "$finished_lease",
         "$lease_requirement",
         "$lease_binding",
+        "$leaf",
+        "$leaf_lease",
+        "$forward",
+        "$forward_tag",
+        "$forward_lease",
         "$task",
         "$port",
     ] {
@@ -3403,6 +3429,83 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
         .expect("accepted affine revision")
         .to_owned();
     assert_ne!(accepted, initial_revision);
+
+    let after_apply_inventory = content_inventory(&project);
+    let requirement_identity = format!("{authored_package}/{}", identities["$lease_requirement"]);
+    for (function_symbol, bound_resource, callee_symbol) in [
+        ("$task", false, Some("$forward")),
+        ("$forward", true, Some("$leaf")),
+        ("$leaf", true, None),
+    ] {
+        let function = identities[function_symbol].as_str();
+        let expected_callee = callee_symbol.map(|symbol| identities[symbol].as_str());
+        let expected_callee_identity =
+            expected_callee.map(|callee| format!("{authored_package}/{callee}"));
+        let mut continuation: Option<String> = None;
+        let mut pages = 0_usize;
+        let mut saw_function = false;
+        let mut saw_bound_resource = false;
+        let mut saw_expected_call = expected_callee.is_none();
+        loop {
+            let mut arguments = vec![
+                "--project",
+                path(&project),
+                "inspect",
+                "owner",
+                "task_function",
+                function,
+                "--detail",
+                "definition",
+                "--limit",
+                "3",
+                "--bytes",
+                "4096",
+            ];
+            if let Some(token) = &continuation {
+                arguments.extend(["--continuation", token.as_str()]);
+            }
+            let records = compact_success_at(&copied_binary, temporary.path(), &arguments);
+            pages = pages.saturating_add(1);
+            saw_function |= records.iter().any(|record| {
+                record.operation == "definition.function"
+                    && compact_field(record, "id") == Some(function)
+                    && compact_field(record, "visibility") == Some("private")
+            });
+            saw_bound_resource |= records.iter().any(|record| {
+                record.operation == "definition.parameter"
+                    && compact_field(record, "name") == Some("lease")
+                    && compact_field(record, "use") == Some("consume")
+                    && compact_field(record, "requirement") == Some(requirement_identity.as_str())
+            });
+            if let Some(callee) = &expected_callee_identity {
+                saw_expected_call |= records.iter().any(|record| {
+                    record.operation == "definition.expression"
+                        && compact_field(record, "form") == Some("call")
+                        && compact_field(record, "function") == Some(callee.as_str())
+                });
+            }
+            if compact_field(compact_record(&records, "page"), "complete") == Some("true") {
+                break;
+            }
+            continuation = Some(
+                compact_field(compact_record(&records, "continuation"), "token")
+                    .expect("definition continuation")
+                    .to_owned(),
+            );
+            assert!(pages < 100, "definition pagination remained incomplete");
+        }
+        assert!(
+            pages > 1,
+            "definition inspection did not exercise continuation"
+        );
+        assert!(saw_function, "definition omitted {function_symbol}");
+        assert_eq!(saw_bound_resource, bound_resource, "{function_symbol}");
+        assert!(
+            saw_expected_call,
+            "definition omitted call from {function_symbol}"
+        );
+    }
+    assert_eq!(content_inventory(&project), after_apply_inventory);
 
     let durable_queue = compact_success_at(
         &copied_binary,
@@ -3475,6 +3578,30 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
     let accepted_inventory = content_inventory(&project);
     let lease_interface = &identities["$lease_interface"];
     let observe = &identities["$observe"];
+    let stale_request = format!(
+        "request base={initial_revision}\nrename.owner owner={} name=stale-leaf\n",
+        identities["$leaf"]
+    );
+    let stale = compact_failure_output_with_status(
+        command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &stale_request,
+            ],
+        ),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+    assert_eq!(content_inventory(&project), accepted_inventory);
     for (name, body, code) in [
         (
             "predecessor-resource-form",
@@ -3531,6 +3658,7 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
     let observe = format!("{authored_package}/{}", identities["$observe"]);
     let finish = format!("{authored_package}/{}", identities["$finish"]);
     let requirement = format!("{authored_package}/{}", identities["$lease_requirement"]);
+    let leaf = format!("{authored_package}/{}", identities["$leaf"]);
     let component = &identities["$component"];
     let affine_rejections = [
         (
@@ -3602,13 +3730,333 @@ fn copied_binary_authors_affine_resource_flow_and_rejects_predecessor_parameter_
                  create.function as=$bad_function module={application} name=resource-list-escape visibility=private result=unit effect=pure body=$bad_body\n\
                  add.parameter as=$bad_parameter function=$bad_function name=leases type=@bad_list"
             ),
-            "kernel_affine_function_parameter",
+            "kernel_affine_function_parameter_container",
         ),
     ];
     for (name, body, code) in affine_rejections {
         let rejection = temporary.path().join(format!("{name}.lkjc"));
         std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
             .expect("write affine-flow rejection request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&rejection),
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(code)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), accepted_inventory, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            accepted,
+            "{name}"
+        );
+    }
+
+    let handoff_signature_rejections = [
+        (
+            "missing-resource-binding",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=missing-resource-binding visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_lease_parameter function=$bad_function name=lease type=@bad_lease use=consume
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_requirement",
+        ),
+        (
+            "extra-nonresource-binding",
+            format!(
+                r#"expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=extra-nonresource-binding visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=value type=text requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_parameter_requirement_extra",
+        ),
+        (
+            "borrowed-resource-binding",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=borrowed-resource-binding visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=borrow requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_use",
+        ),
+        (
+            "unrestricted-resource-binding",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=unrestricted-resource-binding visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_use",
+        ),
+        (
+            "nonfinal-resource-binding",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=nonfinal-resource-binding visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_lease_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+add.parameter as=$bad_text_parameter function=$bad_function name=value type=text
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_order",
+        ),
+        (
+            "multiple-resource-bindings",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=multiple-resource-bindings visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_first function=$bad_function name=first type=@bad_lease use=consume requirement={requirement}
+add.parameter as=$bad_second function=$bad_function name=second type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_order",
+        ),
+        (
+            "public-resource-signature",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=public-resource-signature visibility=public result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_visibility",
+        ),
+        (
+            "package-resource-signature",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=package-resource-signature visibility=package result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_visibility",
+        ),
+        (
+            "pure-resource-signature",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=pure-resource-signature visibility=private result=unit effect=pure body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_effect",
+        ),
+        (
+            "generic-resource-signature",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=generic-resource-signature visibility=private result=unit effect=task body=$bad_body
+add.type-parameter as=$bad_type function=$bad_function name=Item
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_owner_generic_task",
+        ),
+        (
+            "resource-result",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=resource-result visibility=private result=@bad_lease effect=task body=$bad_body
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_function_result",
+        ),
+    ];
+    for (name, body, code) in handoff_signature_rejections {
+        let rejection = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
+            .expect("write affine signature rejection request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&rejection),
+            ],
+        ));
+        assert!(
+            rejected.iter().any(|record| {
+                record.operation == "diagnostic" && compact_field(record, "code") == Some(code)
+            }),
+            "{name}: {rejected:?}"
+        );
+        assert_eq!(content_inventory(&project), accepted_inventory, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            accepted,
+            "{name}"
+        );
+    }
+
+    let handoff_flow_rejections = [
+        (
+            "caller-reuse-after-handoff",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}
+expression.local as=$bad_transfer_local value=$bad_binding
+expression.call as=$bad_transfer function={leaf}
+expression.argument parent=$bad_transfer index=0 expression=$bad_transfer_local
+expression.local as=$bad_reuse_local value=$bad_binding
+expression.capability-call as=$bad_observe requirement={requirement} operation={observe}
+expression.argument parent=$bad_observe index=0 expression=$bad_reuse_local
+expression.sequence as=$bad_steps
+expression.argument parent=$bad_steps index=0 expression=$bad_transfer
+expression.argument parent=$bad_steps index=1 expression=$bad_observe
+expression.let as=$bad_body body=$bad_steps
+expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease
+create.function as=$bad_function module={application} name=caller-reuse-after-handoff visibility=private result=unit effect=task body=$bad_body
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_use_after_consume",
+        ),
+        (
+            "duplicate-handoff",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}
+expression.local as=$bad_first_local value=$bad_binding
+expression.call as=$bad_first function={leaf}
+expression.argument parent=$bad_first index=0 expression=$bad_first_local
+expression.local as=$bad_second_local value=$bad_binding
+expression.call as=$bad_second function={leaf}
+expression.argument parent=$bad_second index=0 expression=$bad_second_local
+expression.sequence as=$bad_steps
+expression.argument parent=$bad_steps index=0 expression=$bad_first
+expression.argument parent=$bad_steps index=1 expression=$bad_second
+expression.let as=$bad_body body=$bad_steps
+expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease
+create.function as=$bad_function module={application} name=duplicate-handoff visibility=private result=unit effect=task body=$bad_body
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_use_after_consume",
+        ),
+        (
+            "handoff-branch-disagreement",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.capability-call as=$bad_acquired requirement={requirement} operation={acquire}
+expression.bool as=$bad_condition value=true
+expression.local as=$bad_transfer_local value=$bad_binding
+expression.call as=$bad_transfer function={leaf}
+expression.argument parent=$bad_transfer index=0 expression=$bad_transfer_local
+expression.unit as=$bad_keep
+expression.if as=$bad_branch condition=$bad_condition when-true=$bad_transfer when-false=$bad_keep
+expression.let as=$bad_body body=$bad_branch
+expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease
+create.function as=$bad_function module={application} name=handoff-branch-disagreement visibility=private result=unit effect=task body=$bad_body
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_branch_join",
+        ),
+        (
+            "handoff-wrong-exact-requirement",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+add.requirement as=$other_requirement component={component} name=other-lease-authority interface={lease_interface}
+requirement.operation parent=$other_requirement index=0 operation={acquire}
+expression.capability-call as=$bad_acquired requirement=$other_requirement operation={acquire}
+expression.local as=$bad_transfer_local value=$bad_binding
+expression.call as=$bad_transfer function={leaf}
+expression.argument parent=$bad_transfer index=0 expression=$bad_transfer_local
+expression.let as=$bad_body body=$bad_transfer
+expression.binding parent=$bad_body index=0 as=$bad_binding name=lease value=$bad_acquired type=@bad_lease
+create.function as=$bad_function module={application} name=handoff-wrong-exact-requirement visibility=private result=unit effect=task body=$bad_body
+effect.requirement parent=$bad_function index=0 requirement={requirement}
+effect.requirement parent=$bad_function index=1 requirement=$other_requirement"#
+            ),
+            "kernel_affine_foreign_requirement",
+        ),
+        (
+            "resource-binding-absent-from-effect",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=resource-binding-absent-from-effect visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}"#
+            ),
+            "kernel_affine_function_resource_effect",
+        ),
+        (
+            "resource-binding-interface-mismatch",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+create.interface as=$other_interface module={application} name=OtherAuthority visibility=private
+add.operation as=$other_operation interface=$other_interface name=noop result=unit idempotency=idempotent external-visibility=none
+add.requirement as=$other_requirement component={component} name=other-interface interface=$other_interface
+requirement.operation parent=$other_requirement index=0 operation=$other_operation
+expression.unit as=$bad_body
+create.function as=$bad_function module={application} name=resource-binding-interface-mismatch visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement=$other_requirement
+effect.requirement parent=$bad_function index=0 requirement=$other_requirement"#
+            ),
+            "kernel_affine_function_resource_interface",
+        ),
+        (
+            "resource-self-recursion",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.local as=$bad_local value=$bad_parameter
+expression.call as=$bad_body function=$bad_function
+expression.argument parent=$bad_body index=0 expression=$bad_local
+create.function as=$bad_function module={application} name=resource-self-recursion visibility=private result=unit effect=task body=$bad_body
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_function index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_resource_call_cycle",
+        ),
+        (
+            "resource-mutual-recursion",
+            format!(
+                r#"type.capability-resource as=@bad_lease interface={lease_interface}
+expression.local as=$bad_left_local value=$bad_left_parameter
+expression.call as=$bad_left_body function=$bad_right
+expression.argument parent=$bad_left_body index=0 expression=$bad_left_local
+create.function as=$bad_left module={application} name=resource-mutual-left visibility=private result=unit effect=task body=$bad_left_body
+add.parameter as=$bad_left_parameter function=$bad_left name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_left index=0 requirement={requirement}
+expression.local as=$bad_right_local value=$bad_right_parameter
+expression.call as=$bad_right_body function=$bad_left
+expression.argument parent=$bad_right_body index=0 expression=$bad_right_local
+create.function as=$bad_right module={application} name=resource-mutual-right visibility=private result=unit effect=task body=$bad_right_body
+add.parameter as=$bad_right_parameter function=$bad_right name=lease type=@bad_lease use=consume requirement={requirement}
+effect.requirement parent=$bad_right index=0 requirement={requirement}"#
+            ),
+            "kernel_affine_resource_call_cycle",
+        ),
+    ];
+    for (name, body, code) in handoff_flow_rejections {
+        let rejection = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
+            .expect("write affine handoff rejection request");
         let rejected = compact_failure_output(command_at(
             &copied_binary,
             temporary.path(),

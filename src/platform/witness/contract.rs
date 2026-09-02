@@ -3,32 +3,32 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-3";
-pub const WITNESS_CONTRACT_VERSION: u16 = 3;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-2";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 2;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-6";
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-4";
+pub const WITNESS_CONTRACT_VERSION: u16 = 4;
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-3";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 3;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-7";
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT03";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM06";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v3";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v2";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT04";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM07";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v4";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v3";
 
-pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v3";
-pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v2";
-pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v3";
-pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v6";
+pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v4";
+pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v3";
+pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v4";
+pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v7";
 
-pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v2";
-pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v2";
-pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v2";
-pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v2";
-pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability.v2";
-pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation.v2";
-pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation.v2";
-pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test.v2";
+pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v3";
+pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v3";
+pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v3";
+pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v3";
+pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability.v3";
+pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation.v3";
+pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation.v3";
+pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test.v3";
 pub const VALIDATION_DEPENDENCY_DIGEST_DOMAIN: &str =
-    "lkjscript.owner-summary.validation-dependency.v2";
+    "lkjscript.owner-summary.validation-dependency.v3";
 
 pub const MAXIMUM_OWNER_SUMMARY_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_WITNESS_MANIFEST_BYTES: usize = 64 * 1024;
@@ -59,11 +59,11 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 17] = [
     },
     ValidatorFeatureDescriptor {
         name: "single_relation_extractor",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "owner_summary_dimensions",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "declaration_local_aggregation",
@@ -111,7 +111,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 17] = [
     },
     ValidatorFeatureDescriptor {
         name: "affine_capability_resources",
-        version: 1,
+        version: 2,
     },
 ];
 

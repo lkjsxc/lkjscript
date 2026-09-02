@@ -151,7 +151,7 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
 #[test]
 fn checked_in_service_artifact_uses_only_bundle_contract_11() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART11".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJART12".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART10".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART04".as_slice()));
     assert!(bytes.len() < 128 * 1024 * 1024);

@@ -12,18 +12,20 @@ Its stable modules are:
 - `service` (`mod_50e2d3318b93f572dad082bd4f42c526`) for routes, strict JSON schemas,
   authorization, data spaces/indexes/schema transitions, rendering, object reconciliation, and
   enqueue policy; and
-- `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) for affine queue claim, metadata
-  borrow, renewal, completion, and retry/failure meaning.
+- `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) for affine queue claim/dispatch and
+  exact-requirement-bound helper processing, metadata borrow, renewal, completion, and retry/failure
+  meaning.
 
 Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_33c934d060f13ede19acbcbd6ff60d37a3532db215eef90b6cdd49e420e9a704`;
-- semantic state: `semantic_state_ba0c303ee50bd7a72280a0c5920a2c535a54fd83dcf5fcb4ea630bb1fb47c8c1`;
-- artifact manifest: `artifact_manifest_7d151920e0160b901fc29a3b1c22c3915738d7ca30c83e412a49fff97447ee5b`;
-- artifact bundle: `artifact_bundle_8c37417848ff93b9ffc752b4415ba841b7e3b1059a38a04d6d6cc0759df4106a`;
-- 1,579 live root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_c17c6a5c64f456f53a583e3446a74ad317e054bc8686af7c1f5a405c2cb763f4`;
+- semantic state: `semantic_state_21aa7470aef40286c899d77ea97c361ae98f4f3192917577d61954c89798a6a4`;
+- package revision: `package_revision_85016db390d92b682b5f9aed9cffb188e6394344cac78d158e023fc6ecc69782`;
+- artifact manifest: `artifact_manifest_3670a7475898c9cd1027b29dcf6dd0c2b5014c8de5fefa445534bce58cb59b2a`;
+- artifact bundle: `artifact_bundle_6028778ec08995e96a1c75ca76d00cb2e2e10d59ddbd4f7876b403ca219e7f94`;
+- 1,585 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
 
@@ -52,9 +54,9 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 832,550-byte
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 835,687-byte
 artifact bundle above (SHA-256
-`12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728`). `serve` resolves target
+`40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071`). `serve` resolves target
 `serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
 validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
 readiness only after first-party data/queue/object preflight. It does not discover this typed
@@ -83,10 +85,14 @@ explicit graph-owned spaces/indexes with canonical typed values. Object bytes re
 local/S3 object capability. Live effects run once through the production VM and never through
 differential replay.
 
-The worker receives only `QueueLeaseState`. It matches the live case, borrows `QueueLeaseInfo` for
-job/payload policy, consumes through heartbeat, matches the renewed state, and consumes through
-complete or fail. Attempt and worker transition identity never enter application values. Dropping a
-local handle does not implicitly change durable queue state.
+The stable worker entry `decl_a914bb78de075ff44a857ac028d704f3` receives only
+`QueueLeaseState`, claims, and matches the live case. It transfers that handle exactly once into
+private task helper `decl_7f443401f4946c55fa239c5430e8ad93`, whose final consume parameter is
+bound to exact `jobs` requirement `req_0cebded5cb056cda5484e39aa40594ad`. The helper borrows
+`QueueLeaseInfo` for job/payload policy, consumes through heartbeat, matches the renewed state, and
+consumes through complete or fail. The entry has no post-transfer use. Attempt and worker
+transition identity never enter application values, and dropping a local handle does not
+implicitly change durable queue state.
 
 ## Routes
 
@@ -125,7 +131,8 @@ cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 The acceptance tool first builds through the public command and requires byte equality with the
 checked-in bundle. It stages only the copied binary, artifact, descriptors, configuration/secrets,
 one initialized shared data root, and a local object directory; it snapshots canonical typed
-meaning authority before and after. Two worker processes exercise claim/info/renew/complete,
+meaning authority before and after. Two worker processes exercise the entry/helper handoff and
+claim/info/renew/complete,
 retry/fail, expired-lease replacement, cancellation, and task cleanup. An independent bounded
 queue-data observer records attempt advancement, terminal state, and cleared private transition
 fields. The same run covers initialization, login, actor isolation, resource/history/object

@@ -72,3 +72,8 @@ stateless reconstruction is materially unacceptable. A replacement must retain o
 authority, exact revision and complete-result binding, the named-owner reference cutoff, atomic
 failure, independent full-authority equality, explicit resource dimensions, copied-binary proof,
 and dependency-closed deletion of inspection-definition-1 and every `icont_` predecessor.
+
+Campaign `202609021736` subsequently advanced the projection owner to contract 2 so a function
+parameter record renders its optional exact requirement binding. Ordering, paging, continuation
+shape, bounds, and the prohibition on using projection records as authored input are unchanged;
+contract-1 continuations and projection identities reject as predecessors.

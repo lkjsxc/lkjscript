@@ -2158,9 +2158,9 @@ fn execute_inspect_owner_with_limits(
 const FUNCTION_DEFINITION_ORDERING: u8 = 1;
 const FUNCTION_DEFINITION_ORDERING_NAME: &str =
     "header-contract-structural-preorder-reference-fact-v1";
-const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT01";
-const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 1;
-const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 1;
+const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT02";
+const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 2;
+const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 2;
 const FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES: usize = 18;
 const FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES: usize = 32;
 const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES: usize = 224;
@@ -4228,6 +4228,14 @@ fn materialize_function_definition(
             ));
         }
         materializer.add_type_reference("parameter_type", owner, 0, record.ty)?;
+        if let Some(requirement) = record.resource_requirement {
+            materializer.add_requirement_reference(
+                "parameter_requirement",
+                owner,
+                0,
+                requirement,
+            )?;
+        }
         materializer.push_fields(
             DefinitionSection::Contract,
             "definition.parameter",
@@ -4240,6 +4248,15 @@ fn materialize_function_definition(
                 (
                     "use",
                     definition_parameter_use_name(record.use_mode).to_owned(),
+                ),
+                (
+                    "requirement",
+                    record
+                        .resource_requirement
+                        .map(|requirement| {
+                            format!("{}/{}", requirement.package, requirement.requirement)
+                        })
+                        .unwrap_or_else(|| "none".to_owned()),
                 ),
             ],
         )?;
@@ -5880,11 +5897,11 @@ mod tests {
         assert!(digest.starts_with("definition_"));
         assert_eq!(
             response_field(&complete_records, "projection", "body-records"),
-            "48"
+            "15"
         );
         assert_eq!(
             response_field(&complete_records, "projection", "fact-records"),
-            "51"
+            "18"
         );
         let project_record = complete_records
             .iter()
@@ -5897,32 +5914,113 @@ mod tests {
                 .all(|field| field.name != "path")
         );
         assert!(complete_records.iter().any(|record| {
-            record.operation == "definition.binding"
+            record.operation == "definition.expression"
                 && record
                     .fields
                     .iter()
-                    .any(|field| field.name == "name" && field.value == "lease-info")
+                    .any(|field| field.name == "form" && field.value == "call")
+                && record.fields.iter().any(|field| {
+                    field.name == "function"
+                        && field
+                            .value
+                            .ends_with("decl_7f443401f4946c55fa239c5430e8ad93")
+                })
+        }));
+        assert!(complete_records.iter().all(|record| {
+            record.operation != "definition.binding"
+                || record.fields.iter().all(|field| {
+                    field.name != "name"
+                        || (field.value != "lease-info" && field.value != "renewed-lease")
+                })
         }));
         assert!(complete_records.iter().any(|record| {
-            record.operation == "definition.binding"
-                && record
-                    .fields
-                    .iter()
-                    .any(|field| field.name == "name" && field.value == "renewed-lease")
+            record.operation == "definition.expression"
+                && record.fields.iter().any(|field| {
+                    field.name == "operation"
+                        && field.value.ends_with("op_23bc0c498113c09a2ff0a4cf9c0a37ab")
+                })
         }));
         for operation in [
-            "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
             "op_1a5491eb1c3ef3d15ec28268b6f04afc",
             "op_f593ba236055aa1afa6c02eaf0db6a64",
             "op_679b43bb7dc0b298a7706d4e8a7bef23",
             "op_242e065f9738b454e2328ed0e558e6a0",
         ] {
-            assert!(complete_records.iter().any(|record| {
-                record.operation == "definition.reference"
+            assert!(complete_records.iter().all(|record| {
+                record.operation != "definition.expression"
+                    || record
+                        .fields
+                        .iter()
+                        .all(|field| field.name != "operation" || !field.value.ends_with(operation))
+            }));
+        }
+
+        let helper_base = vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "task_function".to_owned(),
+            "decl_7f443401f4946c55fa239c5430e8ad93".to_owned(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+        ];
+        let mut helper_arguments = helper_base.clone();
+        helper_arguments.extend([
+            "--limit".to_owned(),
+            "10000".to_owned(),
+            "--bytes".to_owned(),
+            MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+        ]);
+        let helper = execute_inspect_owner(helper_arguments).expect("complete helper projection");
+        let helper_records =
+            parse_records("complete-helper-definition", &helper).expect("helper compact records");
+        assert_eq!(
+            response_field(&helper_records, "projection", "body-records"),
+            "36"
+        );
+        assert_eq!(
+            response_field(&helper_records, "projection", "fact-records"),
+            "39"
+        );
+        assert!(helper_records.iter().any(|record| {
+            record.operation == "definition.parameter"
+                && record
+                    .fields
+                    .iter()
+                    .any(|field| field.name == "name" && field.value == "lease")
+                && record
+                    .fields
+                    .iter()
+                    .any(|field| field.name == "use" && field.value == "consume")
+                && record.fields.iter().any(|field| {
+                    field.name == "requirement"
+                        && field
+                            .value
+                            .ends_with("req_0cebded5cb056cda5484e39aa40594ad")
+                })
+        }));
+        for name in ["lease-info", "renewed-lease"] {
+            assert!(helper_records.iter().any(|record| {
+                record.operation == "definition.binding"
                     && record
                         .fields
                         .iter()
-                        .any(|field| field.name == "target" && field.value.ends_with(operation))
+                        .any(|field| field.name == "name" && field.value == name)
+            }));
+        }
+        for operation in [
+            "op_1a5491eb1c3ef3d15ec28268b6f04afc",
+            "op_f593ba236055aa1afa6c02eaf0db6a64",
+            "op_679b43bb7dc0b298a7706d4e8a7bef23",
+            "op_242e065f9738b454e2328ed0e558e6a0",
+        ] {
+            assert!(helper_records.iter().any(|record| {
+                record.operation == "definition.expression"
+                    && record
+                        .fields
+                        .iter()
+                        .any(|field| field.name == "operation" && field.value.ends_with(operation))
             }));
         }
         let complete_items = complete_records
@@ -5965,6 +6063,51 @@ mod tests {
             "definition pagination did not finish"
         );
         assert_eq!(paged_items, complete_items);
+
+        let helper_digest = response_field(&helper_records, "projection", "digest").to_owned();
+        let helper_complete_items = helper_records
+            .iter()
+            .filter(|record| record.operation.starts_with("definition."))
+            .map(compact_record_identity)
+            .collect::<Vec<_>>();
+        let mut helper_paged_items = Vec::new();
+        let mut helper_continuation: Option<String> = None;
+        for page in 0..100_usize {
+            let mut arguments = helper_base.clone();
+            arguments.extend([
+                "--limit".to_owned(),
+                if page % 2 == 0 { "5" } else { "13" }.to_owned(),
+                "--bytes".to_owned(),
+                if page % 3 == 0 { "8192" } else { "16384" }.to_owned(),
+            ]);
+            if let Some(token) = &helper_continuation {
+                arguments.extend(["--continuation".to_owned(), token.clone()]);
+            }
+            let bytes = execute_inspect_owner(arguments).expect("helper definition page");
+            let records =
+                parse_records("helper-definition-page", &bytes).expect("helper page records");
+            assert_eq!(
+                response_field(&records, "projection", "digest"),
+                helper_digest
+            );
+            helper_paged_items.extend(
+                records
+                    .iter()
+                    .filter(|record| record.operation.starts_with("definition."))
+                    .map(compact_record_identity),
+            );
+            if response_field(&records, "page", "complete") == "true" {
+                helper_continuation = None;
+                break;
+            }
+            helper_continuation =
+                Some(response_field(&records, "continuation", "token").to_owned());
+        }
+        assert!(
+            helper_continuation.is_none(),
+            "helper definition pagination did not finish"
+        );
+        assert_eq!(helper_paged_items, helper_complete_items);
         assert_eq!(
             std::fs::read(&head_path).expect("HEAD after projection"),
             before_head

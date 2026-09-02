@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR06";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR07";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -750,7 +750,10 @@ impl Writer {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
         self.authored_type(&value.ty, definitions, 1)?;
-        self.parameter_use(value.use_mode)
+        self.parameter_use(value.use_mode)?;
+        self.optional(value.resource_requirement.as_ref(), |writer, value| {
+            writer.requirement_reference(value, definitions)
+        })
     }
 
     fn function_effect(
@@ -1429,6 +1432,7 @@ mod tests {
                         name: Name::new("value").unwrap(),
                         ty: AuthoredType::Text {},
                         use_mode: ParameterUse::Unrestricted,
+                        resource_requirement: None,
                     }],
                     result: AuthoredType::Text {},
                     effect: AuthoredFunctionEffect::Pure {},
@@ -1456,7 +1460,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "8a09b2b164bafecbf4a1c4f572e1c57cf0741271dacc50ddb8d51aaed9ff9995"
+            "fd6dbb89245fc17a0c8dbbb33d7ac33ed87c256651f642e28704b175875f3937"
         );
     }
 

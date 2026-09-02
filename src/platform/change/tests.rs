@@ -113,6 +113,100 @@ fn body_edit_derives_local_relation_removal_and_enclosing_summary_candidates() {
 }
 
 #[test]
+fn task_body_edit_retains_an_owned_requirement_in_incremental_summaries() {
+    let mut base = crate::platform::kernel::tests::witness_snapshot();
+    let task = declaration_named(&base, "caller");
+    let package = base.root.package_id;
+    let original_requirement = base
+        .owners
+        .iter()
+        .find_map(|(owner, record)| matches!(record, OwnerRecord::Requirement(_)).then_some(*owner))
+        .expect("fixture requirement");
+    let OwnerKey::Declaration(task_id) = task else {
+        panic!("task declaration expected");
+    };
+    let OwnerRecord::Requirement(original_record) = &base.owners[&original_requirement] else {
+        panic!("requirement record expected");
+    };
+    let requirement_id =
+        crate::platform::semantic_id::RequirementId::migrate(b"change-task-owned-requirement", 0);
+    let requirement = OwnerKey::Requirement(requirement_id);
+    let mut requirement_record = original_record.clone();
+    requirement_record.header = crate::platform::kernel::OwnerHeader::new(
+        requirement,
+        crate::platform::kernel::OwnerKind::Requirement,
+    );
+    requirement_record.declaration = task_id;
+    assert!(
+        base.owners
+            .insert(requirement, OwnerRecord::Requirement(requirement_record))
+            .is_none()
+    );
+    let owner_root = base.root.owners;
+    base.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        owner_root.page(),
+        owner_root.entries().saturating_add(1),
+        owner_root.content(),
+    );
+    let OwnerRecord::Declaration(task_record) =
+        base.owners.get_mut(&task).expect("fixture task owner")
+    else {
+        panic!("task declaration expected");
+    };
+    let DeclarationPayload::Function(task_function) = &mut task_record.payload else {
+        panic!("task function payload expected");
+    };
+    task_function.effect = crate::platform::kernel::FunctionEffect::Task {
+        requirements: vec![crate::platform::kernel::RequirementReference {
+            package,
+            requirement: requirement_id,
+        }],
+    };
+    let capability = base
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Expression(record)
+                if matches!(record.operation, ExpressionOperation::CapabilityCall { .. }) =>
+            {
+                Some(*owner)
+            }
+            _ => None,
+        })
+        .expect("fixture capability call");
+    let OwnerRecord::Expression(capability_record) = base
+        .owners
+        .get_mut(&capability)
+        .expect("fixture capability owner")
+    else {
+        panic!("capability expression expected");
+    };
+    let ExpressionOperation::CapabilityCall {
+        requirement: capability_requirement,
+        ..
+    } = &mut capability_record.operation
+    else {
+        panic!("capability call expected");
+    };
+    capability_requirement.requirement = requirement_id;
+    validate_full(&base).expect("task-owned requirement fixture");
+
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let body = capability;
+    let mut replacement = base.owners[&body].clone();
+    let OwnerRecord::Expression(record) = &mut replacement else {
+        panic!("task body must be an expression");
+    };
+    record.operation = ExpressionOperation::Unit {};
+    let delta = replace_owner_delta(&base, body, replacement);
+    let overlay = KernelOverlay::new(&base, &delta);
+    let derived =
+        derive_local_delta(&overlay, &delta, &base_witness).expect("derived task body edit");
+    assert!(derived.summary_candidates.contains(&task));
+    assert_matches_full_oracle(&base_witness, &overlay, &derived);
+}
+
+#[test]
 fn interface_change_uses_reverse_relations_for_validation_and_compiler_impact() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("base witness");

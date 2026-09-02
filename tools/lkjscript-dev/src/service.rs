@@ -27,7 +27,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 6;
+const SERVICE_CONTRACT_VERSION: u32 = 7;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -41,9 +41,11 @@ const QUEUE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.queue.data-schema.v1";
 const ORACLE_RETRY_JOB: &str = "affine-oracle-retry";
 const ORACLE_STALE_JOB: &str = "affine-oracle-stale";
 const WORKER_FUNCTION: &str = "decl_a914bb78de075ff44a857ac028d704f3";
+const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
+const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "12b39dce25366bd6f6ee2d78dc4d73f03b55d020df7332e1ef914497ad46e728";
+    "40e6cf8fdf214f58163383a2dfc7270cbd4e4ff6a21a301ad762b0ca91f13071";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -235,6 +237,27 @@ struct MaintainedDefinitionObservation {
     relation_digest: String,
     capability_calls: Vec<MaintainedCapabilityObservation>,
     matches: u64,
+    helper_function: String,
+    helper_digest: String,
+    helper_total_records: u64,
+    helper_contract_records: u64,
+    helper_body_records: u64,
+    helper_reference_records: u64,
+    helper_fact_records: u64,
+    helper_structural_edges: u64,
+    helper_reference_edges: u64,
+    helper_maximum_depth: u64,
+    helper_logical_bytes: u64,
+    helper_pages: u64,
+    helper_rendered_output_bytes: u64,
+    helper_owner_order_digest: String,
+    helper_fact_digest: String,
+    helper_relation_digest: String,
+    helper_capability_calls: Vec<MaintainedCapabilityObservation>,
+    helper_matches: u64,
+    handoff_relation: bool,
+    helper_requirement_binding: bool,
+    predecessor_bound: bool,
     largest_function: String,
     largest_body_records: u64,
     largest_digest: String,
@@ -580,7 +603,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-11 service bundle",
+        "maintained artifact-12 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -655,11 +678,40 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.definition_projection.logical_bytes == 0
         || result.definition_projection.pages < 2
         || result.definition_projection.rendered_output_bytes == 0
-        || result.definition_projection.capability_calls.len() < 5
-        || result.definition_projection.matches < 2
+        || result.definition_projection.capability_calls.len() != 1
+        || result.definition_projection.matches != 1
+        || result.definition_projection.helper_function != WORKER_HELPER_FUNCTION
+        || result.definition_projection.helper_total_records == 0
+        || result.definition_projection.helper_contract_records == 0
+        || result.definition_projection.helper_body_records == 0
+        || result.definition_projection.helper_reference_records == 0
+        || result.definition_projection.helper_fact_records == 0
+        || result.definition_projection.helper_structural_edges == 0
+        || result.definition_projection.helper_reference_edges == 0
+        || result.definition_projection.helper_maximum_depth == 0
+        || result.definition_projection.helper_logical_bytes == 0
+        || result.definition_projection.helper_pages < 2
+        || result.definition_projection.helper_rendered_output_bytes == 0
+        || result.definition_projection.helper_digest.is_empty()
+        || result
+            .definition_projection
+            .helper_owner_order_digest
+            .is_empty()
+        || result.definition_projection.helper_fact_digest.is_empty()
+        || result
+            .definition_projection
+            .helper_relation_digest
+            .is_empty()
+        || result.definition_projection.helper_capability_calls.len() < 4
+        || result.definition_projection.helper_matches != 1
+        || !result.definition_projection.handoff_relation
+        || !result.definition_projection.helper_requirement_binding
+        || !result.definition_projection.predecessor_bound
         || result.definition_projection.largest_function.is_empty()
         || result.definition_projection.largest_body_records
             < result.definition_projection.body_records
+        || result.definition_projection.largest_body_records
+            < result.definition_projection.helper_body_records
         || result.definition_projection.largest_digest.is_empty()
         || !result.definition_projection.largest_admitted
         || !result.definition_projection.oracle_equal
@@ -708,7 +760,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-11 service bundle",
+            "maintained artifact-12 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1213,7 +1265,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-11 build",
+        "service readiness disagrees with the exact fresh artifact-12 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -1508,7 +1560,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-11 build",
+        "worker readiness disagrees with the exact fresh artifact-12 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -1527,7 +1579,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-11 build",
+        "second worker readiness disagrees with the exact fresh artifact-12 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -1690,7 +1742,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-11 bundle identity",
+        "restored service readiness changed the exact artifact-12 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -1712,7 +1764,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 6 authority inventory",
+        "service acceptance changed the maintained Graph 7 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -2497,7 +2549,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-11 bundle",
+            "maintained deployment descriptor does not bind the current artifact-12 bundle",
         ));
     }
     if let Some(port) = port {
@@ -2757,6 +2809,16 @@ fn verify_maintained_function_definition(
                 )
             },
         )?;
+        let helper_oracle = function_definition_oracle(&copied_application, WORKER_HELPER_FUNCTION)
+            .map_err(|diagnostic| {
+                ServiceFailure::failed(
+                    "definition_helper_oracle",
+                    format!(
+                        "independent maintained helper reconstruction failed: {}",
+                        diagnostic.message
+                    ),
+                )
+            })?;
         let largest =
             largest_function_definition_oracle(&copied_application).map_err(|diagnostic| {
                 ServiceFailure::failed(
@@ -2782,6 +2844,14 @@ fn verify_maintained_function_definition(
             "worker",
         )?;
         compare_maintained_definition(&projection, &oracle)?;
+        let helper_projection = run_maintained_definition_pages(
+            context,
+            &copied_binary,
+            &copied_application,
+            &helper_oracle,
+            "worker-helper",
+        )?;
+        compare_maintained_definition(&helper_projection, &helper_oracle)?;
         let largest_projection = run_maintained_definition_pages(
             context,
             &copied_binary,
@@ -2806,6 +2876,14 @@ fn verify_maintained_function_definition(
                 parameter_uses: call.parameter_uses.clone(),
             })
             .collect::<Vec<_>>();
+        let helper_capability_calls = helper_oracle
+            .capability_calls
+            .iter()
+            .map(|call| MaintainedCapabilityObservation {
+                operation: call.operation.clone(),
+                parameter_uses: call.parameter_uses.clone(),
+            })
+            .collect::<Vec<_>>();
         for (operation, mode) in [
             ("op_1a5491eb1c3ef3d15ec28268b6f04afc", "borrow"),
             ("op_f593ba236055aa1afa6c02eaf0db6a64", "consume"),
@@ -2813,7 +2891,7 @@ fn verify_maintained_function_definition(
             ("op_242e065f9738b454e2328ed0e558e6a0", "consume"),
         ] {
             require(
-                capability_calls.iter().any(|call| {
+                helper_capability_calls.iter().any(|call| {
                     call.operation.ends_with(operation)
                         && call.parameter_uses.iter().any(|use_mode| use_mode == mode)
                 }),
@@ -2828,6 +2906,32 @@ fn verify_maintained_function_definition(
             }),
             "definition_claim_observation",
             "maintained definition omitted the jobs acquisition operation",
+        )?;
+        let handoff_relation = oracle.relations.iter().any(|relation| {
+            relation.kind == "function_call" && relation.target.ends_with(WORKER_HELPER_FUNCTION)
+        });
+        require(
+            handoff_relation,
+            "definition_handoff_relation",
+            "maintained worker entry omitted the exact helper handoff",
+        )?;
+        let helper_requirement_binding = helper_oracle.relations.iter().any(|relation| {
+            relation.kind == "parameter_requirement"
+                && relation.target.ends_with(WORKER_QUEUE_REQUIREMENT)
+        });
+        require(
+            helper_requirement_binding,
+            "definition_helper_requirement",
+            "maintained helper omitted its exact queue-resource requirement binding",
+        )?;
+        let predecessor_bound = oracle.body_preorder.len() <= 40
+            && helper_oracle.body_preorder.len() <= 40
+            && oracle.body_preorder.len() < 48
+            && helper_oracle.body_preorder.len() < 48;
+        require(
+            predecessor_bound,
+            "definition_handoff_bound",
+            "maintained worker split did not contract both definitions below the predecessor bound",
         )?;
         Ok(MaintainedDefinitionObservation {
             function: WORKER_FUNCTION.to_owned(),
@@ -2849,6 +2953,27 @@ fn verify_maintained_function_definition(
             relation_digest: oracle.relation_digest,
             capability_calls,
             matches: oracle.matches.len() as u64,
+            helper_function: WORKER_HELPER_FUNCTION.to_owned(),
+            helper_digest: helper_projection.digest,
+            helper_total_records: helper_projection.total_records,
+            helper_contract_records: helper_projection.contract_records,
+            helper_body_records: helper_projection.body_records,
+            helper_reference_records: helper_projection.reference_records,
+            helper_fact_records: helper_projection.fact_records,
+            helper_structural_edges: helper_projection.structural_edges,
+            helper_reference_edges: helper_projection.reference_edges,
+            helper_maximum_depth: helper_projection.maximum_depth,
+            helper_logical_bytes: helper_projection.logical_bytes,
+            helper_pages: helper_projection.pages,
+            helper_rendered_output_bytes: helper_projection.rendered_output_bytes,
+            helper_owner_order_digest: helper_oracle.owner_order_digest,
+            helper_fact_digest: helper_oracle.fact_digest,
+            helper_relation_digest: helper_oracle.relation_digest,
+            helper_capability_calls,
+            helper_matches: helper_oracle.matches.len() as u64,
+            handoff_relation,
+            helper_requirement_binding,
+            predecessor_bound,
             largest_function: largest.function,
             largest_body_records: largest.body_preorder.len() as u64,
             largest_digest: largest_projection.digest,
@@ -3182,14 +3307,15 @@ fn compare_maintained_definition(
         "maintained fact count disagrees with the rebuilt witness",
     )?;
     for (projected, expected) in projected_facts.iter().zip(oracle_facts) {
+        let owner = service_definition_field(projected, "owner")?;
+        let record = service_definition_field(projected, "record")?;
+        let summary = service_definition_field(projected, "summary")?;
         require(
-            service_definition_field(projected, "owner")? == expected.owner
-                && service_definition_field(projected, "record")? == expected.record
-                && service_definition_field(projected, "summary")? == expected.summary,
+            owner == expected.owner && record == expected.record && summary == expected.summary,
             "definition_oracle_fact",
             format!(
-                "maintained fact '{}' disagrees with rebuilt authority",
-                expected.owner
+                "maintained fact '{}' disagrees with rebuilt authority: projected owner={owner} record={record} summary={summary}; oracle record={} summary={}",
+                expected.owner, expected.record, expected.summary
             ),
         )?;
     }
@@ -3244,14 +3370,30 @@ fn compare_maintained_definition(
     }
     if oracle.function == WORKER_FUNCTION {
         require(
+            oracle.body_preorder.iter().all(|owner| {
+                owner.name.as_deref() != Some("lease-info")
+                    && owner.name.as_deref() != Some("renewed-lease")
+            }) && oracle.relations.iter().any(|relation| {
+                relation.kind == "function_call"
+                    && relation.target.ends_with(WORKER_HELPER_FUNCTION)
+            }),
+            "definition_oracle_handoff",
+            "maintained worker retained transferred lifecycle structure or omitted its helper call",
+        )?;
+    }
+    if oracle.function == WORKER_HELPER_FUNCTION {
+        require(
             oracle.body_preorder.iter().any(|owner| {
                 owner.name.as_deref() == Some("lease-info") && owner.form == "binding:let"
             }) && oracle.body_preorder.iter().any(|owner| {
                 owner.name.as_deref() == Some("renewed-lease")
                     && owner.form == "binding:match_payload"
+            }) && oracle.relations.iter().any(|relation| {
+                relation.kind == "parameter_requirement"
+                    && relation.target.ends_with(WORKER_QUEUE_REQUIREMENT)
             }),
-            "definition_oracle_bindings",
-            "maintained worker omitted lease-info or renewed-lease lexical structure",
+            "definition_oracle_helper",
+            "maintained helper omitted the lease lifecycle or exact resource binding",
         )?;
     }
     for record in &projection.records {
@@ -3318,7 +3460,7 @@ fn service_definition_records(
 fn service_definition_digest(
     records: &[MaintainedDefinitionRecord],
 ) -> Result<(String, u64), ServiceFailure> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v1");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v2");
     hasher.update(&(records.len() as u64).to_be_bytes());
     let mut logical_bytes = 0_u64;
     for record in records {
@@ -3882,7 +4024,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 6);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 7);
     }
 
     #[test]

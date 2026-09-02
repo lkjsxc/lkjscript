@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 6 records.
+//! Single deterministic relation extractor for Graph 7 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -39,6 +39,7 @@ pub enum RelationKind {
     FunctionCall,
     FunctionValue,
     FunctionRequirement,
+    ParameterRequirement,
     NominalFieldConstruction,
     NominalFieldAccess,
     VariantConstruction,
@@ -70,7 +71,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -83,6 +84,7 @@ impl RelationKind {
         Self::FunctionCall,
         Self::FunctionValue,
         Self::FunctionRequirement,
+        Self::ParameterRequirement,
         Self::NominalFieldConstruction,
         Self::NominalFieldAccess,
         Self::VariantConstruction,
@@ -114,6 +116,7 @@ impl RelationKind {
             Self::FunctionCall => 10,
             Self::FunctionValue => 11,
             Self::FunctionRequirement => 27,
+            Self::ParameterRequirement => 28,
             Self::NominalFieldConstruction => 12,
             Self::NominalFieldAccess => 13,
             Self::VariantConstruction => 14,
@@ -150,6 +153,7 @@ impl RelationKind {
             Self::FunctionCall => "function_call",
             Self::FunctionValue => "function_value",
             Self::FunctionRequirement => "function_requirement",
+            Self::ParameterRequirement => "parameter_requirement",
             Self::NominalFieldConstruction => "nominal_field_construction",
             Self::NominalFieldAccess => "nominal_field_access",
             Self::VariantConstruction => "variant_construction",
@@ -198,6 +202,7 @@ impl RelationKind {
             | Self::VariantExhaustiveness => PropagationClass::Value,
             Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
             Self::FunctionRequirement
+            | Self::ParameterRequirement
             | Self::CapabilityInterface
             | Self::CapabilityOperation
             | Self::ComponentRequirement
@@ -480,22 +485,33 @@ where
             package,
             OwnerKey::Declaration(operation.declaration),
         )?,
-        OwnerRecord::Parameter(parameter) => match parameter.parent {
-            ParameterParent::Function(declaration) => owner_edge(
-                edges,
-                source,
-                RelationKind::MemberDeclaration,
-                package,
-                OwnerKey::Declaration(declaration),
-            )?,
-            ParameterParent::Operation(operation) => owner_edge(
-                edges,
-                source,
-                RelationKind::ParameterOperation,
-                package,
-                OwnerKey::Operation(operation),
-            )?,
-        },
+        OwnerRecord::Parameter(parameter) => {
+            match parameter.parent {
+                ParameterParent::Function(declaration) => owner_edge(
+                    edges,
+                    source,
+                    RelationKind::MemberDeclaration,
+                    package,
+                    OwnerKey::Declaration(declaration),
+                )?,
+                ParameterParent::Operation(operation) => owner_edge(
+                    edges,
+                    source,
+                    RelationKind::ParameterOperation,
+                    package,
+                    OwnerKey::Operation(operation),
+                )?,
+            }
+            if let Some(requirement) = parameter.resource_requirement {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::ParameterRequirement,
+                    requirement.package,
+                    OwnerKey::Requirement(requirement.requirement),
+                )?;
+            }
+        }
         OwnerRecord::Binding(binding) => {
             if let Some(value) = binding.value {
                 owner_edge(

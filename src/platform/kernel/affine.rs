@@ -1,16 +1,16 @@
-//! Language-order affine capability-resource validation for Graph 6.
+//! Language-order affine capability-resource validation for Graph 7.
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::{
     BindingKind, BindingRecord, CaseRecord, DeclarationPayload, DeclarationReference,
-    ExpressionOperation, FunctionEffect, LocalValueReference, OperationRecord, OwnerKey,
-    OwnerRecord, PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceRecord,
-    ParameterRecord, ParameterUse, RequirementRecord, RequirementReference, TypeForm,
-    TypeObjectDigest,
+    DeclarationVisibility, ExpressionOperation, FunctionDeclaration, FunctionEffect,
+    LocalValueReference, OperationRecord, OwnerKey, OwnerRecord, PackageId,
+    PackageInterfaceDeclarationPayload, PackageInterfaceRecord, ParameterRecord, ParameterUse,
+    RequirementRecord, RequirementReference, TypeForm, TypeObjectDigest,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::semantic_id::{BindingId, ExpressionId};
+use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, ParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,7 +43,15 @@ struct ResourceSlot {
     live: bool,
 }
 
-type FlowState = BTreeMap<BindingId, ResourceSlot>;
+type FlowState = BTreeMap<LocalValueReference, ResourceSlot>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ResourceFunctionParameter {
+    parameter: ParameterId,
+    requirement: RequirementReference,
+    interface: DeclarationReference,
+    parameter_count: usize,
+}
 
 pub(super) fn validate_affine_meaning(
     snapshot: &super::KernelSnapshot,
@@ -74,6 +82,7 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
         read,
         work,
         maximum_steps: limits.maximum_steps,
+        current_function: None,
     };
     for owner in roots {
         let record = match validator.read.owner(owner) {
@@ -97,13 +106,25 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
         if !matches!(function.effect, FunctionEffect::Task { .. }) {
             continue;
         }
-        let mut state = FlowState::new();
+        let OwnerKey::Declaration(declaration) = owner else {
+            continue;
+        };
+        validator.current_function = Some(declaration);
+        let mut state = match validator.initial_state(declaration, &function) {
+            Ok(state) => state,
+            Err(diagnostic) => {
+                push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
+                validator.current_function = None;
+                continue;
+            }
+        };
         if let Err(diagnostic) = validator.evaluate(function.body, &mut state, 0) {
             if diagnostic.code == "kernel_affine_work" {
                 return Err(ExpressionValidationExhaustion::Steps);
             }
             push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
         }
+        validator.current_function = None;
     }
     Ok(())
 }
@@ -124,9 +145,37 @@ struct AffineValidator<'a, 'b, R: ?Sized> {
     read: &'a R,
     work: &'b mut usize,
     maximum_steps: usize,
+    current_function: Option<DeclarationId>,
 }
 
 impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
+    fn initial_state(
+        &mut self,
+        declaration: DeclarationId,
+        _function: &FunctionDeclaration,
+    ) -> Result<FlowState, Diagnostic> {
+        let mut state = FlowState::new();
+        if let Some(parameter) = self.resource_function_parameter(DeclarationReference {
+            package: self.read.package_id(),
+            declaration,
+        })? {
+            state.insert(
+                LocalValueReference::FunctionParameter(parameter.parameter),
+                ResourceSlot {
+                    value: ResourceValue {
+                        shape: ResourceShape::Direct,
+                        provenance: Provenance {
+                            requirement: parameter.requirement,
+                            interface: parameter.interface,
+                        },
+                    },
+                    live: true,
+                },
+            );
+        }
+        Ok(state)
+    }
+
     fn validate_owner_shape(
         &mut self,
         owner: OwnerKey,
@@ -137,17 +186,55 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 let resource = self.resource_type(parameter.ty)?;
                 let contains = self.type_contains_resource(parameter.ty)?;
                 match parameter.parent {
-                    super::ParameterParent::Function(_) => {
-                        if contains || parameter.use_mode != ParameterUse::Unrestricted {
+                    super::ParameterParent::Function(declaration) => {
+                        if matches!(resource, Some((ResourceShape::Direct, _))) {
+                            if parameter.use_mode != ParameterUse::Consume {
+                                return Err(owner_affine_error(
+                                    "kernel_affine_function_resource_use",
+                                    owner,
+                                    "direct resource function parameter must consume",
+                                ));
+                            }
+                            if parameter.resource_requirement.is_none() {
+                                return Err(owner_affine_error(
+                                    "kernel_affine_function_resource_requirement",
+                                    owner,
+                                    "direct resource function parameter requires one exact requirement binding",
+                                ));
+                            }
+                            self.resource_function_parameter(DeclarationReference {
+                                package: self.read.package_id(),
+                                declaration,
+                            })?;
+                        } else if contains {
                             return Err(owner_affine_error(
-                                "kernel_affine_function_parameter",
+                                "kernel_affine_function_parameter_container",
                                 owner,
-                                "function parameters cannot contain resources and must be unrestricted",
+                                "function parameter may contain a resource only as its direct type",
+                            ));
+                        } else if parameter.use_mode != ParameterUse::Unrestricted {
+                            return Err(owner_affine_error(
+                                "kernel_affine_function_parameter_use",
+                                owner,
+                                "nonresource function parameter must be unrestricted",
+                            ));
+                        } else if parameter.resource_requirement.is_some() {
+                            return Err(owner_affine_error(
+                                "kernel_affine_parameter_requirement_extra",
+                                owner,
+                                "nonresource function parameter cannot bind a resource requirement",
                             ));
                         }
                     }
                     super::ParameterParent::Operation(operation) => match resource {
                         Some((ResourceShape::Direct, interface)) => {
+                            if parameter.resource_requirement.is_some() {
+                                return Err(owner_affine_error(
+                                    "kernel_affine_parameter_requirement_extra",
+                                    owner,
+                                    "operation parameter cannot bind a function resource requirement",
+                                ));
+                            }
                             let operation = self.operation(self.read.package_id(), operation)?;
                             if parameter.use_mode == ParameterUse::Unrestricted {
                                 return Err(owner_affine_error(
@@ -178,6 +265,13 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 "kernel_affine_nonresource_parameter_use",
                                 owner,
                                 "nonresource operation parameter must be unrestricted",
+                            ));
+                        }
+                        _ if parameter.resource_requirement.is_some() => {
+                            return Err(owner_affine_error(
+                                "kernel_affine_parameter_requirement_extra",
+                                owner,
+                                "operation parameter cannot bind a function resource requirement",
                             ));
                         }
                         _ => {}
@@ -240,6 +334,19 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             "external functions cannot return capability resources",
                         ));
                     }
+                    for parameter in &signature.parameters {
+                        let parameter = self.parameter(self.read.package_id(), *parameter)?;
+                        if self.type_contains_resource(parameter.ty)?
+                            || parameter.use_mode != ParameterUse::Unrestricted
+                            || parameter.resource_requirement.is_some()
+                        {
+                            return Err(owner_affine_error(
+                                "kernel_affine_external_parameter",
+                                owner,
+                                "external parameters cannot contain, borrow, consume, or bind capability resources",
+                            ));
+                        }
+                    }
                 }
                 DeclarationPayload::Function(function) => {
                     if self.type_contains_resource(function.result)? {
@@ -249,6 +356,17 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             "functions cannot return capability resources",
                         ));
                     }
+                    let OwnerKey::Declaration(declaration) = owner else {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_identity",
+                            owner,
+                            "function has a foreign owner identity domain",
+                        ));
+                    };
+                    self.resource_function_parameter(DeclarationReference {
+                        package: self.read.package_id(),
+                        declaration,
+                    })?;
                 }
                 DeclarationPayload::Constant { ty, .. } => {
                     if self.type_contains_resource(*ty)? {
@@ -309,17 +427,27 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             | ExpressionOperation::I64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
-            | ExpressionOperation::Constant { .. }
-            | ExpressionOperation::FunctionValue { .. } => Ok(EvaluatedValue::Unrestricted),
+            | ExpressionOperation::Constant { .. } => Ok(EvaluatedValue::Unrestricted),
+            ExpressionOperation::FunctionValue { function, .. } => {
+                if self.resource_function_parameter(function)?.is_some() {
+                    return Err(affine_error(
+                        "kernel_affine_resource_function_value",
+                        expression,
+                        "resource-bearing task functions can be used only by direct named call",
+                    ));
+                }
+                Ok(EvaluatedValue::Unrestricted)
+            }
             ExpressionOperation::Local { value } => {
-                if let Some(binding) = lexical_binding(value)
-                    && state.contains_key(&binding)
+                if let Some(owner) = resource_owner(value)
+                    && state.contains_key(&owner)
                 {
                     return Err(affine_error(
                         "kernel_affine_resource_copy",
                         expression,
                         format!(
-                            "resource binding {binding} can be used only by an explicit borrow, consume, variant transfer, or match"
+                            "{} can be used only by an explicit borrow, consume, variant transfer, or match",
+                            resource_owner_label(owner)
                         ),
                     ));
                 }
@@ -371,9 +499,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 ),
                             ));
                         }
+                        let owner = LocalValueReference::LexicalBinding(binding);
                         if state
                             .insert(
-                                binding,
+                                owner,
                                 ResourceSlot {
                                     value: resource,
                                     live: true,
@@ -387,12 +516,12 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 format!("resource binding {binding} is introduced more than once"),
                             ));
                         }
-                        scoped.push(binding);
+                        scoped.push(owner);
                     }
                 }
                 let result = self.evaluate(body, state, depth + 1)?;
-                for binding in scoped {
-                    state.remove(&binding);
+                for owner in scoped {
+                    state.remove(&owner);
                 }
                 Ok(result)
             }
@@ -403,12 +532,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 }
                 Ok(result)
             }
-            ExpressionOperation::Call { arguments, .. } => {
-                for argument in arguments {
-                    self.require_unrestricted(argument, state, depth + 1, "function argument")?;
-                }
-                Ok(EvaluatedValue::Unrestricted)
-            }
+            ExpressionOperation::Call {
+                function,
+                arguments,
+                ..
+            } => self.evaluate_function_call(expression, function, &arguments, state, depth + 1),
             ExpressionOperation::Invoke { callee, arguments } => {
                 self.require_unrestricted(callee, state, depth + 1, "invoked value")?;
                 for argument in arguments {
@@ -510,9 +638,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 "resource-bearing match arm omits its payload binding",
                             )
                         })?;
+                        let owner = LocalValueReference::MatchPayload(binding);
                         if branch
                             .insert(
-                                binding,
+                                owner,
                                 ResourceSlot {
                                     value: ResourceValue {
                                         shape: ResourceShape::Direct,
@@ -531,11 +660,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 ),
                             ));
                         }
-                        scoped = Some(binding);
+                        scoped = Some(owner);
                     }
                     let value = self.evaluate(arm.body, &mut branch, depth + 1)?;
-                    if let Some(binding) = scoped {
-                        branch.remove(&binding);
+                    if let Some(owner) = scoped {
+                        branch.remove(&owner);
                     }
                     branch_states.push(branch);
                     branch_values.push(value);
@@ -557,6 +686,130 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             ),
             ExpressionOperation::Transaction { body, .. } => self.evaluate(body, state, depth + 1),
         }
+    }
+
+    fn evaluate_function_call(
+        &mut self,
+        expression: ExpressionId,
+        function: DeclarationReference,
+        arguments: &[ExpressionId],
+        state: &mut FlowState,
+        depth: usize,
+    ) -> Result<EvaluatedValue, Diagnostic> {
+        let Some(parameter) = self.resource_function_parameter(function)? else {
+            for argument in arguments {
+                self.require_unrestricted(*argument, state, depth, "function argument")?;
+            }
+            return Ok(EvaluatedValue::Unrestricted);
+        };
+        if function.package != self.read.package_id() {
+            return Err(affine_error(
+                "kernel_affine_resource_call_package",
+                expression,
+                "resource transfer requires a private same-package task function",
+            ));
+        }
+        if arguments.len() != parameter.parameter_count {
+            return Err(affine_error(
+                "kernel_affine_resource_call_arguments",
+                expression,
+                "resource-bearing call argument count disagrees with its exact callee signature",
+            ));
+        }
+        let Some((resource_argument, ordinary_arguments)) = arguments.split_last() else {
+            return Err(affine_error(
+                "kernel_affine_resource_call_arguments",
+                expression,
+                "resource-bearing call omits its final consume argument",
+            ));
+        };
+        for argument in ordinary_arguments {
+            self.require_unrestricted(*argument, state, depth, "function argument")?;
+        }
+        let resource = self.take_local_resource(
+            *resource_argument,
+            state,
+            ParameterUse::Consume,
+            Some(parameter.requirement),
+        )?;
+        if resource.provenance.interface != parameter.interface {
+            return Err(affine_error(
+                "kernel_affine_resource_call_interface",
+                expression,
+                "transferred resource has a foreign exact interface",
+            ));
+        }
+        let current = self.current_function.ok_or_else(|| {
+            affine_error(
+                "kernel_affine_resource_call_scope",
+                expression,
+                "resource transfer is outside one exact task function",
+            )
+        })?;
+        if function.declaration == current
+            || self.resource_call_reaches(function.declaration, current)?
+        {
+            return Err(affine_error(
+                "kernel_affine_resource_call_cycle",
+                expression,
+                "resource-bearing direct-call graph is cyclic",
+            ));
+        }
+        Ok(EvaluatedValue::Unrestricted)
+    }
+
+    fn resource_call_reaches(
+        &mut self,
+        start: DeclarationId,
+        target: DeclarationId,
+    ) -> Result<bool, Diagnostic> {
+        let mut pending = vec![start];
+        let mut visited = BTreeSet::new();
+        while let Some(declaration) = pending.pop() {
+            if !visited.insert(declaration) {
+                continue;
+            }
+            let function = self.local_function(declaration)?;
+            for callee in self.resource_callees(function.body)? {
+                if callee == target {
+                    return Ok(true);
+                }
+                pending.push(callee);
+            }
+        }
+        Ok(false)
+    }
+
+    fn resource_callees(&mut self, body: ExpressionId) -> Result<Vec<DeclarationId>, Diagnostic> {
+        let mut callees = BTreeSet::new();
+        let mut pending = vec![(body, 0_usize)];
+        let mut visited = BTreeSet::new();
+        while let Some((expression, depth)) = pending.pop() {
+            if !visited.insert(expression) {
+                continue;
+            }
+            self.step(expression, depth)?;
+            let record = self.expression(expression)?;
+            if let ExpressionOperation::Call { function, .. } = &record.operation
+                && self.resource_function_parameter(*function)?.is_some()
+            {
+                if function.package != self.read.package_id() {
+                    return Err(affine_error(
+                        "kernel_affine_resource_call_package",
+                        expression,
+                        "resource transfer requires a private same-package task function",
+                    ));
+                }
+                callees.insert(function.declaration);
+            }
+            pending.extend(
+                record
+                    .children()
+                    .into_iter()
+                    .map(|child| (child.expression, depth.saturating_add(1))),
+            );
+        }
+        Ok(callees.into_iter().collect())
     }
 
     fn evaluate_capability_call(
@@ -668,39 +921,40 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource borrow or consume requires one exact lexical owner",
             ));
         };
-        let binding = lexical_binding(value).ok_or_else(|| {
+        let owner = resource_owner(value).ok_or_else(|| {
             affine_error(
                 "kernel_affine_resource_argument",
                 expression,
-                "resource argument does not name a lexical or match-payload owner",
+                "resource argument does not name a function parameter, lexical, or match-payload owner",
             )
         })?;
-        let slot = state.get_mut(&binding).ok_or_else(|| {
+        let label = resource_owner_label(owner);
+        let slot = state.get_mut(&owner).ok_or_else(|| {
             affine_error(
                 "kernel_affine_resource_fabricated",
                 expression,
-                format!("binding {binding} owns no acquired capability resource"),
+                format!("{label} owns no acquired capability resource"),
             )
         })?;
         if !slot.live {
             return Err(affine_error(
                 "kernel_affine_use_after_consume",
                 expression,
-                format!("binding {binding} was already consumed"),
+                format!("{label} was already consumed"),
             ));
         }
         if slot.value.shape != ResourceShape::Direct {
             return Err(affine_error(
                 "kernel_affine_resource_shape",
                 expression,
-                format!("binding {binding} is not a direct capability resource"),
+                format!("{label} is not a direct capability resource"),
             ));
         }
         if requirement.is_some_and(|expected| expected != slot.value.provenance.requirement) {
             return Err(affine_error(
                 "kernel_affine_foreign_requirement",
                 expression,
-                format!("binding {binding} was acquired from another exact requirement"),
+                format!("{label} was acquired from another exact requirement"),
             ));
         }
         if use_mode == ParameterUse::Consume {
@@ -717,14 +971,15 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
     ) -> Result<Option<ResourceValue>, Diagnostic> {
         let record = self.expression(expression)?;
         if let ExpressionOperation::Local { value } = record.operation
-            && let Some(binding) = lexical_binding(value)
-            && let Some(slot) = state.get_mut(&binding)
+            && let Some(owner) = resource_owner(value)
+            && let Some(slot) = state.get_mut(&owner)
         {
+            let label = resource_owner_label(owner);
             if !slot.live {
                 return Err(affine_error(
                     "kernel_affine_use_after_consume",
                     expression,
-                    format!("binding {binding} was already consumed"),
+                    format!("{label} was already consumed"),
                 ));
             }
             if slot.value.shape != ResourceShape::Variant {
@@ -769,24 +1024,25 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         output: &mut FlowState,
     ) -> Result<(), Diagnostic> {
         *output = before.clone();
-        for (binding, prior) in before {
-            let Some(first) = branches.first().and_then(|branch| branch.get(binding)) else {
+        for (owner, prior) in before {
+            let Some(first) = branches.first().and_then(|branch| branch.get(owner)) else {
                 continue;
             };
             if first.value != prior.value
                 || branches
                     .iter()
-                    .any(|branch| branch.get(binding).map(|slot| slot.live) != Some(first.live))
+                    .any(|branch| branch.get(owner).map(|slot| slot.live) != Some(first.live))
             {
                 return Err(affine_error(
                     "kernel_affine_branch_join",
                     expression,
                     format!(
-                        "binding {binding} is not preserved with identical provenance on every reachable branch"
+                        "{} is not preserved with identical provenance on every reachable branch",
+                        resource_owner_label(*owner)
                     ),
                 ));
             }
-            if let Some(slot) = output.get_mut(binding) {
+            if let Some(slot) = output.get_mut(owner) {
                 slot.live = first.live;
             }
         }
@@ -1135,6 +1391,224 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         }
     }
 
+    fn local_function(
+        &mut self,
+        declaration: DeclarationId,
+    ) -> Result<FunctionDeclaration, Diagnostic> {
+        match self.read.owner(OwnerKey::Declaration(declaration))? {
+            Some(OwnerRecord::Declaration(record)) => match record.payload {
+                DeclarationPayload::Function(function) => Ok(function),
+                _ => Err(Diagnostic::new(
+                    DiagnosticClass::Corrupt,
+                    "kernel_affine_function_kind",
+                    "resource call graph names a non-function declaration",
+                )),
+            },
+            _ => Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "kernel_affine_function_missing",
+                "resource call graph names a missing function declaration",
+            )),
+        }
+    }
+
+    fn resource_function_parameter(
+        &mut self,
+        reference: DeclarationReference,
+    ) -> Result<Option<ResourceFunctionParameter>, Diagnostic> {
+        let owner = OwnerKey::Declaration(reference.declaration);
+        if reference.package != self.read.package_id() {
+            let Some(PackageInterfaceRecord::Declaration(declaration)) = self
+                .read
+                .package_interface_owner(reference.package, owner)?
+            else {
+                return Ok(None);
+            };
+            let parameters = match declaration.payload {
+                PackageInterfaceDeclarationPayload::Function(signature) => signature.parameters,
+                PackageInterfaceDeclarationPayload::External(signature) => signature.parameters,
+                _ => return Ok(None),
+            };
+            for parameter in parameters {
+                let record = self.parameter(reference.package, parameter)?;
+                if self.type_contains_resource(record.ty)?
+                    || record.use_mode != ParameterUse::Unrestricted
+                    || record.resource_requirement.is_some()
+                {
+                    return Err(owner_affine_error(
+                        "kernel_affine_resource_call_package",
+                        owner,
+                        "dependency function signatures cannot transfer capability resources",
+                    ));
+                }
+            }
+            return Ok(None);
+        }
+
+        let Some(OwnerRecord::Declaration(declaration)) = self.read.owner(owner)? else {
+            return Err(owner_affine_error(
+                "kernel_affine_function_missing",
+                owner,
+                "resource signature names a missing declaration",
+            ));
+        };
+        let function = match declaration.payload {
+            DeclarationPayload::Function(function) => function,
+            DeclarationPayload::External(signature) => {
+                for parameter in signature.parameters {
+                    let record = self.parameter(reference.package, parameter)?;
+                    if self.type_contains_resource(record.ty)?
+                        || record.use_mode != ParameterUse::Unrestricted
+                        || record.resource_requirement.is_some()
+                    {
+                        return Err(owner_affine_error(
+                            "kernel_affine_external_parameter",
+                            owner,
+                            "external function signatures cannot transfer capability resources",
+                        ));
+                    }
+                }
+                return Ok(None);
+            }
+            _ => return Ok(None),
+        };
+
+        let mut resource = None;
+        for (index, parameter) in function.parameters.iter().copied().enumerate() {
+            let record = self.parameter(reference.package, parameter)?;
+            if record.parent != super::ParameterParent::Function(reference.declaration) {
+                return Err(owner_affine_error(
+                    "kernel_affine_function_parameter_parent",
+                    OwnerKey::Parameter(parameter),
+                    "function parameter belongs to another semantic parent",
+                ));
+            }
+            match self.resource_type(record.ty)? {
+                Some((ResourceShape::Direct, interface)) => {
+                    if resource.is_some() {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_resource_count",
+                            owner,
+                            "function has more than one direct resource parameter",
+                        ));
+                    }
+                    if index.saturating_add(1) != function.parameters.len() {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_resource_order",
+                            OwnerKey::Parameter(parameter),
+                            "resource parameter must be final in its function signature",
+                        ));
+                    }
+                    if record.use_mode != ParameterUse::Consume {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_resource_use",
+                            OwnerKey::Parameter(parameter),
+                            "direct resource function parameter must consume",
+                        ));
+                    }
+                    let requirement = record.resource_requirement.ok_or_else(|| {
+                        owner_affine_error(
+                            "kernel_affine_function_resource_requirement",
+                            OwnerKey::Parameter(parameter),
+                            "direct resource function parameter requires one exact requirement binding",
+                        )
+                    })?;
+                    resource = Some(ResourceFunctionParameter {
+                        parameter,
+                        requirement,
+                        interface,
+                        parameter_count: function.parameters.len(),
+                    });
+                }
+                Some((ResourceShape::Variant, _)) => {
+                    return Err(owner_affine_error(
+                        "kernel_affine_function_parameter_container",
+                        OwnerKey::Parameter(parameter),
+                        "function resource parameter must use the direct capability-resource type",
+                    ));
+                }
+                None if self.type_contains_resource(record.ty)? => {
+                    return Err(owner_affine_error(
+                        "kernel_affine_function_parameter_container",
+                        OwnerKey::Parameter(parameter),
+                        "function parameter contains a forbidden resource container",
+                    ));
+                }
+                None => {
+                    if record.use_mode != ParameterUse::Unrestricted {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_parameter_use",
+                            OwnerKey::Parameter(parameter),
+                            "nonresource function parameter must be unrestricted",
+                        ));
+                    }
+                    if record.resource_requirement.is_some() {
+                        return Err(owner_affine_error(
+                            "kernel_affine_parameter_requirement_extra",
+                            OwnerKey::Parameter(parameter),
+                            "nonresource function parameter cannot bind a resource requirement",
+                        ));
+                    }
+                }
+            }
+        }
+
+        let Some(resource) = resource else {
+            return Ok(None);
+        };
+        if declaration.visibility != DeclarationVisibility::Private {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_visibility",
+                owner,
+                "resource-bearing task function must be private",
+            ));
+        }
+        if !function.type_parameters.is_empty() {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_generic",
+                owner,
+                "resource-bearing task function cannot be generic",
+            ));
+        }
+        if self.type_contains_resource(function.result)? {
+            return Err(owner_affine_error(
+                "kernel_affine_function_result",
+                owner,
+                "resource-bearing task function cannot return a capability resource",
+            ));
+        }
+        let FunctionEffect::Task { requirements } = function.effect else {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_effect",
+                owner,
+                "resource-bearing function must be a task",
+            ));
+        };
+        if resource.requirement.package != self.read.package_id() {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_package",
+                OwnerKey::Parameter(resource.parameter),
+                "resource parameter must bind a same-package requirement",
+            ));
+        }
+        if !requirements.contains(&resource.requirement) {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_effect",
+                OwnerKey::Parameter(resource.parameter),
+                "resource parameter binding is absent from its function effect",
+            ));
+        }
+        let requirement = self.requirement(resource.requirement)?;
+        if requirement.interface != resource.interface {
+            return Err(owner_affine_error(
+                "kernel_affine_function_resource_interface",
+                OwnerKey::Parameter(resource.parameter),
+                "resource parameter type disagrees with its exact requirement interface",
+            ));
+        }
+        Ok(Some(resource))
+    }
+
     fn case(
         &mut self,
         package: PackageId,
@@ -1192,13 +1666,32 @@ enum ExactRecord {
     Foreign(PackageInterfaceRecord),
 }
 
-fn lexical_binding(reference: LocalValueReference) -> Option<BindingId> {
+fn resource_owner(reference: LocalValueReference) -> Option<LocalValueReference> {
     match reference {
-        LocalValueReference::LexicalBinding(binding)
-        | LocalValueReference::MatchPayload(binding) => Some(binding),
         LocalValueReference::FunctionParameter(_)
-        | LocalValueReference::OperationParameter(_)
-        | LocalValueReference::TransactionBinding(_) => None,
+        | LocalValueReference::LexicalBinding(_)
+        | LocalValueReference::MatchPayload(_) => Some(reference),
+        LocalValueReference::OperationParameter(_) | LocalValueReference::TransactionBinding(_) => {
+            None
+        }
+    }
+}
+
+fn resource_owner_label(reference: LocalValueReference) -> String {
+    match reference {
+        LocalValueReference::FunctionParameter(parameter) => {
+            format!("function parameter {parameter}")
+        }
+        LocalValueReference::LexicalBinding(binding) => format!("binding {binding}"),
+        LocalValueReference::MatchPayload(binding) => {
+            format!("match payload binding {binding}")
+        }
+        LocalValueReference::OperationParameter(parameter) => {
+            format!("operation parameter {parameter}")
+        }
+        LocalValueReference::TransactionBinding(binding) => {
+            format!("transaction binding {binding}")
+        }
     }
 }
 

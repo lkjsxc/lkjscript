@@ -1,10 +1,10 @@
-//! Implementation-disjoint evaluator over canonical Graph 6 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 7 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
 use super::codec::{decode_typed, encode_typed};
-use super::prepare::NormalizedProgram;
+use super::prepare::{NormalizedFunction, NormalizedProgram};
 use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex,
@@ -16,8 +16,9 @@ use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     BindingKind, CaseReference, DeclarationPayload, DeclarationReference, ExpressionOperation,
     FieldReference, FieldSelector, FunctionEffect, ImplementationName, KernelSnapshot,
-    LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
-    PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeObjectDigest,
+    LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterUse,
+    PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeForm,
+    TypeObjectDigest,
 };
 use crate::platform::semantic_id::{
     BindingId, ExpressionId, RepositoryId, RevisionId, TypeParameterId,
@@ -232,7 +233,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 6 authority",
+                        "selected target is absent from canonical Graph 7 authority",
                     ));
                 }
             };
@@ -256,7 +257,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 6 authority",
+                        "selected target port is absent from canonical Graph 7 authority",
                     ));
                 }
             };
@@ -357,7 +358,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: 0,
                 canonical_objects_read: 0,
                 canonical_bytes_read: 0,
-                production_tier: "graph6_reference_records_1",
+                production_tier: "graph7_reference_records_2",
             },
         };
         match operation(&mut state) {
@@ -473,6 +474,19 @@ impl ReferenceState<'_> {
                 "normalized_reference_dependency_package",
                 "exact declaration reference names a package outside the linked artifact closure",
             ));
+        }
+        if let Some(function) = self.program.function(reference) {
+            let function = self
+                .program
+                .functions
+                .get(function.0 as usize)
+                .ok_or_else(|| {
+                    reference_error(
+                        "normalized_reference_function_index",
+                        "exact function index escaped the prepared table",
+                    )
+                })?;
+            self.validate_call_resources(function, &arguments)?;
         }
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
@@ -603,6 +617,61 @@ impl ReferenceState<'_> {
         result
     }
 
+    fn validate_call_resources(
+        &self,
+        function: &NormalizedFunction,
+        arguments: &[NormalizedValue],
+    ) -> Result<(), ExecutionError> {
+        for (index, (parameter, argument)) in function.parameters.iter().zip(arguments).enumerate()
+        {
+            match parameter.resource_requirement {
+                Some(requirement) => {
+                    if index.saturating_add(1) != function.parameters.len()
+                        || parameter.use_mode != ParameterUse::Consume
+                        || !matches!(argument, NormalizedValue::Resource(handle) if handle.is_affine_capability())
+                    {
+                        return Err(reference_error(
+                            "normalized_reference_resource_call_shape",
+                            "resource-bearing call does not use one final consume parameter and direct handle",
+                        ));
+                    }
+                    let NormalizedValue::Resource(handle) = argument else {
+                        return Err(reference_error(
+                            "normalized_reference_resource_call_value",
+                            "resource-bearing call argument is not one exact runtime handle",
+                        ));
+                    };
+                    let requirement = self
+                        .program
+                        .requirements
+                        .get(requirement.0 as usize)
+                        .ok_or_else(|| {
+                            reference_error(
+                                "normalized_reference_resource_call_requirement",
+                                "resource parameter requirement escaped the prepared table",
+                            )
+                        })?;
+                    self.resources.validate_queue_lease_transfer(
+                        requirement.reference,
+                        requirement.interface,
+                        *handle,
+                    )?;
+                }
+                None => {
+                    if parameter.use_mode != ParameterUse::Unrestricted
+                        || reference_value_contains_resource(argument)
+                    {
+                        return Err(reference_error(
+                            "normalized_reference_resource_call_parameter",
+                            "ordinary function parameter use or value contains unbound affine authority",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn evaluate(
         &mut self,
         expression: ExpressionId,
@@ -640,12 +709,21 @@ impl ReferenceState<'_> {
             ExpressionOperation::StaticText { value } => {
                 self.text(value).map(NormalizedValue::StaticText)
             }
-            ExpressionOperation::Local { value } => locals.get(&value).cloned().ok_or_else(|| {
-                reference_error(
-                    "normalized_reference_local_missing",
-                    "canonical local reference escaped its exact lexical scope",
-                )
-            }),
+            ExpressionOperation::Local { value } => {
+                let value = locals.get(&value).cloned().ok_or_else(|| {
+                    reference_error(
+                        "normalized_reference_local_missing",
+                        "canonical local reference escaped its exact lexical scope",
+                    )
+                })?;
+                if reference_value_contains_resource(&value) {
+                    return Err(reference_error(
+                        "normalized_reference_local_resource_use",
+                        "affine local requires an explicit borrow, consume, variant transfer, or match",
+                    ));
+                }
+                Ok(value)
+            }
             ExpressionOperation::Constant { declaration } => {
                 self.call_declaration(declaration, &[], Vec::new())
             }
@@ -701,13 +779,25 @@ impl ReferenceState<'_> {
                 type_arguments,
                 arguments,
             } => {
-                let arguments = self.evaluate_many(&arguments, locals)?;
+                let uses = self.function_parameter_uses(function)?;
+                let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 self.call_declaration(function, &type_arguments, arguments)
             }
             ExpressionOperation::FunctionValue {
                 function,
                 type_arguments,
             } => {
+                let prepared = self.prepared_function(function)?;
+                if prepared
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.resource_requirement.is_some())
+                {
+                    return Err(reference_error(
+                        "normalized_reference_resource_function_value",
+                        "resource-bearing task functions can be used only by direct named call",
+                    ));
+                }
                 let type_arguments = self.resolve_type_arguments(&type_arguments)?.into();
                 self.program
                     .function(function)
@@ -752,7 +842,17 @@ impl ReferenceState<'_> {
             ExpressionOperation::Variant { case, payload } => {
                 let (layout, tag) = self.case_layout(case)?;
                 let payload = payload
-                    .map(|payload| self.evaluate(payload, locals))
+                    .map(|payload| {
+                        self.evaluate_with_use(
+                            payload,
+                            locals,
+                            if self.case_payload_is_direct_resource(layout, tag) {
+                                ParameterUse::Consume
+                            } else {
+                                ParameterUse::Unrestricted
+                            },
+                        )
+                    })
                     .transpose()?
                     .map(Box::new);
                 if payload.is_some() {
@@ -804,7 +904,7 @@ impl ReferenceState<'_> {
                     layout,
                     case,
                     payload,
-                } = self.evaluate(value, locals)?
+                } = self.evaluate_match_value(value, locals)?
                 else {
                     return Err(reference_type_error("match value is not a variant"));
                 };
@@ -852,7 +952,8 @@ impl ReferenceState<'_> {
                 operation,
                 arguments,
             } => {
-                let arguments = self.evaluate_many(&arguments, locals)?;
+                let uses = self.operation_parameter_uses(operation)?;
+                let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 self.capability_call(requirement, operation, arguments)
             }
             ExpressionOperation::Transaction {
@@ -872,6 +973,180 @@ impl ReferenceState<'_> {
             .iter()
             .map(|expression| self.evaluate(*expression, locals))
             .collect()
+    }
+
+    fn evaluate_many_with_uses(
+        &mut self,
+        expressions: &[ExpressionId],
+        uses: &[ParameterUse],
+        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+    ) -> Result<Vec<NormalizedValue>, ExecutionError> {
+        if expressions.len() != uses.len() {
+            return Err(reference_type_error(
+                "call arguments disagree with their exact parameter uses",
+            ));
+        }
+        let mut values = Vec::with_capacity(expressions.len());
+        for (expression, use_mode) in expressions.iter().zip(uses) {
+            values.push(self.evaluate_with_use(*expression, locals, *use_mode)?);
+        }
+        Ok(values)
+    }
+
+    fn evaluate_with_use(
+        &mut self,
+        expression: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+        use_mode: ParameterUse,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        let local = match self.owner(OwnerKey::Expression(expression))? {
+            Some(OwnerRecord::Expression(record)) => match record.operation {
+                ExpressionOperation::Local { value } => Some(value),
+                _ => None,
+            },
+            Some(_) => {
+                return Err(reference_error(
+                    "normalized_reference_expression_kind",
+                    "exact expression identity names another owner kind",
+                ));
+            }
+            None => {
+                return Err(reference_error(
+                    "normalized_reference_expression_missing",
+                    "exact expression is missing from canonical authority",
+                ));
+            }
+        };
+        let value = if let Some(local) = local {
+            match use_mode {
+                ParameterUse::Consume => locals.remove(&local),
+                ParameterUse::Unrestricted | ParameterUse::Borrow => locals.get(&local).cloned(),
+            }
+            .ok_or_else(|| {
+                reference_error(
+                    "normalized_reference_local_missing",
+                    "canonical local reference is absent, consumed, or outside its exact scope",
+                )
+            })?
+        } else {
+            self.evaluate(expression, locals)?
+        };
+        let contains = reference_value_contains_resource(&value);
+        let valid = match use_mode {
+            ParameterUse::Unrestricted => !contains,
+            ParameterUse::Borrow => {
+                matches!(&value, NormalizedValue::Resource(handle) if handle.is_affine_capability())
+            }
+            ParameterUse::Consume => contains,
+        };
+        if !valid {
+            return Err(reference_error(
+                "normalized_reference_local_resource_use",
+                "canonical parameter use disagrees with its runtime affine value",
+            ));
+        }
+        Ok(value)
+    }
+
+    fn evaluate_match_value(
+        &mut self,
+        expression: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        let local = match self.owner(OwnerKey::Expression(expression))? {
+            Some(OwnerRecord::Expression(record)) => match record.operation {
+                ExpressionOperation::Local { value } => Some(value),
+                _ => None,
+            },
+            Some(_) => {
+                return Err(reference_error(
+                    "normalized_reference_expression_kind",
+                    "exact expression identity names another owner kind",
+                ));
+            }
+            None => {
+                return Err(reference_error(
+                    "normalized_reference_expression_missing",
+                    "exact expression is missing from canonical authority",
+                ));
+            }
+        };
+        if let Some(local) = local
+            && locals
+                .get(&local)
+                .is_some_and(reference_value_contains_resource)
+        {
+            return locals.remove(&local).ok_or_else(|| {
+                reference_error(
+                    "normalized_reference_local_missing",
+                    "affine match value was already consumed",
+                )
+            });
+        }
+        self.evaluate(expression, locals)
+    }
+
+    fn prepared_function(
+        &self,
+        reference: DeclarationReference,
+    ) -> Result<&NormalizedFunction, ExecutionError> {
+        let index = self.program.function(reference).ok_or_else(|| {
+            reference_error(
+                "normalized_reference_function_missing",
+                "exact function has no prepared runtime unit",
+            )
+        })?;
+        self.program.functions.get(index.0 as usize).ok_or_else(|| {
+            reference_error(
+                "normalized_reference_function_index",
+                "exact function index escaped the prepared runtime table",
+            )
+        })
+    }
+
+    fn function_parameter_uses(
+        &self,
+        reference: DeclarationReference,
+    ) -> Result<Vec<ParameterUse>, ExecutionError> {
+        Ok(self
+            .prepared_function(reference)?
+            .parameters
+            .iter()
+            .map(|parameter| parameter.use_mode)
+            .collect())
+    }
+
+    fn operation_parameter_uses(
+        &self,
+        reference: OperationReference,
+    ) -> Result<Vec<ParameterUse>, ExecutionError> {
+        self.program
+            .operations
+            .iter()
+            .find(|operation| operation.reference == reference)
+            .map(|operation| {
+                operation
+                    .parameters
+                    .iter()
+                    .map(|parameter| parameter.use_mode)
+                    .collect()
+            })
+            .ok_or_else(|| {
+                reference_error(
+                    "normalized_reference_operation_missing",
+                    "exact capability operation has no prepared runtime definition",
+                )
+            })
+    }
+
+    fn case_payload_is_direct_resource(&self, layout: VariantLayoutIndex, case: u32) -> bool {
+        self.program
+            .variants
+            .get(layout.0 as usize)
+            .and_then(|variant| variant.cases.get(case as usize))
+            .and_then(|case| case.payload)
+            .and_then(|payload| self.program.types.get(&payload))
+            .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. }))
     }
 
     fn binding(
@@ -2400,6 +2675,30 @@ fn reference_map_key_bytes(key: &NormalizedMapKey) -> u64 {
         NormalizedMapKey::Bytes(value) => value.len() as u64,
         NormalizedMapKey::Text(value) => value.len() as u64,
         NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
+    }
+}
+
+fn reference_value_contains_resource(value: &NormalizedValue) -> bool {
+    match value {
+        NormalizedValue::Resource(handle) => handle.is_affine_capability(),
+        NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+            fields.iter().any(reference_value_contains_resource)
+        }
+        NormalizedValue::Record(NormalizedRecord::Structural { fields }) => fields
+            .iter()
+            .any(|(_, value)| reference_value_contains_resource(value)),
+        NormalizedValue::Variant { payload, .. } => payload
+            .as_deref()
+            .is_some_and(reference_value_contains_resource),
+        NormalizedValue::List(items) => items.iter().any(reference_value_contains_resource),
+        NormalizedValue::Map(entries) => entries.values().any(reference_value_contains_resource),
+        NormalizedValue::Unit
+        | NormalizedValue::Bool(_)
+        | NormalizedValue::I64(_)
+        | NormalizedValue::Bytes(_)
+        | NormalizedValue::Text(_)
+        | NormalizedValue::StaticText(_)
+        | NormalizedValue::Function { .. } => false,
     }
 }
 

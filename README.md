@@ -14,7 +14,8 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source and the immutable supported release are product snapshot `0.1.16`. It includes
+Current source is unreleased product snapshot `0.1.17`; the immutable supported release remains
+`v0.1.16`. Both include
 public exact built-in dependency, component, requirement, function-backed
 port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
 authored-operation engine without changing their resulting meaning or atomic project-creation
@@ -26,6 +27,15 @@ Product 0.1.16 adds deterministic bounded `inspect owner ... --detail definition
 live local function. They expose its complete accepted contract, structural body, exact reference
 cutoff, and revision-bound validation facts without exposing storage or creating a second authoring
 format. Immutable v0.1.16 publishes this projection through the same copied-binary workflow.
+
+Unreleased product 0.1.17 adds one canonical exact-requirement binding for a final consume-only
+resource parameter on a private same-package acyclic task helper. Direct named calls move one live
+resource after ordinary arguments finish; compiler, Artifact 12, preparation, VM, and the
+independent reference path recheck the exact requirement/interface and prevent restoration after
+failure. Public compact `add.parameter requirement=...`, plan/apply, and definition inspection
+expose the complete workflow. The maintained `lkjournal` worker now keeps claim/dispatch in its
+stable entry and transfers a live lease once into a graph-authored lifecycle helper. This source
+change has not been tagged or released and changes no deployment or durable queue data.
 
 Product 0.1.15 introduced exact-interface affine capability resources. Public compact records expose
 `type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
@@ -424,11 +434,13 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-Since v0.1.15 the worker claims `QueueLeaseState`, matches its live resource, borrows
-`QueueLeaseInfo`, then consumes the lease through heartbeat and the renewed lease through complete
-or fail. A handle is bound to the exact worker task, resource kind, `DurableQueue` interface, and
-`jobs` requirement. Dropping it performs no implicit queue transition, and no application code
-threads attempt or worker transition identity.
+Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.17 source its stable
+entry claims and matches the live resource, then transfers that lease once into a private
+requirement-bound task helper. The helper borrows `QueueLeaseInfo`, consumes through heartbeat,
+matches the renewed lease, and consumes through complete or fail. A handle is bound to the exact
+worker task scope, resource kind, `DurableQueue` interface, and `jobs` requirement. Dropping it
+performs no implicit queue transition, and no application code threads attempt or worker transition
+identity.
 
 ## Public surface and compatibility
 

@@ -13,11 +13,12 @@ use crate::platform::compiler::unit::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
-    BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
-    ExternalVisibility, FieldReference, Idempotency, ImplementationName, Name, OperationReference,
-    OwnerKey, OwnerRecord, PackageId, ParameterUse, PortReference, RequirementReference,
-    ResourceLimit, SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject,
-    TypeObjectDigest, decode_type_object, encode_type_object,
+    BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference,
+    DeclarationVisibility, EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect,
+    Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
+    ParameterParent, ParameterUse, PortReference, RequirementReference, ResourceLimit,
+    SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
+    decode_type_object, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
@@ -167,6 +168,7 @@ pub struct NormalizedParameter {
     pub name: Name,
     pub ty: TypeObjectDigest,
     pub use_mode: ParameterUse,
+    pub resource_requirement: Option<RequirementIndex>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -304,9 +306,12 @@ impl NormalizedProgram {
             &units,
             &indexes,
             &runtime_owners,
+            &types,
+            &requirements,
             &mut text_cache,
             &mut work,
         )?;
+        validate_resource_call_graph(&functions)?;
         let (components, ports) = prepare_components(
             &artifact,
             &units,
@@ -886,7 +891,9 @@ fn prepare_operations(
         let parameters = record
             .parameters
             .iter()
-            .map(|parameter| normalized_parameter(runtime_owners, reference.package, *parameter))
+            .map(|parameter| {
+                normalized_runtime_parameter(runtime_owners, reference.package, *parameter)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         operations[index.0 as usize] = Some(NormalizedOperation {
             reference: *reference,
@@ -905,6 +912,8 @@ fn prepare_functions(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    requirements: &[NormalizedRequirement],
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<Vec<NormalizedFunction>, Diagnostic> {
@@ -917,14 +926,26 @@ fn prepare_functions(
                 implementation,
             } => (
                 signature.type_parameters.clone(),
-                normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
+                normalized_parameters(
+                    runtime_owners,
+                    declaration.package,
+                    unit,
+                    &signature.parameters,
+                    indexes,
+                )?,
                 index_copy(&unit.tables.types, signature.result, "external result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::External(implementation.clone()),
             ),
             CompilationPayload::Function { signature, code } => (
                 signature.type_parameters.clone(),
-                normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
+                normalized_parameters(
+                    runtime_owners,
+                    declaration.package,
+                    unit,
+                    &signature.parameters,
+                    indexes,
+                )?,
                 index_copy(&unit.tables.types, signature.result, "function result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::Code(translate_code(
@@ -953,6 +974,18 @@ fn prepare_functions(
             }
         };
         let parameter_count = u32_index(parameters.len(), "function parameter count")?;
+        validate_normalized_resource_signature(
+            *declaration,
+            &type_parameters,
+            &parameters,
+            result,
+            &task_requirements,
+            &body,
+            units,
+            runtime_owners,
+            types,
+            requirements,
+        )?;
         functions[index.0 as usize] = Some(NormalizedFunction {
             declaration: *declaration,
             type_parameters: type_parameters.into(),
@@ -964,6 +997,382 @@ fn prepare_functions(
         });
     }
     finish_dense(functions, "function")
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "hostile preparation rechecks one complete resource-bearing signature"
+)]
+fn validate_normalized_resource_signature(
+    declaration: DeclarationReference,
+    type_parameters: &[TypeParameterId],
+    parameters: &[NormalizedParameter],
+    result: TypeObjectDigest,
+    task_requirements: &[RequirementIndex],
+    body: &NormalizedFunctionBody,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    owners: &RuntimeOwnerMap,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    requirements: &[NormalizedRequirement],
+) -> Result<(), Diagnostic> {
+    let mut direct = Vec::new();
+    for (index, parameter) in parameters.iter().enumerate() {
+        let form = types.get(&parameter.ty).ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_parameter_type_missing",
+                "function parameter type is absent from the prepared type closure",
+            )
+        })?;
+        match &form.form {
+            TypeForm::CapabilityResource { interface } => {
+                direct.push((index, parameter, *interface));
+            }
+            _ => {
+                if normalized_type_contains_resource(
+                    parameter.ty,
+                    units,
+                    types,
+                    &mut BTreeSet::new(),
+                    &mut BTreeSet::new(),
+                )? {
+                    return Err(runtime_corrupt(
+                        "normalized_function_resource_container",
+                        "function parameter contains a resource outside its direct type",
+                    ));
+                }
+                if parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_function_parameter_use",
+                        "ordinary function parameter carries affine use or requirement metadata",
+                    ));
+                }
+            }
+        }
+    }
+    if direct.is_empty() {
+        return Ok(());
+    }
+    if direct.len() != 1 {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_count",
+            "function signature contains more than one direct resource parameter",
+        ));
+    }
+    let (index, parameter, interface) = direct[0];
+    let requirement_index = parameter.resource_requirement.ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_function_resource_requirement",
+            "direct resource function parameter omits its exact requirement binding",
+        )
+    })?;
+    if index.saturating_add(1) != parameters.len()
+        || parameter.use_mode != ParameterUse::Consume
+        || !type_parameters.is_empty()
+        || !matches!(body, NormalizedFunctionBody::Code(_))
+        || !task_requirements.contains(&requirement_index)
+    {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_shape",
+            "resource signature is not one final consume parameter on a nongeneric task body",
+        ));
+    }
+    if normalized_type_contains_resource(
+        result,
+        units,
+        types,
+        &mut BTreeSet::new(),
+        &mut BTreeSet::new(),
+    )? {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_result",
+            "resource-bearing function returns affine authority",
+        ));
+    }
+    let requirement = requirements
+        .get(requirement_index.0 as usize)
+        .ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_function_resource_requirement",
+                "resource parameter requirement escaped the prepared table",
+            )
+        })?;
+    if requirement.reference.package != declaration.package || requirement.interface != interface {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_authority",
+            "resource parameter is not bound to the same-package exact requirement and interface",
+        ));
+    }
+    let OwnerRecord::Declaration(record) = exact_runtime_owner(
+        owners,
+        declaration.package,
+        OwnerKey::Declaration(declaration.declaration),
+        "resource-bearing function",
+    )?
+    else {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_owner",
+            "resource-bearing function runtime metadata has another owner kind",
+        ));
+    };
+    let DeclarationPayload::Function(function) = &record.payload else {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_kind",
+            "resource-bearing prepared callable is not a graph task function",
+        ));
+    };
+    let parameter_ids = parameters
+        .iter()
+        .map(|parameter| parameter.parameter)
+        .collect::<Vec<_>>();
+    let requirement_references = task_requirements
+        .iter()
+        .map(|index| {
+            requirements
+                .get(index.0 as usize)
+                .map(|value| value.reference)
+        })
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_function_requirement",
+                "task requirement escaped the prepared table",
+            )
+        })?;
+    if record.visibility != DeclarationVisibility::Private
+        || function.type_parameters != type_parameters
+        || function.parameters != parameter_ids
+        || function.result != result
+        || !matches!(
+            &function.effect,
+            FunctionEffect::Task { requirements: canonical }
+                if canonical == &requirement_references
+                    && canonical.contains(&requirement.reference)
+        )
+    {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_binding",
+            "prepared resource signature disagrees with its private canonical task declaration",
+        ));
+    }
+    let OwnerRecord::Parameter(canonical_parameter) = exact_runtime_owner(
+        owners,
+        declaration.package,
+        OwnerKey::Parameter(parameter.parameter),
+        "resource parameter",
+    )?
+    else {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_parameter",
+            "resource parameter runtime metadata has another owner kind",
+        ));
+    };
+    if canonical_parameter.parent != ParameterParent::Function(declaration.declaration)
+        || canonical_parameter.resource_requirement != Some(requirement.reference)
+    {
+        return Err(runtime_corrupt(
+            "normalized_function_resource_parameter",
+            "resource parameter parent or requirement disagrees with its exact function",
+        ));
+    }
+    Ok(())
+}
+
+fn normalized_type_contains_resource(
+    digest: TypeObjectDigest,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    active_types: &mut BTreeSet<TypeObjectDigest>,
+    active_declarations: &mut BTreeSet<DeclarationReference>,
+) -> Result<bool, Diagnostic> {
+    if !active_types.insert(digest) {
+        return Ok(false);
+    }
+    let object = types.get(&digest).ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_resource_type_missing",
+            "resource-shape validation cannot read one exact prepared type",
+        )
+    })?;
+    let result = match &object.form {
+        TypeForm::CapabilityResource { .. } => true,
+        TypeForm::Named { declaration } => {
+            if !active_declarations.insert(*declaration) {
+                false
+            } else {
+                let unit = declaration_unit(units, *declaration)?;
+                let members = match &unit.payload {
+                    CompilationPayload::Record { fields } => fields
+                        .iter()
+                        .map(|field| {
+                            index_copy(&unit.tables.types, field.ty, "named record field type")
+                                .map(Some)
+                        })
+                        .collect::<Result<Vec<_>, Diagnostic>>()?,
+                    CompilationPayload::Variant { cases } => cases
+                        .iter()
+                        .map(|case| {
+                            case.payload
+                                .map(|payload| {
+                                    index_copy(
+                                        &unit.tables.types,
+                                        payload,
+                                        "named variant case payload type",
+                                    )
+                                })
+                                .transpose()
+                        })
+                        .collect::<Result<Vec<_>, Diagnostic>>()?,
+                    _ => {
+                        return Err(runtime_corrupt(
+                            "normalized_resource_declaration_kind",
+                            "named resource container is not a record or variant compiler unit",
+                        ));
+                    }
+                };
+                let mut contains = false;
+                for member in members.into_iter().flatten() {
+                    if normalized_type_contains_resource(
+                        member,
+                        units,
+                        types,
+                        active_types,
+                        active_declarations,
+                    )? {
+                        contains = true;
+                        break;
+                    }
+                }
+                active_declarations.remove(declaration);
+                contains
+            }
+        }
+        _ => {
+            let mut contains = false;
+            for child in object.child_types() {
+                if normalized_type_contains_resource(
+                    child,
+                    units,
+                    types,
+                    active_types,
+                    active_declarations,
+                )? {
+                    contains = true;
+                    break;
+                }
+            }
+            contains
+        }
+    };
+    active_types.remove(&digest);
+    Ok(result)
+}
+
+fn validate_resource_call_graph(functions: &[NormalizedFunction]) -> Result<(), Diagnostic> {
+    let resource_functions = functions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, function)| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.resource_requirement.is_some())
+                .then_some(index)
+        })
+        .collect::<BTreeSet<_>>();
+    let mut edges = BTreeMap::<usize, BTreeSet<usize>>::new();
+    let mut incoming = resource_functions
+        .iter()
+        .copied()
+        .map(|index| (index, 0_usize))
+        .collect::<BTreeMap<_, _>>();
+    for (caller_index, function) in functions.iter().enumerate() {
+        let NormalizedFunctionBody::Code(code) = &function.body else {
+            continue;
+        };
+        for (instruction_index, instruction) in code.instructions.iter().enumerate() {
+            match instruction {
+                NormalizedInstruction::FunctionValue { function, .. }
+                    if resource_functions.contains(&(function.0 as usize)) =>
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_resource_function_value",
+                        "prepared bytecode creates a value for a resource-bearing function",
+                    ));
+                }
+                NormalizedInstruction::Call {
+                    function: callee,
+                    arguments,
+                    ..
+                } if resource_functions.contains(&(callee.0 as usize)) => {
+                    let callee_index = callee.0 as usize;
+                    let callee = functions.get(callee_index).ok_or_else(|| {
+                        runtime_corrupt(
+                            "normalized_resource_call_target",
+                            "resource call target escaped the prepared function table",
+                        )
+                    })?;
+                    if function.declaration.package != callee.declaration.package
+                        || *arguments != callee.parameter_count
+                        || !matches!(
+                            instruction_index
+                                .checked_sub(1)
+                                .and_then(|index| code.instructions.get(index)),
+                            Some(NormalizedInstruction::LoadLocal {
+                                use_mode: ParameterUse::Consume,
+                                ..
+                            })
+                        )
+                    {
+                        return Err(runtime_corrupt(
+                            "normalized_resource_call_transfer",
+                            "prepared resource call is not one same-package final consume-local transfer",
+                        ));
+                    }
+                    if resource_functions.contains(&caller_index)
+                        && edges.entry(caller_index).or_default().insert(callee_index)
+                    {
+                        let Some(count) = incoming.get_mut(&callee_index) else {
+                            return Err(runtime_corrupt(
+                                "normalized_resource_call_graph",
+                                "resource call graph target is absent from its exact node set",
+                            ));
+                        };
+                        *count = count.saturating_add(1);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut ready = incoming
+        .iter()
+        .filter_map(|(index, count)| (*count == 0).then_some(*index))
+        .collect::<BTreeSet<_>>();
+    let mut visited = 0_usize;
+    while let Some(index) = ready.pop_first() {
+        visited = visited.saturating_add(1);
+        for target in edges.get(&index).into_iter().flatten() {
+            let Some(count) = incoming.get_mut(target) else {
+                return Err(runtime_corrupt(
+                    "normalized_resource_call_graph",
+                    "resource call graph target is absent from its exact node set",
+                ));
+            };
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                ready.insert(*target);
+            }
+        }
+    }
+    if visited != resource_functions.len() {
+        return Err(runtime_corrupt(
+            "normalized_resource_call_cycle",
+            "prepared resource-bearing direct-call graph is cyclic",
+        ));
+    }
+    Ok(())
 }
 
 fn prepare_components(
@@ -1189,15 +1598,72 @@ fn exact_runtime_owner<'a>(
 fn normalized_parameters(
     owners: &RuntimeOwnerMap,
     package: PackageId,
+    unit: &CompilationUnit,
     parameters: &[CompiledParameter],
+    indexes: &RuntimeIndexes,
 ) -> Result<Vec<NormalizedParameter>, Diagnostic> {
     parameters
         .iter()
-        .map(|parameter| normalized_parameter(owners, package, parameter.parameter))
+        .map(|parameter| normalized_parameter(owners, package, unit, *parameter, indexes))
         .collect()
 }
 
 fn normalized_parameter(
+    owners: &RuntimeOwnerMap,
+    package: PackageId,
+    unit: &CompilationUnit,
+    parameter: CompiledParameter,
+    indexes: &RuntimeIndexes,
+) -> Result<NormalizedParameter, Diagnostic> {
+    let parameter_id = parameter.parameter;
+    let OwnerRecord::Parameter(record) = exact_runtime_owner(
+        owners,
+        package,
+        OwnerKey::Parameter(parameter_id),
+        "parameter",
+    )?
+    else {
+        return Err(runtime_corrupt(
+            "normalized_parameter_owner_kind",
+            "parameter runtime metadata has another owner kind",
+        ));
+    };
+    let compiled_type = index_copy(&unit.tables.types, parameter.ty, "parameter type")?;
+    let compiled_requirement = parameter
+        .resource_requirement
+        .map(|requirement| {
+            let reference = index_copy(
+                &unit.tables.requirements,
+                requirement,
+                "parameter resource requirement",
+            )?;
+            required_index(
+                &indexes.requirements,
+                reference,
+                "parameter resource requirement",
+            )
+            .map(|index| (reference, index))
+        })
+        .transpose()?;
+    if compiled_type != record.ty
+        || parameter.use_mode != record.use_mode
+        || compiled_requirement.map(|(reference, _)| reference) != record.resource_requirement
+    {
+        return Err(runtime_corrupt(
+            "normalized_parameter_signature",
+            "compiled parameter type, use, or resource requirement disagrees with exact runtime-owner metadata",
+        ));
+    }
+    Ok(NormalizedParameter {
+        parameter: parameter_id,
+        name: record.name.clone(),
+        ty: record.ty,
+        use_mode: record.use_mode,
+        resource_requirement: compiled_requirement.map(|(_, index)| index),
+    })
+}
+
+fn normalized_runtime_parameter(
     owners: &RuntimeOwnerMap,
     package: PackageId,
     parameter: ParameterId,
@@ -1210,11 +1676,18 @@ fn normalized_parameter(
             "parameter runtime metadata has another owner kind",
         ));
     };
+    if record.resource_requirement.is_some() {
+        return Err(runtime_corrupt(
+            "normalized_operation_resource_binding",
+            "operation parameter carries a function resource requirement binding",
+        ));
+    }
     Ok(NormalizedParameter {
         parameter,
         name: record.name.clone(),
         ty: record.ty,
         use_mode: record.use_mode,
+        resource_requirement: None,
     })
 }
 

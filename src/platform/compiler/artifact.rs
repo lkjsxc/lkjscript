@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 6 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 7 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -10,12 +10,13 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionOperation,
-    ExternalVisibility, FieldReference, Idempotency, LocalValueReference, OperationReference,
-    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageInterfaceDigest,
-    PackageRevisionDigest, ParameterParent, PortImplementation, PortReference,
-    RequirementReference, ResourceLimit, SemanticStateDigest, TypeForm, TypeObjectDigest,
-    decode_owner, decode_owner_binding, decode_type_object, encode_type_object,
+    CaseReference, DeclarationPayload, DeclarationReference, DeclarationVisibility,
+    EncodedOwnerKey, ExpressionOperation, ExternalVisibility, FieldReference, FunctionEffect,
+    Idempotency, LocalValueReference, OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest,
+    OwnerRecord, PackageId, PackageInterfaceDigest, PackageRevisionDigest, ParameterParent,
+    PortImplementation, PortReference, RequirementReference, ResourceLimit, SemanticStateDigest,
+    TypeForm, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
+    encode_type_object,
 };
 use crate::platform::package_interface::{
     build_package_interface, package_interface_digest, validate_package_interface,
@@ -40,17 +41,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-11";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-11";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 11;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF11";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART11";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN11";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-12";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-12";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 12;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF12";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART12";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN12";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v11";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v11";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v11";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v11";
+    "lkjscript.artifact-manifest-envelope.v12";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v12";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v12";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v12";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -228,7 +229,8 @@ where
 const fn runtime_owner_kind(kind: OwnerKind) -> bool {
     matches!(
         kind,
-        OwnerKind::TypeParameter
+        OwnerKind::TaskFunction
+            | OwnerKind::TypeParameter
             | OwnerKind::Field
             | OwnerKind::Case
             | OwnerKind::Operation
@@ -984,6 +986,11 @@ fn validate_declared_closure(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeOwnerExpectation {
+    ResourceFunction {
+        parameters: Vec<ParameterId>,
+        result: TypeObjectDigest,
+        requirements: Vec<RequirementReference>,
+    },
     TypeParameter {
         declaration: DeclarationId,
     },
@@ -1006,6 +1013,7 @@ pub(crate) enum RuntimeOwnerExpectation {
         parent: ParameterParent,
         ty: TypeObjectDigest,
         use_mode: crate::platform::kernel::ParameterUse,
+        resource_requirement: Option<RequirementReference>,
     },
     Requirement {
         declaration: DeclarationId,
@@ -1035,6 +1043,7 @@ pub(crate) enum RuntimePortImplementation {
 impl RuntimeOwnerExpectation {
     pub(crate) const fn kind(&self) -> OwnerKind {
         match self {
+            Self::ResourceFunction { .. } => OwnerKind::TaskFunction,
             Self::TypeParameter { .. } => OwnerKind::TypeParameter,
             Self::Field { .. } => OwnerKind::Field,
             Self::Case { .. } => OwnerKind::Case,
@@ -1048,6 +1057,30 @@ impl RuntimeOwnerExpectation {
 
     fn matches(&self, record: &OwnerRecord) -> bool {
         match (self, record) {
+            (
+                Self::ResourceFunction {
+                    parameters,
+                    result,
+                    requirements,
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                matches!(
+                    (&record.visibility, &record.payload),
+                    (
+                        DeclarationVisibility::Private,
+                        DeclarationPayload::Function(function),
+                    ) if function.type_parameters.is_empty()
+                        && function.parameters == *parameters
+                        && function.result == *result
+                        && matches!(
+                            &function.effect,
+                            FunctionEffect::Task {
+                                requirements: actual,
+                            } if actual == requirements
+                        )
+                )
+            }
             (Self::TypeParameter { declaration }, OwnerRecord::TypeParameter(record)) => {
                 record.declaration == *declaration
             }
@@ -1082,9 +1115,15 @@ impl RuntimeOwnerExpectation {
                     parent,
                     ty,
                     use_mode,
+                    resource_requirement,
                 },
                 OwnerRecord::Parameter(record),
-            ) => record.parent == *parent && record.ty == *ty && record.use_mode == *use_mode,
+            ) => {
+                record.parent == *parent
+                    && record.ty == *ty
+                    && record.use_mode == *use_mode
+                    && record.resource_requirement == *resource_requirement
+            }
             (
                 Self::Requirement {
                     declaration,
@@ -1229,8 +1268,7 @@ pub(crate) fn runtime_owner_expectations(
                     }
                 }
             }
-            CompilationPayload::External { signature, .. }
-            | CompilationPayload::Function { signature, .. } => {
+            CompilationPayload::External { signature, .. } => {
                 let declaration = declaration_owner(*owner, "function")?;
                 insert_signature_expectations(
                     &mut expected,
@@ -1239,6 +1277,52 @@ pub(crate) fn runtime_owner_expectations(
                     signature,
                     unit,
                 )?;
+            }
+            CompilationPayload::Function { signature, .. } => {
+                let declaration = declaration_owner(*owner, "function")?;
+                insert_signature_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    signature,
+                    unit,
+                )?;
+                if signature
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.resource_requirement.is_some())
+                {
+                    let parameters = signature
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.parameter)
+                        .collect();
+                    let result = table_value(
+                        &unit.tables.types,
+                        signature.result,
+                        "resource function result type",
+                    )?;
+                    let requirements = signature
+                        .task_requirements
+                        .iter()
+                        .map(|requirement| {
+                            table_value(
+                                &unit.tables.requirements,
+                                *requirement,
+                                "resource function requirement",
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Declaration(declaration)),
+                        RuntimeOwnerExpectation::ResourceFunction {
+                            parameters,
+                            result,
+                            requirements,
+                        },
+                    )?;
+                }
             }
             CompilationPayload::Component {
                 requirements,
@@ -1410,6 +1494,16 @@ fn insert_parameter_expectation(
             parent,
             ty: table_value(&unit.tables.types, parameter.ty, "runtime parameter type")?,
             use_mode: parameter.use_mode,
+            resource_requirement: parameter
+                .resource_requirement
+                .map(|requirement| {
+                    table_value(
+                        &unit.tables.requirements,
+                        requirement,
+                        "runtime parameter requirement",
+                    )
+                })
+                .transpose()?,
         },
     )
 }

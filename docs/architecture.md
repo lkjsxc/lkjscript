@@ -155,9 +155,10 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source and immutable public latest are product snapshot 0.1.16. Its
-revision-pinned local-function definition inspection and contributor proof have entered the
-distribution path above without adding graph meaning.
+unchanged. Current source is unreleased product snapshot 0.1.17; immutable public latest remains
+v0.1.16. The source adds requirement-bound affine task handoff and a maintained worker split. It
+does not enter the distribution path above, alter the immutable release, or select deployment or
+operational data.
 Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
@@ -257,14 +258,14 @@ standard and `lkjournal` roots contain only this typed meaning graph layout.
 One exact-interface right remains linked across semantic, derived, and operational boundaries:
 
 ```text
-CapabilityResource<Interface> + parameter use
-                 │ exact requirement provenance
+CapabilityResource<Interface> + parameter use / optional helper binding
+                 │ exact acquiring requirement provenance
                  ▼
  language-order affine validator + disjoint finite oracle
-                 │ borrow / consume decisions
+                 │ borrow / consume / one direct acyclic handoff
                  ▼
- compiler-unit 2 / bytecode 2 local loads
-                 │ strict current-artifact shape and use validation
+ compiler-unit 3 / bytecode 3 local loads + exact binding
+                 │ Artifact 12 shape/call-graph validation
                  ▼
  task resource scope: scope + kind + interface + requirement
                  │ reserve before effect; commit or release
@@ -277,12 +278,16 @@ compiler and artifact are derived carriers. A normalized resource entry is the s
 right; ordinary values cannot recreate it. The queue engine may retain private job, attempt, and
 worker fields because operational queue state is a separate authority, but those fields never
 re-enter graph values or public adapter signatures. A resource-bearing nominal variant moves as a
-whole and transfers its one direct payload only to the selected match arm.
+whole and transfers its one direct payload only to the selected match arm. One final consume
+parameter may bind the exact task requirement on a private same-package helper; direct call frames
+share the task scope, recheck the handle, and form an acyclic resource-call graph. No host frame or
+function value becomes parallel authority.
 
 Claim and heartbeat reserve scope capacity before performing a possibly visible queue effect.
 Empty, stale, failed, or cancelled outcomes release the reservation; success commits a live handle.
-Borrow leaves the entry live, while consume removes it before calling the adapter. Task cleanup
-drops only local entries and never performs an implicit queue transition. This ordering prevents
+Borrow leaves the entry live, while consume removes lexical ownership before either a direct
+helper call or adapter call. Failure after helper transfer does not restore the caller. Task
+cleanup drops only local entries and never performs an implicit queue transition. This ordering prevents
 avoidable post-effect allocation loss without claiming exactly-once work.
 
 ## Publication and derived cache handoff

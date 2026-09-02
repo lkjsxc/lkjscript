@@ -1,4 +1,4 @@
-//! Strict typed JSON conversion at normalized Graph 6 runner boundaries.
+//! Strict typed JSON conversion at normalized Graph 7 runner boundaries.
 
 use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{

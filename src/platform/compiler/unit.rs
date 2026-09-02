@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-2";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 2;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-2";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 2;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN02";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v2";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v2";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-3";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 3;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-3";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 3;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN03";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v3";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v3";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -184,6 +184,7 @@ pub struct CompiledParameter {
     pub parameter: ParameterId,
     pub ty: u32,
     pub use_mode: ParameterUse,
+    pub resource_requirement: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -431,7 +432,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 6 inline bound",
+                        "compiled inline text exceeds the Graph 7 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -497,7 +498,7 @@ impl CompilationPayload {
             }
             Self::External { signature, .. } => {
                 require_kind(source, OwnerKind::External)?;
-                signature.validate(tables)?;
+                signature.validate(tables, source.kind)?;
             }
             Self::Function { signature, code } => {
                 if !matches!(
@@ -509,7 +510,7 @@ impl CompilationPayload {
                         "function payload is bound to another owner kind",
                     ));
                 }
-                signature.validate(tables)?;
+                signature.validate(tables, source.kind)?;
                 code.validate(tables)?;
                 if code.parameter_count as usize != signature.parameters.len() {
                     return Err(unit_corrupt(
@@ -577,7 +578,7 @@ impl CompilationPayload {
 }
 
 impl CompiledSignature {
-    fn validate(&self, tables: &CompilationTables) -> Result<(), Diagnostic> {
+    fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
         require_item_count("compiled type parameters", self.type_parameters.len(), true)?;
         require_item_count("compiled parameters", self.parameters.len(), true)?;
         require_unique("compiled type parameter", &self.type_parameters)?;
@@ -591,6 +592,13 @@ impl CompiledSignature {
         )?;
         for parameter in &self.parameters {
             require_index("parameter type", parameter.ty, tables.types.len())?;
+            if let Some(requirement) = parameter.resource_requirement {
+                require_index(
+                    "parameter resource requirement",
+                    requirement,
+                    tables.requirements.len(),
+                )?;
+            }
         }
         require_index("signature result", self.result, tables.types.len())?;
         for requirement in &self.task_requirements {
@@ -600,7 +608,56 @@ impl CompiledSignature {
                 tables.requirements.len(),
             )?;
         }
-        require_unique("signature requirement", &self.task_requirements)
+        require_unique("signature requirement", &self.task_requirements)?;
+        let bound = self
+            .parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(index, parameter)| {
+                parameter
+                    .resource_requirement
+                    .map(|requirement| (index, parameter, requirement))
+            })
+            .collect::<Vec<_>>();
+        if kind == OwnerKind::External
+            && self.parameters.iter().any(|parameter| {
+                parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+            })
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_external_resource_parameter",
+                "compiled external parameters cannot use or bind affine resources",
+            ));
+        }
+        if bound.len() > 1 {
+            return Err(unit_corrupt(
+                "compiler_unit_resource_parameter_count",
+                "compiled function signature binds more than one resource parameter",
+            ));
+        }
+        if let Some((index, parameter, requirement)) = bound.first().copied() {
+            if kind != OwnerKind::TaskFunction
+                || index.saturating_add(1) != self.parameters.len()
+                || parameter.use_mode != ParameterUse::Consume
+                || !self.task_requirements.contains(&requirement)
+            {
+                return Err(unit_corrupt(
+                    "compiler_unit_resource_parameter_shape",
+                    "compiled resource parameter is not one final consume parameter bound to its task requirement",
+                ));
+            }
+        }
+        if self.parameters.iter().any(|parameter| {
+            parameter.use_mode != ParameterUse::Unrestricted
+                && parameter.resource_requirement.is_none()
+        }) {
+            return Err(unit_corrupt(
+                "compiler_unit_function_parameter_use",
+                "compiled function parameter use requires an exact resource binding",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -624,6 +681,12 @@ impl CompiledOperationLayout {
         require_item_count("operation parameters", self.parameters.len(), true)?;
         for parameter in &self.parameters {
             require_index("operation parameter type", parameter.ty, tables.types.len())?;
+            if parameter.resource_requirement.is_some() {
+                return Err(unit_corrupt(
+                    "compiler_unit_operation_resource_binding",
+                    "compiled operation parameter carries a function resource binding",
+                ));
+            }
         }
         require_index("operation result", self.result, tables.types.len())
     }

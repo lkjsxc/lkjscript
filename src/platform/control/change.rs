@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-9";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 9;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-7";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 7;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-10";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 10;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-8";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 8;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -147,11 +147,12 @@ pub(crate) enum CompactChangeFieldForm {
     Idempotency,
     ExternalVisibility,
     ParameterUse,
+    RequirementReference,
     ImplementationName,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 25] = [
+    pub(crate) const ALL: [Self; 26] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -176,6 +177,7 @@ impl CompactChangeFieldForm {
         Self::Idempotency,
         Self::ExternalVisibility,
         Self::ParameterUse,
+        Self::RequirementReference,
         Self::ImplementationName,
     ];
 
@@ -205,6 +207,7 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotency",
             Self::ExternalVisibility => "external_visibility",
             Self::ParameterUse => "parameter_use",
+            Self::RequirementReference => "requirement_reference",
             Self::ImplementationName => "implementation_name",
         }
     }
@@ -235,6 +238,7 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
+            Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
         }
     }
@@ -720,6 +724,11 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "use",
                 required: false,
                 form: FieldForm::ParameterUse,
+            },
+            CompactChangeOperationField {
+                name: "requirement",
+                required: false,
+                form: FieldForm::RequirementReference,
             },
         ],
         direct: None,
@@ -2442,6 +2451,9 @@ impl Decoder {
                             .map(|_| parse_parameter_use(record, "use"))
                             .transpose()?
                             .unwrap_or_default(),
+                        resource_requirement: optional(record, "requirement")
+                            .map(|_| parse_requirement_reference(record, "requirement"))
+                            .transpose()?,
                     },
                 })
             }

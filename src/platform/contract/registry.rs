@@ -89,16 +89,16 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-6";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 6;
-pub const CLI_CONTRACT_VERSION: u16 = 18;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-7";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 7;
+pub const CLI_CONTRACT_VERSION: u16 = 19;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-1";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 1;
+    "lkjscript-function-definition-projection-2";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 2;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -134,13 +134,13 @@ pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: u64 = MAXIMUM_FUNCTION_DEFINI
     + MAXIMUM_FUNCTION_DEFINITION_FACT_READS
         * super::super::witness::contract::MAXIMUM_OWNER_SUMMARY_BYTES as u64;
 
-pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT01";
+pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT02";
 pub(crate) const FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN: &str =
-    "lkjscript.function-definition.continuation-integrity.v1";
+    "lkjscript.function-definition.continuation-integrity.v2";
 pub(crate) const FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN: &str =
-    "lkjscript.function-definition.logical.v1";
+    "lkjscript.function-definition.logical.v2";
 pub(crate) const FUNCTION_DEFINITION_RECORD_KEY_DOMAIN: &str =
-    "lkjscript.function-definition.record-key.v1";
+    "lkjscript.function-definition.record-key.v2";
 
 pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("result", "status"),
@@ -201,6 +201,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.parameter", "name"),
     ("definition.parameter", "type"),
     ("definition.parameter", "use"),
+    ("definition.parameter", "requirement"),
     ("definition.requirement", "id"),
     ("definition.requirement", "parent"),
     ("definition.requirement", "index"),
@@ -296,8 +297,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("schema", "capabilities"),
 ];
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v6";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v6";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v7";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v7";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -577,7 +578,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN06", "LKJTYP06", "LKJSMR01", "LKJDEP06", "LKJRET06"],
+            magic_values: &["LKJOWN07", "LKJTYP07", "LKJSMR01", "LKJDEP07", "LKJRET07"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -700,7 +701,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM06"],
+            magic_values: &["LKJSUM07"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -723,7 +724,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT03"],
+            magic_values: &["LKJWIT04"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -734,7 +735,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 6,
+            version: 7,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -760,7 +761,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR06", "LKJABG01"],
+            magic_values: &["LKJACR07", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -839,7 +840,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF04"],
+            magic_values: &["LKJPIF05"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -893,7 +894,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN02"],
+            magic_values: &["LKJCUN03"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -915,7 +916,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF11"],
+            magic_values: &["LKJAMF12"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -929,7 +930,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART11", "LKJAEN11"],
+            magic_values: &["LKJART12", "LKJAEN12"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -1022,7 +1023,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::ResidentRuntime,
             "normalized artifact resident runtime",
-            "lkjscript-resident-runtime-2",
+            "lkjscript-resident-runtime-3",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -2854,10 +2855,118 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Keep it direct or in one nominal variant case.",
         ),
         diagnostic(
-            "kernel_affine_function_parameter",
+            "kernel_affine_function_parameter_container",
             DiagnosticClass::Semantic,
-            "A function parameter contains a capability resource.",
-            "Keep resources task-local; resource transfer across function boundaries is not supported.",
+            "A function parameter contains capability authority indirectly.",
+            "Use one direct final capability-resource parameter or remove the resource container.",
+        ),
+        diagnostic(
+            "kernel_affine_function_parameter_use",
+            DiagnosticClass::Semantic,
+            "A function parameter uses an unsupported affine mode.",
+            "Use unrestricted for ordinary values and consume for the one direct final resource parameter.",
+        ),
+        diagnostic(
+            "kernel_affine_parameter_requirement_extra",
+            DiagnosticClass::Semantic,
+            "A nonresource or operation parameter declares a resource requirement binding.",
+            "Omit requirement except on one direct consume resource parameter of a private task function.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_use",
+            DiagnosticClass::Semantic,
+            "A direct function resource parameter is not consume-only.",
+            "Set use=consume on the one final resource parameter.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_requirement",
+            DiagnosticClass::Semantic,
+            "A direct function resource parameter omits its exact requirement binding.",
+            "Bind requirement to the same exact task requirement that owns the resource interface.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_count",
+            DiagnosticClass::Semantic,
+            "A function signature contains more than one direct resource parameter.",
+            "Keep exactly one direct consume resource parameter.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_order",
+            DiagnosticClass::Semantic,
+            "A function resource parameter is not final in parameter order.",
+            "Move the resource parameter after all unrestricted parameters.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_visibility",
+            DiagnosticClass::Semantic,
+            "A resource-bearing function is not private.",
+            "Keep the resource-bearing helper private to its package.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_generic",
+            DiagnosticClass::Semantic,
+            "A resource-bearing function is generic.",
+            "Remove type parameters from the resource-bearing helper.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_effect",
+            DiagnosticClass::Semantic,
+            "A resource-bearing function is not a task with the bound requirement in its effect.",
+            "Use a task effect containing the exact bound requirement.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_package",
+            DiagnosticClass::Semantic,
+            "A resource parameter binds a requirement outside its owning package.",
+            "Bind a requirement owned by the same package and task function.",
+        ),
+        diagnostic(
+            "kernel_affine_function_resource_interface",
+            DiagnosticClass::Semantic,
+            "A resource parameter type disagrees with its exact bound requirement interface.",
+            "Use the exact capability-resource interface selected by the bound requirement.",
+        ),
+        diagnostic(
+            "kernel_affine_external_parameter",
+            DiagnosticClass::Semantic,
+            "An external function parameter contains capability authority.",
+            "Keep resource transfer on private graph-authored task functions.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_function_value",
+            DiagnosticClass::Semantic,
+            "A resource-bearing function is used as a function value.",
+            "Call the private helper directly by its exact declaration reference.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_arguments",
+            DiagnosticClass::Semantic,
+            "A resource-bearing direct call has an unsupported argument shape.",
+            "Pass unrestricted arguments first and one direct live owner as the final argument.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_package",
+            DiagnosticClass::Semantic,
+            "A resource-bearing call crosses a package boundary.",
+            "Call a private helper in the caller's package.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_interface",
+            DiagnosticClass::Semantic,
+            "A transferred resource has the wrong exact interface.",
+            "Transfer a live owner whose interface matches the bound requirement exactly.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_scope",
+            DiagnosticClass::Semantic,
+            "A resource transfer appears outside one exact task-function validation scope.",
+            "Keep transfer inside a directly named private task function.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_cycle",
+            DiagnosticClass::Semantic,
+            "The resource-bearing direct-call graph is cyclic.",
+            "Keep resource handoff helpers acyclic.",
         ),
         diagnostic(
             "kernel_affine_function_result",
@@ -5480,6 +5589,7 @@ fn validate_compact_change_inventory(
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
+            ("add.parameter", "requirement"),
         ];
         if !field.required && !optional.contains(&(field.operation, field.name)) {
             return Err(format!(
@@ -5493,6 +5603,7 @@ fn validate_compact_change_inventory(
         ("add.parameter", "function"),
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
+        ("add.parameter", "requirement"),
     ] {
         if !fields
             .iter()
@@ -5659,9 +5770,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-1"
+            "lkjscript-function-definition-projection-2"
         );
-        assert_eq!(contract.version, 1);
+        assert_eq!(contract.version, 2);
         assert_eq!(
             contract_descriptors()
                 .iter()

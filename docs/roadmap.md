@@ -12,9 +12,12 @@ SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, a
 and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
 100,100-owner full-lifecycle admission, exact-interface affine capability resources, and the
 resource-owned maintained durable-queue worker cutover, plus complete revision-pinned local-function
-definition projection with stateless paging and disjoint maintained proof are current architecture.
+definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
+bound consume-only private task-function handoff with the maintained worker split are current
+architecture.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are the supported public `x86_64-unknown-linux-musl` distribution. Its exact and latest
+`v0.1.16` are distinct: source is unreleased product 0.1.17, while v0.1.16 remains the supported
+public `x86_64-unknown-linux-musl` distribution. Its exact and latest
 downloads independently passed static inspection, distributed HTTP with complete function-definition
 projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker
 acceptance with one exact candidate identity through publication.
@@ -32,12 +35,12 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    framing, subscriptions, reconnect/backoff, NIP-01 event canonicalization, signing/key authority,
    relay authentication, replay visibility, and an independent raw WebSocket oracle before adding
    graph meaning or a deployment adapter.
-3. **Workload-driven resource transfer across task functions.** Extend the current lexical affine
-   slice only when a maintained workload cannot keep acquisition and consumption inside one task
-   body. Define call ownership, result transfer, recursion, cancellation, branch joins, artifact
-   movement, and an independent oracle before permitting any resource-valued function signature.
-   Do not generalize this into closures, affine containers, or linear must-use values without their
-   own workloads and proof.
+3. **Broader affine lifetime or result protocols from a maintained workload.** The current direct
+   handoff intentionally admits only one final consume parameter on a private same-package acyclic
+   task helper. Add resource results, borrowing parameters, public or cross-package signatures,
+   closures, affine containers, async ownership, or linear must-use values only when a maintained
+   workload fixes the complete lifetime/failure protocol and an independent oracle, migration, and
+   predecessor deletion prove it.
 4. **Million-owner compiler admission and separately selected data/history scale.** The current
    harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
    capacity attempt reached 275,000 accepted modules before its one-hour allocation and is

@@ -1,4 +1,4 @@
-//! Typed Graph 6 declaration, type-object, and expression authoring builders.
+//! Typed Graph 7 declaration, type-object, and expression authoring builders.
 
 mod declarations;
 mod mutation;
@@ -47,6 +47,7 @@ pub struct AuthoredParameter {
     pub name: Name,
     pub ty: AuthoredType,
     pub use_mode: ParameterUse,
+    pub resource_requirement: Option<AuthoredRequirementReference>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -474,6 +475,11 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
     for parameter in parameters {
         let id = lowerer.function_parameter_symbol(&parameter.symbol)?;
         let ty = lowerer.lower_type(&parameter.ty)?;
+        let resource_requirement = parameter
+            .resource_requirement
+            .as_ref()
+            .map(|requirement| lowerer.lower_requirement_reference(requirement))
+            .transpose()?;
         parameter_ids.push(id);
         lowerer.insert_created(OwnerRecord::Parameter(ParameterRecord {
             header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
@@ -481,6 +487,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             name: parameter.name.clone(),
             ty,
             use_mode: parameter.use_mode,
+            resource_requirement,
         }))?;
     }
     let result = lowerer.lower_type(result)?;

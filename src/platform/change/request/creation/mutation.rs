@@ -1,4 +1,4 @@
-//! Typed additions and contract updates for existing Graph 6 owners.
+//! Typed additions and contract updates for existing Graph 7 owners.
 
 use super::*;
 use crate::platform::kernel::{
@@ -254,6 +254,7 @@ fn lower_add_operation<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
             name: parameter.name.clone(),
             ty,
             use_mode: parameter.use_mode,
+            resource_requirement: None,
         }))?;
     }
     let result = lowerer.lower_type(&operation.result)?;
@@ -322,6 +323,11 @@ fn lower_add_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
     parameter: &AuthoredParameter,
 ) -> Result<(), Diagnostic> {
     let ty = lowerer.lower_type(&parameter.ty)?;
+    let resource_requirement = parameter
+        .resource_requirement
+        .as_ref()
+        .map(|requirement| lowerer.lower_requirement_reference(requirement))
+        .transpose()?;
     let (parameter_id, parent) = match selector {
         ParameterParentSelector::Declaration { declaration } => {
             let declaration = lowerer.resolve_declaration(declaration)?;
@@ -365,6 +371,7 @@ fn lower_add_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
         name: parameter.name.clone(),
         ty,
         use_mode: parameter.use_mode,
+        resource_requirement,
     }))
 }
 

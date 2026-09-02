@@ -1,4 +1,4 @@
-//! Normalized Graph 6 semantic owner records.
+//! Normalized Graph 7 semantic owner records.
 
 use super::contract::{
     GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_DOCUMENTATION_BYTES,
@@ -467,6 +467,7 @@ pub struct ParameterRecord {
     pub name: Name,
     pub ty: TypeObjectDigest,
     pub use_mode: ParameterUse,
+    pub resource_requirement: Option<RequirementReference>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -771,7 +772,7 @@ fn validate_ordered_unique<T: Ord + Copy>(
     if (!allow_zero && values.is_empty()) || values.len() > MAXIMUM_CHILDREN {
         return Err(owner_error(
             "kernel_owner_child_count",
-            format!("{label} count is outside the Graph 6 bound"),
+            format!("{label} count is outside the Graph 7 bound"),
         ));
     }
     let unique = values.iter().copied().collect::<BTreeSet<_>>();

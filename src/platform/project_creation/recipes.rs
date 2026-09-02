@@ -45,7 +45,7 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_command_standard_types",
-            "built-in standard primitive types disagree with canonical Graph 6 types",
+            "built-in standard primitive types disagree with canonical Graph 7 types",
         ));
     }
 
@@ -115,7 +115,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_http_standard_types",
-            "built-in HTTP recipe declarations disagree with canonical Graph 6 primitive types",
+            "built-in HTTP recipe declarations disagree with canonical Graph 7 primitive types",
         ));
     }
 
@@ -234,7 +234,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
     {
         return Err(recipe_error(
             "new_nostr_standard_types",
-            "built-in standard HTTP server and client types disagree with canonical Graph 6 types",
+            "built-in standard HTTP server and client types disagree with canonical Graph 7 types",
         ));
     }
 
@@ -589,6 +589,7 @@ fn parameter(
             name: name(parameter_name)?,
             ty,
             use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+            resource_requirement: None,
         },
     })
 }

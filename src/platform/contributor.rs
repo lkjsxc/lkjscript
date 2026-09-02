@@ -1099,7 +1099,7 @@ fn hash_endpoint(hasher: &mut Hasher, endpoint: RelationEndpoint) {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_change_default_maximum_operations, function_definition_oracle,
+        GraphRepository, compact_change_default_maximum_operations, function_definition_oracle,
         largest_function_definition_oracle, semantic_inventory,
     };
     use std::path::Path;
@@ -1133,29 +1133,31 @@ mod tests {
         assert_eq!(oracle.kind, "task_function");
         assert_eq!(oracle.name, "run");
         assert_eq!(oracle.contract_owners.len(), 3);
-        assert_eq!(oracle.body_preorder.len(), 48);
-        assert_eq!(oracle.structural_edges, 51);
-        assert_eq!(oracle.maximum_depth, 8);
-        assert!(
-            oracle
-                .body_preorder
-                .iter()
-                .any(|owner| owner.name.as_deref() == Some("lease-info"))
-        );
-        assert!(
-            oracle
-                .body_preorder
-                .iter()
-                .any(|owner| owner.name.as_deref() == Some("renewed-lease"))
-        );
-        assert!(oracle.matches.len() >= 2);
+        assert_eq!(oracle.body_preorder.len(), 15);
+        assert_eq!(oracle.structural_edges, 18);
+        assert_eq!(oracle.maximum_depth, 3);
+        assert!(oracle.body_preorder.iter().all(|owner| {
+            owner.name.as_deref() != Some("lease-info")
+                && owner.name.as_deref() != Some("renewed-lease")
+        }));
+        assert_eq!(oracle.matches.len(), 1);
+        assert!(oracle.relations.iter().any(|relation| {
+            relation.kind == "function_call"
+                && relation
+                    .target
+                    .ends_with("decl_7f443401f4946c55fa239c5430e8ad93")
+        }));
         let operation_uses = oracle
             .capability_calls
             .iter()
             .map(|call| (call.operation.as_str(), call.parameter_uses.as_slice()))
             .collect::<Vec<_>>();
+        assert!(
+            operation_uses.iter().any(|(operation, _)| {
+                operation.ends_with("op_23bc0c498113c09a2ff0a4cf9c0a37ab")
+            })
+        );
         for operation in [
-            "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
             "op_1a5491eb1c3ef3d15ec28268b6f04afc",
             "op_f593ba236055aa1afa6c02eaf0db6a64",
             "op_679b43bb7dc0b298a7706d4e8a7bef23",
@@ -1164,11 +1166,46 @@ mod tests {
             assert!(
                 operation_uses
                     .iter()
-                    .any(|(observed, _)| observed.ends_with(operation)),
-                "worker oracle omitted operation {operation}"
+                    .all(|(observed, _)| !observed.ends_with(operation)),
+                "entry retained transferred operation {operation}"
             );
         }
-        assert!(operation_uses.iter().any(|(operation, uses)| {
+
+        let helper = function_definition_oracle(&project, "decl_7f443401f4946c55fa239c5430e8ad93")
+            .expect("maintained worker helper definition oracle");
+        assert_eq!(helper.kind, "task_function");
+        assert_eq!(helper.name, "process-lease");
+        assert_eq!(helper.parameters, 2);
+        assert_eq!(helper.requirements, 1);
+        assert_eq!(helper.contract_owners.len(), 3);
+        assert_eq!(helper.body_preorder.len(), 36);
+        assert_eq!(helper.structural_edges, 39);
+        assert_eq!(helper.maximum_depth, 6);
+        assert!(
+            helper
+                .body_preorder
+                .iter()
+                .any(|owner| owner.name.as_deref() == Some("lease-info"))
+        );
+        assert!(
+            helper
+                .body_preorder
+                .iter()
+                .any(|owner| owner.name.as_deref() == Some("renewed-lease"))
+        );
+        assert_eq!(helper.matches.len(), 1);
+        assert!(helper.relations.iter().any(|relation| {
+            relation.kind == "parameter_requirement"
+                && relation
+                    .target
+                    .ends_with("req_0cebded5cb056cda5484e39aa40594ad")
+        }));
+        let helper_operation_uses = helper
+            .capability_calls
+            .iter()
+            .map(|call| (call.operation.as_str(), call.parameter_uses.as_slice()))
+            .collect::<Vec<_>>();
+        assert!(helper_operation_uses.iter().any(|(operation, uses)| {
             operation.ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
                 && uses.contains(&"borrow".to_owned())
         }));
@@ -1177,10 +1214,34 @@ mod tests {
             "op_679b43bb7dc0b298a7706d4e8a7bef23",
             "op_242e065f9738b454e2328ed0e558e6a0",
         ] {
-            assert!(operation_uses.iter().any(|(observed, uses)| {
+            assert!(helper_operation_uses.iter().any(|(observed, uses)| {
                 observed.ends_with(operation) && uses.contains(&"consume".to_owned())
             }));
         }
+        let repository = GraphRepository::open(&project).expect("maintained worker repository");
+        let view = repository.view_current().expect("maintained worker view");
+        let complete = view
+            .reconstruct_full_oracle()
+            .expect("maintained complete authority");
+        let rebuilt = crate::platform::witness::rebuild_full_witness(&complete.value)
+            .expect("maintained complete witness");
+        let mut summary_mismatches = Vec::new();
+        for owner in complete.value.owners.keys().copied() {
+            let bound = view
+                .definition_reader()
+                .summary(owner)
+                .expect("bound maintained summary read")
+                .expect("bound maintained summary");
+            if bound.summary != rebuilt.summaries[&owner]
+                || bound.digest != rebuilt.entries.summaries[&owner]
+            {
+                summary_mismatches.push(owner);
+            }
+        }
+        assert!(
+            summary_mismatches.is_empty(),
+            "incremental and complete summaries disagree for {summary_mismatches:?}"
+        );
         assert_eq!(
             std::fs::read(project.join("HEAD")).expect("lkjournal HEAD after oracle"),
             before

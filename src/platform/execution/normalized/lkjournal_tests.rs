@@ -1,14 +1,19 @@
 //! Maintained `lkjournal` contract tests over the checked-in artifact bundle.
 
-use super::prepare::{NormalizedProgram, NormalizedRequirement};
+use super::prepare::{
+    NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram, NormalizedRequirement,
+};
 use crate::platform::compiler::load_artifact;
-use crate::platform::kernel::Name;
+use crate::platform::kernel::{Name, ParameterUse};
 use std::collections::BTreeSet;
 use std::sync::{Arc, OnceLock};
 
 const LKJOURNAL_ARTIFACT: &[u8] =
     include_bytes!("../../../../applications/lkjournal/generated/lkjournal.lkja");
 const DATA_INTERFACE: &str = "decl_640e96fa57dee1c09557eb4bc7b53398";
+const WORKER_ENTRY: &str = "decl_a914bb78de075ff44a857ac028d704f3";
+const WORKER_HELPER: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
+const WORKER_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 
 fn program() -> Arc<NormalizedProgram> {
     static PROGRAM: OnceLock<Arc<NormalizedProgram>> = OnceLock::new();
@@ -130,4 +135,62 @@ fn artifact_service_and_worker_share_the_durable_queue_contract() {
     let worker_operations = operation_names(&program, worker_jobs);
     assert!(worker_operations.contains("claim"));
     assert!(worker_operations.contains("complete"));
+}
+
+#[test]
+fn artifact_prepares_one_exact_worker_handoff_without_host_authority() {
+    let program = program();
+    let entry = program
+        .functions
+        .iter()
+        .position(|function| function.declaration.declaration.to_string() == WORKER_ENTRY)
+        .expect("maintained worker entry");
+    let helper = program
+        .functions
+        .iter()
+        .position(|function| function.declaration.declaration.to_string() == WORKER_HELPER)
+        .expect("maintained worker helper");
+    let helper_function = &program.functions[helper];
+    assert_eq!(helper_function.parameters.len(), 2);
+    assert!(helper_function.parameters[0].resource_requirement.is_none());
+    assert_eq!(
+        helper_function.parameters[0].use_mode,
+        ParameterUse::Unrestricted
+    );
+    let lease = &helper_function.parameters[1];
+    assert_eq!(lease.use_mode, ParameterUse::Consume);
+    let requirement = lease
+        .resource_requirement
+        .expect("exact helper resource requirement");
+    assert_eq!(
+        program.requirements[requirement.0 as usize]
+            .reference
+            .requirement
+            .to_string(),
+        WORKER_REQUIREMENT
+    );
+    assert_eq!(helper_function.task_requirements.as_ref(), [requirement]);
+
+    let NormalizedFunctionBody::Code(entry_code) = &program.functions[entry].body else {
+        panic!("maintained worker entry must be graph code");
+    };
+    assert!(entry_code.instructions.windows(2).any(|instructions| {
+        matches!(
+            instructions,
+            [
+                NormalizedInstruction::LoadLocal {
+                    use_mode: ParameterUse::Consume,
+                    ..
+                },
+                NormalizedInstruction::Call {
+                    function,
+                    arguments: 2,
+                    ..
+                }
+            ] if function.0 as usize == helper
+        )
+    }));
+    assert!(entry_code.instructions.iter().all(|instruction| {
+        !matches!(instruction, NormalizedInstruction::FunctionValue { function, .. } if function.0 as usize == helper)
+    }));
 }

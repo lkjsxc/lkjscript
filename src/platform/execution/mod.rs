@@ -1,4 +1,4 @@
-//! Representation-neutral execution controls and normalized Graph 6 execution.
+//! Representation-neutral execution controls and normalized Graph 7 execution.
 
 mod control;
 pub(crate) mod normalized;

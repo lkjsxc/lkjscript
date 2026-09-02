@@ -1,4 +1,4 @@
-//! Exact deployment-grant binding for normalized Graph 6 requirements.
+//! Exact deployment-grant binding for normalized Graph 7 requirements.
 
 use super::prepare::NormalizedProgram;
 use super::resource::NormalizedResourceScope;
@@ -101,7 +101,10 @@ fn grant_digest(domain: &str, bytes: &[u8]) -> [u8; 32] {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedCallPolicy {
+    /// Exact graph requirement used by the operation that acquired or accesses a resource.
     pub requirement: RequirementReference,
+    /// Exact component requirement whose deployment grant backs the operation.
+    pub grant_requirement: RequirementReference,
     pub requirement_name: Name,
     pub operation: OperationReference,
     pub operation_name: Name,
@@ -575,7 +578,8 @@ impl NormalizedCapabilities {
                 )
             })?;
         Ok(NormalizedCallPolicy {
-            requirement: canonical.reference,
+            requirement: requirement.reference,
+            grant_requirement: canonical.reference,
             requirement_name: requirement.name.clone(),
             operation: operation.reference,
             operation_name: operation.name.clone(),

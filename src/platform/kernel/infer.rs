@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 6.
+//! Independent exact-ID expression type and effect oracle for Graph 7.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;

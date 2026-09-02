@@ -1,6 +1,6 @@
 //! Exact first-party standard package material embedded in the released executable.
 //!
-//! The maintained Graph 6 package owns both generated assets. This module validates the complete
+//! The maintained Graph 7 package owns both generated assets. This module validates the complete
 //! package transport and artifact closure before exposing either one to project creation, linking,
 //! inspection, or export.
 
@@ -30,11 +30,11 @@ const STANDARD_TRANSPORT_PACK: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261";
+    "rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705";
+    "package_revision_987d74de0827e4a710a0aaa6991075227d4e24830ee0654ff0a73b2717015b9f";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9";
+    "package_transport_875deeb0623c0fe50e8f806c277c57df1fd7eb385a2af2b2224b43ec2b8176d4";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn maintained_standard_is_the_byte_owner_of_embedded_assets() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
-        let repository = GraphRepository::open(&root).expect("open maintained Graph 6 standard");
+        let repository = GraphRepository::open(&root).expect("open maintained Graph 7 standard");
         let exported = repository
             .export_package_transport()
             .expect("export maintained standard transport");

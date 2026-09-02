@@ -197,7 +197,7 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
                 "selected owner has no candidate record",
             )
         })?;
-        let children = aggregation_children(&record)?;
+        let children = selected_aggregation_children(view, *owner, &record)?;
         let child_summaries = children
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
@@ -267,7 +267,7 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
                 "selected owner has no candidate record",
             )
         })?;
-        let children = aggregation_children(&record)?;
+        let children = selected_aggregation_children(view, owner, &record)?;
         let child_validations = children
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
@@ -306,6 +306,39 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
         .into_iter()
         .map(|(owner, summary)| (owner, summary.finish()))
         .collect())
+}
+
+fn selected_aggregation_children<R: SummaryRead>(
+    view: &R,
+    owner: OwnerKey,
+    record: &OwnerRecord,
+) -> Result<Vec<(OwnershipRole, OwnerKey)>, Diagnostic> {
+    let mut children = aggregation_children(record)?;
+    let OwnerRecord::Declaration(declaration) = record else {
+        return Ok(children);
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        return Ok(children);
+    };
+    let FunctionEffect::Task { requirements } = &function.effect else {
+        return Ok(children);
+    };
+    for requirement in requirements {
+        if requirement.package != view.package_id() {
+            continue;
+        }
+        let child = OwnerKey::Requirement(requirement.requirement);
+        let expected = OwnershipEntry::new(
+            OwnershipParent::Owner(owner),
+            OwnershipRole::DeclarationRequirement,
+        );
+        if view.ownership(child)? == Some(expected) {
+            children.push((OwnershipRole::DeclarationRequirement, child));
+        }
+    }
+    children.sort_unstable();
+    children.dedup();
+    Ok(children)
 }
 
 fn selected_ownership_depths<R: SummaryRead>(
@@ -1033,6 +1066,8 @@ fn local_summary(
             presentation.piece(1, &record.name)?;
             interface.piece(1, &record.ty)?;
             interface.piece(2, &record.use_mode)?;
+            interface.piece(3, &record.resource_requirement)?;
+            capability.piece(1, &record.resource_requirement)?;
         }
         OwnerRecord::Binding(record) => {
             presentation.piece(1, &record.name)?;

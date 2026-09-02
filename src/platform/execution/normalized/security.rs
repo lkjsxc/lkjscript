@@ -1,4 +1,4 @@
-//! Exact Graph 6 bindings for time, randomness, and identifier capabilities.
+//! Exact Graph 7 bindings for time, randomness, and identifier capabilities.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -333,6 +333,7 @@ mod tests {
     ) -> NormalizedCallPolicy {
         NormalizedCallPolicy {
             requirement,
+            grant_requirement: requirement,
             requirement_name: Name::new("security").unwrap(),
             operation,
             operation_name: Name::new(display_name).unwrap(),

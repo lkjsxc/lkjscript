@@ -722,7 +722,7 @@ fn task_unit_uses_exact_dense_nominal_and_capability_operands() {
 }
 
 #[test]
-fn every_graph6_expression_form_lowers_with_verified_control_flow() {
+fn every_graph7_expression_form_lowers_with_verified_control_flow() {
     let snapshot = complete_expression_snapshot();
     let caller = declaration_named(&snapshot, "caller");
     let receipt = compile_memory(&snapshot, OwnerKey::Declaration(caller));
@@ -925,7 +925,7 @@ fn body_reorder_changes_unit_key_but_repository_point_lowering_matches_memory() 
 
     let temporary = tempfile::tempdir().expect("compiler repository parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let view = created
         .repository
         .view_current()
@@ -995,7 +995,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("compiler manifest parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 6 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1021,7 +1021,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     assert_eq!(validation.map.entries_visited, 22);
 
     drop(created);
-    let reopened = GraphRepository::open(&root).expect("reopen Graph 6 repository");
+    let reopened = GraphRepository::open(&root).expect("reopen Graph 7 repository");
     let cached = load_current_compilation(&reopened)
         .expect("load reopened compilation")
         .expect("reopened cache head");
@@ -1039,7 +1039,7 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
     let snapshot = structurally_empty_snapshot(b"empty-compiler-manifest");
     let temporary = tempfile::tempdir().expect("empty compiler parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("empty Graph 6 repository");
+        .expect("empty Graph 7 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1082,7 +1082,7 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("incremental manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1201,7 +1201,7 @@ fn rename_and_move_reuse_the_complete_compilation_unit_map() {
     let destination = module_named(&snapshot, "second");
     let temporary = tempfile::tempdir().expect("rename manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1302,7 +1302,7 @@ fn declaration_deletion_removes_one_unit_and_matches_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("deletion manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1380,7 +1380,7 @@ fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("cache recovery parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 6 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
     let original_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1425,7 +1425,7 @@ fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("manifest decoder parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let built = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1464,7 +1464,7 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
     let outside = temporary.path().join("outside");
     let sentinel = b"outside cache sentinel";
     std::fs::write(&outside, sentinel).expect("outside sentinel");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 6 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
     let initial_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1513,11 +1513,11 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
 }
 
 #[test]
-fn graph6_artifact_links_deterministically_and_reopens_without_graph4_modules() {
+fn graph7_artifact_links_deterministically_and_reopens_without_graph4_modules() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact link parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 6 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1525,9 +1525,9 @@ fn graph6_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     .expect("clean normalized compilation");
 
     let first = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("link Graph 6 artifact");
+        .expect("link Graph 7 artifact");
     let second = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("repeat Graph 6 link");
+        .expect("repeat Graph 7 link");
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
@@ -1708,11 +1708,11 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
 }
 
 #[test]
-fn graph6_artifact_links_exact_compiled_dependency_closure() {
+fn graph7_artifact_links_exact_compiled_dependency_closure() {
     let temporary = tempfile::tempdir().expect("dependency artifact parent");
     let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
     let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
-        .expect("source Graph 6 repository");
+        .expect("source Graph 7 repository");
     let source_compilation = build_clean(
         &source.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1778,7 +1778,7 @@ fn graph6_artifact_links_exact_compiled_dependency_closure() {
 
     let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
     let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
-        .expect("target Graph 6 repository");
+        .expect("target Graph 7 repository");
     target
         .repository
         .stage_package_transport(exported.transport_digest, &exported.packs)
@@ -1919,7 +1919,7 @@ fn graph6_artifact_links_exact_compiled_dependency_closure() {
         &unrelated_snapshot,
         None,
     )
-    .expect("unrelated Graph 6 repository");
+    .expect("unrelated Graph 7 repository");
     let unrelated_compilation = build_clean(
         &unrelated.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1946,11 +1946,11 @@ fn graph6_artifact_links_exact_compiled_dependency_closure() {
 }
 
 #[test]
-fn graph6_artifact_rejects_predecessor_corruption_and_inexact_closures() {
+fn graph7_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact rejection parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 6 repository");
+        .expect("Graph 7 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2103,6 +2103,132 @@ fn graph6_artifact_rejects_predecessor_corruption_and_inexact_closures() {
             .expect_err("unreachable object must reject")
             .code,
         "artifact_unreachable_object"
+    );
+}
+
+#[test]
+fn resource_function_artifact_rejects_rebound_or_reclassified_authority() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("applications/lkjournal/generated/lkjournal.lkja");
+    let bytes = std::fs::read(path).expect("maintained resource-function artifact");
+    let loaded = load_artifact(&bytes).expect("load maintained resource-function artifact");
+
+    let resource_parameter = loaded
+        .manifest
+        .packages
+        .iter()
+        .enumerate()
+        .find_map(|(package_index, package)| {
+            package
+                .runtime_owners
+                .iter()
+                .enumerate()
+                .find_map(|(binding_index, binding)| {
+                    (binding.kind == OwnerKind::Parameter)
+                        .then(|| {
+                            let key =
+                                ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+                            let bytes = loaded.objects.get(&key)?;
+                            let record =
+                                decode_owner(bytes, binding.owner, binding.kind, binding.object)
+                                    .ok()?;
+                            matches!(
+                                record,
+                                OwnerRecord::Parameter(crate::platform::kernel::ParameterRecord {
+                                    resource_requirement: Some(_),
+                                    ..
+                                })
+                            )
+                            .then_some((package_index, binding_index))
+                        })
+                        .flatten()
+                })
+        })
+        .expect("resource parameter runtime owner");
+    let mut wrong_parameter_manifest = loaded.manifest.clone();
+    let mut wrong_parameter_objects = loaded.objects.clone();
+    let binding = &mut wrong_parameter_manifest.packages[resource_parameter.0].runtime_owners
+        [resource_parameter.1];
+    let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+    let bytes = wrong_parameter_objects
+        .remove(&old_key)
+        .expect("resource parameter owner bytes");
+    let mut record = decode_owner(&bytes, binding.owner, binding.kind, binding.object)
+        .expect("decode resource parameter owner");
+    let OwnerRecord::Parameter(parameter) = &mut record else {
+        panic!("resource parameter owner kind")
+    };
+    parameter.resource_requirement = None;
+    let (digest, bytes) = encode_owner(&record).expect("encode rebound resource parameter");
+    binding.object = digest;
+    assert!(
+        wrong_parameter_objects
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+                bytes
+            )
+            .is_none()
+    );
+    let (closure, count, bytes) = super::artifact::closure_facts(&wrong_parameter_objects).unwrap();
+    wrong_parameter_manifest.closure = closure;
+    wrong_parameter_manifest.object_count = count;
+    wrong_parameter_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(wrong_parameter_manifest, &wrong_parameter_objects)
+            .expect_err("resource parameter rebinding must reject")
+            .code,
+        "artifact_runtime_owner_semantics"
+    );
+
+    let resource_function = loaded
+        .manifest
+        .packages
+        .iter()
+        .enumerate()
+        .find_map(|(package_index, package)| {
+            package
+                .runtime_owners
+                .iter()
+                .enumerate()
+                .find_map(|(binding_index, binding)| {
+                    (binding.kind == OwnerKind::TaskFunction)
+                        .then_some((package_index, binding_index))
+                })
+        })
+        .expect("resource function runtime owner");
+    let mut wrong_function_manifest = loaded.manifest.clone();
+    let mut wrong_function_objects = loaded.objects.clone();
+    let binding = &mut wrong_function_manifest.packages[resource_function.0].runtime_owners
+        [resource_function.1];
+    let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+    let bytes = wrong_function_objects
+        .remove(&old_key)
+        .expect("resource function owner bytes");
+    let mut record = decode_owner(&bytes, binding.owner, binding.kind, binding.object)
+        .expect("decode resource function owner");
+    let OwnerRecord::Declaration(function) = &mut record else {
+        panic!("resource function owner kind")
+    };
+    function.visibility = crate::platform::kernel::DeclarationVisibility::Public;
+    let (digest, bytes) = encode_owner(&record).expect("encode public resource function");
+    binding.object = digest;
+    assert!(
+        wrong_function_objects
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+                bytes
+            )
+            .is_none()
+    );
+    let (closure, count, bytes) = super::artifact::closure_facts(&wrong_function_objects).unwrap();
+    wrong_function_manifest.closure = closure;
+    wrong_function_manifest.object_count = count;
+    wrong_function_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(wrong_function_manifest, &wrong_function_objects)
+            .expect_err("public resource function metadata must reject")
+            .code,
+        "artifact_runtime_owner_semantics"
     );
 }
 

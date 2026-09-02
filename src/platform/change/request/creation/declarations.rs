@@ -1,4 +1,4 @@
-//! Authored builders for Graph 6 declarations, members, targets, and retained attachments.
+//! Authored builders for Graph 7 declarations, members, targets, and retained attachments.
 
 use super::*;
 use crate::platform::kernel::{
@@ -301,6 +301,7 @@ pub(in crate::platform::change::request) fn lower_interface<
                 name: parameter.name.clone(),
                 ty,
                 use_mode: parameter.use_mode,
+                resource_requirement: None,
             }))?;
         }
         let result = lowerer.lower_type(&operation.result)?;
@@ -361,12 +362,18 @@ pub(in crate::platform::change::request) fn lower_external<
         let id = lowerer.function_parameter_symbol(&parameter.symbol)?;
         parameter_ids.push(id);
         let ty = lowerer.lower_type(&parameter.ty)?;
+        let resource_requirement = parameter
+            .resource_requirement
+            .as_ref()
+            .map(|requirement| lowerer.lower_requirement_reference(requirement))
+            .transpose()?;
         lowerer.insert_created(OwnerRecord::Parameter(ParameterRecord {
             header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
             parent: ParameterParent::Function(declaration),
             name: parameter.name.clone(),
             ty,
             use_mode: parameter.use_mode,
+            resource_requirement,
         }))?;
     }
     let result = lowerer.lower_type(result)?;

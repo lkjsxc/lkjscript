@@ -314,6 +314,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("input"),
             ty: unit_type,
             use_mode: ParameterUse::Unrestricted,
+            resource_requirement: None,
         }),
     );
     insert(
@@ -608,7 +609,7 @@ fn normalized_prototype_passes_full_oracle() {
 }
 
 #[test]
-fn graph_six_permits_a_structurally_empty_package() {
+fn graph_seven_permits_a_structurally_empty_package() {
     let snapshot = KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
@@ -627,7 +628,7 @@ fn graph_six_permits_a_structurally_empty_package() {
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     };
-    let report = validate_full(&snapshot).expect("empty package is valid Graph 6 authority");
+    let report = validate_full(&snapshot).expect("empty package is valid Graph 7 authority");
     assert_eq!(report.owners_checked, 0);
     assert_eq!(report.relation_edges, 0);
 }
@@ -975,8 +976,56 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "c039ea2a13f1e3f3b10180745be3e48898bc98ce4b950841c05d80f75652acc9"
+        "03ac90418cdec0bd465ae24ee495da51b1b74e8d0e29571125172edf7ab9f3fb"
     );
+}
+
+#[test]
+fn parameter_requirement_binding_is_canonical_and_relation_bearing() {
+    let (mut snapshot, ids) = prototype_snapshot();
+    let owner = OwnerKey::Parameter(ids.parameter);
+    let before = snapshot.owners[&owner].clone();
+    let (before_digest, before_bytes) =
+        encode_owner(&before).expect("unbound parameter must encode canonically");
+    let requirement = RequirementReference {
+        package: snapshot.root.package_id,
+        requirement: ids.requirement,
+    };
+    let Some(OwnerRecord::Parameter(parameter)) = snapshot.owners.get_mut(&owner) else {
+        panic!("fixture parameter");
+    };
+    parameter.resource_requirement = Some(requirement);
+    let after = snapshot.owners[&owner].clone();
+    let (after_digest, after_bytes) =
+        encode_owner(&after).expect("bound parameter must encode canonically");
+    assert_ne!(before_digest, after_digest);
+    assert_ne!(before_bytes, after_bytes);
+    assert_eq!(
+        decode_owner(&after_bytes, owner, OwnerKind::Parameter, after_digest)
+            .expect("bound parameter must decode exactly"),
+        after
+    );
+
+    let relations = extract_relations(
+        snapshot.root.package_id,
+        &snapshot.owners,
+        &snapshot.types,
+        &snapshot.dependencies,
+    )
+    .expect("bound parameter relations");
+    assert!(relations.iter().any(|edge| {
+        edge.source
+            == RelationEndpoint::Owner(ExactOwnerKey {
+                package: snapshot.root.package_id,
+                owner,
+            })
+            && edge.kind == RelationKind::ParameterRequirement
+            && edge.target
+                == RelationEndpoint::Owner(ExactOwnerKey {
+                    package: snapshot.root.package_id,
+                    owner: OwnerKey::Requirement(ids.requirement),
+                })
+    }));
 }
 
 #[test]

@@ -246,12 +246,17 @@ edges. Request-local labels are notation only; normalized authored intent owns s
 and request commitment.
 
 `type.capability-resource as=@TYPE interface=INTERFACE` authors one exact-interface resource type.
-`add.parameter ... use=unrestricted|borrow|consume` authors canonical operation-parameter use;
-omission means unrestricted and is valid only for an ordinary nonresource parameter. Function
-parameters cannot use borrow/consume or contain resources. Resource operation parameters require
-explicit borrow or consume. Direct and input-file records lower to identical intent. Unknown
-predecessor type/use spellings, omitted resource use, unrestricted resources, and borrow/consume on
-ordinary values reject before plan publication.
+`add.parameter ... use=unrestricted|borrow|consume [requirement=REQUIREMENT]` authors canonical
+parameter use and the optional exact function-resource binding. Omission means unrestricted and no
+binding for an ordinary nonresource parameter. Resource operation parameters require explicit
+borrow or consume and no binding. One private same-package nongeneric task function may instead
+have one final direct resource parameter with `use=consume` and `requirement` naming the same exact
+requirement in its effect and interface in its resource type. Its preceding parameters and result
+must be resource-free, and only a direct named acyclic call may transfer the final resource owner.
+Direct and input-file records lower to identical intent. Missing, extra, foreign, interface-
+mismatched, borrowed, unrestricted, multiple, nonfinal, public, package, generic, pure,
+cross-package, recursive, indirect, resource-result, and caller-reuse forms reject before plan
+publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice has exactly three public spellings: `add.type-parameter` adds one ordered
 stable parameter to a pure function; `expression.function-value` names one exact pure function and

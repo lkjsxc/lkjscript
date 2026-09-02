@@ -45,7 +45,7 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
         &logical,
         Some("repository fixture".to_owned()),
     )
-    .expect("Graph 6 repository creation");
+    .expect("Graph 7 repository creation");
 
     assert_eq!(created.repository.root(), destination.as_path());
     assert_eq!(created.current.head, created.initial.publication.head);
@@ -2548,6 +2548,7 @@ fn authored_owned_closure_removes_operation_parameters_and_updates_one_surviving
                             name: Name::new("value").unwrap(),
                             ty: AuthoredType::Unit {},
                             use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                            resource_requirement: None,
                         }],
                         result: AuthoredType::Unit {},
                         idempotency: Idempotency::Idempotent,
@@ -4888,6 +4889,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                     name: Name::new("input").unwrap(),
                     ty: AuthoredType::Bool {},
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                    resource_requirement: None,
                 }],
                 result: AuthoredType::Bool {},
                 effect: AuthoredFunctionEffect::Pure {},
@@ -5006,7 +5008,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
 }
 
 #[test]
-fn authored_type_builder_interns_every_unrestricted_graph_six_type_form() {
+fn authored_type_builder_interns_every_unrestricted_graph_seven_type_form() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -5311,6 +5313,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                         },
                     },
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                    resource_requirement: None,
                 }],
                 result: AuthoredType::TypeParameter {
                     parameter: AuthoredTypeParameterReference::Symbol {
@@ -5336,6 +5339,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                             declaration: local_declaration("$record"),
                         },
                         use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                        resource_requirement: None,
                     }],
                     result: AuthoredType::Unit {},
                     idempotency: Idempotency::Idempotent,
@@ -5704,6 +5708,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                     name: Name::new("value").unwrap(),
                     ty: AuthoredType::Bool {},
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                    resource_requirement: None,
                 },
             },
             AuthoredChange::AddPort {
@@ -5758,6 +5763,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                     name: Name::new("value").unwrap(),
                     ty: AuthoredType::Unit {},
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                    resource_requirement: None,
                 },
             },
             AuthoredChange::AddTypeParameter {
@@ -6016,6 +6022,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
                 name: Name::new("additional").unwrap(),
                 ty: AuthoredType::Unit {},
                 use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                resource_requirement: None,
             },
         },
     ];
@@ -6041,7 +6048,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
 }
 
 #[test]
-fn authored_expression_builder_covers_every_graph_six_operation() {
+fn authored_expression_builder_covers_every_graph_seven_operation() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -6547,6 +6554,7 @@ fn idempotent_authored_reprepare_hides_child_type_objects_from_its_exact_base() 
                 name: Name::new("value").unwrap(),
                 ty: structural.clone(),
                 use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                resource_requirement: None,
             }],
             result: structural,
             effect: AuthoredFunctionEffect::Pure {},
@@ -7389,6 +7397,7 @@ fn authored_parameter(symbol: &str, name: &str, ty: AuthoredType) -> AuthoredPar
         name: Name::new(name).expect("parameter name"),
         ty,
         use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+        resource_requirement: None,
     }
 }
 

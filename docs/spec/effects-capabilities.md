@@ -31,8 +31,11 @@ Failed planning or apply leaves accepted authority unchanged.
 
 An interface owns stable operation identities, input parameters, canonical parameter-use modes,
 output type, failure contract, and semantic limits. Ordinary parameters are unrestricted. A direct
-`CapabilityResource<Interface>` parameter is explicitly borrow or consume, and its interface must
-be the operation's exact owning interface. A capability relation records the exact use site,
+`CapabilityResource<Interface>` operation parameter is explicitly borrow or consume, and its
+interface must be the operation's exact owning interface. The one admitted task-helper resource
+parameter is final and consume-only and carries an exact requirement binding in the callee effect.
+A parameter-requirement relation makes that binding part of summaries, impact, package validation,
+compilation, artifacts, and inspection. A capability relation records the exact use site,
 requirement, interface, and operation. Resource types additionally retain an exact interface
 relation, so interface evolution reaches requirements, callers, components, grants, adapters,
 tests, targets, package interfaces, compilation, and artifacts through impact queries. Rename does
@@ -52,11 +55,14 @@ cannot serialize into accepted literals, graph data, artifacts as values, caches
 payloads, objects, or logs. Streams use bounded chunks and backpressure. Data transactions and
 queue leases are lexical/task-owned.
 
-The compiler records borrow/consume on local loads. Strict artifact loading and normalized
-execution recheck the semantic parameter modes and resource shape, so hostile derived input cannot
-restore a copied transition right. Resource-bearing variants move as one outer value; matching
-transfers the direct payload only to the selected arm. Task cleanup drops local handles without
-implicitly completing, failing, cancelling, or otherwise mutating an external queue lease.
+The compiler records borrow/consume on local loads and retains the exact requirement on a resource
+parameter. Strict artifact loading and normalized preparation recheck the private task signature,
+exact requirement/interface, immediate final consume load, direct call, and acyclic resource-call
+graph. Each VM and reference call frame revalidates the same live task scope, kind, requirement,
+interface, and slot, so hostile derived input cannot copy, rebind, revive, or indirectly invoke a
+transition right. Resource-bearing variants move as one outer value; matching transfers the direct
+payload only to the selected arm. Task cleanup drops local handles without implicitly completing,
+failing, cancelling, or otherwise mutating an external queue lease.
 
 Operations that may have committed externally before visibility loss return the distinct possible
 visibility class. Callers may retry only where the graph-owned idempotency contract permits it.

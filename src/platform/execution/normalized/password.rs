@@ -1,4 +1,4 @@
-//! Exact Graph 6 binding for password hashing and verification.
+//! Exact Graph 7 binding for password hashing and verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -243,6 +243,7 @@ mod tests {
     ) -> NormalizedCallPolicy {
         NormalizedCallPolicy {
             requirement,
+            grant_requirement: requirement,
             requirement_name: Name::new("password").unwrap(),
             operation,
             operation_name: Name::new(display_name).unwrap(),

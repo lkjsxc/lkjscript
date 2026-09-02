@@ -37,7 +37,7 @@ fn recipes_match_captured_generation_neutral_predecessor_projections() {
         ),
         (
             ProjectTemplate::Command,
-            "recipe_projection_623446518a615838fff444a06ef774296569129c4147de8d299689f5423fed4f",
+            "recipe_projection_0ceff258627ab4f462ed18a4dbca42629601d9e531494a808e72f275b492a8d6",
             10,
             2,
             4,
@@ -45,7 +45,7 @@ fn recipes_match_captured_generation_neutral_predecessor_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_72de89e360419c910f92a301b6728fc61434e76e0e9b0fc73b4857d9a77ffadb",
+            "recipe_projection_b0efe18e305ed8a2eeff6090d4d7df673fbd242e79f3acd55964d02ee6325d68",
             20,
             12,
             10,
@@ -53,7 +53,7 @@ fn recipes_match_captured_generation_neutral_predecessor_projections() {
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_6b6ff733baf49ed05059bc04aad3b72fc6aa4c58fccdffcd89fdfa3331df43b9",
+            "recipe_projection_69b9d883961f87cb2733aa03227d98930731b28ae630ccfdd50a5c47e0ab75af",
             86,
             12,
             69,

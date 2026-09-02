@@ -1,4 +1,4 @@
-//! Repository-bound command and graph-owned test runners for normalized Graph 6 artifacts.
+//! Repository-bound command and graph-owned test runners for normalized Graph 7 artifacts.
 
 use super::capability::NormalizedCapabilities;
 use super::codec::{decode_value, encode_typed};

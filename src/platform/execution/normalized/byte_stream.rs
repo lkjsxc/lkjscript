@@ -1,4 +1,4 @@
-//! Exact Graph 6 byte-stream capability over task-owned opaque handles.
+//! Exact Graph 7 byte-stream capability over task-owned opaque handles.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -99,7 +99,8 @@ impl NormalizedByteStreamAdapter {
     }
 
     fn validate_policy(&self, policy: &NormalizedCallPolicy) -> Result<(), ExecutionError> {
-        if policy.requirement != self.requirement || policy.grant.interface != self.interface {
+        if policy.grant_requirement != self.requirement || policy.grant.interface != self.interface
+        {
             return Err(stream_runtime(
                 "normalized_stream_binding",
                 "byte-stream call policy has a foreign exact requirement or interface",
@@ -161,7 +162,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                     ));
                 };
                 resources
-                    .read_byte_stream(policy.requirement, *stream, control)
+                    .read_byte_stream(policy.grant_requirement, *stream, control)
                     .map(|chunk| self.read_result(chunk))
             }
             NormalizedByteStreamOperation::Close => {
@@ -170,7 +171,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                         "stream close expects one byte-stream handle",
                     ));
                 };
-                resources.close(policy.requirement, *stream)?;
+                resources.close(policy.grant_requirement, *stream)?;
                 Ok(NormalizedValue::Unit)
             }
             NormalizedByteStreamOperation::ReadAll => {
@@ -190,7 +191,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                     )
                 })?;
                 resources
-                    .read_all_byte_stream(policy.requirement, *stream, maximum_bytes, control)
+                    .read_all_byte_stream(policy.grant_requirement, *stream, maximum_bytes, control)
                     .map(NormalizedValue::bytes)
             }
         }
@@ -265,6 +266,7 @@ mod tests {
     ) -> NormalizedCallPolicy {
         NormalizedCallPolicy {
             requirement,
+            grant_requirement: requirement,
             requirement_name: Name::new("streams").unwrap(),
             operation,
             operation_name: Name::new(name).unwrap(),

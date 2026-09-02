@@ -1,4 +1,4 @@
-//! Exact Graph 6 binding for deployment configuration reads.
+//! Exact Graph 7 binding for deployment configuration reads.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -202,6 +202,7 @@ mod tests {
     ) -> NormalizedCallPolicy {
         NormalizedCallPolicy {
             requirement,
+            grant_requirement: requirement,
             requirement_name: Name::new("config").unwrap(),
             operation,
             operation_name: Name::new(name).unwrap(),

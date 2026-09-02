@@ -1,4 +1,4 @@
-//! Explicit canonical Graph 6 name value.
+//! Explicit canonical Graph 7 name value.
 
 use super::contract::MAXIMUM_NAME_BYTES;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};

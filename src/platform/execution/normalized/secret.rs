@@ -1,4 +1,4 @@
-//! Exact Graph 6 binding for least-authority secret verification.
+//! Exact Graph 7 binding for least-authority secret verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
@@ -124,6 +124,7 @@ mod tests {
     ) -> NormalizedCallPolicy {
         NormalizedCallPolicy {
             requirement,
+            grant_requirement: requirement,
             requirement_name: Name::new("secret").unwrap(),
             operation,
             operation_name: Name::new("matches").unwrap(),
