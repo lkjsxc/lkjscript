@@ -4360,7 +4360,7 @@ fn exact_identity_bytes(
         ));
     }
     let mut decoded = [0_u8; 16];
-    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in encoded.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let high = lower_hex_nibble(pair[0]).ok_or_else(|| {
             ServiceFailure::failed(
                 "route_identity_hex",

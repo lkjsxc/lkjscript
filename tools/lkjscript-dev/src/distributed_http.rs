@@ -1640,7 +1640,7 @@ fn http_response_matrix_is_current(responses: &[HttpObservation]) -> bool {
     let empty_digest = VerificationDigest::of(&[]);
     ["first", "restart"]
         .into_iter()
-        .zip(responses.chunks_exact(CASES.len()))
+        .zip(responses.as_chunks::<{ CASES.len() }>().0)
         .all(|(run, observations)| {
             observations.iter().zip(CASES).all(
                 |(observation, (case, method, path, status, matched))| {

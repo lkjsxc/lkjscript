@@ -332,14 +332,15 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
         });
         let mut edges = base_read.value.edges.into_iter().collect::<BTreeSet<_>>();
         for edge in &removed_route_edges {
-            if edge.kind == RelationKind::HttpRouteTarget && edge.target == target_endpoint {
-                if !edges.remove(edge) {
-                    return Err(validation_error(
-                        DiagnosticClass::Corrupt,
-                        "change_validate_http_route_remove",
-                        "candidate HTTP route delta removes an absent accepted target relation",
-                    ));
-                }
+            if edge.kind == RelationKind::HttpRouteTarget
+                && edge.target == target_endpoint
+                && !edges.remove(edge)
+            {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_remove",
+                    "candidate HTTP route delta removes an absent accepted target relation",
+                ));
             }
         }
         for edge in &added_route_edges {

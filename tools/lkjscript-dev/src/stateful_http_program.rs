@@ -1812,7 +1812,6 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$home_request",
         homepage,
         &["$data"],
-        "$http_port_home",
         "home",
     )?;
 
@@ -1825,7 +1824,6 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$list_request",
         list,
         &["$data"],
-        "$http_port_list",
         "list",
     )?;
 
@@ -1842,7 +1840,6 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$create_request",
         create,
         &["$streams", "$data", "$identifiers", "$clock"],
-        "$http_port_create",
         "create",
     )?;
 
@@ -1860,7 +1857,6 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$update_request",
         update,
         &["$streams", "$data", "$clock"],
-        "$http_port_update",
         "update",
     )?;
 
@@ -1874,7 +1870,6 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
         "$delete_request",
         delete,
         &["$data"],
-        "$http_port_delete",
         "delete",
     )?;
 
@@ -1936,7 +1931,6 @@ fn add_http_handler(
     request: &str,
     body: String,
     requirements: &[&str],
-    port: &str,
     port_name: &str,
 ) -> Result<(), DevError> {
     builder.create_function(
@@ -1950,7 +1944,7 @@ fn add_http_handler(
     builder.record(
         "add.port",
         vec![
-            ("as", port.to_owned()),
+            ("as", format!("$http_port_{port_name}")),
             ("component", "$application_component".to_owned()),
             ("name", port_name.to_owned()),
             ("type", "@http_function".to_owned()),
