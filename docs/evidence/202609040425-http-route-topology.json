@@ -5,7 +5,7 @@
   },
   "campaign": "202609040425-graph-owned-exact-http-route-topology",
   "status": "incomplete",
-  "assembled_at_utc": "2026-09-03T22:25:44Z",
+  "assembled_at_utc": "2026-09-03T22:35:42Z",
   "repository": {
     "name": "lkjsxc/lkjscript",
     "branch": "main",
@@ -32,14 +32,19 @@
         "sha": "5cfdd919cf3df3bbc0011188d7a280b57edb4295",
         "tree": "4449605c8458208b6ddc7c40e7527daab766677a",
         "summary": "Implement graph-owned exact HTTP routes"
+      },
+      {
+        "sha": "680465a9f998da4d8c5441d70fdb9c6183a2ebe6",
+        "tree": "45970570764eda6e0a60775c5c44ea1d7c8ac170",
+        "summary": "Satisfy strict HTTP route verification lints"
       }
     ],
-    "implementation_head": "5cfdd919cf3df3bbc0011188d7a280b57edb4295",
-    "implementation_tree": "4449605c8458208b6ddc7c40e7527daab766677a",
+    "implementation_head": "680465a9f998da4d8c5441d70fdb9c6183a2ebe6",
+    "implementation_tree": "45970570764eda6e0a60775c5c44ea1d7c8ac170",
     "implementation_worktree": "clean",
     "implementation_divergence": {
       "behind_origin_main": 0,
-      "ahead_of_origin_main": 3
+      "ahead_of_origin_main": 5
     },
     "agent_policy_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
     "preserved_work": [
@@ -311,6 +316,11 @@
     "focused_current_commit": [
       {
         "classification": "fresh passed",
+        "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+        "passed": 1
+      },
+      {
+        "classification": "fresh passed",
         "command": "cargo test --locked -p lkjscript-dev independent_http_route_set_is_order_invariant_and_strict",
         "passed": 1
       },
@@ -339,6 +349,13 @@
         "classification": "reused passed",
         "observation": "intermediate distributed HTTP, stateful HTTP, outbound HTTP, and service receipts passed their then-current copied-binary checks",
         "disposition": "their verifier and capability inputs later changed, so final classification requires new full and target receipts"
+      },
+      {
+        "classification": "failed",
+        "observation": "full-profile receipt .artifacts/lkjscript-dev/check/1788474512748659432-2950750-0/receipt.json passed 22 of 24 selected gates fresh, failed clippy, and skipped workspace_tests through its failed prerequisite",
+        "receipt_sha256": "52852047a2e382f6150ce852d0231e669b7c825ef7a6a22e8e6e2bd6b1247c43",
+        "receipt_digest": "verification_a67075563fb15c5fba61a011368045dea82f0859e4c48ab8d7bd9020e24189ab",
+        "disposition": "all four strict lint findings were corrected without contract change; the exact clippy command and focused route-oracle and stateful-schema tests passed, and a completely fresh full profile is required"
       }
     ]
   },
