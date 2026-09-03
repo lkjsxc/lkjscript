@@ -1121,7 +1121,7 @@ fn run_workflow(
         isolated_root,
     )?;
     let check_records = compact_records("check", &checked.stdout)?;
-    require_field(&check_records, "tests", "passed", "14")?;
+    require_field(&check_records, "tests", "passed", "21")?;
     require_field(&check_records, "tests", "failed", "0")?;
     require_field(&check_records, "tests", "differential", "equal")?;
     let check_compilation = compiler_observation(&check_records)?;
