@@ -4,8 +4,8 @@
     "version": 1
   },
   "campaign": "202609031354-incremental-object-catalog",
-  "status": "verification_pending",
-  "assembled_at_utc": "2026-09-03T11:24:45Z",
+  "status": "complete",
+  "assembled_at_utc": "2026-09-03T11:33:16Z",
   "repository": {
     "name": "lkjsxc/lkjscript",
     "branch": "main",
@@ -372,9 +372,23 @@
       "receipt_sha256": "981d4769dd90a3ae9bf4e4d8b3b564a4ce7417d11ace6b8c6e19357a2aece95f",
       "receipt_digest": "verification_c69582aa3919f218d460259a888cd4aaf5c90347dc37d559aa7ed64cb4d9bcea"
     },
-    "final_full": {
-      "classification": "not run",
-      "reason": "runs fresh after current owners and this bounded evidence are assembled"
+    "assembled_evidence_full": {
+      "classification": "fresh passed",
+      "source_head": "4da37eecea9d0cc25ee9f07438ac5f6778eacc18",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "skipped": 0,
+      "input_stable": true,
+      "worktree_input_digest": "verification_aad7e7939ac9f058af4b3971bfa1e6c041d598928ece15087dfce13ce275c804",
+      "elapsed_nanoseconds": 218385323660,
+      "receipt": ".artifacts/lkjscript-dev/check/1788434951047741899-2549183-0/receipt.json",
+      "receipt_sha256": "16a386bb81dc4d597340e85b1ed2c1fdf602418fac49288d56f96b38c874d3b1",
+      "receipt_digest": "verification_e56429ba615350cd2dce5a2e2ffde9691564d71948d112c8c2bf3e1d460257a1"
+    },
+    "terminal_tree_full_receipt": {
+      "recording": "terminal handoff",
+      "reason": "the receipt is produced only after the lifecycle-only containing commit and cannot be named by that commit without changing its verified input"
     },
     "invalidated_or_failed_observations": [
       {
@@ -408,7 +422,7 @@
     "CAT-4": { "classification": "fresh passed", "claim": "public behavior and maintained standard/lkjournal meaning and canonical packs remain exact" },
     "CAT-5": { "classification": "fresh passed", "claim": "the exact copied-binary million-module capacity lifecycle passed all ceilings, oracles, queries, and cleanup" },
     "CAT-6": { "classification": "fresh passed", "claim": "only product, catalog, scale receipt, and derived capabilities identity advanced; predecessor healthy paths are deleted" },
-    "CAT-7": { "classification": "not run", "claim": "final fresh full profile and terminal repository closure remain" }
+    "CAT-7": { "classification": "fresh passed", "claim": "assembled-evidence full profile passed 24/24 fresh with zero reuse; the exact lifecycle-closure full receipt is self-excluding and reported in the terminal handoff" }
   },
   "external_actions": {
     "fetch": "fresh passed; origin/main remained f794278cc4436802e96c6b50909114cc3d5e031c through the capacity source freeze",
