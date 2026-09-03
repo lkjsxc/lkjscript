@@ -14,7 +14,7 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot `0.1.18`; the immutable supported release remains
+Current source is unreleased product snapshot `0.1.19`; the immutable supported release remains
 `v0.1.16`. Both include
 public exact built-in dependency, component, requirement, function-backed
 port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
@@ -22,6 +22,14 @@ authored-operation engine without changing their resulting meaning or atomic pro
 contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
 No deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
+
+Unreleased product 0.1.19 replaces the disposable monolithic object locator with one atomic
+manifest over bounded immutable sorted segments. Healthy repository open and accepted sealing no
+longer scan every old pack footer or rebuild and rewrite the complete catalog; exact pack entries
+and accepted `HEAD` remain canonical, and missing, predecessor, or inconsistent catalog state is
+reconstructed under the publication lock. This adds no public operation or authoring path and does
+not change graph meaning, pack/object bytes, maintained semantic revisions, deployment, or the
+immutable release.
 
 Product 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
 live local function. They expose its complete accepted contract, structural body, exact reference
@@ -443,7 +451,7 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.18 source its stable
+Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.19 source its stable
 entry claims and matches the live resource, then transfers that lease once into a private
 requirement-bound task helper. The helper borrows `QueueLeaseInfo`, consumes through heartbeat,
 matches the renewed lease, and consumes through complete or fail. A handle is bound to the exact

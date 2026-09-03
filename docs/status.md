@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-02 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-03 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -10,6 +10,15 @@ The typed meaning graph is the sole current editable program authority. A projec
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
 and private staging/locking state. Accepted meaning is the exact revision and immutable object
 closure selected by `HEAD`. No maintained project contains a predecessor `.lkjscript` store.
+
+The sole healthy object catalog is contract 2: one atomic manifest selects at most 32 immutable
+content-addressed sorted segments, with at most one segment per level and 64 entries per lookup
+block. Healthy repository open and sealing perform no complete old-pack footer scan or full catalog
+materialization. Each newly sealed pack set contributes one delta; deterministic equal-level
+streaming merges give logarithmic rewrite work. Missing, predecessor, malformed, or derived state
+incomplete for the current closure is rebuilt once under the exclusive publication lock from an independent
+immutable-footer oracle. Pack contract 1, object-store contract 1, immutable objects, and `HEAD`
+remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
@@ -103,15 +112,16 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source is unreleased product snapshot `0.1.18`; immutable public latest and the supported
-download remain `v0.1.16`. Source admits one exact-requirement-bound final consume resource
+Current source is unreleased product snapshot `0.1.19`; immutable public latest and the supported
+download remain `v0.1.16`. Source retains one exact-requirement-bound final consume resource
 parameter on a private same-package acyclic task helper and one identity-preserving private
-same-module function extraction. Graph 7, validation witness 4, owner summary 3, validator 7,
+same-module function extraction. Product 0.1.19 changes only disposable object-location and
+contributor scale-evidence behavior. Graph 7, validation witness 4, owner summary 3, validator 7,
 package interface 5, compiler-unit/bytecode 3, Artifact 12, resident runtime 3, function-definition
-projection 2, and service receipt 7 remain current and unchanged by extraction. Compact change 11,
-authored change 9, logical change plan 3, registry 8, and CLI 20 advance for its public request,
-review, discovery, and diagnostic behavior. Revision, receipt, transaction, semantic-diff, package
-transport, project creation,
+projection 2, service receipt 7, compact change 11, authored change 9, logical change plan 3,
+registry 8, and CLI 20 remain current. Object catalog 2 and semantic-scale receipt 3 advance;
+object-store 1 and pack 1 do not. Revision, receipt, transaction, semantic-diff, package transport,
+project creation,
 deployment, HTTP client, data-store, logical-backup, queue-data, object, HTTP, and adapter contracts
 retain their independent owners.
 
@@ -127,7 +137,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`553f004534cfd61ea0db89e9eeaaeb5186b60053a234a24a2b697e0ced9daca6` in current source.
+`aa332bfb075c5bf53920e68e77bb5f99a75b7065f35f2d414b303593164e076f` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -306,8 +316,10 @@ Contributor command `lkjscript-dev scale` now drives one current semantic-scale 
 copied supported executable. It discovers the public operation grammar and capabilities, constructs
 all retained topologies only through compact `change plan` and `change apply`, uses current
 `status`, exact owner `inspect`, bounded `query`, `check`, and `build`, and writes one bounded
-`lkjscript-semantic-scale-receipt` contract 2. A read-only typed `GraphRepository` inventory is its
-formatter-independent oracle; it has no accepted-authority write path.
+`lkjscript-semantic-scale-receipt` contract 3. A read-only typed `GraphRepository` inventory is its
+formatter-independent semantic oracle. The receipt also binds catalog identity, layout, cumulative
+delta/merge/rebuild work, the final healthy session, and an independently reconstructed footer
+commitment. Neither oracle has an accepted-authority write path.
 
 One fresh `small-functions` lifecycle admitted 100,100 live owners: 100 modules, 50,000 pure
 functions, 50,000 expressions, and 100,000 relations. Fifty-one construction batches plus one

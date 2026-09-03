@@ -2,24 +2,31 @@
 
 pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store-1";
 pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack-1";
-pub const CATALOG_CONTRACT_IDENTITY: &str = "lkjscript-object-catalog-1";
+pub const CATALOG_CONTRACT_IDENTITY: &str = "lkjscript-object-catalog-2";
 
 pub const PACK_MAGIC: [u8; 8] = *b"LKJPAK01";
 pub const PACK_INDEX_MAGIC: [u8; 8] = *b"LKJIDX01";
 pub const PACK_END_MAGIC: [u8; 8] = *b"LKJEND01";
 pub const PACK_CONTRACT_VERSION: u16 = 1;
 
-pub const CATALOG_MAGIC: [u8; 8] = *b"LKJCAT01";
-pub const CATALOG_END_MAGIC: [u8; 8] = *b"LKJCEND1";
-pub const CATALOG_CONTRACT_VERSION: u16 = 1;
+pub const CATALOG_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMN02";
+pub const CATALOG_MANIFEST_END_MAGIC: [u8; 8] = *b"LKJCMNE2";
+pub const CATALOG_SEGMENT_MAGIC: [u8; 8] = *b"LKJCSE02";
+pub const CATALOG_SEGMENT_METADATA_MAGIC: [u8; 8] = *b"LKJCSM02";
+pub const CATALOG_SEGMENT_END_MAGIC: [u8; 8] = *b"LKJCSEN2";
+pub const CATALOG_CONTRACT_VERSION: u16 = 2;
 
 pub const PACK_NONCE_DOMAIN: &str = "lkjscript.object-pack.nonce.v1";
 pub const PACK_ID_DOMAIN: &str = "lkjscript.object-pack.identity.v1";
 pub const PACK_ENTRY_CHECKSUM_DOMAIN: &str = "lkjscript.object-pack.entry.v1";
 pub const PACK_INDEX_CHECKSUM_DOMAIN: &str = "lkjscript.object-pack.index.v1";
 pub const PACK_CHECKSUM_DOMAIN: &str = "lkjscript.object-pack.complete.v1";
-pub const CATALOG_CHECKSUM_DOMAIN: &str = "lkjscript.object-catalog.complete.v1";
-pub const CATALOG_GENERATION_DOMAIN: &str = "lkjscript.object-catalog.generation.v1";
+pub const CATALOG_MANIFEST_CHECKSUM_DOMAIN: &str = "lkjscript.object-catalog.manifest.complete.v2";
+pub const CATALOG_SEGMENT_CHECKSUM_DOMAIN: &str = "lkjscript.object-catalog.segment.complete.v2";
+pub const CATALOG_BLOCK_CHECKSUM_DOMAIN: &str = "lkjscript.object-catalog.segment-block.v2";
+pub const CATALOG_LOGICAL_ENTRY_DOMAIN: &str = "lkjscript.object-catalog.logical-entry.v2";
+pub const CATALOG_LOGICAL_COMMITMENT_DOMAIN: &str =
+    "lkjscript.object-catalog.logical-commitment.v2";
 
 pub use crate::platform::kernel::contract::{
     BLOB_OBJECT_DIGEST_DOMAIN, CHANGE_DIGEST_DOMAIN, DEPENDENCY_OBJECT_DIGEST_DOMAIN,
@@ -49,4 +56,15 @@ pub const TARGET_PACK_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_PACK_BYTES: usize = 1_073_741_824;
 pub const MAXIMUM_PACK_ENTRY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_PACK_ENTRIES: usize = 2_000_000;
-pub const MAXIMUM_CATALOG_BYTES: usize = 512 * 1024 * 1024;
+pub const CATALOG_BLOCK_ENTRIES: usize = 64;
+pub const CATALOG_BLOCK_FILTER_BYTES: usize = 128;
+pub const MAXIMUM_CATALOG_ENTRIES: usize = 8_000_000;
+pub const MAXIMUM_CATALOG_PACKS: usize = 100_000;
+pub const MAXIMUM_CATALOG_SEGMENTS: usize = 32;
+pub const MAXIMUM_CATALOG_LEVEL: u16 = 31;
+pub const CATALOG_RECOVERY_LEVEL: u16 = MAXIMUM_CATALOG_LEVEL;
+pub const MAXIMUM_CATALOG_BLOCKS: usize = MAXIMUM_CATALOG_ENTRIES.div_ceil(CATALOG_BLOCK_ENTRIES);
+pub const MAXIMUM_CATALOG_MANIFEST_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_CATALOG_SEGMENT_METADATA_BYTES: usize = 64 * 1024 * 1024;
+pub const MAXIMUM_CATALOG_SEGMENT_BYTES: usize = 1024 * 1024 * 1024;
+pub const MAXIMUM_CATALOG_LEFTOVERS: usize = 128;

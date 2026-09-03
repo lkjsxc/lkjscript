@@ -12,6 +12,7 @@ HEAD                       atomic accepted visibility binding
 LOCK                       repository publication lock
 packs/                     immutable multi-domain object packs
 catalog/current.lkjc       rebuildable physical object locator
+catalog/segments/          immutable content-addressed locator segments
 staging/                   private incomplete publication state
 PACKAGE-TRANSPORTS/        exact immutable dependency transports when present
 derived/compiler/          disposable compiler manifests, units, and CURRENT
@@ -46,10 +47,41 @@ footers, order, offsets, lengths, checksums, and closure. Duplicate physical def
 noncanonical order, truncation, trailing input, foreign domains, overflow, and digest mismatch
 reject. Pack filenames are locators and never semantic identity.
 
-The catalog maps exact object keys to pack positions and may be rebuilt by bounded verification of
-packs. A catalog entry is useful only after the referenced pack entry reproduces its exact key.
-Catalog disagreement is derived corruption and may not make unavailable or wrong semantic bytes
-appear valid.
+Catalog contract 2 is the sole healthy physical locator. `catalog/current.lkjc` is an atomically
+replaced manifest selecting at most 32 immutable, content-addressed, sorted segments under
+`catalog/segments/`, with at most one segment at each level. The manifest binds the ordered segment
+identities, generations, key ranges, entry and pack totals, cumulative physical work, and one
+packing-independent logical catalog commitment. Each segment binds its level and generation,
+canonical key/location entries, exact pack descriptors, 64-entry block ranges and filters,
+per-block checksums, and an authenticated metadata tail and closing marker.
+
+A healthy open reads the bounded manifest and selected segment metadata. It does not enumerate old
+packs, read every catalog entry, or scan pack footers. Point lookup searches each live segment's
+range and fixed-size filter, reads at most one bounded block per candidate segment, and accepts a
+location only after the selected pack footer reproduces the exact typed key, encoded length,
+checksum, domain, and descriptor. `GraphRepository` additionally reads the current `HEAD` closure
+through that path before returning a healthy repository. Catalog disagreement is derived
+corruption and may not make unavailable or wrong semantic bytes appear valid.
+
+Each accepted pack set creates one level-zero delta directly from the sealed pack metadata already
+in memory. Equal levels merge as a deterministic binary counter through streaming sorted readers;
+the healthy path neither materializes the complete catalog nor rewrites every prior entry per
+batch. New segment files and their directory are durable before the manifest selects them. The
+manifest is durable before a new `HEAD` may require the objects. Only after manifest durability may
+exact unselected segment and owned staging paths be removed.
+
+Missing, predecessor-contract, malformed, current-closure-incomplete, or lookup-inconsistent
+catalog state is rechecked under the repository's exclusive publication lock and reconstructed at
+most once from strict immutable pack footers. Reconstruction uses a disjoint sorted footer oracle,
+atomically publishes only contract 2, then retries current-closure validation. Pack or accepted
+object corruption rejects with `HEAD` unchanged. Contract 1 has no healthy reader or writer; its
+bytes are merely one disposable recovery trigger.
+
+Current decoder and resource bounds are 8,000,000 entries, 100,000 packs, 32 segments and levels
+0–31, 125,000 blocks, 64 entries and 128 filter bytes per block, 64 KiB per manifest, 64 MiB of
+metadata and 1 GiB per segment, and 128 classified derived leftovers. Counts, lengths, offsets,
+arithmetic, names, file types, order, ranges, checksums, trailing bytes, and exact selected paths are
+validated before allocation, lookup, merge, cleanup, or publication.
 
 Persistent maps use canonical typed keys and bounded values over immutable content-addressed pages.
 Equal logical maps have equal logical content commitments independent of page splits. Sparse path

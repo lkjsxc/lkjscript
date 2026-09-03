@@ -3629,7 +3629,10 @@ mod tests {
         let store = repository
             .object_store()
             .expect("query corruption object store");
-        let location = store.catalog().get(key).expect("corrupt object location");
+        let location = store
+            .catalog_location(key)
+            .expect("catalog lookup")
+            .expect("corrupt object location");
         let pack = repository
             .root()
             .join("packs")

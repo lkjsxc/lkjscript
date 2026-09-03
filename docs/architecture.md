@@ -155,10 +155,12 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source is unreleased product snapshot 0.1.18; immutable public latest remains
+unchanged. Current source is unreleased product snapshot 0.1.19; immutable public latest remains
 v0.1.16. The source retains requirement-bound affine task handoff and the maintained worker split,
 and adds one identity-preserving private same-module function-extraction operation plus its
-maintained `update-resource` cutover. It does not enter the distribution path above, alter the
+maintained `update-resource` cutover. It also replaces the disposable monolithic object locator
+with catalog contract 2 and advances contributor scale evidence to contract 3. It does not enter
+the distribution path above, alter the
 immutable release, or select deployment or operational data.
 Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
@@ -264,12 +266,21 @@ canonical full reconstruction validates all owner records, types, scopes, effect
 relations, components, ports, targets, tests, dependency interfaces, and reachability. Sparse
 change preparation and point reads retain that complete reconstruction as an independent oracle.
 
-On disk, immutable typed objects and persistent-map pages are sealed into bounded packs. A catalog
-maps content keys to physical pack entries and is rebuildable from verified pack contents. `HEAD`
-binds one exact repository, revision record, semantic state, root, witness, and acceptance
-evidence. Canonical data is synchronized before the separately atomic `HEAD` visibility change.
-Missing disposable staging directories may be recreated; missing or inconsistent accepted packs,
-objects, or `HEAD` bindings are corruption.
+On disk, immutable typed objects and persistent-map pages are sealed into bounded contract-1 packs.
+Catalog contract 2 is a disposable physical index: one atomic manifest selects a bounded set of
+content-addressed sorted segments, and each segment binds bounded blocks plus exact pack
+descriptors. Healthy open and lookup read only the manifest, selected segment metadata, candidate
+blocks, and targeted pack footers; sealing adds one delta and performs deterministic streaming
+equal-level merges. Neither path enumerates all old packs or materializes and rewrites the complete
+catalog.
+
+`HEAD` binds one exact repository, revision record, semantic state, root, witness, and acceptance
+evidence. New packs and catalog segments become durable, then the catalog manifest becomes durable,
+before the separately atomic `HEAD` visibility change. Missing, predecessor, malformed, stale, or
+current-closure-incomplete catalog state is rechecked and rebuilt once from immutable pack footers
+under the exclusive repository lock. That independent recovery path does not call the healthy
+segment lookup or merge implementation. Missing or inconsistent accepted packs, objects, or
+`HEAD` bindings remain canonical corruption and cannot be repaired by catalog bytes.
 
 Package transports stored under `PACKAGE-TRANSPORTS` are exact immutable dependency inputs selected
 by accepted dependency records. They are not a second package authoring format. The maintained

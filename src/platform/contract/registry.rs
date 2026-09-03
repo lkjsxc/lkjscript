@@ -640,10 +640,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCAT01", "LKJCEND1"],
+            magic_values: &["LKJCMN02", "LKJCMNE2", "LKJCSE02", "LKJCSM02", "LKJCSEN2"],
             digest_domains: &[
-                storage_contract::CATALOG_CHECKSUM_DOMAIN,
-                storage_contract::CATALOG_GENERATION_DOMAIN,
+                storage_contract::CATALOG_MANIFEST_CHECKSUM_DOMAIN,
+                storage_contract::CATALOG_SEGMENT_CHECKSUM_DOMAIN,
+                storage_contract::CATALOG_BLOCK_CHECKSUM_DOMAIN,
+                storage_contract::CATALOG_LOGICAL_ENTRY_DOMAIN,
+                storage_contract::CATALOG_LOGICAL_COMMITMENT_DOMAIN,
             ],
         },
         ContractDescriptor {

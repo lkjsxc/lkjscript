@@ -1,9 +1,10 @@
 use crate::evidence::{FileProof, VerificationDigest};
 use crate::process::{ProcessObservation, ProcessStatus};
+use lkjscript::platform::contributor::CatalogInventory;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SCALE_CONTRACT_VERSION: u32 = 2;
+pub(crate) const SCALE_CONTRACT_VERSION: u32 = 3;
 pub(crate) const SCALE_SCHEMA: &str = "lkjscript-semantic-scale-receipt";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -163,6 +164,7 @@ pub(crate) struct LogicalEvidence {
     pub(crate) builds: Vec<BuildEvidence>,
     pub(crate) clean_exact_artifacts_equal: Option<bool>,
     pub(crate) oracle: Option<OracleEvidence>,
+    pub(crate) catalog: Option<CatalogInventory>,
     pub(crate) observed: Option<SemanticCounts>,
     pub(crate) public_oracle_equal: Option<bool>,
     pub(crate) shape_digest: Option<VerificationDigest>,

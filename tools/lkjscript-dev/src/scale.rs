@@ -6,7 +6,8 @@ mod runner;
 use crate::error::DevError;
 use crate::evidence::{self, PublishedEvidence, VerificationDigest};
 use lkjscript::platform::contributor::{
-    SemanticInventory, compact_change_default_maximum_operations, semantic_inventory,
+    SemanticInventory, catalog_inventory, compact_change_default_maximum_operations,
+    semantic_inventory,
 };
 use lkjscript::platform::control::{
     MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS, parse_records, render_record,
@@ -46,7 +47,7 @@ const READ_BYTES: &str = "131072";
 const REQUIRED_OPERATIONS: [&str; 7] = [
     "new", "status", "inspect", "query", "change", "check", "build",
 ];
-const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current compact public change budget admits at most 1000 items per batch. Receipt schema lkjscript-semantic-scale-receipt contract 2.";
+const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed semantic and catalog-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed semantic and catalog-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current compact public change budget admits at most 1000 items per batch. Receipt schema lkjscript-semantic-scale-receipt contract 3.";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1346,6 +1347,7 @@ fn attach_oracle(
     logical: &mut LogicalEvidence,
 ) -> Result<(), DevError> {
     let inventory = semantic_inventory(project).map_err(diagnostic_error)?;
+    let catalog = catalog_inventory(project).map_err(diagnostic_error)?;
     let observed = SemanticCounts {
         owners: inventory.owners,
         modules: inventory.modules,
@@ -1358,11 +1360,28 @@ fn attach_oracle(
     });
     let requested_equal = &observed == requested;
     logical.oracle = Some(oracle_evidence(inventory));
+    let catalog_equal = catalog.identity == "lkjscript-object-catalog-2"
+        && catalog.contract_version == 2
+        && catalog.state == "loaded"
+        && catalog.segments <= catalog.maximum_live_segments
+        && catalog.maximum_lookup_segments == catalog.segments
+        && catalog.history.full_rebuilds == 0
+        && catalog.history.full_footer_scan_runs == 0
+        && catalog.history.pack_footers_scanned == 0
+        && catalog.work.full_rebuilds == 0
+        && catalog.work.full_footer_scan_runs == 0
+        && catalog.work.pack_footers_scanned == 0
+        && catalog.footer_oracle_equal
+        && catalog.footer_oracle_entries == catalog.entries
+        && catalog.footer_oracle_packs == catalog.packs
+        && catalog.footer_oracle_commitment == catalog.commitment
+        && catalog.leftovers.is_empty();
+    logical.catalog = Some(catalog);
     logical.observed = Some(observed);
     logical.public_oracle_equal = Some(revision_equal && public_equal && requested_equal);
-    if !revision_equal || !public_equal || !requested_equal {
+    if !revision_equal || !public_equal || !requested_equal || !catalog_equal {
         return Err(DevError::corrupt(
-            "public scale observations and typed repository oracle disagree",
+            "public scale observations, typed semantic oracle, and independent catalog oracle disagree",
         ));
     }
     Ok(())
@@ -1374,6 +1393,7 @@ fn complete_partial_oracle(
     logical: &mut LogicalEvidence,
 ) -> Result<(), DevError> {
     let inventory = semantic_inventory(project).map_err(diagnostic_error)?;
+    logical.catalog = catalog_inventory(project).ok();
     logical.final_revision = Some(inventory.revision.clone());
     logical.observed = Some(SemanticCounts {
         owners: inventory.owners,
@@ -2623,11 +2643,11 @@ mod tests {
             )
             .is_err()
         );
-        assert!(HELP.contains("contract 2"));
+        assert!(HELP.contains("contract 3"));
     }
 
     #[test]
-    fn invalid_options_publish_one_failed_contract_two_receipt() {
+    fn invalid_options_publish_one_failed_contract_three_receipt() {
         let repository = repository_root().expect("repository root");
         let parent = repository.join(".artifacts/lkjscript-dev/scale-option-tests");
         fs::create_dir_all(&parent).expect("option-test parent");
@@ -2650,7 +2670,7 @@ mod tests {
         .expect("invalid options publish a receipt");
         assert_eq!(code, 1);
         let bytes = fs::read(evidence_root.join("receipt.json")).expect("failed receipt");
-        let receipt: ScaleReceipt = serde_json::from_slice(&bytes).expect("contract-2 receipt");
+        let receipt: ScaleReceipt = serde_json::from_slice(&bytes).expect("contract-3 receipt");
         assert_eq!(receipt.status, ReceiptStatus::Failed);
         assert_eq!(receipt.admission, AdmissionClassification::Failed);
         assert_eq!(receipt.commands.len(), 0);
@@ -2754,12 +2774,12 @@ mod tests {
     }
 
     #[test]
-    fn receipt_contract_is_two_and_rejects_unknown_fields() {
-        assert_eq!(SCALE_CONTRACT_VERSION, 2);
+    fn receipt_contract_is_three_and_rejects_unknown_fields() {
+        assert_eq!(SCALE_CONTRACT_VERSION, 3);
         assert_eq!(SCALE_SCHEMA, "lkjscript-semantic-scale-receipt");
         assert!(
             serde_json::from_str::<ScaleReceipt>(r#"{"unexpected":true}"#).is_err(),
-            "strict contract-2 decoding must reject foreign receipt fields"
+            "strict contract-3 decoding must reject foreign receipt fields"
         );
     }
 

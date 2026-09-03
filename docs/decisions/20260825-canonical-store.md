@@ -37,9 +37,10 @@ semantic meaning.
 - Immutable objects are grouped into bounded deterministic packs. Pack indexes, per-entry checks,
   complete-pack checks, strict offsets and lengths, and typed object domains are verified before
   use. Packs are never mutated after publication.
-- The object catalog is derived. Open scans exact pack footers, independently rebuilds the catalog,
-  and may continue from the rebuilt in-memory catalog if persisting the acceleration fails. A
-  missing or corrupt catalog cannot redefine or hide authority.
+- The object catalog is derived. This decision initially selected full footer reconstruction on
+  open; [`20260903-incremental-object-catalog.md`](20260903-incremental-object-catalog.md) refines
+  that physical path to bounded immutable segments while retaining an independent footer rebuild.
+  A missing or corrupt catalog cannot redefine or hide authority.
 - Publication writes immutable semantic and evidence objects into private stages, seals and
   synchronizes required packs, publishes their directory entries, then atomically advances HEAD
   only after the exact base is rechecked. A failure before HEAD leaves the prior accepted state;

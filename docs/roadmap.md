@@ -15,9 +15,10 @@ resource-owned maintained durable-queue worker cutover, plus complete revision-p
 definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
 bound consume-only private task-function handoff with the maintained worker split, plus one bounded
 identity-preserving graph-native function extraction and the maintained `update-resource` split are
-current architecture.
+current architecture. One crash-safe rebuildable incremental object-location catalog now keeps
+healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are distinct: source is unreleased product 0.1.18, while v0.1.16 remains the supported
+`v0.1.16` are distinct: source is unreleased product 0.1.19, while v0.1.16 remains the supported
 public `x86_64-unknown-linux-musl` distribution. Its exact and latest
 downloads independently passed static inspection, distributed HTTP with complete function-definition
 projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker

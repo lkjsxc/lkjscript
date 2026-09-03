@@ -29,11 +29,13 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
 use crate::platform::semantic_id::{DeclarationId, DocumentationId, RepositoryId, RevisionId};
+use crate::platform::storage::catalog::CatalogManifest;
 use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::witness::{NamespaceKey, OwnershipParent};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 #[test]
 fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
@@ -1855,7 +1857,10 @@ fn revision_view_detects_corruption_in_the_selected_owner_without_full_scan() {
         .0;
     let key = ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes());
     let store = created.repository.object_store().expect("object store");
-    let location = store.catalog().get(key).expect("owner catalog location");
+    let location = store
+        .catalog_location(key)
+        .expect("catalog lookup")
+        .expect("owner catalog location");
     let pack = destination.join("packs").join(location.pack.file_name());
     drop(store);
 
@@ -7493,6 +7498,111 @@ fn repository_rejects_predecessor_head_and_missing_accepted_pack() {
 }
 
 #[test]
+fn first_repository_open_rebuilds_disposable_v1_catalog_without_changing_authority() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let head_before = std::fs::read(destination.join("HEAD")).expect("HEAD before migration");
+    let packs_before = directory_file_digests(&destination.join("packs"));
+    std::fs::write(
+        destination.join("catalog/current.lkjc"),
+        predecessor_catalog_fixture(),
+    )
+    .expect("install disposable v1 catalog fixture");
+
+    let reopened = GraphRepository::open(&destination).expect("first open rebuilds v1 catalog");
+    assert_eq!(
+        reopened.current().expect("current after migration").head,
+        created.current.head
+    );
+    assert_eq!(
+        std::fs::read(destination.join("HEAD")).expect("HEAD after migration"),
+        head_before
+    );
+    assert_eq!(
+        directory_file_digests(&destination.join("packs")),
+        packs_before
+    );
+    let observation = reopened
+        .object_store()
+        .expect("open rebuilt catalog")
+        .catalog_observation();
+    assert_eq!(observation.contract_version, 2);
+    assert_eq!(observation.history.full_rebuilds, 1);
+    assert_eq!(observation.history.full_footer_scan_runs, 1);
+    assert!(observation.leftovers.is_empty());
+}
+
+#[test]
+fn repository_open_rebuilds_current_closure_incomplete_catalog_once() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let head_before = std::fs::read(destination.join("HEAD")).expect("HEAD before repair");
+    let packs_before = directory_file_digests(&destination.join("packs"));
+    std::fs::write(
+        destination.join("catalog/current.lkjc"),
+        CatalogManifest::empty()
+            .encode()
+            .expect("encode stale empty manifest"),
+    )
+    .expect("install current-closure-incomplete catalog fixture");
+
+    let reopened = GraphRepository::open(&destination).expect("open repairs stale catalog");
+    assert_eq!(
+        reopened.current().expect("current after repair").head,
+        created.current.head
+    );
+    assert_eq!(
+        std::fs::read(destination.join("HEAD")).expect("HEAD after repair"),
+        head_before
+    );
+    assert_eq!(
+        directory_file_digests(&destination.join("packs")),
+        packs_before
+    );
+    let observation = reopened
+        .object_store()
+        .expect("open repaired catalog")
+        .catalog_observation();
+    assert_eq!(observation.history.full_rebuilds, 1);
+    assert_eq!(observation.history.full_footer_scan_runs, 1);
+    assert!(observation.leftovers.is_empty());
+}
+
+fn predecessor_catalog_fixture() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"LKJCAT01");
+    bytes.extend_from_slice(&1_u16.to_be_bytes());
+    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    bytes.extend_from_slice(&[0_u8; 32]);
+    bytes.extend_from_slice(&0_u64.to_be_bytes());
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.object-catalog.complete.v1");
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(&bytes);
+    bytes.extend_from_slice(hasher.finalize().as_bytes());
+    bytes.extend_from_slice(b"LKJCEND1");
+    bytes
+}
+
+fn directory_file_digests(directory: &Path) -> BTreeMap<String, blake3::Hash> {
+    std::fs::read_dir(directory)
+        .expect("read digest fixture directory")
+        .map(|entry| {
+            let entry = entry.expect("digest fixture entry");
+            let name = entry
+                .file_name()
+                .into_string()
+                .expect("UTF-8 digest fixture name");
+            let bytes = std::fs::read(entry.path()).expect("digest fixture bytes");
+            (name, blake3::hash(&bytes))
+        })
+        .collect()
+}
+
+#[test]
 fn repository_open_reconstructs_one_missing_operational_lock_concurrently() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
@@ -7524,7 +7634,7 @@ fn repository_open_reconstructs_one_missing_operational_lock_concurrently() {
 }
 
 #[test]
-fn repository_open_does_not_reconstruct_lock_before_canonical_validation() {
+fn repository_open_serializes_recovery_before_rejecting_canonical_corruption() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -7540,7 +7650,10 @@ fn repository_open_does_not_reconstruct_lock_before_canonical_validation() {
             .code,
         "publication_repository_object_missing"
     );
-    assert!(!destination.join("LOCK").exists());
+    let lock = std::fs::symlink_metadata(destination.join("LOCK"))
+        .expect("recovery lock remains the single operational lock authority");
+    assert!(lock.is_file());
+    assert_eq!(lock.len(), 0);
 }
 
 #[cfg(unix)]

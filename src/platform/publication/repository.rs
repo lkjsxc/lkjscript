@@ -326,7 +326,7 @@ impl GraphRepository {
         let lock = open_or_reconstruct_lock(&root_directory, &root)?;
         FileExt::lock_shared(&lock)
             .map_err(|error| io_diagnostic("publication_repository_read_lock", &root, error))?;
-        let store = PackDirectoryStore::initialize(&root).map_err(store_diagnostic)?;
+        let store = open_store_shared(&root_directory, &root, &lock)?;
         let _ = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -343,7 +343,16 @@ impl GraphRepository {
     }
 
     pub fn object_store(&self) -> Result<PackDirectoryStore, Diagnostic> {
-        PackDirectoryStore::open(&self.root).map_err(store_diagnostic)
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_shared(&lock).map_err(|error| {
+            io_diagnostic(
+                "publication_repository_object_store_lock",
+                &self.root,
+                error,
+            )
+        })?;
+        open_store_shared(&root_directory, &self.root, &lock)
     }
 
     pub fn export_package_transport(
@@ -366,7 +375,7 @@ impl GraphRepository {
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock)
             .map_err(|error| io_diagnostic("publication_package_stage_lock", &self.root, error))?;
-        let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let mut store = open_store_exclusive(&root_directory, &self.root)?;
         let before = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -457,7 +466,7 @@ impl GraphRepository {
         FileExt::lock_exclusive(&lock).map_err(|error| {
             io_diagnostic("publication_compilation_stage_lock", &self.root, error)
         })?;
-        let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let mut store = open_store_exclusive(&root_directory, &self.root)?;
         let before = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -504,7 +513,7 @@ impl GraphRepository {
         FileExt::lock_shared(&lock).map_err(|error| {
             io_diagnostic("publication_repository_read_lock", &self.root, error)
         })?;
-        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let store = open_store_shared(&root_directory, &self.root, &lock)?;
         read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -523,7 +532,7 @@ impl GraphRepository {
         FileExt::lock_shared(&lock).map_err(|error| {
             io_diagnostic("publication_repository_view_lock", &self.root, error)
         })?;
-        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let store = open_store_shared(&root_directory, &self.root, &lock)?;
         let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -552,7 +561,7 @@ impl GraphRepository {
                 error,
             )
         })?;
-        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let store = open_store_shared(&root_directory, &self.root, &lock)?;
         let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Source,
@@ -656,7 +665,7 @@ impl GraphRepository {
         FileExt::lock_shared(&lock).map_err(|error| {
             io_diagnostic("publication_repository_reconcile_lock", &self.root, error)
         })?;
-        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let store = open_store_shared(&root_directory, &self.root, &lock)?;
         let current = read_current_optional(&root_directory, &store)?;
         validate_prepared_repository(prepared)?;
         let mut work = ReconciliationWork::default();
@@ -718,7 +727,7 @@ impl GraphRepository {
         FileExt::lock_exclusive(&lock).map_err(|error| {
             io_diagnostic("publication_repository_write_lock", &self.root, error)
         })?;
-        let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let mut store = open_store_exclusive(&root_directory, &self.root)?;
         let current = read_current_optional(&root_directory, &store)?;
         validate_prepared_repository(prepared)?;
         match classify_publication(&store, current.as_ref(), prepared)?.0 {
@@ -832,6 +841,73 @@ impl GraphRepository {
         }
         names.sort();
         Ok(names)
+    }
+}
+
+fn open_validated_store(
+    root_directory: &File,
+    root: &Path,
+) -> Result<PackDirectoryStore, Diagnostic> {
+    let store = PackDirectoryStore::open(root).map_err(store_diagnostic)?;
+    let _ = read_current_optional(root_directory, &store)?;
+    Ok(store)
+}
+
+fn recover_validated_store(
+    root_directory: &File,
+    root: &Path,
+    initial: &Diagnostic,
+) -> Result<PackDirectoryStore, Diagnostic> {
+    let reason = format!(
+        "exclusive catalog recovery after {}: {}",
+        initial.code, initial.message
+    );
+    let store = PackDirectoryStore::recover_catalog(root, reason).map_err(store_diagnostic)?;
+    let _ = read_current_optional(root_directory, &store)?;
+    Ok(store)
+}
+
+/// Opens and validates one catalog snapshot while the caller holds the shared repository lock.
+/// A failed healthy observation is rechecked and, if still failing, rebuilt exactly once under
+/// the exclusive lock before atomically downgrading to a shared observation.
+fn open_store_shared(
+    root_directory: &File,
+    root: &Path,
+    lock: &File,
+) -> Result<PackDirectoryStore, Diagnostic> {
+    let initial = match open_validated_store(root_directory, root) {
+        Ok(store) => return Ok(store),
+        Err(error) => error,
+    };
+    FileExt::unlock(lock)
+        .map_err(|error| io_diagnostic("publication_catalog_unlock", root, error))?;
+    FileExt::lock_exclusive(lock)
+        .map_err(|error| io_diagnostic("publication_catalog_recovery_lock", root, error))?;
+    let store = match open_validated_store(root_directory, root) {
+        Ok(store) => store,
+        Err(rechecked) => {
+            recover_validated_store(root_directory, root, &rechecked).map_err(|mut error| {
+                error.notes.push(format!(
+                    "initial healthy catalog observation failed at {}",
+                    initial.code
+                ));
+                error
+            })?
+        }
+    };
+    FileExt::lock_shared(lock)
+        .map_err(|error| io_diagnostic("publication_catalog_recovery_downgrade", root, error))?;
+    Ok(store)
+}
+
+/// Opens and validates one catalog snapshot while the caller already owns the exclusive lock.
+fn open_store_exclusive(
+    root_directory: &File,
+    root: &Path,
+) -> Result<PackDirectoryStore, Diagnostic> {
+    match open_validated_store(root_directory, root) {
+        Ok(store) => Ok(store),
+        Err(error) => recover_validated_store(root_directory, root, &error),
     }
 }
 
@@ -2389,17 +2465,6 @@ fn open_or_reconstruct_lock(root_directory: &File, root: &Path) -> Result<File, 
     if let Some(lock) = open_lock_optional(root_directory)? {
         return Ok(lock);
     }
-
-    let store = PackDirectoryStore::initialize(root).map_err(store_diagnostic)?;
-    let _ = read_current_optional(root_directory, &store)?.ok_or_else(|| {
-        repository_error(
-            DiagnosticClass::Source,
-            "publication_repository_unpublished",
-            "Graph 7 repository has no accepted HEAD",
-        )
-    })?;
-    drop(store);
-
     match rustix::fs::openat(
         root_directory,
         LOCK_FILE,
@@ -2412,6 +2477,20 @@ fn open_or_reconstruct_lock(root_directory: &File, root: &Path) -> Result<File, 
                 .map_err(|error| io_diagnostic("publication_repository_lock_sync", root, error))?;
             root_directory.sync_all().map_err(|error| {
                 io_diagnostic("publication_repository_layout_sync", root, error)
+            })?;
+            FileExt::lock_exclusive(&lock).map_err(|error| {
+                io_diagnostic("publication_repository_lock_recovery", root, error)
+            })?;
+            let store = open_store_exclusive(root_directory, root)?;
+            let _ = read_current_optional(root_directory, &store)?.ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Source,
+                    "publication_repository_unpublished",
+                    "Graph 7 repository has no accepted HEAD",
+                )
+            })?;
+            FileExt::unlock(&lock).map_err(|error| {
+                io_diagnostic("publication_repository_lock_recovery_release", root, error)
             })?;
             Ok(lock)
         }

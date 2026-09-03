@@ -147,7 +147,27 @@ Raw observations and bounded logs are under
 `.artifacts/campaign/202608270014/performance/work-KCVcbb/`; each structured row retains its
 observation SHA-256. These are single samples, not latency or topology distributions.
 
-## Current semantic-scale lifecycle
+## Current incremental-catalog capacity implementation
+
+Semantic-scale receipt contract 3 adds the exact catalog identity, selected segment layout,
+cumulative delta/merge/reconstruction work, final healthy-session reads, packing-independent
+logical commitment, and an implementation-disjoint full-footer reconstruction. The copied product
+binary remains the only writer: the harness uses ordinary 1,000-operation `change plan` and
+`change apply` batches and has no storage or accepted-authority construction shortcut.
+
+Two release-mode feasibility probes on Linux x86-64 used candidate SHA-256
+`2257fe2d1472023504b1f761f5005d04f5b8b66db9dcb065d8e71682c0eace59` and capabilities digest
+`aa332bfb075c5bf53920e68e77bb5f99a75b7065f35f2d414b303593164e076f`. The 20,000-module run
+completed in 75.853 seconds with 62,576 catalog entries, 306 packs, three live segments, 18 merges,
+84,099,679 repository bytes, and complete cleanup. The 100,000-module run completed in 543.352
+seconds with 519,732 catalog entries, 3,987 packs, four live segments, 97 merges, 2,508,340 bytes of
+selected metadata, 1,071,853,101 repository bytes, 101,252 KiB maximum child RSS, 160,208 KiB
+harness RSS, semantic/footer-oracle equality, zero healthy full scans or reconstructions, and
+complete cleanup. These working-tree probes establish the expected work curve only; neither is the
+required million-owner admission or final-source proof. Raw receipts are under
+`.artifacts/campaign/202609031354/probe-{20000,100000}/`.
+
+## Predecessor semantic-scale lifecycle
 
 At implementation commit `bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608`, receipt contract 2 copied
 the 15,616,616-byte release candidate (SHA-256
@@ -207,8 +227,8 @@ numbers predate meaning graph contracts 2, 3, and 4, persistent root pages, dire
 imports/targets, normalized query, or explicit generics. Those rows are historical baselines and
 must not be presented as current-contract performance. Two graph-4 release workflows at 10,000
 empty background modules are retained below on opposite sides of the semantic-fact cutover. The
-contract-2 semantic-scale observations above supersede their current-scale gap; no million-owner
-admission exists.
+predecessor contract-2 semantic-scale observations above supersede their earlier scale gap; no
+million-owner admission exists.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.

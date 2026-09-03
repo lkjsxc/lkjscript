@@ -12,6 +12,9 @@ use super::kernel::{
 };
 use super::publication::GraphRepository;
 use super::semantic_id::{DeclarationId, ExpressionId, encode_hex};
+use super::storage::catalog::{CatalogHistory, CatalogWork};
+use super::storage::directory::CatalogState;
+use super::storage::object::{StoreError, StoreErrorClass};
 use super::witness::{
     BindingContainerRole, ExpressionRootRole, FullWitness, OwnershipEntry, OwnershipParent,
     OwnershipRole, rebuild_full_witness,
@@ -56,6 +59,77 @@ pub struct SemanticInventory {
     pub map_bytes_read: u64,
     pub store_objects_read: u64,
     pub store_bytes_read: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogWorkInventory {
+    pub healthy_opens: u64,
+    pub manifests_read: u64,
+    pub manifest_bytes_read: u64,
+    pub segment_metadata_read: u64,
+    pub segment_metadata_bytes_read: u64,
+    pub segment_lookups: u64,
+    pub segment_blocks_read: u64,
+    pub segment_block_bytes_read: u64,
+    pub segment_entries_examined: u64,
+    pub targeted_pack_footers_read: u64,
+    pub targeted_pack_footer_bytes_read: u64,
+    pub delta_segments_written: u64,
+    pub merge_operations: u64,
+    pub merge_entries_read: u64,
+    pub merge_bytes_read: u64,
+    pub segments_written: u64,
+    pub segment_entries_written: u64,
+    pub manifests_written: u64,
+    pub obsolete_segments_removed: u64,
+    pub full_rebuilds: u64,
+    pub full_footer_scan_runs: u64,
+    pub pack_footers_scanned: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogHistoryInventory {
+    pub delta_segments: u64,
+    pub merge_operations: u64,
+    pub merge_entries_read: u64,
+    pub merge_bytes_read: u64,
+    pub segments_written: u64,
+    pub segment_entries_written: u64,
+    pub full_rebuilds: u64,
+    pub full_footer_scan_runs: u64,
+    pub pack_footers_scanned: u64,
+}
+
+/// Contributor-only bounded observation of derived catalog layout and an independent footer
+/// reconstruction. It does not add a product operation or mutate semantic authority.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogInventory {
+    pub identity: String,
+    pub contract_version: u16,
+    pub state: String,
+    pub generation: u64,
+    pub commitment: String,
+    pub entries: u64,
+    pub packs: u64,
+    pub segments: u64,
+    pub segment_bytes: u64,
+    pub segment_metadata_bytes: u64,
+    pub maximum_level: Option<u16>,
+    pub maximum_live_segments: u64,
+    pub maximum_lookup_segments: u64,
+    pub block_entries: u64,
+    pub history: CatalogHistoryInventory,
+    pub work: CatalogWorkInventory,
+    pub leftovers: Vec<String>,
+    pub footer_oracle_packs: u64,
+    pub footer_oracle_entries: u64,
+    pub footer_oracle_bytes_read: u64,
+    pub footer_oracle_duplicate_objects: u64,
+    pub footer_oracle_commitment: String,
+    pub footer_oracle_equal: bool,
 }
 
 /// One typed owner in the implementation-disjoint function-definition reconstruction.
@@ -262,6 +336,96 @@ pub fn semantic_inventory(project: &Path) -> Result<SemanticInventory, Diagnosti
         store_objects_read: read.work.store.objects_read,
         store_bytes_read: read.work.store.bytes_read,
     })
+}
+
+pub fn catalog_inventory(project: &Path) -> Result<CatalogInventory, Diagnostic> {
+    let repository = GraphRepository::open(project)?;
+    let store = repository.object_store()?;
+    let observation = store.catalog_observation();
+    let footer = store
+        .verify_catalog_from_footers()
+        .map_err(catalog_store_diagnostic)?;
+    Ok(CatalogInventory {
+        identity: observation.identity.to_owned(),
+        contract_version: observation.contract_version,
+        state: match observation.state {
+            CatalogState::Loaded => "loaded",
+            CatalogState::RebuiltPersisted => "rebuilt_persisted",
+            CatalogState::IncrementalPersisted => "incremental_persisted",
+        }
+        .to_owned(),
+        generation: observation.generation,
+        commitment: observation.commitment.to_string(),
+        entries: observation.entries,
+        packs: observation.packs,
+        segments: observation.segments as u64,
+        segment_bytes: observation.segment_bytes,
+        segment_metadata_bytes: observation.segment_metadata_bytes,
+        maximum_level: observation.maximum_level,
+        maximum_live_segments: observation.maximum_live_segments as u64,
+        maximum_lookup_segments: observation.maximum_lookup_segments as u64,
+        block_entries: observation.block_entries as u64,
+        history: catalog_history_inventory(observation.history),
+        work: catalog_work_inventory(observation.work),
+        leftovers: observation.leftovers,
+        footer_oracle_packs: footer.packs,
+        footer_oracle_entries: footer.entries,
+        footer_oracle_bytes_read: footer.footer_bytes_read,
+        footer_oracle_duplicate_objects: footer.duplicate_objects,
+        footer_oracle_commitment: footer.oracle_commitment.to_string(),
+        footer_oracle_equal: footer.equal && footer.oracle_commitment == footer.manifest_commitment,
+    })
+}
+
+fn catalog_history_inventory(value: CatalogHistory) -> CatalogHistoryInventory {
+    CatalogHistoryInventory {
+        delta_segments: value.delta_segments,
+        merge_operations: value.merge_operations,
+        merge_entries_read: value.merge_entries_read,
+        merge_bytes_read: value.merge_bytes_read,
+        segments_written: value.segments_written,
+        segment_entries_written: value.segment_entries_written,
+        full_rebuilds: value.full_rebuilds,
+        full_footer_scan_runs: value.full_footer_scan_runs,
+        pack_footers_scanned: value.pack_footers_scanned,
+    }
+}
+
+fn catalog_work_inventory(value: CatalogWork) -> CatalogWorkInventory {
+    CatalogWorkInventory {
+        healthy_opens: value.healthy_opens,
+        manifests_read: value.manifests_read,
+        manifest_bytes_read: value.manifest_bytes_read,
+        segment_metadata_read: value.segment_metadata_read,
+        segment_metadata_bytes_read: value.segment_metadata_bytes_read,
+        segment_lookups: value.segment_lookups,
+        segment_blocks_read: value.segment_blocks_read,
+        segment_block_bytes_read: value.segment_block_bytes_read,
+        segment_entries_examined: value.segment_entries_examined,
+        targeted_pack_footers_read: value.targeted_pack_footers_read,
+        targeted_pack_footer_bytes_read: value.targeted_pack_footer_bytes_read,
+        delta_segments_written: value.delta_segments_written,
+        merge_operations: value.merge_operations,
+        merge_entries_read: value.merge_entries_read,
+        merge_bytes_read: value.merge_bytes_read,
+        segments_written: value.segments_written,
+        segment_entries_written: value.segment_entries_written,
+        manifests_written: value.manifests_written,
+        obsolete_segments_removed: value.obsolete_segments_removed,
+        full_rebuilds: value.full_rebuilds,
+        full_footer_scan_runs: value.full_footer_scan_runs,
+        pack_footers_scanned: value.pack_footers_scanned,
+    }
+}
+
+fn catalog_store_diagnostic(error: StoreError) -> Diagnostic {
+    let class = match error.class {
+        StoreErrorClass::Input => DiagnosticClass::Source,
+        StoreErrorClass::Resource => DiagnosticClass::Resource,
+        StoreErrorClass::Corrupt => DiagnosticClass::Corrupt,
+        StoreErrorClass::Io => DiagnosticClass::Infrastructure,
+    };
+    Diagnostic::new(class, error.code, error.message)
 }
 
 /// Reconstruct one complete accepted function from typed authority for independent verification.
@@ -2224,8 +2388,9 @@ fn hash_endpoint(hasher: &mut Hasher, endpoint: RelationEndpoint) {
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphRepository, compact_change_default_maximum_operations, function_definition_oracle,
-        function_extraction_oracle, largest_function_definition_oracle, semantic_inventory,
+        GraphRepository, catalog_inventory, compact_change_default_maximum_operations,
+        function_definition_oracle, function_extraction_oracle, largest_function_definition_oracle,
+        semantic_inventory,
     };
     use crate::platform::kernel::{DeclarationPayload, ExpressionOperation, OwnerKey, OwnerRecord};
     use std::path::Path;
@@ -2248,6 +2413,35 @@ mod tests {
     #[test]
     fn compact_change_default_is_the_current_batch_authority() {
         assert_eq!(compact_change_default_maximum_operations(), 1_000);
+    }
+
+    #[test]
+    fn catalog_inventory_binds_incremental_work_and_independent_footer_oracle() {
+        let temporary = tempfile::tempdir().expect("temporary catalog inventory parent");
+        let project = temporary.path().join("meaning");
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let created = GraphRepository::create(&project, &snapshot, None)
+            .expect("create catalog inventory repository");
+        let before = std::fs::read(project.join("HEAD")).expect("HEAD before catalog inventory");
+        let inventory = catalog_inventory(&project).expect("catalog inventory");
+        assert_eq!(inventory.identity, "lkjscript-object-catalog-2");
+        assert_eq!(inventory.contract_version, 2);
+        assert_eq!(inventory.state, "loaded");
+        assert!(inventory.entries > 0);
+        assert!(inventory.segments <= inventory.maximum_live_segments);
+        assert_eq!(inventory.maximum_lookup_segments, inventory.segments);
+        assert_eq!(inventory.history.full_rebuilds, 0);
+        assert_eq!(inventory.work.full_rebuilds, 0);
+        assert!(inventory.footer_oracle_equal);
+        assert_eq!(inventory.footer_oracle_commitment, inventory.commitment);
+        assert_eq!(
+            std::fs::read(project.join("HEAD")).expect("HEAD after catalog inventory"),
+            before
+        );
+        assert_eq!(
+            created.current.head.revision.to_string(),
+            semantic_inventory(&project).unwrap().revision
+        );
     }
 
     #[test]

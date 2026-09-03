@@ -47,6 +47,25 @@ expression ownership, relations, dependencies/interfaces, components/ports/targe
 documentation/annotations, retirements, counts, and digest. Migration tooling is temporary and
 must be deleted after materialization. The retained projection is evidence, never authority.
 
+Object-catalog acceptance has a separate footer oracle. It enumerates and strictly decodes
+immutable pack footers, deterministically resolves duplicate physical objects, and computes entry
+count and packing-independent logical commitment without calling the contract-2 manifest reader,
+segment lookup, merge, or commitment implementation. It must agree with the selected manifest after
+healthy incremental construction and recovery. Repeated-process open, lookup, plan, apply, and seal
+fixtures separately require zero complete footer scans and zero full reconstructions; recovery and
+deep verification must report their scans rather than relabel them as healthy work. Missing,
+predecessor, malformed, stale, canonical-corruption, and every segment/manifest/cleanup
+interruption fixture must preserve old-or-new `HEAD` visibility and exact canonical bytes.
+
+The lightweight million-owner capacity admission uses a copied release-mode executable and only
+the unchanged public `change plan` / `change apply` path. It constructs exactly 1,000,000
+independent modules in 1,000-operation batches, then runs status, exact inspection, bounded owner,
+exact-name, and bounded-context queries plus typed semantic and independent catalog oracles. The
+gate admits at most 7,200 wall seconds and 68,719,476,736 run bytes and requires at least
+8,589,934,592 available memory bytes and 68,719,476,736 available filesystem bytes at preflight.
+It is capacity-only evidence: it does not run or claim million-owner check, compilation, build,
+release, deployment, service, operational-data, or production admission.
+
 Recipe lowering additionally requires generation-neutral projections for `minimal`, `command`,
 `http`, and `nostr-relay-info` to agree with their predecessor results while excluding deliberately
 fresh repository, package, revision, and owner identities. The oracle must use an independent graph

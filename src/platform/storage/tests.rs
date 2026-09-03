@@ -1,6 +1,9 @@
 //! Generic immutable store and pack conformance tests.
 
-use super::catalog::ObjectCatalog;
+use super::catalog::{
+    CatalogEntry, CatalogHistory, CatalogIndex, CatalogLocation, CatalogManifest, ObjectCatalog,
+    PackDescriptor, SegmentId, read_segment_metadata, write_segment,
+};
 use super::directory::{CatalogState, PackDirectoryStore, SealCheckpoint};
 use super::memory::MemoryPackedStore;
 use super::object::{
@@ -10,7 +13,7 @@ use super::object::{
 use super::pack::{PackBuilder, PackId, PackMetadata};
 use super::page_store::ObjectPageStore;
 use crate::platform::persistent_map::{MapWork, PersistentMap};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Seek, SeekFrom, Write};
 
 fn object(domain: ObjectDomain, value: &[u8]) -> (ObjectKey, Vec<u8>) {
@@ -53,14 +56,6 @@ fn rewrite_pack_index_checksum(bytes: &mut [u8]) {
     hasher.update(&((end - start) as u64).to_be_bytes());
     hasher.update(&bytes[start..end]);
     bytes[footer + 36..footer + 68].copy_from_slice(hasher.finalize().as_bytes());
-}
-
-fn rewrite_catalog_checksum(bytes: &mut [u8]) {
-    let trailer = bytes.len() - 40;
-    let mut hasher = blake3::Hasher::new_derive_key(super::contract::CATALOG_CHECKSUM_DOMAIN);
-    hasher.update(&(trailer as u64).to_be_bytes());
-    hasher.update(&bytes[..trailer]);
-    bytes[trailer..trailer + 32].copy_from_slice(hasher.finalize().as_bytes());
 }
 
 #[test]
@@ -392,26 +387,154 @@ fn target_sized_packs_and_catalog_round_trip() {
         .expect("catalog must rebuild");
     assert!(build.duplicates.is_empty());
     assert_eq!(build.catalog.len(), expected.len());
-    let encoded = build.catalog.encode().expect("catalog must encode");
-    let decoded =
-        ObjectCatalog::decode(&encoded, build.catalog.generation()).expect("catalog must decode");
-    assert_eq!(decoded, build.catalog);
-    assert!(ObjectCatalog::decode(&encoded, [0x44; 32]).is_err());
-    let mut corrupt = encoded.clone();
+    let descriptors = packs
+        .iter()
+        .map(|pack| {
+            Ok((
+                pack.id,
+                PackDescriptor::from_metadata(pack.id, &pack.metadata)?,
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, super::object::StoreError>>()
+        .expect("pack descriptors");
+    let mut segment_bytes = Vec::new();
+    let written = write_segment(
+        &mut segment_bytes,
+        0,
+        1,
+        &descriptors,
+        build.catalog.entries().map(Ok),
+    )
+    .expect("segment must encode");
+    let mut reader = Cursor::new(&segment_bytes);
+    let metadata =
+        read_segment_metadata(&mut reader, segment_bytes.len() as u64, written.metadata.id)
+            .expect("segment metadata must decode");
+    assert_eq!(metadata, written.metadata);
+    let mut decoded = BTreeMap::new();
+    for ordinal in 0..metadata.blocks.len() {
+        for entry in metadata
+            .read_block(&mut reader, ordinal)
+            .expect("segment block must decode")
+        {
+            decoded.insert(entry.key, entry.location);
+        }
+    }
+    assert_eq!(decoded.len(), build.catalog.len());
+    let manifest = CatalogManifest::from_segments(
+        1,
+        CatalogHistory::default(),
+        std::slice::from_ref(&metadata),
+    )
+    .expect("manifest must construct");
+    let manifest_bytes = manifest.encode().expect("manifest must encode");
+    let decoded_manifest = CatalogManifest::decode(&manifest_bytes).expect("manifest must decode");
+    assert_eq!(decoded_manifest, manifest);
+    let index = CatalogIndex::new(decoded_manifest, vec![metadata]).expect("index must bind");
+    assert_eq!(index.len(), expected.len());
+    assert_eq!(
+        index.manifest().logical_commitment,
+        build.catalog.logical_commitment()
+    );
+    let mut corrupt = manifest_bytes;
     let checksum = corrupt.len() - 40;
     corrupt[checksum] ^= 1;
-    assert!(ObjectCatalog::decode(&corrupt, build.catalog.generation()).is_err());
-    let mut overflow = encoded.clone();
-    let first_location_offset = 52 + 65;
-    overflow[first_location_offset..first_location_offset + 8]
-        .copy_from_slice(&u64::MAX.to_be_bytes());
-    rewrite_catalog_checksum(&mut overflow);
-    let error = ObjectCatalog::decode(&overflow, build.catalog.generation())
+    assert!(CatalogManifest::decode(&corrupt).is_err());
+    let invalid = CatalogEntry {
+        key: expected[0].0,
+        location: CatalogLocation {
+            pack: packs[0].id,
+            offset: u64::MAX,
+            length: 1,
+            checksum: [0_u8; 32],
+        },
+    };
+    let error = write_segment(&mut Vec::new(), 0, 1, &descriptors, [Ok(invalid)])
         .expect_err("catalog coordinates must not overflow");
     assert_eq!(error.code, "catalog_location_overflow");
     for (key, _) in expected {
-        assert!(decoded.get(key).is_some());
+        assert!(decoded.contains_key(&key));
     }
+}
+
+#[test]
+fn catalog_segment_decoder_rejects_hostile_identity_layout_and_payload() {
+    let (key, bytes) = object(ObjectDomain::Owner, b"strict-catalog-segment");
+    let mut builder = PackBuilder::default();
+    builder.insert(key, &bytes).expect("object must stage");
+    let pack = builder.seal().expect("pack must seal");
+    let descriptor = PackDescriptor::from_metadata(pack.id, &pack.metadata)
+        .expect("pack descriptor must construct");
+    let descriptors = BTreeMap::from([(pack.id, descriptor)]);
+    let location = CatalogLocation {
+        pack: pack.id,
+        offset: pack.metadata.entries[0].offset,
+        length: pack.metadata.entries[0].encoded_length,
+        checksum: pack.metadata.entries[0].checksum,
+    };
+    let mut encoded = Vec::new();
+    let written = write_segment(
+        &mut encoded,
+        0,
+        1,
+        &descriptors,
+        [Ok(CatalogEntry { key, location })],
+    )
+    .expect("segment must encode");
+
+    assert_eq!(
+        SegmentId::parse_file_name(&written.metadata.id.file_name())
+            .expect("canonical segment name"),
+        written.metadata.id
+    );
+    assert!(SegmentId::parse_file_name(&written.metadata.id.file_name().to_uppercase()).is_err());
+    assert!(SegmentId::parse_file_name("../segment_escape.lkjs").is_err());
+
+    let truncated_length = encoded.len() as u64 - 1;
+    assert!(
+        read_segment_metadata(
+            &mut Cursor::new(&encoded[..encoded.len() - 1]),
+            truncated_length,
+            written.metadata.id,
+        )
+        .is_err()
+    );
+    let mut trailing = encoded.clone();
+    trailing.push(0);
+    assert!(
+        read_segment_metadata(
+            &mut Cursor::new(&trailing),
+            trailing.len() as u64,
+            written.metadata.id,
+        )
+        .is_err()
+    );
+    assert!(
+        read_segment_metadata(
+            &mut Cursor::new(&encoded),
+            encoded.len() as u64,
+            SegmentId::from_bytes([0x55; 32]),
+        )
+        .is_err()
+    );
+
+    let mut corrupted_payload = encoded;
+    let first_entry = usize::try_from(written.metadata.blocks[0].offset)
+        .expect("block offset must fit test platform");
+    corrupted_payload[first_entry] ^= 1;
+    let error = written
+        .metadata
+        .read_block(&mut Cursor::new(corrupted_payload), 0)
+        .expect_err("authenticated block corruption must reject");
+    assert_eq!(error.code, "catalog_block_checksum");
+
+    let error = CatalogManifest::from_segments(
+        1,
+        CatalogHistory::default(),
+        &[written.metadata.clone(), written.metadata],
+    )
+    .expect_err("duplicate segment level and identity must reject");
+    assert_eq!(error.code, "catalog_manifest_order");
 }
 
 #[test]
@@ -591,8 +714,8 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
     let temporary = tempfile::TempDir::new().expect("temporary store parent");
     let root = temporary.path().join("objects");
     let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
-    assert_eq!(store.catalog_state(), CatalogState::RebuiltPersisted);
-    assert!(store.catalog_rebuild_note().is_some());
+    assert_eq!(store.catalog_state(), CatalogState::Loaded);
+    assert!(store.catalog_rebuild_note().is_none());
     let entries = [
         object(ObjectDomain::Owner, b"owner-on-disk"),
         object(ObjectDomain::Type, b"type-on-disk"),
@@ -612,8 +735,9 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
         .expect("objects must seal");
     assert_eq!(receipt.packs.len(), 1);
     assert_eq!(receipt.objects, entries.len());
-    assert_eq!(receipt.catalog_state, CatalogState::RebuiltPersisted);
-    assert!(receipt.catalog_persist_error.is_none());
+    assert_eq!(receipt.catalog_state, CatalogState::IncrementalPersisted);
+    assert_eq!(receipt.catalog_work.full_rebuilds, 0);
+    assert_eq!(receipt.catalog_work.full_footer_scan_runs, 0);
     assert_eq!(store.staged_len(), 0);
     let deep = store.deep_verify().expect("store must verify deeply");
     assert_eq!(deep.packs, 1);
@@ -635,11 +759,73 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
 
     std::fs::write(root.join("catalog/current.lkjc"), b"corrupt catalog")
         .expect("catalog corruption fixture");
-    let rebuilt = PackDirectoryStore::open(&root).expect("corrupt catalog must rebuild");
+    assert!(PackDirectoryStore::open(&root).is_err());
+    let rebuilt = PackDirectoryStore::recover_catalog(&root, "discarded corrupt fixture catalog")
+        .expect("corrupt catalog must rebuild under exclusive recovery");
     assert_eq!(rebuilt.catalog_state(), CatalogState::RebuiltPersisted);
     assert!(rebuilt.catalog_rebuild_note().is_some());
-    assert!(rebuilt.catalog_persist_error().is_none());
-    assert_eq!(rebuilt.catalog().len(), entries.len());
+    assert_eq!(
+        rebuilt.catalog_observation().entries as usize,
+        entries.len()
+    );
+    assert_eq!(rebuilt.catalog_work().full_footer_scan_runs, 1);
+}
+
+#[test]
+fn incremental_catalog_merges_are_bounded_and_order_independent() {
+    let temporary = tempfile::TempDir::new().expect("temporary catalog parent");
+    let forward_root = temporary.path().join("forward");
+    let reverse_root = temporary.path().join("reverse");
+    let entries = (0..8_u8)
+        .map(|ordinal| object(ObjectDomain::Owner, &[b'o', ordinal]))
+        .collect::<Vec<_>>();
+
+    for (root, reverse) in [(&forward_root, false), (&reverse_root, true)] {
+        let mut store = PackDirectoryStore::initialize(root).expect("initialize catalog fixture");
+        for ordinal in 0..entries.len() {
+            let index = if reverse {
+                entries.len() - ordinal - 1
+            } else {
+                ordinal
+            };
+            let (key, bytes) = &entries[index];
+            let mut work = StoreWork::default();
+            assert_eq!(
+                store.stage(*key, bytes, &mut work).expect("stage delta"),
+                StageOutcome::Inserted
+            );
+            let receipt = store
+                .seal_staged(16 * 1024, &mut work)
+                .expect("seal incremental delta");
+            assert_eq!(receipt.catalog_work.full_rebuilds, 0);
+            assert_eq!(receipt.catalog_work.full_footer_scan_runs, 0);
+            drop(store);
+            store = PackDirectoryStore::open(root).expect("healthy incremental reopen");
+            assert_eq!(store.catalog_work().full_rebuilds, 0);
+            assert_eq!(store.catalog_work().full_footer_scan_runs, 0);
+        }
+        let observation = store.catalog_observation();
+        assert_eq!(observation.entries, entries.len() as u64);
+        assert_eq!(observation.segments, 1);
+        assert_eq!(observation.maximum_level, Some(3));
+        assert_eq!(observation.history.delta_segments, entries.len() as u64);
+        assert_eq!(observation.history.merge_operations, 7);
+        assert_eq!(observation.history.full_rebuilds, 0);
+        assert_eq!(observation.history.full_footer_scan_runs, 0);
+        assert!(observation.leftovers.is_empty());
+        let deep = store.deep_verify().expect("independent footer oracle");
+        assert!(deep.catalog_equal);
+        assert_eq!(deep.oracle_commitment, observation.commitment);
+    }
+
+    let forward = PackDirectoryStore::open(&forward_root)
+        .expect("forward catalog")
+        .catalog_observation();
+    let reverse = PackDirectoryStore::open(&reverse_root)
+        .expect("reverse catalog")
+        .catalog_observation();
+    assert_eq!(forward.commitment, reverse.commitment);
+    assert_eq!(forward.entries, reverse.entries);
 }
 
 #[test]
@@ -731,12 +917,12 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
         assert!(error.message.contains(checkpoint.name()));
         drop(store);
 
-        let published = !matches!(
+        let catalog_visible = matches!(
             checkpoint,
-            SealCheckpoint::PackStageCreated
-                | SealCheckpoint::PackPayloadWritten
-                | SealCheckpoint::PackFooterWritten
-                | SealCheckpoint::PackFileSynced
+            SealCheckpoint::ManifestPublished
+                | SealCheckpoint::CatalogDirectorySynced
+                | SealCheckpoint::ObsoleteSegmentsRemoved
+                | SealCheckpoint::DerivedCleanupSynced
         );
         let leaves_pack_stage = matches!(
             checkpoint,
@@ -748,9 +934,15 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
         );
         let leaves_catalog_stage = matches!(
             checkpoint,
-            SealCheckpoint::CatalogStageCreated
-                | SealCheckpoint::CatalogBytesWritten
-                | SealCheckpoint::CatalogFileSynced
+            SealCheckpoint::SegmentStageCreated
+                | SealCheckpoint::SegmentBytesWritten
+                | SealCheckpoint::SegmentFileSynced
+                | SealCheckpoint::SegmentPublished
+                | SealCheckpoint::SegmentStageRemoved
+                | SealCheckpoint::SegmentDirectorySynced
+                | SealCheckpoint::ManifestStageCreated
+                | SealCheckpoint::ManifestBytesWritten
+                | SealCheckpoint::ManifestFileSynced
         );
         let mut reopened = PackDirectoryStore::open(&root).expect("interrupted store must reopen");
         assert_eq!(
@@ -767,7 +959,7 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
             reopened
                 .read(key, bytes.len(), &mut StoreWork::default())
                 .expect("interrupted lookup"),
-            published.then_some(bytes.clone()),
+            catalog_visible.then_some(bytes.clone()),
             "wrong visible immutable object state at {checkpoint:?}"
         );
 
@@ -776,7 +968,7 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
             .expect("retry staging must be safe");
         assert_eq!(
             retry_outcome,
-            if published {
+            if catalog_visible {
                 StageOutcome::Reused
             } else {
                 StageOutcome::Inserted
@@ -794,6 +986,98 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
         let deep = reopened.deep_verify().expect("retried store must verify");
         assert_eq!(deep.packs, 1);
         assert_eq!(deep.objects, 1);
+    }
+}
+
+#[test]
+fn every_catalog_recovery_checkpoint_reopens_or_repairs_exactly() {
+    const RECOVERY_CHECKPOINTS: [SealCheckpoint; 13] = [
+        SealCheckpoint::SegmentStageCreated,
+        SealCheckpoint::SegmentBytesWritten,
+        SealCheckpoint::SegmentFileSynced,
+        SealCheckpoint::SegmentPublished,
+        SealCheckpoint::SegmentStageRemoved,
+        SealCheckpoint::SegmentDirectorySynced,
+        SealCheckpoint::ManifestStageCreated,
+        SealCheckpoint::ManifestBytesWritten,
+        SealCheckpoint::ManifestFileSynced,
+        SealCheckpoint::ManifestPublished,
+        SealCheckpoint::CatalogDirectorySynced,
+        SealCheckpoint::ObsoleteSegmentsRemoved,
+        SealCheckpoint::DerivedCleanupSynced,
+    ];
+
+    for checkpoint in RECOVERY_CHECKPOINTS {
+        let temporary = tempfile::TempDir::new().expect("temporary recovery parent");
+        let root = temporary.path().join(checkpoint.name());
+        let mut store = PackDirectoryStore::initialize(&root).expect("initialize recovery store");
+        let (key, bytes) = object(ObjectDomain::Owner, checkpoint.name().as_bytes());
+        store
+            .stage(key, &bytes, &mut StoreWork::default())
+            .expect("stage recovery fixture");
+        let sealed = store
+            .seal_staged(16 * 1024, &mut StoreWork::default())
+            .expect("seal recovery fixture");
+        let expected_commitment = store.catalog_observation().commitment;
+        let pack_path = root.join("packs").join(sealed.packs[0].file_name());
+        let pack_before = std::fs::read(&pack_path).expect("read immutable pack before recovery");
+        drop(store);
+
+        std::fs::write(
+            root.join("catalog/current.lkjc"),
+            b"malformed recovery fixture",
+        )
+        .expect("replace disposable manifest");
+        let error = PackDirectoryStore::recover_catalog_with_fault(
+            &root,
+            "fault-injected catalog repair",
+            checkpoint,
+        )
+        .expect_err("recovery checkpoint must interrupt repair");
+        assert_eq!(error.code, "pack_store_injected_interruption");
+
+        let manifest_visible = matches!(
+            checkpoint,
+            SealCheckpoint::ManifestPublished
+                | SealCheckpoint::CatalogDirectorySynced
+                | SealCheckpoint::ObsoleteSegmentsRemoved
+                | SealCheckpoint::DerivedCleanupSynced
+        );
+        match PackDirectoryStore::open(&root) {
+            Ok(opened) if manifest_visible => {
+                assert_eq!(opened.catalog_observation().commitment, expected_commitment);
+                drop(opened);
+            }
+            Err(_) if !manifest_visible => {}
+            outcome => panic!("unexpected recovery visibility {outcome:?} at {checkpoint:?}"),
+        }
+
+        let repaired = PackDirectoryStore::recover_catalog(&root, "retry interrupted repair")
+            .expect("retry must reconstruct from immutable footers");
+        assert_eq!(
+            repaired.catalog_observation().commitment,
+            expected_commitment
+        );
+        assert!(repaired.catalog_leftovers().is_empty());
+        assert!(repaired.staging_leftovers().is_empty());
+        assert_eq!(repaired.catalog_work().full_rebuilds, 1);
+        assert_eq!(repaired.catalog_work().full_footer_scan_runs, 1);
+        assert_eq!(
+            repaired
+                .read(key, bytes.len(), &mut StoreWork::default())
+                .expect("read repaired object"),
+            Some(bytes)
+        );
+        assert!(
+            repaired
+                .deep_verify()
+                .expect("deep verify repair")
+                .catalog_equal
+        );
+        assert_eq!(
+            std::fs::read(pack_path).expect("read immutable pack after recovery"),
+            pack_before
+        );
     }
 }
 
@@ -824,7 +1108,8 @@ fn directory_store_detects_duplicate_physical_objects() {
         &second.bytes,
     )
     .expect("second pack fixture");
-    let store = PackDirectoryStore::open(&root).expect("store must reopen");
+    let store = PackDirectoryStore::recover_catalog(&root, "duplicate fixture pack discovery")
+        .expect("store must recover from immutable pack footers");
     assert_eq!(store.duplicate_objects().len(), 1);
     assert_eq!(store.duplicate_objects()[0].key, shared.0);
     assert_eq!(store.deep_verify().expect("packs must verify").packs, 2);
@@ -867,7 +1152,7 @@ fn directory_store_rejects_symlinked_pack_and_predecessor_bytes() {
     std::fs::write(&external, b"LKJGRPH4 predecessor").expect("external fixture");
     let symlink_name = PackId::from_bytes([0x44; 32]).file_name();
     symlink(&external, root.join("packs").join(symlink_name)).expect("symlink fixture");
-    assert!(PackDirectoryStore::open(&root).is_err());
+    assert!(PackDirectoryStore::recover_catalog(&root, "symlink fixture").is_err());
 
     std::fs::remove_dir_all(&root).expect("replace fixture store");
     drop(PackDirectoryStore::initialize(&root).expect("store must initialize"));
@@ -877,7 +1162,8 @@ fn directory_store_rejects_symlinked_pack_and_predecessor_bytes() {
         b"LKJGRPH4 predecessor",
     )
     .expect("predecessor fixture");
-    let error = PackDirectoryStore::open(&root).expect_err("predecessor bytes must reject");
+    let error = PackDirectoryStore::recover_catalog(&root, "predecessor fixture")
+        .expect_err("predecessor bytes must reject");
     assert!(matches!(
         error.class,
         super::object::StoreErrorClass::Corrupt | super::object::StoreErrorClass::Resource
@@ -896,5 +1182,5 @@ fn staging_leftovers_are_classified_without_becoming_authority() {
         store.staging_leftovers(),
         &[".pack-stage-interrupted".to_owned()]
     );
-    assert!(store.catalog().is_empty());
+    assert_eq!(store.catalog_observation().entries, 0);
 }
