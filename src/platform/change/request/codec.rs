@@ -1,8 +1,8 @@
 //! Explicit deterministic encoding for normalized authored intent.
 //!
 //! Record and list order is part of authored intent and allocation traversal, including for
-//! collections that lower into keyed graph relations. This codec does not claim to canonicalize
-//! distinct authored requests that happen to produce behaviorally equal graph content.
+//! collections that lower into keyed graph relations. Independent HTTP route additions are the
+//! exception: their graph-owned set semantics require canonical target/method/path/port order.
 
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR08";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR10";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -26,9 +26,32 @@ pub(super) fn encode_authored_intent(
     writer.list(&request.preconditions, |writer, precondition| {
         writer.precondition(precondition)
     })?;
-    writer.list(&request.changes, |writer, change| {
-        writer.change(change, definitions)
-    })?;
+    writer.authored_changes(&request.changes, definitions)?;
+    Ok(writer.finish())
+}
+
+pub(super) fn authored_http_route_sort_key(
+    change: &AuthoredChange,
+    definitions: &BTreeMap<String, SymbolDefinition>,
+) -> Result<Vec<u8>, Diagnostic> {
+    let AuthoredChange::AddHttpRoute {
+        target,
+        method,
+        path,
+        port,
+        ..
+    } = change
+    else {
+        return Err(codec_error(
+            "change_authored_http_route_sort_key",
+            "HTTP route sort-key encoding requires an add.http-route operation",
+        ));
+    };
+    let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+    writer.owner_selector(target, definitions)?;
+    writer.string(method)?;
+    writer.string(path)?;
+    writer.port_reference(port, definitions)?;
     Ok(writer.finish())
 }
 
@@ -167,6 +190,32 @@ impl Writer {
         self.length(values.len())?;
         for value in values {
             encode(self, value)?;
+        }
+        Ok(())
+    }
+
+    fn authored_changes(
+        &mut self,
+        changes: &[AuthoredChange],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.length(changes.len())?;
+        for change in changes
+            .iter()
+            .filter(|change| !matches!(change, AuthoredChange::AddHttpRoute { .. }))
+        {
+            self.change(change, definitions)?;
+        }
+        let mut routes = changes
+            .iter()
+            .filter(|change| matches!(change, AuthoredChange::AddHttpRoute { .. }))
+            .map(|change| {
+                authored_http_route_sort_key(change, definitions).map(|key| (key, change))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        routes.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        for (_, change) in routes {
+            self.change(change, definitions)?;
         }
         Ok(())
     }
@@ -434,7 +483,9 @@ impl Writer {
                 self.symbol(symbol, definitions)?;
                 self.name(name)?;
                 self.declaration_reference(component, definitions)?;
-                self.port_reference(port, definitions)?;
+                self.optional(port.as_ref(), |writer, port| {
+                    writer.port_reference(port, definitions)
+                })?;
                 self.runner(*runner)
             }
             AuthoredChange::CreateDocumentation {
@@ -587,7 +638,9 @@ impl Writer {
                 self.tag(28)?;
                 self.owner_selector(target, definitions)?;
                 self.declaration_reference(component, definitions)?;
-                self.port_reference(port, definitions)?;
+                self.optional(port.as_ref(), |writer, port| {
+                    writer.port_reference(port, definitions)
+                })?;
                 self.runner(*runner)
             }
             AuthoredChange::AddDependency {
@@ -648,6 +701,32 @@ impl Writer {
                 self.declaration_selector(function, definitions)?;
                 self.raw(&expression.bytes())?;
                 self.name(name)
+            }
+            AuthoredChange::AddHttpRoute {
+                symbol,
+                target,
+                method,
+                path,
+                port,
+            } => {
+                self.tag(37)?;
+                self.symbol(symbol, definitions)?;
+                self.owner_selector(target, definitions)?;
+                self.string(method)?;
+                self.string(path)?;
+                self.port_reference(port, definitions)
+            }
+            AuthoredChange::SetHttpRoute {
+                route,
+                method,
+                path,
+                port,
+            } => {
+                self.tag(38)?;
+                self.owner_selector(route, definitions)?;
+                self.string(method)?;
+                self.string(path)?;
+                self.port_reference(port, definitions)
             }
         }
     }
@@ -1472,7 +1551,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "55c6bfff8315a05bf27523d5bf30cb2d0b4e4dd05659a517b9e06e63203917fc"
+            "1d9f873a05eb9fe70d8b9bf3c2ba72a343b721205908e8161b6ae7410d01c0bc"
         );
     }
 
@@ -1570,6 +1649,40 @@ mod tests {
         assert_ne!(
             canonical_authored_intent_bytes(&first).unwrap(),
             canonical_authored_intent_bytes(&reordered).unwrap()
+        );
+    }
+
+    #[test]
+    fn independent_http_route_additions_have_set_order_and_label_independent_intent() {
+        let target = crate::platform::semantic_id::TargetId::migrate(b"route-order", 1);
+        let package = crate::platform::kernel::PackageId::migrate(b"route-order", 2);
+        let port = crate::platform::semantic_id::PortId::migrate(b"route-order", 3);
+        let route = |symbol: &str, method: &str, path: &str| AuthoredChange::AddHttpRoute {
+            symbol: symbol.to_owned(),
+            target: OwnerSelector::Exact {
+                owner: OwnerKey::Target(target),
+            },
+            method: method.to_owned(),
+            path: path.to_owned(),
+            port: AuthoredPortReference::Exact { package, port },
+        };
+        let request = |first: AuthoredChange, second: AuthoredChange| AuthoredChangeSet {
+            base: revision(),
+            preconditions: Vec::new(),
+            changes: vec![first, second],
+            budget: ChangeBudget::default(),
+        };
+        let first = request(
+            route("$root", "GET", "/"),
+            route("$probe", "HEAD", "/probe"),
+        );
+        let swapped = request(
+            route("$different_probe_label", "HEAD", "/probe"),
+            route("$different_root_label", "GET", "/"),
+        );
+        assert_eq!(
+            canonical_authored_intent_bytes(&first).unwrap(),
+            canonical_authored_intent_bytes(&swapped).unwrap()
         );
     }
 

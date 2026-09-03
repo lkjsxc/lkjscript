@@ -24,7 +24,7 @@ struct RecipeProjection {
 }
 
 #[test]
-fn recipes_match_captured_generation_neutral_predecessor_projections() {
+fn recipes_match_captured_generation_neutral_projections() {
     let temporary = tempfile::TempDir::new().expect("temporary recipe projection root");
     let cases = [
         (
@@ -37,7 +37,7 @@ fn recipes_match_captured_generation_neutral_predecessor_projections() {
         ),
         (
             ProjectTemplate::Command,
-            "recipe_projection_b46f48f1b1a1966cb55d480bd1ab76f18f48c7ca1b3a79948ba459496f57970c",
+            "recipe_projection_3371111f5b29ea3733a057820ac8b389a82bd1cc66fadaa3eb23eee791f8178c",
             10,
             2,
             4,
@@ -45,19 +45,19 @@ fn recipes_match_captured_generation_neutral_predecessor_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_ec764297d4d69b5704b67f817fcf3e1f019309285f1bf5180b0f69fa2c28501e",
-            20,
+            "recipe_projection_02ae1023e091b62e34e89efb83eb4899225633f7ea0e9f6332b2edf0b6357a73",
+            21,
             12,
             10,
-            35,
+            36,
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_59c724a352718e8e13a636ce651997f493954bbcf8781d5acbba82bdb2b90182",
-            86,
+            "recipe_projection_21959733f7422dd7e34117f25eaa8e48eb1a8438a7a548bdfa0cf7e3350932fc",
+            56,
             12,
-            69,
-            130,
+            43,
+            85,
         ),
     ];
     for (template, expected_digest, owners, types, expressions, relations) in cases {
@@ -181,6 +181,15 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
             (OwnerKey::Target(id), OwnerRecord::Target(record)) => {
                 Some((id.to_string(), format!("target:{}", record.name)))
             }
+            (OwnerKey::HttpRoute(id), OwnerRecord::HttpRoute(record)) => Some((
+                id.to_string(),
+                format!(
+                    "http-route:{}/{} {}",
+                    identity(&identities, record.target),
+                    record.method,
+                    record.path
+                ),
+            )),
             _ => None,
         };
         if let Some((id, label)) = label {

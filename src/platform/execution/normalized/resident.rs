@@ -1,9 +1,9 @@
-//! Bounded resident execution for exact Graph 8 deployments.
+//! Bounded resident execution for exact Graph 9 deployments.
 
 use super::deployment::NormalizedPreparedDeployment;
 use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::resource::NormalizedResourceScope;
-use super::value::NormalizedValue;
+use super::value::{NormalizedValue, PortIndex};
 use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
@@ -115,6 +115,39 @@ impl NormalizedResidentDeployment {
             .invoke(move |control| {
                 NormalizedVm::new(&program, policy).invoke_target_scoped(
                     &target,
+                    arguments,
+                    Some(&capabilities),
+                    &resources,
+                    &control,
+                )
+            })
+            .await?;
+        let (value, execution) = receipt.value;
+        Ok(NormalizedResidentInvocationReceipt {
+            value,
+            execution,
+            queue_nanoseconds: receipt.queue_nanoseconds,
+            execution_nanoseconds: receipt.execution_nanoseconds,
+            task_id: receipt.task_id,
+        })
+    }
+
+    pub(crate) async fn invoke_port_scoped(
+        &self,
+        resources: NormalizedResourceScope,
+        port: PortIndex,
+        arguments: Vec<NormalizedValue>,
+    ) -> Result<NormalizedResidentInvocationReceipt, ExecutionError> {
+        let program = Arc::clone(&self.program);
+        let component = self.target.component;
+        let capabilities = self.deployment.capabilities().clone();
+        let policy = self.policy;
+        let receipt = self
+            .kernel
+            .invoke(move |control| {
+                NormalizedVm::new(&program, policy).invoke_port_scoped(
+                    component,
+                    port,
                     arguments,
                     Some(&capabilities),
                     &resources,

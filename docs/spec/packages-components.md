@@ -60,18 +60,22 @@ stable ID, exact interface declaration, exact operation set, and resource limits
 stable ID, function type, and exact function or expression implementation. Credentials, live
 adapters, sockets, and deployment topology are excluded.
 
-A target binds stable target identity and mutable target name to exact component and port
-identities plus one runner kind. Public `create.target` accepts exactly `command`, `http`, or
-`interactive`; `run` accepts only a pure command target, while `serve` accepts exact HTTP or
-interactive topology.
+A target binds stable target identity and mutable target name to one exact component plus one
+runner kind. A `command` or `interactive` target owns one exact component port. An `http` target
+has no universal port and instead owns a nonempty finite set of stable exact route owners, each
+binding one method/path pair to a component-owned HTTP port. Public `create.target` accepts exactly
+`command`, `http`, or `interactive`; `run` accepts only a pure command target, while `serve` accepts
+exact HTTP or interactive topology. The full route contract is specified in
+[Exact inbound HTTP route topology](http-route-topology.md).
 Tests are graph-owned actual/expected expressions with exact comparison policy. Task functions may
 name exact requirements; artifact linking retains their exact requirement owner closure without
 treating a use by multiple task functions as duplicate semantic definition.
 
 Validation rejects foreign domains, absent or retired owners, invalid type/effect shape,
-requirement widening, unavailable operations, a port/function type disagreement, a target whose
-port belongs to another component, a missing component requirement closure, incompatible ports,
-and runner mismatch before publication or execution. An interactive port must reconstruct the
+requirement widening, unavailable operations, a port/function type disagreement, a target or route
+whose port belongs to another component, a missing component requirement closure, incompatible
+ports, duplicate or invalid HTTP route keys, and runner mismatch before publication or execution.
+An interactive port must reconstruct the
 canonical `(Option<State>, SessionEvent) -> SessionDecision<State>` relation with one closed
 ordinary concrete `State`; graph validation, package construction, compilation, strict artifact
 loading, and deployment preparation each reject relation or retained-state drift. Request-local forward references are resolved

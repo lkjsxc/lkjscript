@@ -1,4 +1,4 @@
-//! Exact Graph 8 binding for least-authority secret verification.
+//! Exact Graph 9 binding for least-authority secret verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

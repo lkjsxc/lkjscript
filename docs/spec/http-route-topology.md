@@ -18,7 +18,8 @@ targets retain exactly one port and own no HTTP routes.
 
 The canonical route order is unsigned method bytes followed by unsigned path bytes. Duplicate
 method/path pairs reject even when they select the same port. The canonical route-set digest binds
-the ordered method, path, and exact port identities; it does not replace stable route identity.
+the ordered stable route, method, path, and exact port identities; it does not replace stable route
+identity.
 
 ## Keys and exact matching
 
@@ -31,7 +32,8 @@ Transport validation precedes exactly one route lookup. Method and path equality
 case-sensitive. The lookup uses the adapter's validated path spelling without percent-decoding,
 Unicode normalization, case folding, slash collapsing, dot-segment resolution, trailing-slash
 equivalence, wildcard matching, or parameter extraction. Query text and decoded query parameters
-remain handler inputs but never select a route. `HEAD` selects only an exact `HEAD` route; a matched
+remain handler inputs but never select a route; query decoding therefore follows a successful
+lookup. `HEAD` selects only an exact `HEAD` route; a matched
 HEAD response retains transport body suppression and is never mapped to `GET`.
 
 An unmatched valid pair returns status 404, no application headers, and an empty body. It invokes

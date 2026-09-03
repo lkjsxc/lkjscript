@@ -1,4 +1,4 @@
-//! Typed Graph 8 declaration, type-object, and expression authoring builders.
+//! Typed Graph 9 declaration, type-object, and expression authoring builders.
 
 mod declarations;
 mod mutation;

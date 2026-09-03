@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 8 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 9 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -171,17 +171,38 @@ impl<'a> NormalizedVm<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
-        let port = self
-            .program
-            .ports
-            .get(target.port.0 as usize)
-            .ok_or_else(|| {
-                runtime_error(
-                    "normalized_target_port",
-                    "prepared target port index is outside the runtime table",
-                )
-            })?;
-        if port.component != target.component {
+        let port = target.port.ok_or_else(|| {
+            runtime_error(
+                "normalized_target_port_missing",
+                "prepared non-HTTP target has no exact port",
+            )
+        })?;
+        self.invoke_port_scoped(
+            target.component,
+            port,
+            arguments,
+            capabilities,
+            resources,
+            control,
+        )
+    }
+
+    pub(crate) fn invoke_port_scoped(
+        &self,
+        component: super::value::ComponentIndex,
+        port: super::value::PortIndex,
+        arguments: Vec<NormalizedValue>,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedInvocation, ExecutionError> {
+        let port = self.program.ports.get(port.0 as usize).ok_or_else(|| {
+            runtime_error(
+                "normalized_target_port",
+                "prepared target port index is outside the runtime table",
+            )
+        })?;
+        if port.component != component {
             return Err(runtime_error(
                 "normalized_target_component",
                 "prepared target and port disagree on their exact component",

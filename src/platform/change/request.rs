@@ -33,7 +33,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
-    ModuleId, OperationId, ParameterId, PortId, RequirementId, RevisionId, TargetId,
+    HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RequirementId, RevisionId, TargetId,
     TypeParameterId,
 };
 use crate::platform::witness::NamespaceKey;
@@ -127,7 +127,7 @@ pub enum AuthoredChange {
         symbol: String,
         name: Name,
         component: AuthoredDeclarationReference,
-        port: AuthoredPortReference,
+        port: Option<AuthoredPortReference>,
         runner: crate::platform::package::RunnerKind,
     },
     CreateDocumentation {
@@ -171,6 +171,13 @@ pub enum AuthoredChange {
         component: DeclarationSelector,
         port: AuthoredPort,
     },
+    AddHttpRoute {
+        symbol: String,
+        target: OwnerSelector,
+        method: String,
+        path: String,
+        port: AuthoredPortReference,
+    },
     SetDeclarationVisibility {
         declaration: DeclarationSelector,
         visibility: crate::platform::kernel::DeclarationVisibility,
@@ -212,8 +219,14 @@ pub enum AuthoredChange {
     SetTarget {
         target: OwnerSelector,
         component: AuthoredDeclarationReference,
-        port: AuthoredPortReference,
+        port: Option<AuthoredPortReference>,
         runner: crate::platform::package::RunnerKind,
+    },
+    SetHttpRoute {
+        route: OwnerSelector,
+        method: String,
+        path: String,
+        port: AuthoredPortReference,
     },
     AddDependency {
         package: PackageId,
@@ -310,6 +323,7 @@ pub(super) enum SymbolKind {
     Requirement,
     Port,
     Target,
+    HttpRoute,
     Documentation,
     Annotation,
 }
@@ -332,6 +346,7 @@ impl SymbolKind {
             Self::Requirement => 13,
             Self::Port => 14,
             Self::Target => 15,
+            Self::HttpRoute => 18,
             Self::Documentation => 16,
             Self::Annotation => 17,
         }
@@ -351,6 +366,7 @@ impl SymbolKind {
             Self::Requirement => 10,
             Self::Port => 11,
             Self::Target => 12,
+            Self::HttpRoute => 15,
             Self::Documentation => 13,
             Self::Annotation => 14,
         }
@@ -372,6 +388,7 @@ impl SymbolKind {
             Self::Requirement => IdentityKind::Requirement,
             Self::Port => IdentityKind::Port,
             Self::Target => IdentityKind::Target,
+            Self::HttpRoute => IdentityKind::HttpRoute,
             Self::Documentation => IdentityKind::Documentation,
             Self::Annotation => IdentityKind::Annotation,
         }
@@ -397,6 +414,9 @@ impl SymbolKind {
             Self::Requirement => OwnerKey::Requirement(RequirementId::allocate(seed, ordinal)),
             Self::Port => OwnerKey::Port(PortId::allocate(seed, ordinal)),
             Self::Target => OwnerKey::Target(TargetId::allocate(seed, ordinal)),
+            Self::HttpRoute => OwnerKey::HttpRoute(
+                crate::platform::semantic_id::HttpRouteId::allocate(seed, ordinal),
+            ),
             Self::Documentation => {
                 OwnerKey::Documentation(DocumentationId::allocate(seed, ordinal))
             }
@@ -688,7 +708,8 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
             | AuthoredChange::AddRequirement { .. }
-            | AuthoredChange::AddPort { .. } => {
+            | AuthoredChange::AddPort { .. }
+            | AuthoredChange::AddHttpRoute { .. } => {
                 creation::lower_mutation(&mut lowerer, change)?;
             }
             _ => {}
@@ -751,6 +772,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }
+            | AuthoredChange::AddHttpRoute { .. }
             | AuthoredChange::AddDependency { .. }
             | AuthoredChange::ReplaceDependency { .. }
             | AuthoredChange::DeleteDependency { .. } => {}
@@ -763,7 +785,8 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
-            | AuthoredChange::SetTarget { .. } => {
+            | AuthoredChange::SetTarget { .. }
+            | AuthoredChange::SetHttpRoute { .. } => {
                 creation::lower_mutation(&mut lowerer, change)?;
             }
             AuthoredChange::DeleteOwner { .. } => {}
@@ -910,6 +933,7 @@ fn collect_symbol_definitions(
             AuthoredChange::CreateTarget { symbol, .. } => {
                 creation::collect_target_symbols(symbol, &mut definitions)?
             }
+            AuthoredChange::AddHttpRoute { .. } => {}
             AuthoredChange::CreateDocumentation { symbol, .. } => {
                 creation::collect_documentation_symbols(symbol, &mut definitions)?
             }
@@ -934,7 +958,8 @@ fn collect_symbol_definitions(
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
-            | AuthoredChange::SetTarget { .. } => {
+            | AuthoredChange::SetTarget { .. }
+            | AuthoredChange::SetHttpRoute { .. } => {
                 creation::collect_mutation_symbols(change, &mut definitions)?
             }
             AuthoredChange::AddDependency { .. }
@@ -947,6 +972,26 @@ fn collect_symbol_definitions(
                 creation::collect_expression_symbols(body, &mut definitions)?
             }
         }
+    }
+    let mut routes = request
+        .changes
+        .iter()
+        .filter_map(|change| match change {
+            AuthoredChange::AddHttpRoute { symbol, .. } => Some((symbol, change)),
+            _ => None,
+        })
+        .map(|(symbol, change)| {
+            codec::authored_http_route_sort_key(change, &definitions.entries)
+                .map(|key| (key, symbol.as_str()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    routes.sort_unstable_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| left.1.as_bytes().cmp(right.1.as_bytes()))
+    });
+    for (_, symbol) in routes {
+        define_symbol(&mut definitions, symbol, SymbolKind::HttpRoute)?;
     }
     Ok(definitions.into_entries())
 }
@@ -1466,6 +1511,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     fn target_symbol(&self, symbol: &str) -> Result<TargetId, Diagnostic> {
         match self.symbol_owner(symbol, SymbolKind::Target)? {
             OwnerKey::Target(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn http_route_symbol(&self, symbol: &str) -> Result<HttpRouteId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::HttpRoute)? {
+            OwnerKey::HttpRoute(value) => Ok(value),
             _ => Err(symbol_domain_corrupt(symbol)),
         }
     }

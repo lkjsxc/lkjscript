@@ -37,10 +37,11 @@ use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
     ExpressionOperation, ExpressionRecord, ExternalVisibility, FieldSelector, FunctionDeclaration,
-    FunctionEffect, Idempotency, LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey,
-    OwnerKind, OwnerRecord, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
-    PortReference, RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField,
-    TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    FunctionEffect, HttpRouteRecord, Idempotency, LocalValueReference, Name, OperationRecord,
+    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterParent, ParameterRecord,
+    PortImplementation, PortRecord, PortReference, RecordExpressionField, ResourceLimit,
+    ResourceUnit, StructuralTypeField, TargetRecord, TypeForm, TypeObject, TypeObjectDigest,
+    encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -48,6 +49,7 @@ use crate::platform::publication::{
     GraphRepository, PublicationOptions, PublicationOutcome, RepositoryView,
 };
 use crate::platform::secrets::SecretCatalog;
+use crate::platform::semantic_id::HttpRouteId;
 use crate::platform::semantic_id::{
     DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
 };
@@ -91,15 +93,15 @@ fn prepare_repository(
 ) -> (tempfile::TempDir, GraphRepository, NormalizedProgram) {
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
-        .expect("Graph 8 repository");
+        .expect("Graph 9 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
     )
     .expect("normalized compilation");
     let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("Graph 8 artifact");
-    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 8 artifact");
+        .expect("Graph 9 artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 9 artifact");
     let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
     (temporary, created.repository, program)
 }
@@ -382,7 +384,7 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
                         package,
                         declaration: component,
                     },
-                    port: PortReference { package, port },
+                    port: Some(PortReference { package, port }),
                     runner: RunnerKind::Command,
                 }),
             )
@@ -427,7 +429,7 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
             (OwnerKey::Target(target), OwnerRecord::Target(record))
                 if record.name.as_str() == "pure" =>
             {
-                Some((*target, record.port.port))
+                record.port.map(|port| (*target, port.port))
             }
             _ => None,
         })
@@ -828,7 +830,7 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot
 }
 
-fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnapshot {
+pub(crate) fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnapshot {
     const SEED: &[u8] = b"normalized-http-runner";
 
     let mut snapshot = byte_stream_command_snapshot();
@@ -1111,15 +1113,42 @@ fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnapshot {
         ],
     };
 
-    for record in snapshot.owners.values_mut() {
+    let mut route_binding = None;
+    for (owner, record) in &mut snapshot.owners {
         match record {
             OwnerRecord::Port(port) => port.function_type = port_type,
             OwnerRecord::Target(target) => {
                 target.name = Name::new("serve").unwrap();
                 target.runner = RunnerKind::Http;
+                route_binding = target.port.take().map(|port| (*owner, port));
             }
             _ => {}
         }
+    }
+    let (OwnerKey::Target(target), port) = route_binding.expect("HTTP target route binding") else {
+        panic!("HTTP fixture target owner kind")
+    };
+    for (ordinal, method, path) in [
+        (0, "POST", "/echo"),
+        (1, "GET", "/get"),
+        (2, "HEAD", "/head"),
+    ] {
+        let route = HttpRouteId::migrate(SEED, ordinal);
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::HttpRoute(route),
+                    OwnerRecord::HttpRoute(HttpRouteRecord {
+                        header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute,),
+                        target,
+                        method: method.to_owned(),
+                        path: path.to_owned(),
+                        port,
+                    }),
+                )
+                .is_none()
+        );
     }
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
@@ -1574,7 +1603,7 @@ fn transaction_result_snapshot() -> crate::platform::kernel::KernelSnapshot {
 }
 
 #[test]
-fn strict_graph8_artifact_prepares_only_dense_runtime_bindings() {
+fn strict_graph9_artifact_prepares_only_dense_runtime_bindings() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let caller = snapshot
         .owners
@@ -2075,15 +2104,19 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
     assert_eq!(response.status, 200);
     assert!(response.headers.is_empty());
     assert_eq!(response.body, b"payload");
-    assert_eq!(observation.task_id, 1);
+    assert_eq!(observation.task_id, Some(1));
+    assert_eq!(
+        observation.route,
+        Some(HttpRouteId::migrate(b"normalized-http-runner", 0))
+    );
     assert!(observation.instructions > 0);
     assert_eq!(application.resident().deployment().live_streams(), 0);
 
     assert_eq!(
         application
             .dispatch(HttpRequest {
-                method: "GET".to_owned(),
-                path: "/invalid".to_owned(),
+                method: "POST".to_owned(),
+                path: "/echo".to_owned(),
                 query: "broken=%zz".to_owned(),
                 headers: Vec::new(),
                 body: Vec::new(),
@@ -2095,13 +2128,62 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
     );
     assert_eq!(application.resident().observe().admitted, 1);
 
+    for (method, path, query) in [
+        ("GET", "/echo", "tag=unmatched"),
+        ("post", "/echo", "tag=unmatched"),
+        ("POST", "/Echo", "tag=unmatched"),
+        ("POST", "/echo/", "tag=unmatched"),
+        ("POST", "/%65cho", "tag=unmatched"),
+        ("HEAD", "/get", "tag=unmatched"),
+        ("GET", "/invalid", "broken=%zz"),
+    ] {
+        let (response, observation) = application
+            .dispatch(HttpRequest {
+                method: method.to_owned(),
+                path: path.to_owned(),
+                query: query.to_owned(),
+                headers: Vec::new(),
+                body: b"unmatched-body".to_vec(),
+            })
+            .await
+            .expect("valid unmatched exact route");
+        assert_eq!(response.status, 404, "{method} {path}");
+        assert!(response.headers.is_empty(), "{method} {path}");
+        assert!(response.body.is_empty(), "{method} {path}");
+        assert_eq!(observation.route, None, "{method} {path}");
+        assert_eq!(observation.task_id, None, "{method} {path}");
+        assert_eq!(observation.instructions, 0, "{method} {path}");
+    }
+    assert_eq!(application.resident().observe().admitted, 1);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    let (head_response, head_observation) = application
+        .dispatch(HttpRequest {
+            method: "HEAD".to_owned(),
+            path: "/head".to_owned(),
+            query: "tag=head".to_owned(),
+            headers: Vec::new(),
+            body: b"head-body".to_vec(),
+        })
+        .await
+        .expect("matched explicit HEAD route");
+    assert_eq!(head_response.status, 200);
+    assert!(head_response.body.is_empty());
+    assert_eq!(
+        head_observation.route,
+        Some(HttpRouteId::migrate(b"normalized-http-runner", 2))
+    );
+    assert_eq!(head_observation.task_id, Some(2));
+    assert_eq!(application.resident().observe().admitted, 2);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
     let live_response = application
         .clone()
         .router()
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/live?tag=transport")
+                .uri("/echo?tag=transport")
                 .header("content-type", "application/octet-stream")
                 .body(Body::from("live-body"))
                 .expect("live normalized HTTP request"),
@@ -2115,7 +2197,76 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
             .expect("bounded live normalized HTTP body"),
         "live-body"
     );
-    assert_eq!(application.resident().observe().admitted, 2);
+    assert_eq!(application.resident().observe().admitted, 3);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    let live_unknown = application
+        .clone()
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/echo/?tag=transport")
+                .body(Body::from("unmatched-live-body"))
+                .expect("live unmatched normalized HTTP request"),
+        )
+        .await
+        .expect("live unmatched normalized HTTP response");
+    assert_eq!(live_unknown.status(), axum::http::StatusCode::NOT_FOUND);
+    assert_eq!(
+        to_bytes(live_unknown.into_body(), 64)
+            .await
+            .expect("bounded unmatched live body"),
+        ""
+    );
+    assert_eq!(application.resident().observe().admitted, 3);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    let live_unknown_malformed_query = application
+        .clone()
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/unknown?broken=%zz")
+                .body(Body::from("unmatched-malformed-query"))
+                .expect("live unmatched malformed-query request"),
+        )
+        .await
+        .expect("live unmatched malformed-query response");
+    assert_eq!(
+        live_unknown_malformed_query.status(),
+        axum::http::StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        to_bytes(live_unknown_malformed_query.into_body(), 64)
+            .await
+            .expect("bounded unmatched malformed-query body"),
+        ""
+    );
+    assert_eq!(application.resident().observe().admitted, 3);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    let live_head = application
+        .clone()
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("HEAD")
+                .uri("/head?tag=transport")
+                .body(Body::from("head-live-body"))
+                .expect("live matched HEAD request"),
+        )
+        .await
+        .expect("live matched HEAD response");
+    assert_eq!(live_head.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        to_bytes(live_head.into_body(), 64)
+            .await
+            .expect("bounded live HEAD body"),
+        ""
+    );
+    assert_eq!(application.resident().observe().admitted, 4);
     assert_eq!(application.resident().deployment().live_streams(), 0);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -2917,7 +3068,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
 }
 
 #[test]
-fn every_graph8_expression_form_executes_equally_in_both_tiers() {
+fn every_graph9_expression_form_executes_equally_in_both_tiers() {
     let snapshot = transaction_result_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();
@@ -2944,7 +3095,7 @@ fn every_graph8_expression_form_executes_equally_in_both_tiers() {
 }
 
 #[test]
-fn both_graph8_execution_tiers_commit_and_rollback_exact_transactions() {
+fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
     let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();

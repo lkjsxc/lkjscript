@@ -43,7 +43,10 @@ use super::super::execution::normalized::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::http_client::HTTP_CLIENT_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
-use super::super::kernel::contract::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION};
+use super::super::kernel::contract::{
+    GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+    MAXIMUM_HTTP_ROUTE_METHOD_BYTES, MAXIMUM_HTTP_ROUTE_PATH_BYTES, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+};
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::normalized_query::{
     ContextDirection, DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_CONTEXT_DEPTH,
@@ -92,9 +95,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-9";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 9;
-pub const CLI_CONTRACT_VERSION: u16 = 21;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-10";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 10;
+pub const CLI_CONTRACT_VERSION: u16 = 22;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -594,7 +597,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN08", "LKJTYP08", "LKJSMR01", "LKJDEP08", "LKJRET08"],
+            magic_values: &["LKJOWN09", "LKJTYP09", "LKJSMR01", "LKJDEP09", "LKJRET09"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -720,7 +723,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM07"],
+            magic_values: &["LKJSUM08"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -743,7 +746,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT04"],
+            magic_values: &["LKJWIT05"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -754,7 +757,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 8,
+            version: 9,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -780,7 +783,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR08", "LKJABG01"],
+            magic_values: &["LKJACR10", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -913,7 +916,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN03"],
+            magic_values: &["LKJCUN04"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -935,7 +938,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF13"],
+            magic_values: &["LKJAMF14"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -949,7 +952,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART13", "LKJAEN13"],
+            magic_values: &["LKJART14", "LKJAEN14"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -1007,7 +1010,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::HttpAdapter,
             "HTTP adapter",
-            "lkjscript-http-adapter-1",
+            "lkjscript-http-adapter-2",
             HTTP_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -1605,6 +1608,34 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             "change_request_bytes",
             MAXIMUM_COMPACT_INPUT_BYTES,
             LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_route_method_bytes",
+            MAXIMUM_HTTP_ROUTE_METHOD_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_route_path_bytes",
+            MAXIMUM_HTTP_ROUTE_PATH_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_routes_per_target",
+            MAXIMUM_HTTP_ROUTES_PER_TARGET,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_route_key_bytes_per_target",
+            MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+            LimitClass::DeterministicOperationBudget,
             LimitUnit::Bytes,
             OverridePolicy::Fixed,
         ),
@@ -2977,6 +3008,60 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use a verified executable and retain the failing request.",
         ),
         diagnostic(
+            "change_target_port_condition",
+            DiagnosticClass::Source,
+            "A create.target record supplies port for http or omits it for another runner.",
+            "Omit port when runner=http; otherwise supply the exact component port.",
+        ),
+        diagnostic(
+            "kernel_http_route_method",
+            DiagnosticClass::Semantic,
+            "An HTTP route method is empty, excessive, non-ASCII, or not an HTTP token.",
+            "Use an exact 1 through 32-byte ASCII HTTP token.",
+        ),
+        diagnostic(
+            "kernel_http_route_path",
+            DiagnosticClass::Semantic,
+            "An HTTP route path is malformed or exceeds the exact path bound.",
+            "Use a path beginning with /, without query, fragment, or control bytes, within 16384 bytes.",
+        ),
+        diagnostic(
+            "kernel_http_target_route_count",
+            DiagnosticClass::Semantic,
+            "An HTTP target has zero routes or exceeds the finite route bound.",
+            "Give the target 1 through 4096 distinct exact routes.",
+        ),
+        diagnostic(
+            "kernel_http_route_duplicate",
+            DiagnosticClass::Semantic,
+            "One HTTP target contains a duplicate exact method and path pair.",
+            "Delete or change one duplicate; port identity does not distinguish route keys.",
+        ),
+        diagnostic(
+            "kernel_http_target_route_bytes",
+            DiagnosticClass::Semantic,
+            "One HTTP target exceeds the aggregate route-key byte bound.",
+            "Reduce its aggregate method-plus-path bytes to at most 4194304.",
+        ),
+        diagnostic(
+            "kernel_http_target_universal_port",
+            DiagnosticClass::Semantic,
+            "An HTTP target retained a predecessor universal port.",
+            "Remove the target port and author every exact method/path route explicitly.",
+        ),
+        diagnostic(
+            "kernel_http_route_non_http_target",
+            DiagnosticClass::Semantic,
+            "A route is owned by a target whose runner is not http.",
+            "Move or recreate the route under an exact HTTP target.",
+        ),
+        diagnostic(
+            "kernel_http_route_port_owner",
+            DiagnosticClass::Semantic,
+            "An HTTP route selects a port not owned by its target component.",
+            "Select a function-backed HTTP port owned by the exact target component.",
+        ),
+        diagnostic(
             "change_prepared_base",
             DiagnosticClass::Corrupt,
             "Prepared publication does not bind one exact accepted base.",
@@ -2987,12 +3072,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "A target selects a port that is not owned by its exact component.",
             "Select a port added to the target component or correct the component reference.",
-        ),
-        diagnostic(
-            "kernel_type_target_http_runner",
-            DiagnosticClass::Semantic,
-            "An HTTP target port does not have the exact semantic HTTP function shape.",
-            "Use the discovered structural HTTP request/response function type and implementation.",
         ),
         diagnostic(
             "kernel_type_target_command_runner",
@@ -4728,6 +4807,19 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     )?);
                 }
             }
+            for (condition, port) in [
+                ("runner=http", "forbidden"),
+                ("runner=command|interactive", "required"),
+            ] {
+                records.push(compact_record(
+                    "change.operation-rule",
+                    &[
+                        ("operation", "create.target".to_owned()),
+                        ("condition", condition.to_owned()),
+                        ("port", port.to_owned()),
+                    ],
+                )?);
+            }
             for (name, value, unit) in [
                 (
                     "maximum-extraction-moved-owners",
@@ -5806,6 +5898,7 @@ fn validate_compact_change_inventory(
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
             ("add.parameter", "requirement"),
+            ("create.target", "port"),
         ];
         if !field.required && !optional.contains(&(field.operation, field.name)) {
             return Err(format!(
@@ -5820,6 +5913,7 @@ fn validate_compact_change_inventory(
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
         ("add.parameter", "requirement"),
+        ("create.target", "port"),
     ] {
         if !fields
             .iter()

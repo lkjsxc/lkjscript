@@ -3073,6 +3073,7 @@ fn parse_identity_kind(value: &str) -> Result<IdentityKind, Diagnostic> {
         IdentityKind::Requirement,
         IdentityKind::Port,
         IdentityKind::Target,
+        IdentityKind::HttpRoute,
         IdentityKind::Documentation,
         IdentityKind::Annotation,
     ];
@@ -3611,6 +3612,7 @@ pub(crate) const fn identity_kind_name(kind: IdentityKind) -> &'static str {
         IdentityKind::Requirement => "requirement",
         IdentityKind::Port => "port",
         IdentityKind::Target => "target",
+        IdentityKind::HttpRoute => "http_route",
         IdentityKind::Documentation => "documentation",
         IdentityKind::Annotation => "annotation",
     }
@@ -3630,6 +3632,7 @@ const fn identity_kind_order(kind: IdentityKind) -> u8 {
         IdentityKind::Requirement => 10,
         IdentityKind::Port => 11,
         IdentityKind::Target => 12,
+        IdentityKind::HttpRoute => 15,
         IdentityKind::Documentation => 13,
         IdentityKind::Annotation => 14,
     }

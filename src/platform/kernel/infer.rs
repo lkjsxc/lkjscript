@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 8.
+//! Independent exact-ID expression type and effect oracle for Graph 9.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -333,8 +333,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     }
                 }
                 OwnerRecord::Target(target) => {
+                    let Some(target_port) = target.port else {
+                        continue;
+                    };
                     if target.component.package == self.read.package_id()
-                        && target.port.package == self.read.package_id()
+                        && target_port.package == self.read.package_id()
                     {
                         match self
                             .read
@@ -344,7 +347,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 if !matches!(
                                     component.payload,
                                     DeclarationPayload::Component { ref ports, .. }
-                                        if ports.contains(&target.port.port)
+                                        if ports.contains(&target_port.port)
                                 ) {
                                     self.error(
                                         "kernel_full_target_port_owner",
@@ -356,10 +359,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             Err(diagnostic) => self.push_diagnostic(diagnostic),
                         }
                     }
-                    if target.port.package != self.read.package_id() {
+                    if target_port.package != self.read.package_id() {
                         continue;
                     }
-                    let port = match self.read.owner(OwnerKey::Port(target.port.port)) {
+                    let port = match self.read.owner(OwnerKey::Port(target_port.port)) {
                         Ok(Some(OwnerRecord::Port(port))) => port,
                         Ok(_) => continue,
                         Err(diagnostic) => {
@@ -377,16 +380,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         }
                     };
                     match target.runner {
-                        RunnerKind::Http if port.function_type != http_type => self.error(
-                            "kernel_type_target_http_runner",
-                            "http target requires the exact semantic HTTP function-backed port shape",
-                        ),
                         RunnerKind::Interactive => {
-                            let standard = crate::platform::builtin_standard::BuiltinStandard::load()
-                                .and_then(|standard| standard.session_contract());
+                            let standard =
+                                crate::platform::builtin_standard::BuiltinStandard::load()
+                                    .and_then(|standard| standard.session_contract());
                             match standard.and_then(|standard| {
                                 crate::platform::session::validate_session_function_type(
-                                    &crate::platform::session::ExpressionSessionRead::new(self.read),
+                                    &crate::platform::session::ExpressionSessionRead::new(
+                                        self.read,
+                                    ),
                                     standard,
                                     port.function_type,
                                 )
@@ -400,6 +402,34 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "command target cannot select the semantic HTTP port shape",
                         ),
                         _ => {}
+                    }
+                }
+                OwnerRecord::HttpRoute(route) => {
+                    if route.port.package != self.read.package_id() {
+                        continue;
+                    }
+                    let port = match self.read.owner(OwnerKey::Port(route.port.port)) {
+                        Ok(Some(OwnerRecord::Port(port))) => port,
+                        Ok(_) => continue,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    let http_type = match crate::platform::http::semantic_http_types(
+                        &mut TypeObjectInterner::default(),
+                    ) {
+                        Ok(types) => types.function_type,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    if port.function_type != http_type {
+                        self.error(
+                            "kernel_type_http_route_port",
+                            "HTTP route requires the exact semantic HTTP function-backed port shape",
+                        );
                     }
                 }
                 _ => {}

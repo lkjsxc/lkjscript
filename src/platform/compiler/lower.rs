@@ -1,12 +1,12 @@
-//! Exact point-read lowering from normalized Graph 8 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 9 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
     CompilationSource, CompilationTables, CompilationUnit, CompilationUnitKey, CompiledCaseLayout,
-    CompiledCode, CompiledFieldLayout, CompiledFieldSelector, CompiledInstruction,
-    CompiledOperationLayout, CompiledParameter, CompiledPort, CompiledPortImplementation,
-    CompiledRequirement, CompiledSignature, CompiledText, CompiledVariantJump,
-    MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
+    CompiledCode, CompiledFieldLayout, CompiledFieldSelector, CompiledHttpRoute,
+    CompiledInstruction, CompiledOperationLayout, CompiledParameter, CompiledPort,
+    CompiledPortImplementation, CompiledRequirement, CompiledSignature, CompiledText,
+    CompiledVariantJump, MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
 };
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::change::{
@@ -15,15 +15,16 @@ use crate::platform::change::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseReference, DeclarationPayload, DeclarationRecord,
-    DeclarationReference, ExpressionOperation, ExpressionRecord, FieldReference, FieldSelector,
-    FunctionEffect, LocalValueReference, OperationReference, OwnerKey, OwnerRecord, PackageId,
-    PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation, PortReference,
-    RequirementReference, TextValue, TypeForm, TypeObjectDigest,
+    DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRecord, FieldReference,
+    FieldSelector, FunctionEffect, LocalValueReference, OperationReference, OwnerKey, OwnerRecord,
+    PackageId, PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation,
+    PortReference, RelationEndpoint, RelationKind, RequirementReference, TextValue, TypeForm,
+    TypeObjectDigest,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, OperationId, ParameterId, PortId,
-    RequirementId,
+    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, HttpRouteId, OperationId, ParameterId,
+    PortId, RequirementId,
 };
 use crate::platform::session::{CanonicalSessionRead, validate_session_function_type};
 use crate::platform::storage::object::ObjectKey;
@@ -127,7 +128,8 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         validation_dependencies: bound_summary.summary.validation_dependencies,
     };
     let key = CompilationUnitKey::derive(&source, optimization)?;
-    let payload = builder.compile_payload(owner, record)?;
+    let route_ids = target_route_ids(witness, owner, &mut builder.work)?;
+    let payload = builder.compile_payload(owner, record, &route_ids)?;
     let tables = builder.tables.finish();
     let mut work = builder.work;
     let unit = CompilationUnit {
@@ -157,6 +159,70 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     })
 }
 
+fn target_route_ids<W: WitnessBaseRead + ?Sized>(
+    witness: &W,
+    owner: OwnerKey,
+    work: &mut CompilationWork,
+) -> Result<Vec<HttpRouteId>, Diagnostic> {
+    if !matches!(owner, OwnerKey::Target(_)) {
+        return Ok(Vec::new());
+    }
+    let read = witness.read_incoming_relations_of_kind(
+        owner,
+        RelationKind::HttpRouteTarget,
+        crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1),
+    )?;
+    work.witness.add(read.work);
+    if read.value.truncated {
+        return Err(compiler_error(
+            DiagnosticClass::Resource,
+            "compiler_http_route_relation_limit",
+            "HTTP target incoming route relations exceed the compiler bound",
+        ));
+    }
+    let expected_target = RelationEndpoint::Owner(ExactOwnerKey {
+        package: witness.witness_package_id(),
+        owner,
+    });
+    let mut routes = Vec::new();
+    for edge in read.value.edges {
+        if edge.kind != RelationKind::HttpRouteTarget {
+            continue;
+        }
+        if edge.target != expected_target {
+            return Err(compiler_corrupt(
+                "compiler_http_route_relation_target",
+                "HTTP route relation disagrees with the selected target",
+            ));
+        }
+        let RelationEndpoint::Owner(ExactOwnerKey {
+            package,
+            owner: OwnerKey::HttpRoute(route),
+        }) = edge.source
+        else {
+            return Err(compiler_corrupt(
+                "compiler_http_route_relation_source",
+                "HTTP route relation has a foreign source",
+            ));
+        };
+        if package != witness.witness_package_id() {
+            return Err(compiler_corrupt(
+                "compiler_http_route_relation_package",
+                "HTTP route relation source belongs to another package",
+            ));
+        }
+        routes.push(route);
+    }
+    routes.sort_unstable();
+    if routes.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(compiler_corrupt(
+            "compiler_http_route_relation_duplicate",
+            "HTTP target repeats one route relation",
+        ));
+    }
+    Ok(routes)
+}
+
 struct UnitBuilder<'a, B: ?Sized> {
     canonical: &'a B,
     package: PackageId,
@@ -169,21 +235,109 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         &mut self,
         selected: OwnerKey,
         record: OwnerRecord,
+        route_ids: &[HttpRouteId],
     ) -> Result<CompilationPayload, Diagnostic> {
         match (selected, record) {
             (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) => {
                 self.compile_declaration(declaration, record)
             }
-            (OwnerKey::Target(_), OwnerRecord::Target(record)) => {
+            (OwnerKey::Target(target_id), OwnerRecord::Target(record)) => {
+                let component = self.tables.declaration(record.component)?;
+                if record.runner == RunnerKind::Http {
+                    if record.port.is_some() {
+                        return Err(compiler_corrupt(
+                            "compiler_http_target_universal_port",
+                            "HTTP target retained a universal port",
+                        ));
+                    }
+                    let http_type = crate::platform::http::semantic_http_types(
+                        &mut crate::platform::kernel::TypeObjectInterner::default(),
+                    )?
+                    .function_type;
+                    let mut routes = Vec::with_capacity(route_ids.len());
+                    for route_id in route_ids {
+                        let OwnerRecord::HttpRoute(route) = self.required_owner(
+                            OwnerKey::HttpRoute(*route_id),
+                            "HTTP target route owner is missing",
+                        )?
+                        else {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_kind",
+                                "HTTP route identity names another owner kind",
+                            ));
+                        };
+                        if route.target != target_id {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_target",
+                                "HTTP route belongs to another target",
+                            ));
+                        }
+                        if route.port.package != self.package {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_port_package",
+                                "HTTP route port belongs to another package",
+                            ));
+                        }
+                        let OwnerRecord::Port(port) = self.required_owner(
+                            OwnerKey::Port(route.port.port),
+                            "HTTP route references a missing port",
+                        )?
+                        else {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_port_kind",
+                                "HTTP route port identity names another owner kind",
+                            ));
+                        };
+                        if port.declaration != record.component.declaration
+                            || port.function_type != http_type
+                            || !matches!(port.implementation, PortImplementation::Function(_))
+                        {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_port_relation",
+                                "HTTP route port has the wrong component, shape, or implementation",
+                            ));
+                        }
+                        routes.push(CompiledHttpRoute {
+                            route: *route_id,
+                            method: route.method,
+                            path: route.path,
+                            port: self.tables.port(route.port)?,
+                        });
+                    }
+                    routes.sort_by(|left, right| {
+                        left.method
+                            .as_bytes()
+                            .cmp(right.method.as_bytes())
+                            .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+                    });
+                    return Ok(CompilationPayload::Target {
+                        component,
+                        port: None,
+                        routes,
+                        runner: record.runner,
+                    });
+                }
+                if !route_ids.is_empty() {
+                    return Err(compiler_corrupt(
+                        "compiler_non_http_routes",
+                        "non-HTTP target owns HTTP routes",
+                    ));
+                }
+                let port_reference = record.port.ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_target_port_missing",
+                        "non-HTTP target has no exact port",
+                    )
+                })?;
                 if record.runner == RunnerKind::Interactive {
-                    if record.port.package != self.package {
+                    if port_reference.package != self.package {
                         return Err(compiler_corrupt(
                             "compiler_session_port_package",
                             "interactive target port must belong to the compiled root package",
                         ));
                     }
                     let OwnerRecord::Port(port_record) = self.required_owner(
-                        OwnerKey::Port(record.port.port),
+                        OwnerKey::Port(port_reference.port),
                         "interactive target references a missing port",
                     )?
                     else {
@@ -202,11 +356,11 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     self.work.canonical.add(session_read.work());
                     let _ = validation?;
                 }
-                let component = self.tables.declaration(record.component)?;
-                let port = self.tables.port(record.port)?;
+                let port = self.tables.port(port_reference)?;
                 Ok(CompilationPayload::Target {
                     component,
-                    port,
+                    port: Some(port),
+                    routes: Vec::new(),
                     runner: record.runner,
                 })
             }

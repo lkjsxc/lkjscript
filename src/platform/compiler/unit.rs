@@ -7,21 +7,21 @@ use crate::platform::kernel::{
     PackageId, ParameterUse, PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
 };
 use crate::platform::package::RunnerKind;
-use crate::platform::semantic_id::{ParameterId, TypeParameterId};
+use crate::platform::semantic_id::{HttpRouteId, ParameterId, TypeParameterId};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 use crate::platform::witness::SemanticDigest;
 use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-3";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 3;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-4";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 4;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-3";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 3;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN03";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v3";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v3";
-pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN04";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v4";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v4";
+pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -166,9 +166,18 @@ pub enum CompilationPayload {
     },
     Target {
         component: u32,
-        port: u32,
+        port: Option<u32>,
+        routes: Vec<CompiledHttpRoute>,
         runner: RunnerKind,
     },
+}
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct CompiledHttpRoute {
+    pub route: HttpRouteId,
+    pub method: String,
+    pub path: String,
+    pub port: u32,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -432,7 +441,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 8 inline bound",
+                        "compiled inline text exceeds the Graph 9 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -566,15 +575,95 @@ impl CompilationPayload {
                 }
             }
             Self::Target {
-                component, port, ..
+                component,
+                port,
+                routes,
+                runner,
             } => {
                 require_kind(source, OwnerKind::Target)?;
                 require_index("target component", *component, tables.declarations.len())?;
-                require_index("target port", *port, tables.ports.len())?;
+                if (*runner == RunnerKind::Http) == port.is_some() {
+                    return Err(unit_corrupt(
+                        "compiler_unit_target_port_condition",
+                        "HTTP target must omit its universal port and non-HTTP target must contain one",
+                    ));
+                }
+                if let Some(port) = port {
+                    require_index("target port", *port, tables.ports.len())?;
+                }
+                if *runner == RunnerKind::Http {
+                    validate_compiled_http_routes(routes, tables.ports.len())?;
+                } else if !routes.is_empty() {
+                    return Err(unit_corrupt(
+                        "compiler_unit_non_http_routes",
+                        "non-HTTP target contains HTTP routes",
+                    ));
+                }
             }
         }
         Ok(())
     }
+}
+
+fn validate_compiled_http_routes(
+    routes: &[CompiledHttpRoute],
+    port_count: usize,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::contract::{
+        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+    if routes.is_empty() || routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
+        return Err(unit_corrupt(
+            "compiler_unit_http_route_count",
+            "compiled HTTP target route count is outside the supported bounds",
+        ));
+    }
+    let mut bytes = 0_usize;
+    let mut identities = BTreeSet::new();
+    for (index, route) in routes.iter().enumerate() {
+        crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
+            |_| {
+                unit_corrupt(
+                    "compiler_unit_http_route_key",
+                    "compiled HTTP route contains an invalid method or path",
+                )
+            },
+        )?;
+        require_index("HTTP route port", route.port, port_count)?;
+        if !identities.insert(route.route) {
+            return Err(unit_corrupt(
+                "compiler_unit_http_route_identity",
+                "compiled HTTP target repeats one route identity",
+            ));
+        }
+        bytes = bytes
+            .checked_add(route.method.len())
+            .and_then(|value| value.checked_add(route.path.len()))
+            .ok_or_else(|| {
+                unit_corrupt(
+                    "compiler_unit_http_route_bytes",
+                    "compiled HTTP route-key bytes overflowed",
+                )
+            })?;
+        if index > 0 {
+            let previous = &routes[index - 1];
+            if (previous.method.as_bytes(), previous.path.as_bytes())
+                >= (route.method.as_bytes(), route.path.as_bytes())
+            {
+                return Err(unit_corrupt(
+                    "compiler_unit_http_route_order",
+                    "compiled HTTP routes are not in unique canonical key order",
+                ));
+            }
+        }
+    }
+    if bytes > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+        return Err(unit_corrupt(
+            "compiler_unit_http_route_bytes",
+            "compiled HTTP route-key bytes exceed the supported bound",
+        ));
+    }
+    Ok(())
 }
 
 impl CompiledSignature {

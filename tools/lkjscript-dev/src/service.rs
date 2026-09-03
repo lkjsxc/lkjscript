@@ -15,7 +15,7 @@ use lkjscript::platform::data::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::Read;
@@ -28,7 +28,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 8;
+const SERVICE_CONTRACT_VERSION: u32 = 9;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -46,7 +46,35 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "2bdf2f1d2b4871b8aba7cf57932149685b9f8735334b71c21bab4f708d89b83d";
+    "1dc6c9f93a72bfe848c59389c1922604dedd22f2fef3250dd523fc4186fcc11e";
+const EXPECTED_HTTP_ROUTES: [(&str, &str, &str, &str); 11] = [
+    ("GET", "/", "home", "home"),
+    ("GET", "/health", "health", "health-route"),
+    ("GET", "/resource", "read-resource", "read-resource"),
+    (
+        "GET",
+        "/resource/history",
+        "resource-history",
+        "resource-history",
+    ),
+    ("GET", "/resources", "list-resources", "list-resources"),
+    ("POST", "/initialize", "initialize", "initialize"),
+    ("POST", "/login", "login", "login"),
+    ("POST", "/objects", "publish-object", "publish-object"),
+    (
+        "POST",
+        "/objects/reconcile",
+        "reconcile-object",
+        "reconcile-object",
+    ),
+    (
+        "POST",
+        "/resource/update",
+        "update-resource",
+        "update-resource",
+    ),
+    ("POST", "/resources", "create-resource", "create-resource"),
+];
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -225,6 +253,8 @@ struct ServiceResult {
     authority_before: AuthorityObservation,
     authority_after: AuthorityObservation,
     authority_unchanged: bool,
+    http_route_topology: HttpRouteTopologyObservation,
+    http_route_runtime: HttpRouteRuntimeObservation,
     routes_checked: u64,
     resource_revision: u64,
     history_entries: u64,
@@ -241,6 +271,53 @@ struct ServiceResult {
     structured_session: StructuredSessionObservation,
     request_elapsed_nanoseconds: BTreeMap<String, u64>,
     definition_projection: MaintainedDefinitionObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteTopologyObservation {
+    target: String,
+    target_name: String,
+    component: String,
+    route_count: u64,
+    route_set: String,
+    independent_route_set: String,
+    oracle_digest: String,
+    routes: Vec<HttpRouteObservation>,
+    distinct_ports: u64,
+    distinct_functions: u64,
+    context_queries: u64,
+    canonical_order: bool,
+    predecessor_port_absent: bool,
+    contexts_complete: bool,
+    copied_binary_equal: bool,
+    authority_unchanged: bool,
+    isolated_copy_removed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteObservation {
+    id: String,
+    method: String,
+    path: String,
+    port: String,
+    port_name: String,
+    function: String,
+    function_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteRuntimeObservation {
+    query_did_not_select_route: bool,
+    mismatch_cases: u64,
+    fixed_404_status: u16,
+    fixed_404_empty_body: bool,
+    fixed_404_no_application_headers: bool,
+    unmatched_head_not_get: bool,
+    mismatched_body_bytes: u64,
+    health_after_misses: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -716,7 +793,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-13 service bundle",
+        "maintained artifact-14 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -753,6 +830,35 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.data_contract != DATA_CONTRACT
         || !result.authority_unchanged
         || result.authority_before != result.authority_after
+        || result.http_route_topology.target_name != "serve"
+        || result.http_route_topology.route_count != EXPECTED_HTTP_ROUTES.len() as u64
+        || result.http_route_topology.routes.len() as u64 != result.http_route_topology.route_count
+        || result.http_route_topology.distinct_ports != result.http_route_topology.route_count
+        || result.http_route_topology.distinct_functions != result.http_route_topology.route_count
+        || result.http_route_topology.context_queries != result.http_route_topology.route_count
+        || !result
+            .http_route_topology
+            .route_set
+            .starts_with("http_routes_")
+        || result.http_route_topology.route_set.len() != 76
+        || result.http_route_topology.independent_route_set != result.http_route_topology.route_set
+        || result.http_route_topology.oracle_digest
+            != http_route_oracle_digest(&result.http_route_topology.routes)
+        || !http_route_inventory_is_current(&result.http_route_topology.routes)
+        || !result.http_route_topology.canonical_order
+        || !result.http_route_topology.predecessor_port_absent
+        || !result.http_route_topology.contexts_complete
+        || !result.http_route_topology.copied_binary_equal
+        || !result.http_route_topology.authority_unchanged
+        || !result.http_route_topology.isolated_copy_removed
+        || !result.http_route_runtime.query_did_not_select_route
+        || result.http_route_runtime.mismatch_cases != 6
+        || result.http_route_runtime.fixed_404_status != 404
+        || !result.http_route_runtime.fixed_404_empty_body
+        || !result.http_route_runtime.fixed_404_no_application_headers
+        || !result.http_route_runtime.unmatched_head_not_get
+        || result.http_route_runtime.mismatched_body_bytes != 64 * 1024
+        || !result.http_route_runtime.health_after_misses
         || result.routes_checked != receipt.requests.len() as u64
         || result.resource_revision == 0
         || result.history_entries == 0
@@ -942,7 +1048,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-13 service bundle",
+            "maintained artifact-14 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1326,6 +1432,7 @@ fn run_acceptance(
 ) -> Result<ServiceResult, ServiceFailure> {
     let application = context.repository.join("applications/lkjournal");
     let authority_before = observe_graph_authority(&application)?;
+    let http_route_topology = verify_http_route_topology(context, binary, &application)?;
     let definition_projection =
         verify_maintained_function_definition(context, binary, &application)?;
     let artifact_source = application.join(SERVICE_ARTIFACT_RELATIVE);
@@ -1469,7 +1576,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-13 build",
+        "service readiness disagrees with the exact fresh artifact-14 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -1485,6 +1592,88 @@ fn run_acceptance(
         "health_route",
         "health route failed",
     )?;
+
+    let health_query = context.request(
+        "health-query-independent",
+        service_port,
+        "GET",
+        "/health?route-key=ignored",
+        b"",
+        &[],
+    )?;
+    timings.insert(
+        "health_query_independent".to_owned(),
+        health_query.elapsed_nanoseconds,
+    );
+    let query_did_not_select_route = health_query.status == 200 && health_query.body == b"ready";
+    require(
+        query_did_not_select_route,
+        "health_query_route",
+        "query text changed exact HTTP route selection",
+    )?;
+    let mismatched_body = vec![b'x'; 64 * 1024];
+    let mismatch_cases = [
+        ("route-miss-unknown", "GET", "/unknown", false),
+        ("route-miss-path-case", "GET", "/Health", false),
+        ("route-miss-trailing-slash", "GET", "/health/", false),
+        ("route-miss-percent-spelling", "GET", "/%68ealth", false),
+        ("route-miss-method", "POST", "/health", true),
+        ("route-miss-head", "HEAD", "/health", false),
+    ];
+    let mut fixed_404_empty_body = true;
+    let mut fixed_404_no_application_headers = true;
+    let mut unmatched_head_not_get = false;
+    for (name, method, path, include_body) in mismatch_cases {
+        let body = if include_body {
+            mismatched_body.as_slice()
+        } else {
+            b"".as_slice()
+        };
+        let response = context.request(name, service_port, method, path, body, &[])?;
+        timings.insert(name.to_owned(), response.elapsed_nanoseconds);
+        fixed_404_empty_body &= response.status == 404 && response.body.is_empty();
+        fixed_404_no_application_headers &= response
+            .headers
+            .keys()
+            .all(|name| http_transport_owned_header(name));
+        if method == "HEAD" {
+            unmatched_head_not_get = response.status == 404 && response.body.is_empty();
+        }
+    }
+    require(
+        fixed_404_empty_body && fixed_404_no_application_headers && unmatched_head_not_get,
+        "route_miss_response",
+        "an exact HTTP route mismatch did not return the fixed empty header-free 404",
+    )?;
+    let health_after_misses_response = context.request(
+        "health-after-route-misses",
+        service_port,
+        "GET",
+        "/health",
+        b"",
+        &[],
+    )?;
+    timings.insert(
+        "health_after_route_misses".to_owned(),
+        health_after_misses_response.elapsed_nanoseconds,
+    );
+    let health_after_misses =
+        health_after_misses_response.status == 200 && health_after_misses_response.body == b"ready";
+    require(
+        health_after_misses,
+        "route_miss_cleanup",
+        "service did not remain usable after a body-bearing exact route miss",
+    )?;
+    let http_route_runtime = HttpRouteRuntimeObservation {
+        query_did_not_select_route,
+        mismatch_cases: mismatch_cases.len() as u64,
+        fixed_404_status: 404,
+        fixed_404_empty_body,
+        fixed_404_no_application_headers,
+        unmatched_head_not_get,
+        mismatched_body_bytes: mismatched_body.len() as u64,
+        health_after_misses,
+    };
 
     let initialize_path = format!("/initialize?{}", query(&[("actor", "operator")]));
     let denied = context.request(
@@ -2075,7 +2264,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-13 build",
+        "worker readiness disagrees with the exact fresh artifact-14 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -2094,7 +2283,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-13 build",
+        "second worker readiness disagrees with the exact fresh artifact-14 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -2406,7 +2595,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-13 bundle identity",
+        "restored service readiness changed the exact artifact-14 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -2428,7 +2617,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 8 authority inventory",
+        "service acceptance changed the maintained Graph 9 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -2438,6 +2627,8 @@ fn run_acceptance(
         authority_before,
         authority_after,
         authority_unchanged: true,
+        http_route_topology,
+        http_route_runtime,
         routes_checked: context.requests.len() as u64,
         resource_revision: 1,
         history_entries: 2,
@@ -3451,7 +3642,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-13 bundle",
+            "maintained deployment descriptor does not bind the current artifact-14 bundle",
         ));
     }
     if let Some(port) = port {
@@ -3685,6 +3876,514 @@ fn u64_at(value: &Value, field: &str) -> Result<u64, ServiceFailure> {
             format!("response field '{field}' is absent"),
         )
     })
+}
+
+fn verify_http_route_topology(
+    context: &mut ServiceContext,
+    binary: &Path,
+    application: &Path,
+) -> Result<HttpRouteTopologyObservation, ServiceFailure> {
+    let temporary = tempfile::Builder::new()
+        .prefix("http-route-topology-")
+        .tempdir_in(&context.run_directory)
+        .map_err(|error| ServiceFailure::infrastructure("route_workspace", error))?;
+    let temporary_path = temporary.path().to_path_buf();
+    let result = (|| {
+        let copied_application = temporary_path.join("lkjournal");
+        copy_bounded_tree(application, &copied_application)?;
+        let copied_binary = temporary_path.join("lkjscript");
+        fs::copy(binary, &copied_binary)
+            .map_err(|error| ServiceFailure::infrastructure("route_binary_copy", error))?;
+        let source_binary = process::read_bounded(binary, MAXIMUM_BINARY_BYTES)
+            .map_err(|error| ServiceFailure::infrastructure("route_binary_source", error))?;
+        let copied_binary_bytes = process::read_bounded(&copied_binary, MAXIMUM_BINARY_BYTES)
+            .map_err(|error| ServiceFailure::infrastructure("route_binary_read", error))?;
+        let copied_binary_equal = source_binary == copied_binary_bytes;
+        require(
+            copied_binary_equal,
+            "route_binary_mismatch",
+            "copied route-topology candidate differs from the selected candidate",
+        )?;
+        let authority_before = observe_graph_authority(&copied_application)?;
+        let tree_before = service_tree_digest(&copied_application)?;
+
+        let target_find = context.invoke(CommandRequest::standard(
+            "route-target-find",
+            vec![
+                copied_binary.to_string_lossy().into_owned(),
+                "--project".to_owned(),
+                copied_application.to_string_lossy().into_owned(),
+                "query".to_owned(),
+                "find".to_owned(),
+                "target".to_owned(),
+                "serve".to_owned(),
+            ],
+        ))?;
+        let target_find = service_compact_records("route target lookup", &target_find)?;
+        service_require_field(&target_find, "result", "status", "success")?;
+        service_require_field(&target_find, "summary", "returned", "1")?;
+        service_require_field(&target_find, "summary", "match", "true")?;
+        let target_record = service_required_record(&target_find, "owner")?;
+        service_require_exact(
+            service_required_field(target_record, "kind")?,
+            "target",
+            "route target kind",
+        )?;
+        service_require_exact(
+            service_required_field(target_record, "name")?,
+            "serve",
+            "route target name",
+        )?;
+        let target = service_required_field(target_record, "id")?.to_owned();
+
+        let target_inspect = context.invoke(CommandRequest::standard(
+            "route-target-inspect",
+            vec![
+                copied_binary.to_string_lossy().into_owned(),
+                "--project".to_owned(),
+                copied_application.to_string_lossy().into_owned(),
+                "inspect".to_owned(),
+                "owner".to_owned(),
+                "target".to_owned(),
+                target.clone(),
+            ],
+        ))?;
+        let target_inspect = service_compact_records("route target inspection", &target_inspect)?;
+        service_require_field(&target_inspect, "result", "status", "success")?;
+        let inspected_target = service_required_record(&target_inspect, "owner")?;
+        service_require_exact(
+            service_required_field(inspected_target, "id")?,
+            &target,
+            "inspected route target",
+        )?;
+        service_require_exact(
+            service_required_field(inspected_target, "name")?,
+            "serve",
+            "inspected route target name",
+        )?;
+        let component = service_required_field(inspected_target, "component")?.to_owned();
+        let route_count = service_parse_u64(
+            service_required_field(inspected_target, "route-count")?,
+            "HTTP route count",
+        )?;
+        let route_set = service_required_field(inspected_target, "route-set")?.to_owned();
+        let predecessor_port_absent = inspected_target
+            .fields
+            .iter()
+            .all(|field| field.name != "port");
+        require(
+            predecessor_port_absent,
+            "route_target_predecessor_port",
+            "HTTP target inspection retained the predecessor universal port",
+        )?;
+
+        let route_query = context.invoke(CommandRequest::standard(
+            "route-owner-inventory",
+            vec![
+                copied_binary.to_string_lossy().into_owned(),
+                "--project".to_owned(),
+                copied_application.to_string_lossy().into_owned(),
+                "query".to_owned(),
+                "owners".to_owned(),
+                "--kind".to_owned(),
+                "http_route".to_owned(),
+                "--limit".to_owned(),
+                "4096".to_owned(),
+                "--bytes".to_owned(),
+                "4194304".to_owned(),
+            ],
+        ))?;
+        let route_query = service_compact_records("HTTP route inventory", &route_query)?;
+        service_require_field(&route_query, "result", "status", "success")?;
+        service_require_field(&route_query, "summary", "truncated", "false")?;
+        let returned = service_parse_u64(
+            service_required_field(
+                service_required_record(&route_query, "summary")?,
+                "returned",
+            )?,
+            "HTTP route inventory count",
+        )?;
+        let route_ids = route_query
+            .iter()
+            .filter(|record| record.operation == "owner")
+            .map(|record| {
+                service_require_exact(
+                    service_required_field(record, "kind")?,
+                    "http_route",
+                    "route inventory kind",
+                )?;
+                Ok(service_required_field(record, "id")?.to_owned())
+            })
+            .collect::<Result<Vec<_>, ServiceFailure>>()?;
+        require(
+            returned == route_count && route_ids.len() as u64 == route_count,
+            "route_inventory_count",
+            "HTTP target and complete route-owner inventory counts disagree",
+        )?;
+
+        let mut routes = Vec::with_capacity(route_ids.len());
+        let mut contexts_complete = true;
+        for (index, route_id) in route_ids.iter().enumerate() {
+            let inspect_output = context.invoke(CommandRequest::standard(
+                &format!("route-inspect-{index:02}"),
+                vec![
+                    copied_binary.to_string_lossy().into_owned(),
+                    "--project".to_owned(),
+                    copied_application.to_string_lossy().into_owned(),
+                    "inspect".to_owned(),
+                    "owner".to_owned(),
+                    "http_route".to_owned(),
+                    route_id.clone(),
+                ],
+            ))?;
+            let inspect_output = service_compact_records("HTTP route inspection", &inspect_output)?;
+            service_require_field(&inspect_output, "result", "status", "success")?;
+            let route = service_required_record(&inspect_output, "owner")?;
+            service_require_exact(
+                service_required_field(route, "id")?,
+                route_id,
+                "route identity",
+            )?;
+            service_require_exact(
+                service_required_field(route, "kind")?,
+                "http_route",
+                "route kind",
+            )?;
+            service_require_exact(
+                service_required_field(route, "target")?,
+                &target,
+                "route target",
+            )?;
+            service_require_exact(
+                service_required_field(route, "component")?,
+                &component,
+                "route component",
+            )?;
+            let method = service_required_field(route, "method")?.to_owned();
+            let path = service_required_field(route, "path")?.to_owned();
+            let port = service_required_field(route, "port")?.to_owned();
+
+            let context_output = context.invoke(CommandRequest::standard(
+                &format!("route-context-{index:02}"),
+                vec![
+                    copied_binary.to_string_lossy().into_owned(),
+                    "--project".to_owned(),
+                    copied_application.to_string_lossy().into_owned(),
+                    "query".to_owned(),
+                    "context".to_owned(),
+                    route_id.clone(),
+                    "--direction".to_owned(),
+                    "outgoing".to_owned(),
+                    "--depth".to_owned(),
+                    "2".to_owned(),
+                    "--limit".to_owned(),
+                    "64".to_owned(),
+                    "--bytes".to_owned(),
+                    "65536".to_owned(),
+                ],
+            ))?;
+            let context_output =
+                service_compact_records("HTTP route bounded context", &context_output)?;
+            service_require_field(&context_output, "result", "status", "success")?;
+            let context_summary = service_required_record(&context_output, "summary")?;
+            let context_complete = service_required_field(context_summary, "truncated")? == "false"
+                && service_required_field(context_summary, "total-owners")? == "5"
+                && service_required_field(context_summary, "total-relations")? == "5";
+            contexts_complete &= context_complete;
+            require(
+                context_complete,
+                "route_context_bound",
+                "HTTP route dependency context was truncated or changed shape",
+            )?;
+            let context_owners = context_output
+                .iter()
+                .filter(|record| record.operation == "owner")
+                .collect::<Vec<_>>();
+            let port_owner = unique_context_owner(&context_owners, "port", "1")?;
+            let target_owner = unique_context_owner(&context_owners, "target", "1")?;
+            let component_owner = unique_context_owner(&context_owners, "component", "2")?;
+            let function_owner = unique_context_owner(&context_owners, "task_function", "2")?;
+            let context_port = service_required_field(port_owner, "id")?;
+            let context_target = service_required_field(target_owner, "id")?;
+            let context_component = service_required_field(component_owner, "id")?;
+            let function = service_required_field(function_owner, "id")?.to_owned();
+            require(
+                port.ends_with(context_port)
+                    && context_target == target
+                    && component.ends_with(context_component),
+                "route_context_owner",
+                "HTTP route inspection and bounded context disagree on target, component, or port",
+            )?;
+            for (kind, source, destination) in [
+                ("http_route_target", route_id.as_str(), target.as_str()),
+                ("http_route_port", route_id.as_str(), context_port),
+                ("target_component", target.as_str(), context_component),
+                ("member_declaration", context_port, context_component),
+                ("function_value", context_port, function.as_str()),
+            ] {
+                require(
+                    context_relation_exists(&context_output, kind, source, destination)?,
+                    "route_context_relation",
+                    format!("HTTP route bounded context omitted {kind} {source} -> {destination}"),
+                )?;
+            }
+            routes.push(HttpRouteObservation {
+                id: route_id.clone(),
+                method,
+                path,
+                port,
+                port_name: service_required_field(port_owner, "name")?.to_owned(),
+                function,
+                function_name: service_required_field(function_owner, "name")?.to_owned(),
+            });
+        }
+        routes.sort_by(|left, right| {
+            left.method
+                .as_bytes()
+                .cmp(right.method.as_bytes())
+                .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+                .then_with(|| left.id.as_bytes().cmp(right.id.as_bytes()))
+        });
+        require_current_http_route_inventory(&routes)?;
+        let independent_route_set = independent_http_route_set(&routes)?;
+        require(
+            independent_route_set == route_set,
+            "route_set_digest",
+            "independent full-read reconstruction disagrees with the target route-set digest",
+        )?;
+        let distinct_ports = routes
+            .iter()
+            .map(|route| route.port.as_str())
+            .collect::<BTreeSet<_>>()
+            .len() as u64;
+        let distinct_functions = routes
+            .iter()
+            .map(|route| route.function.as_str())
+            .collect::<BTreeSet<_>>()
+            .len() as u64;
+        require(
+            distinct_ports == route_count && distinct_functions == route_count,
+            "route_handler_sharing",
+            "lkjournal unexpectedly shares a port or function between distinct route behaviors",
+        )?;
+        let oracle_digest = http_route_oracle_digest(&routes);
+        let authority_after = observe_graph_authority(&copied_application)?;
+        let tree_after = service_tree_digest(&copied_application)?;
+        let authority_unchanged = authority_before == authority_after && tree_before == tree_after;
+        require(
+            authority_unchanged,
+            "route_authority_changed",
+            "HTTP route inspection changed the isolated Graph 9 application copy",
+        )?;
+        Ok(HttpRouteTopologyObservation {
+            target,
+            target_name: "serve".to_owned(),
+            component,
+            route_count,
+            route_set,
+            independent_route_set,
+            oracle_digest,
+            routes,
+            distinct_ports,
+            distinct_functions,
+            context_queries: route_ids.len() as u64,
+            canonical_order: true,
+            predecessor_port_absent,
+            contexts_complete,
+            copied_binary_equal,
+            authority_unchanged,
+            isolated_copy_removed: false,
+        })
+    })();
+    let removal = temporary.close();
+    if let Err(error) = removal {
+        return Err(ServiceFailure::infrastructure(
+            "route_workspace_cleanup",
+            error,
+        ));
+    }
+    require(
+        !temporary_path.exists(),
+        "route_workspace_retained",
+        "HTTP route topology workspace remained after cleanup",
+    )?;
+    let mut observation = result?;
+    observation.isolated_copy_removed = true;
+    Ok(observation)
+}
+
+fn unique_context_owner<'a>(
+    records: &[&'a CompactRecord],
+    kind: &str,
+    depth: &str,
+) -> Result<&'a CompactRecord, ServiceFailure> {
+    let matches = records
+        .iter()
+        .copied()
+        .filter(|record| {
+            service_required_field(record, "kind").ok() == Some(kind)
+                && service_required_field(record, "depth").ok() == Some(depth)
+        })
+        .collect::<Vec<_>>();
+    require(
+        matches.len() == 1,
+        "route_context_owner_count",
+        format!(
+            "HTTP route context has {} {kind} owners at depth {depth}",
+            matches.len()
+        ),
+    )?;
+    matches.first().copied().ok_or_else(|| {
+        ServiceFailure::failed(
+            "route_context_owner_missing",
+            format!("HTTP route context omitted {kind} at depth {depth}"),
+        )
+    })
+}
+
+fn context_relation_exists(
+    records: &[CompactRecord],
+    kind: &str,
+    source: &str,
+    target: &str,
+) -> Result<bool, ServiceFailure> {
+    for record in records
+        .iter()
+        .filter(|record| record.operation == "relation")
+    {
+        if service_required_field(record, "kind")? == kind
+            && service_required_field(record, "source-owner")? == source
+            && service_required_field(record, "target-owner")? == target
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn require_current_http_route_inventory(
+    routes: &[HttpRouteObservation],
+) -> Result<(), ServiceFailure> {
+    require(
+        http_route_inventory_is_current(routes),
+        "route_inventory",
+        "lkjournal exact HTTP route, port, or function inventory changed",
+    )
+}
+
+fn http_route_inventory_is_current(routes: &[HttpRouteObservation]) -> bool {
+    routes.len() == EXPECTED_HTTP_ROUTES.len()
+        && routes
+            .iter()
+            .zip(EXPECTED_HTTP_ROUTES)
+            .all(|(route, expected)| {
+                (
+                    route.method.as_str(),
+                    route.path.as_str(),
+                    route.port_name.as_str(),
+                    route.function_name.as_str(),
+                ) == expected
+            })
+}
+
+fn http_route_oracle_digest(routes: &[HttpRouteObservation]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"lkjscript.dev.http-route-oracle.v1");
+    hasher.update((routes.len() as u64).to_be_bytes());
+    for route in routes {
+        for field in [
+            route.id.as_bytes(),
+            route.method.as_bytes(),
+            route.path.as_bytes(),
+            route.port.as_bytes(),
+            route.port_name.as_bytes(),
+            route.function.as_bytes(),
+            route.function_name.as_bytes(),
+        ] {
+            hasher.update((field.len() as u64).to_be_bytes());
+            hasher.update(field);
+        }
+    }
+    format!("route_oracle_{}", lower_hex(&hasher.finalize()))
+}
+
+fn independent_http_route_set(routes: &[HttpRouteObservation]) -> Result<String, ServiceFailure> {
+    let mut routes = routes.iter().collect::<Vec<_>>();
+    routes.sort_by(|left, right| {
+        left.method
+            .as_bytes()
+            .cmp(right.method.as_bytes())
+            .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+            .then_with(|| left.id.as_bytes().cmp(right.id.as_bytes()))
+    });
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.http-route-set.v1");
+    hasher.update(&(routes.len() as u64).to_be_bytes());
+    for route in routes {
+        let route_id = exact_identity_bytes(&route.id, "route_", "HTTP route identity")?;
+        let (package, port) = route.port.split_once('/').ok_or_else(|| {
+            ServiceFailure::failed(
+                "route_port_identity",
+                "HTTP route port is not an exact package-qualified identity",
+            )
+        })?;
+        let package = exact_identity_bytes(package, "pkg_", "HTTP route port package")?;
+        let port = exact_identity_bytes(port, "port_", "HTTP route port identity")?;
+        hasher.update(&route_id);
+        hasher.update(&(route.method.len() as u64).to_be_bytes());
+        hasher.update(route.method.as_bytes());
+        hasher.update(&(route.path.len() as u64).to_be_bytes());
+        hasher.update(route.path.as_bytes());
+        hasher.update(&package);
+        hasher.update(&port);
+    }
+    Ok(format!(
+        "http_routes_{}",
+        lower_hex(hasher.finalize().as_bytes())
+    ))
+}
+
+fn exact_identity_bytes(
+    value: &str,
+    prefix: &str,
+    label: &str,
+) -> Result<[u8; 16], ServiceFailure> {
+    let encoded = value.strip_prefix(prefix).ok_or_else(|| {
+        ServiceFailure::failed(
+            "route_identity_prefix",
+            format!("{label} has another identity prefix"),
+        )
+    })?;
+    if encoded.len() != 32 {
+        return Err(ServiceFailure::failed(
+            "route_identity_length",
+            format!("{label} is not a 128-bit lowercase hexadecimal identity"),
+        ));
+    }
+    let mut decoded = [0_u8; 16];
+    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+        let high = lower_hex_nibble(pair[0]).ok_or_else(|| {
+            ServiceFailure::failed(
+                "route_identity_hex",
+                format!("{label} contains non-lowercase-hexadecimal bytes"),
+            )
+        })?;
+        let low = lower_hex_nibble(pair[1]).ok_or_else(|| {
+            ServiceFailure::failed(
+                "route_identity_hex",
+                format!("{label} contains non-lowercase-hexadecimal bytes"),
+            )
+        })?;
+        decoded[index] = (high << 4) | low;
+    }
+    Ok(decoded)
+}
+
+const fn lower_hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        _ => None,
+    }
 }
 
 fn verify_maintained_function_definition(
@@ -4706,6 +5405,21 @@ fn observe_graph_authority(application: &Path) -> Result<AuthorityObservation, S
         .map_err(|error| ServiceFailure::infrastructure("authority_observation", error))
 }
 
+fn http_transport_owned_header(name: &str) -> bool {
+    matches!(
+        name,
+        "connection"
+            | "content-length"
+            | "date"
+            | "keep-alive"
+            | "proxy-connection"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    )
+}
+
 fn free_port() -> Result<u16, ServiceFailure> {
     TcpListener::bind(("127.0.0.1", 0))
         .and_then(|listener| listener.local_addr())
@@ -4941,7 +5655,54 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 8);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 9);
+    }
+
+    #[test]
+    fn independent_http_route_set_is_order_invariant_and_strict() {
+        let route = |id: &str, method: &str, path: &str, port: &str| HttpRouteObservation {
+            id: id.to_owned(),
+            method: method.to_owned(),
+            path: path.to_owned(),
+            port: port.to_owned(),
+            port_name: "ignored-name".to_owned(),
+            function: "decl_00000000000000000000000000000000".to_owned(),
+            function_name: "ignored-function".to_owned(),
+        };
+        let first = route(
+            "route_11111111111111111111111111111111",
+            "GET",
+            "/",
+            "pkg_22222222222222222222222222222222/port_33333333333333333333333333333333",
+        );
+        let second = route(
+            "route_44444444444444444444444444444444",
+            "POST",
+            "/items",
+            "pkg_22222222222222222222222222222222/port_55555555555555555555555555555555",
+        );
+        let forward = independent_http_route_set(&[first.clone(), second.clone()])
+            .expect("independent route set");
+        let reversed = independent_http_route_set(&[second.clone(), first.clone()])
+            .expect("order-invariant independent route set");
+        assert_eq!(forward, reversed);
+        assert!(forward.starts_with("http_routes_"));
+        assert_eq!(forward.len(), 76);
+
+        let mut changed = second;
+        changed.path = "/other".to_owned();
+        assert_ne!(
+            forward,
+            independent_http_route_set(&[first.clone(), changed]).expect("changed route set")
+        );
+        let mut malformed = first;
+        malformed.id = "route_A1111111111111111111111111111111".to_owned();
+        assert_eq!(
+            independent_http_route_set(&[malformed])
+                .expect_err("uppercase identity must reject")
+                .code,
+            "route_identity_hex"
+        );
     }
 
     #[test]

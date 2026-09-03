@@ -1,4 +1,4 @@
-//! Typed, domain-separated Graph 8 object identities.
+//! Typed, domain-separated Graph 9 object identities.
 
 use super::contract;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -89,7 +89,7 @@ macro_rules! kernel_digest {
                 let tag = u8::decode(decoder)?;
                 if tag != $tag {
                     return Err(DecodeError::OtherString(format!(
-                        "foreign Graph 8 digest domain tag {tag}; expected {}",
+                        "foreign Graph 9 digest domain tag {tag}; expected {}",
                         $tag
                     )));
                 }
@@ -173,7 +173,7 @@ fn decode_digest(value: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {
     if value.len() != DIGEST_BYTES * 2 {
         return Err(digest_error(
             "kernel_digest_length",
-            "Graph 8 digest must contain 64 lowercase hexadecimal characters",
+            "Graph 9 digest must contain 64 lowercase hexadecimal characters",
         ));
     }
     let mut bytes = [0_u8; DIGEST_BYTES];
@@ -196,7 +196,7 @@ fn decode_hex(value: u8) -> Option<u8> {
 fn invalid_hex(value: &str) -> Diagnostic {
     digest_error(
         "kernel_digest_hex",
-        format!("Graph 8 digest '{value}' is not canonical lowercase hexadecimal"),
+        format!("Graph 9 digest '{value}' is not canonical lowercase hexadecimal"),
     )
 }
 

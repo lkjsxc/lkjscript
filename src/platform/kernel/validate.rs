@@ -1,7 +1,10 @@
-//! Implementation-disjoint full validator for normalized Graph 8 authority.
+//! Implementation-disjoint full validator for normalized Graph 9 authority.
 
 use super::affine::validate_affine_meaning;
-use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
+use super::contract::{
+    MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+    MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK,
+};
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference, TextValue};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
@@ -18,7 +21,7 @@ use super::{
     encode_type_object,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::semantic_id::{BindingId, ExpressionId};
+use crate::platform::semantic_id::{BindingId, ExpressionId, TargetId};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Exact logical authority supplied to the full oracle. Object-store and persistent-map integrity
@@ -306,6 +309,7 @@ impl FullValidator<'_> {
         }
         self.validate_namespaces();
         self.validate_owner_structure();
+        self.validate_http_topology();
         self.validate_expressions();
         self.validate_types();
         self.validate_resource_shapes();
@@ -509,6 +513,11 @@ impl FullValidator<'_> {
                     "component port",
                 ),
                 OwnerRecord::Target(_) => {}
+                OwnerRecord::HttpRoute(route) => self.require_local_kind(
+                    OwnerKey::Target(route.target),
+                    &[OwnerKind::Target],
+                    "HTTP route target",
+                ),
                 OwnerRecord::Documentation(documentation) => {
                     self.require_owner(documentation.owner, "documentation owner");
                     if documentation.owner == *key {
@@ -526,6 +535,133 @@ impl FullValidator<'_> {
                             "annotation cannot own itself",
                         );
                     }
+                }
+            }
+        }
+    }
+
+    fn validate_http_topology(&mut self) {
+        let mut routes = BTreeMap::<TargetId, Vec<(OwnerKey, &super::HttpRouteRecord)>>::new();
+        for (owner, record) in &self.snapshot.owners {
+            let OwnerRecord::HttpRoute(route) = record else {
+                continue;
+            };
+            routes
+                .entry(route.target)
+                .or_default()
+                .push((*owner, route));
+        }
+
+        let targets = self
+            .snapshot
+            .owners
+            .iter()
+            .filter_map(|(owner, record)| match (owner, record) {
+                (OwnerKey::Target(target), OwnerRecord::Target(record)) => Some((*target, record)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for (target_id, target) in targets {
+            if !self.consume_work() {
+                return;
+            }
+            let owned = routes.get(&target_id).map(Vec::as_slice).unwrap_or(&[]);
+            if target.runner == crate::platform::package::RunnerKind::Http {
+                if target.port.is_some() {
+                    self.error(
+                        "kernel_http_target_universal_port",
+                        "HTTP target must not retain a universal port",
+                    );
+                }
+                if owned.is_empty() || owned.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
+                    self.error(
+                        "kernel_http_target_route_count",
+                        format!(
+                            "HTTP target must own 1 through {MAXIMUM_HTTP_ROUTES_PER_TARGET} routes"
+                        ),
+                    );
+                }
+                let mut key_bytes = 0_usize;
+                let mut keys = BTreeMap::<(&str, &str), OwnerKey>::new();
+                for (route_owner, route) in owned {
+                    if !self.consume_work() {
+                        return;
+                    }
+                    key_bytes = match key_bytes
+                        .checked_add(route.method.len())
+                        .and_then(|value| value.checked_add(route.path.len()))
+                    {
+                        Some(value) => value,
+                        None => {
+                            self.error(
+                                "kernel_http_target_route_bytes",
+                                "HTTP target route-key byte count overflowed",
+                            );
+                            MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET.saturating_add(1)
+                        }
+                    };
+                    if let Some(previous) =
+                        keys.insert((route.method.as_str(), route.path.as_str()), *route_owner)
+                    {
+                        self.error(
+                            "kernel_http_route_duplicate",
+                            format!(
+                                "HTTP routes {previous} and {route_owner} repeat one exact method/path pair"
+                            ),
+                        );
+                    }
+                    if route.port.package != self.snapshot.root.package_id {
+                        self.error(
+                            "kernel_http_route_port_package",
+                            "HTTP route port must belong to the root package",
+                        );
+                        continue;
+                    }
+                    match self.snapshot.owners.get(&OwnerKey::Port(route.port.port)) {
+                        Some(OwnerRecord::Port(port)) => {
+                            if port.declaration != target.component.declaration {
+                                self.error(
+                                    "kernel_http_route_port_owner",
+                                    "HTTP route port does not belong to its target component",
+                                );
+                            }
+                            if !matches!(port.implementation, PortImplementation::Function(_)) {
+                                self.error(
+                                    "kernel_http_route_port_implementation",
+                                    "HTTP route port must be function-backed",
+                                );
+                            }
+                        }
+                        Some(_) => self.error(
+                            "kernel_http_route_port_kind",
+                            "HTTP route port identity names another owner kind",
+                        ),
+                        None => self.error(
+                            "kernel_http_route_port_missing",
+                            "HTTP route references a missing port",
+                        ),
+                    }
+                }
+                if key_bytes > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+                    self.error(
+                        "kernel_http_target_route_bytes",
+                        format!(
+                            "HTTP target route keys exceed {MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET} bytes"
+                        ),
+                    );
+                }
+            } else {
+                if target.port.is_none() {
+                    self.error(
+                        "kernel_target_port_missing",
+                        "non-HTTP target must select one exact port",
+                    );
+                }
+                if !owned.is_empty() {
+                    self.error(
+                        "kernel_http_route_non_http_target",
+                        "HTTP routes may belong only to an HTTP target",
+                    );
                 }
             }
         }
@@ -1149,7 +1285,7 @@ impl FullValidator<'_> {
                         _ => return None,
                     };
                 }
-                OwnerKey::Module(_) | OwnerKey::Target(_) => return None,
+                OwnerKey::Module(_) | OwnerKey::Target(_) | OwnerKey::HttpRoute(_) => return None,
             }
         }
         None
@@ -1472,29 +1608,37 @@ impl FullValidator<'_> {
                         &[OwnerKind::Component],
                         "target component",
                     );
-                    self.require_exact_kind(
-                        target.port.package,
-                        OwnerKey::Port(target.port.port),
-                        &[OwnerKind::Port],
-                        "target port",
-                    );
-                    if target.component.package != target.port.package {
-                        self.error(
-                            "kernel_full_target_package",
-                            "target component and port must belong to one package",
+                    if let Some(port) = target.port {
+                        self.require_exact_kind(
+                            port.package,
+                            OwnerKey::Port(port.port),
+                            &[OwnerKind::Port],
+                            "target port",
                         );
-                    }
-                    if target.port.package == self.snapshot.root.package_id
-                        && self
-                            .port_parent(target.port.port)
-                            .is_some_and(|parent| parent != target.component.declaration)
-                    {
-                        self.error(
-                            "kernel_full_target_port_owner",
-                            "target port does not belong to its component",
-                        );
+                        if target.component.package != port.package {
+                            self.error(
+                                "kernel_full_target_package",
+                                "target component and port must belong to one package",
+                            );
+                        }
+                        if port.package == self.snapshot.root.package_id
+                            && self
+                                .port_parent(port.port)
+                                .is_some_and(|parent| parent != target.component.declaration)
+                        {
+                            self.error(
+                                "kernel_full_target_port_owner",
+                                "target port does not belong to its component",
+                            );
+                        }
                     }
                 }
+                OwnerRecord::HttpRoute(route) => self.require_exact_kind(
+                    route.port.package,
+                    OwnerKey::Port(route.port.port),
+                    &[OwnerKind::Port],
+                    "HTTP route port",
+                ),
                 OwnerRecord::Documentation(documentation) => {
                     self.validate_document_content(&documentation.content)
                 }

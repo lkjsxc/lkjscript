@@ -985,7 +985,13 @@ struct SessionRuntimeContract {
 
 impl SessionRuntimeContract {
     fn prepare(program: &NormalizedProgram, target: &NormalizedTarget) -> Result<Self, Diagnostic> {
-        let port = program.ports.get(target.port.0 as usize).ok_or_else(|| {
+        let port_index = target.port.ok_or_else(|| {
+            session_corrupt(
+                "normalized_session_target_port",
+                "interactive target has no exact port",
+            )
+        })?;
+        let port = program.ports.get(port_index.0 as usize).ok_or_else(|| {
             session_corrupt(
                 "normalized_session_port",
                 "interactive target port escaped the artifact table",

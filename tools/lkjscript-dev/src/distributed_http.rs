@@ -20,7 +20,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
-pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 3;
+pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 4;
 const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
@@ -156,6 +156,9 @@ struct StoppedObservation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct HttpObservation {
+    name: String,
+    method: String,
+    path: String,
     status: u16,
     body_bytes: u64,
     body_sha256: String,
@@ -212,10 +215,29 @@ struct WorkflowResult {
     authority_before: AuthorityObservation,
     authority_after: AuthorityObservation,
     authority_unchanged: bool,
+    topology: HttpTopologyObservation,
     responses: Vec<HttpObservation>,
     restart_equal: bool,
     startup_failures_without_ready: u64,
     definition_projection: DefinitionWorkflowObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpTopologyObservation {
+    route: String,
+    target: String,
+    component: String,
+    port: String,
+    function: String,
+    method: String,
+    path: String,
+    route_count: u64,
+    route_set: String,
+    context_owners: u64,
+    context_relations: u64,
+    predecessor_port_absent: bool,
+    context_complete: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -625,7 +647,8 @@ pub(crate) fn read_transferred_receipt(
         || result.authority_before != result.authority_after
         || !result.restart_equal
         || result.startup_failures_without_ready == 0
-        || result.responses.is_empty()
+        || !http_topology_is_current(&result.topology)
+        || !http_response_matrix_is_current(&result.responses)
         || result.definition_projection.initial_revision != result.initial_revision
         || result.definition_projection.accepted_revision != result.accepted_revision
         || result.definition_projection.initial_digest
@@ -769,7 +792,7 @@ fn run_workflow(
     let dependencies = parse_u64(required_field(summary, "dependencies")?, "dependency count")?;
     let targets = parse_u64(required_field(summary, "targets")?, "target count")?;
     let tests = parse_u64(required_field(summary, "tests")?, "test count")?;
-    if owners != 20 || dependencies != 1 || targets != 1 || tests != 1 {
+    if owners != 21 || dependencies != 1 || targets != 1 || tests != 1 {
         return Err(AcceptanceFailure::acceptance(
             "created_topology",
             "HTTP recipe semantic counts disagree with the maintained closed topology",
@@ -791,6 +814,7 @@ fn run_workflow(
     require_field(&created_records, "deployment", "listener", "127.0.0.1:0")?;
     validate_next_actions(&created_records)?;
     validate_starter_files(&project, &descriptor, &artifact)?;
+    let topology = inspect_http_topology(context, isolated_root, &project)?;
 
     let module_query = context.invoke_success(
         "find-application-module",
@@ -1198,7 +1222,7 @@ fn run_workflow(
     if !clean_incremental_equal {
         return Err(AcceptanceFailure::acceptance(
             "artifact_determinism",
-            "clean and incremental Artifact 13 bytes disagree",
+            "clean and incremental Artifact 14 bytes disagree",
         ));
     }
 
@@ -1216,9 +1240,14 @@ fn run_workflow(
         &artifact_bundle,
         "restart",
     )?;
-    let restart_equal = first.status == second.status
-        && first.body_sha256 == second.body_sha256
-        && first.body_bytes == second.body_bytes;
+    let restart_equal = first.len() == second.len()
+        && first.iter().zip(&second).all(|(left, right)| {
+            left.method == right.method
+                && left.path == right.path
+                && left.status == right.status
+                && left.body_sha256 == right.body_sha256
+                && left.body_bytes == right.body_bytes
+        });
     if !restart_equal {
         return Err(AcceptanceFailure::acceptance(
             "restart_response",
@@ -1259,6 +1288,8 @@ fn run_workflow(
     let logical_plan_proof =
         evidence::proof(&logical_plan_path, logical_plan_path.display().to_string())
             .map_err(|error| AcceptanceFailure::infrastructure("logical_plan_proof", error))?;
+    let mut responses = first;
+    responses.extend(second);
 
     Ok(WorkflowResult {
         product_version,
@@ -1298,7 +1329,8 @@ fn run_workflow(
         authority_before,
         authority_after,
         authority_unchanged,
-        responses: vec![first, second],
+        topology,
+        responses,
         restart_equal,
         startup_failures_without_ready: 1_u64.saturating_add(artifact_startup_failures),
         definition_projection: DefinitionWorkflowObservation {
@@ -1333,6 +1365,301 @@ fn run_workflow(
             authority_unchanged_before_apply,
         },
     })
+}
+
+fn inspect_http_topology(
+    context: &mut AcceptanceContext,
+    isolated_root: &Path,
+    project: &Path,
+) -> Result<HttpTopologyObservation, AcceptanceFailure> {
+    let project_path = project.display().to_string();
+    let target_find = context.invoke_success(
+        "route-target-find",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "query".to_owned(),
+            "find".to_owned(),
+            "target".to_owned(),
+            "serve".to_owned(),
+        ],
+        isolated_root,
+    )?;
+    let target_find = compact_records("HTTP target lookup", &target_find.stdout)?;
+    require_field(&target_find, "result", "status", "success")?;
+    require_field(&target_find, "summary", "returned", "1")?;
+    let target = required_field(required_record(&target_find, "owner")?, "id")?.to_owned();
+
+    let target_inspect = context.invoke_success(
+        "route-target-inspect",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "target".to_owned(),
+            target.clone(),
+        ],
+        isolated_root,
+    )?;
+    let target_inspect = compact_records("HTTP target inspection", &target_inspect.stdout)?;
+    let target_record = required_record(&target_inspect, "owner")?;
+    require_exact(required_field(target_record, "id")?, &target, "HTTP target")?;
+    require_exact(
+        required_field(target_record, "name")?,
+        "serve",
+        "HTTP target name",
+    )?;
+    let component = required_field(target_record, "component")?.to_owned();
+    let route_count = parse_u64(required_field(target_record, "route-count")?, "route count")?;
+    let route_set = required_field(target_record, "route-set")?.to_owned();
+    let predecessor_port_absent = target_record
+        .fields
+        .iter()
+        .all(|field| field.name != "port");
+    if !predecessor_port_absent || route_count != 1 || !route_set.starts_with("http_routes_") {
+        return Err(AcceptanceFailure::acceptance(
+            "http_target_topology",
+            "HTTP target retained a universal port or did not own one finite route",
+        ));
+    }
+
+    let routes = context.invoke_success(
+        "route-owner-inventory",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "query".to_owned(),
+            "owners".to_owned(),
+            "--kind".to_owned(),
+            "http_route".to_owned(),
+            "--limit".to_owned(),
+            "4096".to_owned(),
+            "--bytes".to_owned(),
+            "4194304".to_owned(),
+        ],
+        isolated_root,
+    )?;
+    let routes = compact_records("HTTP route inventory", &routes.stdout)?;
+    require_field(&routes, "summary", "returned", "1")?;
+    require_field(&routes, "summary", "truncated", "false")?;
+    let route_records = routes
+        .iter()
+        .filter(|record| record.operation == "owner")
+        .collect::<Vec<_>>();
+    if route_records.len() != 1 {
+        return Err(AcceptanceFailure::acceptance(
+            "http_route_inventory",
+            "HTTP recipe did not expose exactly one route owner",
+        ));
+    }
+    let route = required_field(route_records[0], "id")?.to_owned();
+    require_exact(
+        required_field(route_records[0], "kind")?,
+        "http_route",
+        "HTTP route kind",
+    )?;
+
+    let route_inspect = context.invoke_success(
+        "route-owner-inspect",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "http_route".to_owned(),
+            route.clone(),
+        ],
+        isolated_root,
+    )?;
+    let route_inspect = compact_records("HTTP route inspection", &route_inspect.stdout)?;
+    let route_record = required_record(&route_inspect, "owner")?;
+    require_exact(
+        required_field(route_record, "target")?,
+        &target,
+        "route target",
+    )?;
+    require_exact(
+        required_field(route_record, "component")?,
+        &component,
+        "route component",
+    )?;
+    require_exact(
+        required_field(route_record, "method")?,
+        "GET",
+        "route method",
+    )?;
+    require_exact(required_field(route_record, "path")?, "/", "route path")?;
+    let port = required_field(route_record, "port")?.to_owned();
+
+    let route_context = context.invoke_success(
+        "route-bounded-context",
+        vec![
+            "--project".to_owned(),
+            project_path,
+            "query".to_owned(),
+            "context".to_owned(),
+            route.clone(),
+            "--direction".to_owned(),
+            "outgoing".to_owned(),
+            "--depth".to_owned(),
+            "2".to_owned(),
+            "--limit".to_owned(),
+            "64".to_owned(),
+            "--bytes".to_owned(),
+            "65536".to_owned(),
+        ],
+        isolated_root,
+    )?;
+    let route_context = compact_records("HTTP route bounded context", &route_context.stdout)?;
+    let context_summary = required_record(&route_context, "summary")?;
+    let context_owners = parse_u64(
+        required_field(context_summary, "total-owners")?,
+        "route context owners",
+    )?;
+    let context_relations = parse_u64(
+        required_field(context_summary, "total-relations")?,
+        "route context relations",
+    )?;
+    let context_complete = required_field(context_summary, "truncated")? == "false"
+        && context_owners == 5
+        && context_relations == 5;
+    let port_owner = unique_owner_at(&route_context, "port", "1")?;
+    let target_owner = unique_owner_at(&route_context, "target", "1")?;
+    let component_owner = unique_owner_at(&route_context, "component", "2")?;
+    let function_owner = unique_owner_at(&route_context, "task_function", "2")?;
+    let context_port = required_field(port_owner, "id")?;
+    let context_component = required_field(component_owner, "id")?;
+    let function = required_field(function_owner, "id")?.to_owned();
+    let relations_complete = [
+        ("http_route_target", route.as_str(), target.as_str()),
+        ("http_route_port", route.as_str(), context_port),
+        ("target_component", target.as_str(), context_component),
+        ("member_declaration", context_port, context_component),
+        ("function_value", context_port, function.as_str()),
+    ]
+    .into_iter()
+    .all(|(kind, source, target)| relation_exists(&route_context, kind, source, target));
+    if !context_complete
+        || !relations_complete
+        || required_field(target_owner, "id")? != target
+        || !port.ends_with(context_port)
+        || !component.ends_with(context_component)
+        || required_field(port_owner, "name")? != "http"
+        || required_field(function_owner, "name")? != "handle"
+    {
+        return Err(AcceptanceFailure::acceptance(
+            "http_route_context",
+            "bounded HTTP route context omitted its exact target, port, component, or function",
+        ));
+    }
+    Ok(HttpTopologyObservation {
+        route,
+        target,
+        component,
+        port,
+        function,
+        method: "GET".to_owned(),
+        path: "/".to_owned(),
+        route_count,
+        route_set,
+        context_owners,
+        context_relations,
+        predecessor_port_absent,
+        context_complete,
+    })
+}
+
+fn unique_owner_at<'a>(
+    records: &'a [CompactRecord],
+    kind: &str,
+    depth: &str,
+) -> Result<&'a CompactRecord, AcceptanceFailure> {
+    let matches = records
+        .iter()
+        .filter(|record| {
+            record.operation == "owner"
+                && required_field(record, "kind").ok() == Some(kind)
+                && required_field(record, "depth").ok() == Some(depth)
+        })
+        .collect::<Vec<_>>();
+    if matches.len() != 1 {
+        return Err(AcceptanceFailure::acceptance(
+            "http_route_context_owner",
+            format!(
+                "route context has {} {kind} owners at depth {depth}",
+                matches.len()
+            ),
+        ));
+    }
+    Ok(matches[0])
+}
+
+fn relation_exists(records: &[CompactRecord], kind: &str, source: &str, target: &str) -> bool {
+    records.iter().any(|record| {
+        record.operation == "relation"
+            && required_field(record, "kind").ok() == Some(kind)
+            && required_field(record, "source-owner").ok() == Some(source)
+            && required_field(record, "target-owner").ok() == Some(target)
+    })
+}
+
+fn http_topology_is_current(topology: &HttpTopologyObservation) -> bool {
+    topology.route.starts_with("route_")
+        && topology.target.starts_with("target_")
+        && topology.component.contains("/decl_")
+        && topology.port.contains("/port_")
+        && topology.function.starts_with("decl_")
+        && topology.method == "GET"
+        && topology.path == "/"
+        && topology.route_count == 1
+        && topology.route_set.starts_with("http_routes_")
+        && topology.route_set.len() == 76
+        && topology.context_owners == 5
+        && topology.context_relations == 5
+        && topology.predecessor_port_absent
+        && topology.context_complete
+}
+
+fn http_response_matrix_is_current(responses: &[HttpObservation]) -> bool {
+    const CASES: [(&str, &str, &str, u16, bool); 7] = [
+        ("matched", "GET", "/", 200, true),
+        ("query", "GET", "/?ignored=route", 200, true),
+        ("head", "HEAD", "/", 404, false),
+        ("method", "POST", "/", 404, false),
+        ("trailing", "GET", "//", 404, false),
+        ("percent", "GET", "/%2F", 404, false),
+        ("recovered", "GET", "/", 200, true),
+    ];
+    if responses.len() != CASES.len() * 2 {
+        return false;
+    }
+    let matched_sha256 = sha256_hex(CHANGED_RESPONSE);
+    let matched_digest = VerificationDigest::of(CHANGED_RESPONSE);
+    let empty_sha256 = sha256_hex(&[]);
+    let empty_digest = VerificationDigest::of(&[]);
+    ["first", "restart"]
+        .into_iter()
+        .zip(responses.chunks_exact(CASES.len()))
+        .all(|(run, observations)| {
+            observations.iter().zip(CASES).all(
+                |(observation, (case, method, path, status, matched))| {
+                    observation.name == format!("{run}-{case}")
+                        && observation.method == method
+                        && observation.path == path
+                        && observation.status == status
+                        && if matched {
+                            observation.body_bytes == CHANGED_RESPONSE.len() as u64
+                                && observation.body_sha256 == matched_sha256
+                                && observation.body_digest == matched_digest
+                        } else {
+                            observation.body_bytes == 0
+                                && observation.body_sha256 == empty_sha256
+                                && observation.body_digest == empty_digest
+                        }
+                },
+            )
+        })
 }
 
 fn exercise_artifact_startup_failures(
@@ -1389,7 +1716,7 @@ fn exercise_artifact_startup_failures(
 
     let mut corrupt = valid_bytes.to_vec();
     let last = corrupt.last_mut().ok_or_else(|| {
-        AcceptanceFailure::acceptance("artifact_empty", "valid Artifact 13 bytes are empty")
+        AcceptanceFailure::acceptance("artifact_empty", "valid Artifact 14 bytes are empty")
     })?;
     *last ^= 0x01;
     publish_product_input(artifact, &corrupt)?;
@@ -1449,7 +1776,7 @@ fn run_http_once(
     descriptor: &Path,
     artifact_bundle: &str,
     name: &str,
-) -> Result<HttpObservation, AcceptanceFailure> {
+) -> Result<Vec<HttpObservation>, AcceptanceFailure> {
     let ready = context.start_runner(
         name,
         vec![
@@ -1474,31 +1801,79 @@ fn run_http_once(
         .local_address
         .parse()
         .map_err(|error| AcceptanceFailure::infrastructure("ready_address", error))?;
-    let response = http_probe::request(address, "GET", "/", &[], &[])
-        .map_err(|error| AcceptanceFailure::infrastructure("http_request", error))?;
-    if response.status != 200 || response.body != CHANGED_RESPONSE {
-        return Err(AcceptanceFailure::acceptance(
-            "http_response",
-            "live HTTP response disagrees with accepted response-text graph meaning",
-        ));
-    }
-    let expected_content_length = CHANGED_RESPONSE.len().to_string();
-    if response.headers.get("content-length").map(String::as_str)
-        != Some(expected_content_length.as_str())
-    {
-        return Err(AcceptanceFailure::acceptance(
-            "http_content_length",
-            "live HTTP response content length is absent or incorrect",
-        ));
+    let mut observations = Vec::new();
+    for (case, method, path, body, matched) in [
+        ("matched", "GET", "/", &b""[..], true),
+        ("query", "GET", "/?ignored=route", &b""[..], true),
+        ("head", "HEAD", "/", &b""[..], false),
+        ("method", "POST", "/", &b"body-must-be-drained"[..], false),
+        ("trailing", "GET", "//", &b""[..], false),
+        ("percent", "GET", "/%2F", &b""[..], false),
+        ("recovered", "GET", "/", &b""[..], true),
+    ] {
+        let response = http_probe::request(address, method, path, body, &[])
+            .map_err(|error| AcceptanceFailure::infrastructure("http_request", error))?;
+        if matched {
+            if response.status != 200 || response.body != CHANGED_RESPONSE {
+                return Err(AcceptanceFailure::acceptance(
+                    "http_response",
+                    format!("live HTTP {case} response disagrees with exact route meaning"),
+                ));
+            }
+            let expected_content_length = CHANGED_RESPONSE.len().to_string();
+            if response.headers.get("content-length").map(String::as_str)
+                != Some(expected_content_length.as_str())
+            {
+                return Err(AcceptanceFailure::acceptance(
+                    "http_content_length",
+                    "live matched HTTP response content length is absent or incorrect",
+                ));
+            }
+        } else if response.status != 404
+            || !response.body.is_empty()
+            || response
+                .headers
+                .keys()
+                .any(|header| !http_transport_owned_header(header))
+        {
+            return Err(AcceptanceFailure::acceptance(
+                "http_route_miss",
+                format!(
+                    "live HTTP {case} mismatch returned status {}, {} body bytes, headers {:?}",
+                    response.status,
+                    response.body.len(),
+                    response.headers
+                ),
+            ));
+        }
+        observations.push(HttpObservation {
+            name: format!("{name}-{case}"),
+            method: method.to_owned(),
+            path: path.to_owned(),
+            status: response.status,
+            body_bytes: response.body.len() as u64,
+            body_sha256: sha256_hex(&response.body),
+            body_digest: VerificationDigest::of(&response.body),
+            elapsed_nanoseconds: response.elapsed_nanoseconds,
+        });
     }
     context.stop_runner()?;
-    Ok(HttpObservation {
-        status: response.status,
-        body_bytes: response.body.len() as u64,
-        body_sha256: sha256_hex(&response.body),
-        body_digest: VerificationDigest::of(&response.body),
-        elapsed_nanoseconds: response.elapsed_nanoseconds,
-    })
+    Ok(observations)
+}
+
+fn http_transport_owned_header(name: &str) -> bool {
+    matches!(
+        name,
+        "connection"
+            | "content-length"
+            | "date"
+            | "keep-alive"
+            | "proxy-connection"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    )
 }
 
 impl AcceptanceContext {
@@ -3150,7 +3525,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode acceptance schema"),
-            r#"{"identity":"lkjscript-distributed-http-acceptance","version":3}"#
+            r#"{"identity":"lkjscript-distributed-http-acceptance","version":4}"#
         );
         assert_eq!(ACCEPTANCE_WORKFLOW, "distributed-http-application");
     }

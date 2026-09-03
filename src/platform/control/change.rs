@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-12";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 12;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-9";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 9;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-13";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 13;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-10";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 10;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -81,10 +81,12 @@ pub(crate) enum CompactChangeOperation {
     AddParameter,
     AddRequirement,
     AddPort,
+    AddHttpRoute,
     AddDependency,
     ReplaceDependency,
     SetFunctionContract,
     SetRequirementContract,
+    SetHttpRoute,
     DeleteOwner,
     RenameOwner,
     MoveDeclaration,
@@ -93,7 +95,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 26] = [
+    pub(crate) const ALL: [Self; 28] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -111,10 +113,12 @@ impl CompactChangeOperation {
         Self::AddParameter,
         Self::AddRequirement,
         Self::AddPort,
+        Self::AddHttpRoute,
         Self::AddDependency,
         Self::ReplaceDependency,
         Self::SetFunctionContract,
         Self::SetRequirementContract,
+        Self::SetHttpRoute,
         Self::DeleteOwner,
         Self::RenameOwner,
         Self::MoveDeclaration,
@@ -152,10 +156,12 @@ pub(crate) enum CompactChangeFieldForm {
     RequirementReference,
     ImplementationName,
     ExactExpression,
+    HttpMethod,
+    HttpPath,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 27] = [
+    pub(crate) const ALL: [Self; 29] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -183,6 +189,8 @@ impl CompactChangeFieldForm {
         Self::RequirementReference,
         Self::ImplementationName,
         Self::ExactExpression,
+        Self::HttpMethod,
+        Self::HttpPath,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -214,6 +222,8 @@ impl CompactChangeFieldForm {
             Self::RequirementReference => "requirement_reference",
             Self::ImplementationName => "implementation_name",
             Self::ExactExpression => "exact_expression",
+            Self::HttpMethod => "http_method",
+            Self::HttpPath => "http_path",
         }
     }
 
@@ -246,6 +256,8 @@ impl CompactChangeFieldForm {
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
             Self::ExactExpression => "expr_HEX",
+            Self::HttpMethod => "ASCII_HTTP_TOKEN_1_TO_32_BYTES",
+            Self::HttpPath => "/EXACT_PATH_1_TO_16384_BYTES",
         }
     }
 }
@@ -573,7 +585,7 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
             CompactChangeOperationField {
                 name: "port",
-                required: true,
+                required: false,
                 form: FieldForm::PortReference,
             },
             CompactChangeOperationField {
@@ -799,6 +811,38 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddHttpRoute,
+        name: "add.http-route",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "target",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "method",
+                required: true,
+                form: FieldForm::HttpMethod,
+            },
+            CompactChangeOperationField {
+                name: "path",
+                required: true,
+                form: FieldForm::HttpPath,
+            },
+            CompactChangeOperationField {
+                name: "port",
+                required: true,
+                form: FieldForm::PortReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::AddDependency,
         name: "add.dependency",
         fields: &[
@@ -887,6 +931,33 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "interface",
                 required: true,
                 form: FieldForm::DeclarationReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetHttpRoute,
+        name: "set.http-route",
+        fields: &[
+            CompactChangeOperationField {
+                name: "route",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "method",
+                required: true,
+                form: FieldForm::HttpMethod,
+            },
+            CompactChangeOperationField {
+                name: "path",
+                required: true,
+                form: FieldForm::HttpPath,
+            },
+            CompactChangeOperationField {
+                name: "port",
+                required: true,
+                form: FieldForm::PortReference,
             },
         ],
         direct: None,
@@ -2471,13 +2542,26 @@ impl Decoder {
                     expected: self.decode_expression(&expected)?,
                 })
             }
-            CompactChangeOperation::CreateTarget => Ok(AuthoredChange::CreateTarget {
-                symbol: symbol(record, "as")?,
-                name: parse_name(record, "name")?,
-                component: parse_declaration_reference(record, "component")?,
-                port: parse_port_reference(record, "port")?,
-                runner: parse_runner_kind(record, "runner")?,
-            }),
+            CompactChangeOperation::CreateTarget => {
+                let runner = parse_runner_kind(record, "runner")?;
+                let port = optional(record, "port")
+                    .map(|_| parse_port_reference(record, "port"))
+                    .transpose()?;
+                if (runner == RunnerKind::Http) == port.is_some() {
+                    return Err(record_error(
+                        record,
+                        "change_target_port_condition",
+                        "create.target forbids port for http and requires port for every other runner",
+                    ));
+                }
+                Ok(AuthoredChange::CreateTarget {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    component: parse_declaration_reference(record, "component")?,
+                    port,
+                    runner,
+                })
+            }
             CompactChangeOperation::AddField => Ok(AuthoredChange::AddField {
                 record: parse_declaration_selector(record, "record")?,
                 field: AuthoredField {
@@ -2589,6 +2673,13 @@ impl Decoder {
                     },
                 },
             }),
+            CompactChangeOperation::AddHttpRoute => Ok(AuthoredChange::AddHttpRoute {
+                symbol: symbol(record, "as")?,
+                target: parse_owner_selector(record, "target")?,
+                method: required(record, "method")?.to_owned(),
+                path: required(record, "path")?.to_owned(),
+                port: parse_port_reference(record, "port")?,
+            }),
             CompactChangeOperation::AddDependency => {
                 let package = parse_field(record, "package")?;
                 let semantic_revision = parse_field(record, "semantic-revision")?;
@@ -2647,6 +2738,12 @@ impl Decoder {
                     limits,
                 })
             }
+            CompactChangeOperation::SetHttpRoute => Ok(AuthoredChange::SetHttpRoute {
+                route: parse_owner_selector(record, "route")?,
+                method: required(record, "method")?.to_owned(),
+                path: required(record, "path")?.to_owned(),
+                port: parse_port_reference(record, "port")?,
+            }),
             CompactChangeOperation::DeleteOwner => {
                 let policy = required(record, "policy")?;
                 let policy = match policy {
@@ -4086,7 +4183,7 @@ mod tests {
             AuthoredChange::CreateTarget {
                 runner: RunnerKind::Command,
                 component: AuthoredDeclarationReference::Local { .. },
-                port: AuthoredPortReference::Symbol { symbol },
+                port: Some(AuthoredPortReference::Symbol { symbol }),
                 ..
             } if symbol == "$port"
         ));

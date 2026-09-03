@@ -17,11 +17,11 @@ Exact identities and receipts are in
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 
-Current checkout source is unreleased product 0.1.20. Immutable public latest remains v0.1.16;
-v0.1.15 and every older tag, release, asset, and attestation remain unchanged. The structured
-session source campaign authorizes implementation, verification, commits, and at most one safe
-fast-forward source push; it does not authorize a tag, release, asset, attestation, installer, or
-package publication.
+Current checkout source is unreleased product 0.1.21. Immutable public latest remains v0.1.16;
+v0.1.15 and every older tag, release, asset, and attestation remain unchanged. The exact HTTP
+route-topology source campaign authorizes implementation, verification, commits, and at most one
+safe fast-forward source push; it does not authorize a tag, release, asset, attestation, installer,
+or package publication.
 
 ## Identity and authority
 

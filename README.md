@@ -14,14 +14,15 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot `0.1.20`; the immutable supported release remains
+Current source is unreleased product snapshot `0.1.21`; the immutable supported release remains
 `v0.1.16`. Both include public exact built-in dependency, component, requirement, function-backed
-port, and command/HTTP target authoring. Source 0.1.20 additionally admits one exact relational
-`interactive` target whose graph-owned ordinary state crosses finite callbacks while a structured
-resident parent owns the connection, bounded mailboxes, timers, cancellation, and joined children.
-All four built-in recipes lower through the same typed
-authored-operation engine without changing their resulting meaning or atomic project-creation
-contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
+port, and command/HTTP target authoring. Source 0.1.21 replaces a universal HTTP target port with
+stable graph-owned exact method/path route owners and retains the exact relational `interactive`
+target whose graph-owned ordinary state crosses finite callbacks while a structured resident parent
+owns the connection, bounded mailboxes, timers, cancellation, and joined children. All four
+built-in recipes lower through the same typed authored-operation engine and preserve their
+application behavior and atomic project-creation boundary. The release also includes one
+deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
 The maintained source `lkjournal-live-1` consumer proves authenticated multi-subscription server
 push over plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound
@@ -234,10 +235,14 @@ without the `interactive` runner. The current-source topology records are:
 add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
 create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
 add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
-create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http|interactive
+create.target as=$TARGET name=NAME component=DECLARATION [port=PORT] runner=command|http|interactive
+add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT
+set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT
 ```
 
-An interactive port must have the exact structural relation
+An HTTP target forbids a universal `port`; its graph-owned finite route set performs byte-exact,
+case-sensitive method/path selection and returns a fixed empty 404 for an unmatched valid pair.
+Command and interactive targets still require one exact port. An interactive port must have the exact structural relation
 `(Option<State>, SessionEvent) -> SessionDecision<State>` with one closed ordinary concrete
 `State`. The same relation is independently reconstructed during accepted validation, package and
 artifact construction/loading, and deployment preparation. `serve` selects either exact HTTP or
@@ -465,7 +470,7 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.20 source its stable
+Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.21 source its stable
 entry claims and matches the live resource, then transfers that lease once into a private
 requirement-bound task helper. The helper borrows `QueueLeaseInfo`, consumes through heartbeat,
 matches the renewed lease, and consumes through complete or fail. A handle is bound to the exact

@@ -47,7 +47,7 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
         &logical,
         Some("repository fixture".to_owned()),
     )
-    .expect("Graph 8 repository creation");
+    .expect("Graph 9 repository creation");
 
     assert_eq!(created.repository.root(), destination.as_path());
     assert_eq!(created.current.head, created.initial.publication.head);
@@ -2386,7 +2386,7 @@ fn authored_owned_closure_leaf_selects_the_same_owner_and_relations_as_reject() 
 fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let logical = crate::platform::execution::normalized::tests::normalized_http_snapshot();
     let expected = logical.owners.keys().copied().collect::<BTreeSet<_>>();
     assert_eq!(
         logical
@@ -5276,7 +5276,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
 }
 
 #[test]
-fn authored_type_builder_interns_every_unrestricted_graph_eight_type_form() {
+fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -5475,9 +5475,9 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 symbol: "$target".to_owned(),
                 name: Name::new("authored_command").unwrap(),
                 component: local_declaration("$component"),
-                port: AuthoredPortReference::Symbol {
+                port: Some(AuthoredPortReference::Symbol {
                     symbol: "$port".to_owned(),
-                },
+                }),
                 runner: RunnerKind::Command,
             },
             AuthoredChange::CreateDocumentation {
@@ -5757,7 +5757,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         panic!("component allocation has a foreign domain")
     };
     assert_eq!(target_record.component.declaration, component_id);
-    assert_eq!(target_record.port.port, port_id);
+    assert_eq!(target_record.port.map(|port| port.port), Some(port_id));
     let Some(OwnerRecord::Documentation(documentation)) = view
         .owner(prepared.allocated["$documentation"])
         .unwrap()
@@ -5892,9 +5892,9 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
             AuthoredChange::SetTarget {
                 target: OwnerSelector::Exact { owner: target },
                 component: exact_declaration(component),
-                port: AuthoredPortReference::Symbol {
+                port: Some(AuthoredPortReference::Symbol {
                     symbol: "$alternate_port".to_owned(),
-                },
+                }),
                 runner: RunnerKind::Command,
             },
             AuthoredChange::SetRequirementContract {
@@ -6243,7 +6243,10 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     let Some(OwnerRecord::Target(target_record)) = view.owner(target).unwrap().value else {
         panic!("target must remain readable")
     };
-    assert_eq!(OwnerKey::Port(target_record.port.port), port);
+    assert_eq!(
+        target_record.port.map(|port| OwnerKey::Port(port.port)),
+        Some(port)
+    );
     assert_eq!(target_record.runner, RunnerKind::Command);
 }
 
@@ -6316,7 +6319,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
 }
 
 #[test]
-fn authored_expression_builder_covers_every_graph_eight_operation() {
+fn authored_expression_builder_covers_every_graph_nine_operation() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();

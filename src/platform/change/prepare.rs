@@ -1,4 +1,4 @@
-//! One generic Graph 8 preparation pipeline before repository publication is bound.
+//! One generic Graph 9 preparation pipeline before repository publication is bound.
 
 use super::budget::ChangeBudgetMeter;
 use super::derived::derive_local_delta_with_admission;

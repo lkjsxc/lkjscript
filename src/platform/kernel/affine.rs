@@ -1,4 +1,4 @@
-//! Language-order affine capability-resource validation for Graph 8.
+//! Language-order affine capability-resource validation for Graph 9.
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};

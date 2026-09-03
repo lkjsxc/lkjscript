@@ -3,6 +3,7 @@
 use super::capability::NormalizedAdapterKind;
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
+use super::value::PortIndex;
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
@@ -14,6 +15,7 @@ use crate::platform::http::{
 };
 use crate::platform::kernel::{Name, RequirementReference, TypeObjectInterner};
 use crate::platform::package::RunnerKind;
+use crate::platform::semantic_id::HttpRouteId;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
@@ -43,23 +45,67 @@ impl NormalizedHttpApplication {
                 "normalized HTTP adapter requires an http runner target",
             ));
         }
+        if resident.target().port.is_some()
+            || resident.target().http_routes.is_empty()
+            || resident.target().http_routes.len()
+                > crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET
+        {
+            return Err(http_corrupt(
+                "normalized_http_route_topology",
+                "normalized HTTP target must have one bounded route set and no universal port",
+            ));
+        }
         let program = resident.program();
-        let port = program
-            .ports
-            .get(resident.target().port.0 as usize)
-            .ok_or_else(|| {
+        let function_type = semantic_http_types(&mut TypeObjectInterner::default())?.function_type;
+        let mut previous = None;
+        let mut route_bytes = 0usize;
+        for route in resident.target().http_routes.iter() {
+            crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
+                |_| {
+                    http_corrupt(
+                        "normalized_http_route_key",
+                        "normalized HTTP route contains an invalid method or path",
+                    )
+                },
+            )?;
+            let key = (route.method.as_bytes(), route.path.as_bytes());
+            if previous.is_some_and(|previous| previous >= key) {
+                return Err(http_corrupt(
+                    "normalized_http_route_order",
+                    "normalized HTTP routes are duplicate or noncanonical",
+                ));
+            }
+            previous = Some(key);
+            route_bytes = route_bytes
+                .checked_add(route.method.len())
+                .and_then(|value| value.checked_add(route.path.len()))
+                .ok_or_else(|| {
+                    http_corrupt(
+                        "normalized_http_route_bytes",
+                        "normalized HTTP route-key byte accounting overflowed",
+                    )
+                })?;
+            if route_bytes
+                > crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET
+            {
+                return Err(http_corrupt(
+                    "normalized_http_route_bytes",
+                    "normalized HTTP route keys exceed the aggregate byte bound",
+                ));
+            }
+            let port = program.ports.get(route.port.0 as usize).ok_or_else(|| {
                 http_corrupt(
-                    "normalized_http_port",
-                    "selected HTTP target port escaped the exact runtime table",
+                    "normalized_http_route_port",
+                    "selected HTTP route port escaped the exact runtime table",
                 )
             })?;
-        if port.function_type
-            != semantic_http_types(&mut TypeObjectInterner::default())?.function_type
-        {
-            return Err(http_diagnostic(
-                "normalized_http_handler_signature",
-                "HTTP handler must have the exact current structural request and response types",
-            ));
+            if port.component != resident.target().component || port.function_type != function_type
+            {
+                return Err(http_diagnostic(
+                    "normalized_http_handler_signature",
+                    "each HTTP route must select a function-backed port on the target component with the exact current structural request and response types",
+                ));
+            }
         }
         let mut stream_requirements = resident
             .deployment()
@@ -107,6 +153,19 @@ impl NormalizedHttpApplication {
         mut request: HttpRequest,
     ) -> Result<(HttpResponse, HttpDispatchObservation), ExecutionError> {
         validate_request(&request, &self.limits)?;
+        let method_is_head = request.method == "HEAD";
+        let Some((route, port)) = self.select_route(&request.method, &request.path) else {
+            return Ok((
+                unmatched_response(),
+                HttpDispatchObservation {
+                    route: None,
+                    task_id: None,
+                    queue_nanoseconds: 0,
+                    execution_nanoseconds: 0,
+                    instructions: 0,
+                },
+            ));
+        };
         let query_parameters = decode_query_parameters(&request.query)?;
         let resources = NormalizedResourceScope::new()?;
         let body = self.resident.deployment().register_memory_stream(
@@ -117,13 +176,17 @@ impl NormalizedHttpApplication {
         let request = request_value(request, query_parameters, body)?;
         let receipt = self
             .resident
-            .invoke_scoped(resources, vec![request])
+            .invoke_port_scoped(resources, port, vec![request])
             .await?;
-        let response = response_value(receipt.value, &self.limits)?;
+        let mut response = response_value(receipt.value, &self.limits)?;
+        if method_is_head {
+            response.body.clear();
+        }
         Ok((
             response,
             HttpDispatchObservation {
-                task_id: receipt.task_id,
+                route: Some(route),
+                task_id: Some(receipt.task_id),
                 queue_nanoseconds: receipt.queue_nanoseconds,
                 execution_nanoseconds: receipt.execution_nanoseconds,
                 instructions: receipt.execution.instructions,
@@ -194,6 +257,22 @@ impl NormalizedHttpApplication {
     pub(crate) fn resident(&self) -> &NormalizedResidentDeployment {
         &self.resident
     }
+
+    fn select_route(&self, method: &str, path: &str) -> Option<(HttpRouteId, PortIndex)> {
+        self.resident
+            .target()
+            .http_routes
+            .binary_search_by(|route| {
+                route
+                    .method
+                    .as_bytes()
+                    .cmp(method.as_bytes())
+                    .then_with(|| route.path.as_bytes().cmp(path.as_bytes()))
+            })
+            .ok()
+            .and_then(|index| self.resident.target().http_routes.get(index))
+            .map(|route| (route.route, route.port))
+    }
 }
 
 async fn normalized_live_handler(
@@ -204,6 +283,15 @@ async fn normalized_live_handler(
     let (request, body) = match decode_live_request(request, &application.limits) {
         Ok(request) => request,
         Err(response) => return response,
+    };
+    if let Err(error) = validate_request(&request, &application.limits) {
+        return safe_error_response(&error, execution_error_status(&error));
+    }
+    let Some((_route, port)) = application.select_route(&request.method, &request.path) else {
+        drop(body);
+        return encode_live_response(unmatched_response()).unwrap_or_else(|error| {
+            safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR)
+        });
     };
     let query_parameters = match decode_query_parameters(&request.query) {
         Ok(parameters) => parameters,
@@ -254,7 +342,7 @@ async fn normalized_live_handler(
     ));
     let outcome = application
         .resident
-        .invoke_scoped(resources, vec![request])
+        .invoke_port_scoped(resources, port, vec![request])
         .await
         .and_then(|receipt| response_value(receipt.value, &application.limits));
     if let Err(response) = finish_request_body_pump(pump, deadline).await {
@@ -270,6 +358,14 @@ async fn normalized_live_handler(
             })
         }
         Err(error) => safe_error_response(&error, execution_error_status(&error)),
+    }
+}
+
+fn unmatched_response() -> HttpResponse {
+    HttpResponse {
+        status: 404,
+        headers: Vec::new(),
+        body: Vec::new(),
     }
 }
 

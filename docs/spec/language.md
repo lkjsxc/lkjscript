@@ -151,8 +151,8 @@ span padding, and dense compiler indexes are not global semantic identities.
 
 All accepted references resolve to exact package/module/declaration/member identities, and
 canonical relations retain those stable bindings. Imports store exact package/module identities,
-exports store declaration IDs, expression references store exact declaration references, and
-targets store exact module/component/port identities. Module rename therefore does not rewrite
+exports store declaration IDs, expression references store exact declaration references, targets
+store exact component identities, and target-owned HTTP routes store exact port identities. Module rename therefore does not rewrite
 importers or targets. Declaration rename changes its owning module and name summary without
 rewriting callers. Declaration move is not yet local because an exact declaration reference
 deliberately includes its owning module identity.

@@ -4,8 +4,8 @@ use super::budget::{CanonicalReadAdmission, WitnessReadAdmission};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
-    PackageInterfaceRecord, RelationEdge, RelationEndpoint, RetirementRecord, SemanticRoot,
-    TypeObject, TypeObjectDigest,
+    PackageInterfaceRecord, RelationEdge, RelationEndpoint, RelationKind, RetirementRecord,
+    SemanticRoot, TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
@@ -263,6 +263,13 @@ pub trait WitnessBaseRead {
         maximum_items: usize,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
+    fn read_incoming_relations_of_kind(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
+
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
@@ -329,6 +336,18 @@ pub trait WitnessBaseRead {
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         Err(admission_unsupported("witness incoming relations"))
+    }
+
+    /// Performs an admitted incoming-relation prefix read within one exact relation kind.
+    /// The default fails closed rather than reading an unrelated unbounded prefix.
+    fn read_incoming_relations_of_kind_admitted(
+        &self,
+        _owner: OwnerKey,
+        _kind: RelationKind,
+        _maximum_items: usize,
+        _admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        Err(admission_unsupported("witness incoming relations by kind"))
     }
 
     /// Performs an admitted foreign-package relation prefix read. The default fails closed.
@@ -624,6 +643,22 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
         })
     }
 
+    fn read_incoming_relations_of_kind(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        self.admitted(|admission| {
+            self.base.read_incoming_relations_of_kind_admitted(
+                owner,
+                kind,
+                maximum_items,
+                admission,
+            )
+        })
+    }
+
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
@@ -904,7 +939,7 @@ impl WitnessBaseRead for FullWitness {
         maximum_items: usize,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
-        read_memory_relations(self, owner, maximum_items, false, admission)
+        read_memory_relations(self, owner, None, maximum_items, false, admission)
     }
 
     fn read_incoming_relations(
@@ -925,7 +960,31 @@ impl WitnessBaseRead for FullWitness {
         maximum_items: usize,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
-        read_memory_relations(self, owner, maximum_items, true, admission)
+        read_memory_relations(self, owner, None, maximum_items, true, admission)
+    }
+
+    fn read_incoming_relations_of_kind(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        self.read_incoming_relations_of_kind_admitted(
+            owner,
+            kind,
+            maximum_items,
+            WitnessReadAdmission::unbounded(),
+        )
+    }
+
+    fn read_incoming_relations_of_kind_admitted(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        read_memory_relations(self, owner, Some(kind), maximum_items, true, admission)
     }
 
     fn read_incoming_package_relations(
@@ -1046,6 +1105,7 @@ impl WitnessBaseRead for FullWitness {
 fn read_memory_relations(
     witness: &FullWitness,
     owner: OwnerKey,
+    kind: Option<RelationKind>,
     maximum_items: usize,
     reverse: bool,
     admission: WitnessReadAdmission,
@@ -1082,7 +1142,14 @@ fn read_memory_relations(
         }
     });
     let available = &relations[start..end];
-    let returned = available.len().min(maximum_items);
+    let matching = if let Some(kind) = kind {
+        let start = available.partition_point(|edge| edge.kind < kind);
+        let end = available.partition_point(|edge| edge.kind <= kind);
+        &available[start..end]
+    } else {
+        available
+    };
+    let returned = matching.len().min(maximum_items);
     admission.check_work(
         WitnessReadWork {
             point_reads: 1,
@@ -1093,8 +1160,8 @@ fn read_memory_relations(
     )?;
     Ok(WitnessRead::memory_records(
         WitnessRelationRead {
-            edges: available[..returned].to_vec(),
-            truncated: available.len() > maximum_items,
+            edges: matching[..returned].to_vec(),
+            truncated: matching.len() > maximum_items,
         },
         returned as u64,
     ))
@@ -1378,6 +1445,16 @@ mod tests {
             maximum_items: usize,
         ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
             self.base.read_incoming_relations(owner, maximum_items)
+        }
+
+        fn read_incoming_relations_of_kind(
+            &self,
+            owner: OwnerKey,
+            kind: RelationKind,
+            maximum_items: usize,
+        ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+            self.base
+                .read_incoming_relations_of_kind(owner, kind, maximum_items)
         }
 
         fn read_incoming_package_relations(

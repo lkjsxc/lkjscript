@@ -36,10 +36,11 @@ use super::execution::ExecutionControl;
 use super::execution::normalized::NormalizedCommandPolicy;
 use super::kernel::{
     BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility, EncodedOwnerKey,
-    ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect, LocalValueReference,
-    Name, OperationReference, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind,
-    OwnerRecord, PackageId, PackageTransportDigest, ParameterParent, ParameterUse,
-    RequirementReference, ResourceUnit, TextValue, TypeObjectDigest, encode_owner,
+    ExactOwnerKey, ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect,
+    LocalValueReference, Name, OperationReference, OwnerKey as KernelOwnerKey,
+    OwnerKind as KernelOwnerKind, OwnerRecord, PackageId, PackageTransportDigest, ParameterParent,
+    ParameterUse, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit, TextValue,
+    TypeObjectDigest, encode_owner, http_route_set_digest,
 };
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
@@ -2242,6 +2243,7 @@ fn execute_inspect_owner_with_limits(
     if let Some(name) = record.name() {
         owner_fields.push(("name", name.as_str().to_owned()));
     }
+    owner_fields.extend(http_topology_inspection_fields(&view, record)?);
     append_compact_record(&mut output, "owner", &owner_fields)?;
     let summary_fields = vec![
         ("type-roots", record.type_roots().len().to_string()),
@@ -2262,6 +2264,121 @@ fn execute_inspect_owner_with_limits(
     ];
     append_compact_record(&mut output, "summary", &summary_fields)?;
     Ok(output.finish())
+}
+
+fn http_topology_inspection_fields(
+    view: &RepositoryView,
+    record: &OwnerRecord,
+) -> Result<Vec<(&'static str, String)>, Diagnostic> {
+    match record {
+        OwnerRecord::HttpRoute(route) => {
+            let target_owner = KernelOwnerKey::Target(route.target);
+            let target_read = view.owner(target_owner)?;
+            let Some(OwnerRecord::Target(target)) = target_read.value else {
+                return Err(owner_inspection_error(
+                    DiagnosticClass::Corrupt,
+                    "http_route_target_missing",
+                    "HTTP route names a missing or foreign target owner",
+                ));
+            };
+            if target_read.revision != view.revision() {
+                return Err(owner_inspection_error(
+                    DiagnosticClass::Corrupt,
+                    "http_route_target_revision",
+                    "HTTP route and target were not read from one accepted revision",
+                ));
+            }
+            Ok(vec![
+                ("target", route.target.to_string()),
+                ("method", route.method.clone()),
+                ("path", route.path.clone()),
+                (
+                    "component",
+                    local_definition_reference(
+                        target.component.package,
+                        KernelOwnerKey::Declaration(target.component.declaration),
+                    ),
+                ),
+                (
+                    "port",
+                    local_definition_reference(
+                        route.port.package,
+                        KernelOwnerKey::Port(route.port.port),
+                    ),
+                ),
+            ])
+        }
+        OwnerRecord::Target(target) if target.runner == super::package::RunnerKind::Http => {
+            let endpoint = RelationEndpoint::Owner(ExactOwnerKey {
+                package: view.package(),
+                owner: target.header.owner,
+            });
+            let relations = view.incoming_relations(
+                endpoint,
+                Some(RelationKind::HttpRouteTarget),
+                super::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET + 1,
+            )?;
+            if relations.revision != view.revision() || relations.value.truncated {
+                return Err(owner_inspection_error(
+                    DiagnosticClass::Corrupt,
+                    "http_target_route_relations",
+                    "HTTP target route relations are stale or exceed the semantic bound",
+                ));
+            }
+            let mut routes = Vec::with_capacity(relations.value.edges.len());
+            for edge in relations.value.edges {
+                let RelationEndpoint::Owner(source) = edge.source else {
+                    return Err(owner_inspection_error(
+                        DiagnosticClass::Corrupt,
+                        "http_target_route_relation_source",
+                        "HTTP target route relation has a package source",
+                    ));
+                };
+                let route_read = view.owner(source.owner)?;
+                let Some(OwnerRecord::HttpRoute(route)) = route_read.value else {
+                    return Err(owner_inspection_error(
+                        DiagnosticClass::Corrupt,
+                        "http_target_route_owner",
+                        "HTTP target relation names a missing or foreign route owner",
+                    ));
+                };
+                if source.package != view.package()
+                    || route_read.revision != view.revision()
+                    || route.target
+                        != match target.header.owner {
+                            KernelOwnerKey::Target(target) => target,
+                            _ => {
+                                return Err(owner_inspection_error(
+                                    DiagnosticClass::Corrupt,
+                                    "http_target_identity",
+                                    "HTTP target record has another identity domain",
+                                ));
+                            }
+                        }
+                {
+                    return Err(owner_inspection_error(
+                        DiagnosticClass::Corrupt,
+                        "http_target_route_binding",
+                        "HTTP target route relation disagrees with exact authority",
+                    ));
+                }
+                routes.push(route);
+            }
+            let digest = http_route_set_digest(&routes)?;
+            Ok(vec![
+                (
+                    "component",
+                    local_definition_reference(
+                        target.component.package,
+                        KernelOwnerKey::Declaration(target.component.declaration),
+                    ),
+                ),
+                ("route-count", routes.len().to_string()),
+                ("route-set", format!("http_routes_{}", encode_hex(&digest))),
+            ])
+        }
+        _ => Ok(Vec::new()),
+    }
 }
 
 const FUNCTION_DEFINITION_ORDERING: u8 = 1;
@@ -4167,6 +4284,7 @@ fn definition_identity_kind_name(owner: KernelOwnerKey) -> &'static str {
         KernelOwnerKey::Requirement(_) => "requirement",
         KernelOwnerKey::Port(_) => "port",
         KernelOwnerKey::Target(_) => "target",
+        KernelOwnerKey::HttpRoute(_) => "http_route",
         KernelOwnerKey::Documentation(_) => "documentation",
         KernelOwnerKey::Annotation(_) => "annotation",
     }

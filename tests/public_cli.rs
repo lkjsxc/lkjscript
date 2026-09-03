@@ -761,10 +761,12 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.parameter",
             "add.requirement",
             "add.port",
+            "add.http-route",
             "add.dependency",
             "replace.dependency",
             "set.function-contract",
             "set.requirement-contract",
+            "set.http-route",
             "delete.owner",
             "rename.owner",
             "move.declaration",
@@ -776,7 +778,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 106);
+    assert_eq!(operation_fields.len(), 115);
     assert_eq!(
         operation_fields
             .iter()
@@ -789,6 +791,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             })
             .collect::<Vec<_>>(),
         vec![
+            ("create.target", "port"),
             ("add.case", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
@@ -801,9 +804,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 27);
+    assert_eq!(field_forms.len(), 29);
     for (name, syntax) in [
         ("exact_expression", "expr_HEX"),
+        ("http_method", "ASCII_HTTP_TOKEN_1_TO_32_BYTES"),
+        ("http_path", "/EXACT_PATH_1_TO_16384_BYTES"),
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
         ("runner_kind", "command|http|interactive"),
@@ -862,6 +867,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "name") == Some("expression")
     }));
     assert!(query.iter().any(|record| {
+        record.operation == "query.owner-kind"
+            && compact_field(record, "name") == Some("http_route")
+    }));
+    assert!(query.iter().any(|record| {
         record.operation == "query.namespace-class"
             && compact_field(record, "name") == Some("parameter")
     }));
@@ -873,12 +882,18 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         record.operation == "query.relation-kind"
             && compact_field(record, "name") == Some("parameter_requirement")
     }));
+    for relation in ["http_route_target", "http_route_port"] {
+        assert!(query.iter().any(|record| {
+            record.operation == "query.relation-kind"
+                && compact_field(record, "name") == Some(relation)
+        }));
+    }
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        22
+        23
     );
     assert_eq!(
         query
@@ -892,7 +907,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        28
+        30
     );
     assert_eq!(
         query
@@ -5694,6 +5709,489 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
 }
 
 #[test]
+fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
+    let temporary = tempfile::TempDir::new().expect("isolated HTTP route workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("application");
+
+    let grammar = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["capabilities", "--section", "change"],
+    );
+    for operation in ["add.http-route", "set.http-route"] {
+        assert!(grammar.iter().any(|record| {
+            record.operation == "change.operation"
+                && compact_field(record, "name") == Some(operation)
+        }));
+    }
+    for (condition, port) in [
+        ("runner=http", "forbidden"),
+        ("runner=command|interactive", "required"),
+    ] {
+        assert!(grammar.iter().any(|record| {
+            record.operation == "change.operation-rule"
+                && compact_field(record, "operation") == Some("create.target")
+                && compact_field(record, "condition") == Some(condition)
+                && compact_field(record, "port") == Some(port)
+        }));
+    }
+    let owners = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["capabilities", "--section", "owners"],
+    );
+    assert!(owners.iter().any(|record| {
+        record.operation == "owner.kind" && compact_field(record, "name") == Some("http_route")
+    }));
+
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "http",
+            "--name",
+            "route-lifecycle",
+        ],
+    );
+    let base = current_revision_at(&copied_binary, temporary.path(), &project);
+    let routes = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--kind",
+            "http_route",
+        ],
+    );
+    let route = compact_field(
+        routes
+            .iter()
+            .find(|record| record.operation == "owner")
+            .expect("initial HTTP route owner"),
+        "id",
+    )
+    .expect("initial HTTP route identity")
+    .to_owned();
+    let targets = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--kind",
+            "target",
+        ],
+    );
+    let target = compact_field(
+        targets
+            .iter()
+            .find(|record| record.operation == "owner")
+            .expect("HTTP target owner"),
+        "id",
+    )
+    .expect("HTTP target identity")
+    .to_owned();
+    let inspected_route = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "http_route",
+            &route,
+        ],
+    );
+    let route_owner = compact_record(&inspected_route, "owner");
+    assert_eq!(compact_field(route_owner, "target"), Some(target.as_str()));
+    assert_eq!(compact_field(route_owner, "method"), Some("GET"));
+    assert_eq!(compact_field(route_owner, "path"), Some("/"));
+    let component = compact_field(route_owner, "component")
+        .expect("route component")
+        .to_owned();
+    let port = compact_field(route_owner, "port")
+        .expect("route port")
+        .to_owned();
+    let inspected_target = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "target",
+            &target,
+        ],
+    );
+    let target_owner = compact_record(&inspected_target, "owner");
+    assert_eq!(
+        compact_field(target_owner, "component"),
+        Some(component.as_str())
+    );
+    assert_eq!(compact_field(target_owner, "route-count"), Some("1"));
+    let initial_route_set = compact_field(target_owner, "route-set")
+        .expect("initial route-set digest")
+        .to_owned();
+
+    let zero = format!(
+        "request base={base}\n\
+         delete.owner owner={route} policy=reject\n"
+    );
+    let zero_path = temporary.path().join("zero-routes.lkjc");
+    std::fs::write(&zero_path, zero).expect("zero-route request");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&zero_path),
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("kernel_http_target_route_count")
+    );
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        base
+    );
+
+    let first = format!(
+        "request base={base}\n\
+         add.http-route as=$route_a target={target} method=GET path=/a port={port}\n\
+         add.http-route as=$route_b target={target} method=POST path=/b port={port}\n"
+    );
+    let swapped = format!(
+        "request base={base}\n\
+         add.http-route as=$renamed_b target={target} method=POST path=/b port={port}\n\
+         add.http-route as=$renamed_a target={target} method=GET path=/a port={port}\n"
+    );
+    let first_path = temporary.path().join("add-routes.lkjc");
+    let swapped_path = temporary.path().join("add-routes-swapped.lkjc");
+    std::fs::write(&first_path, first).expect("ordered route additions");
+    std::fs::write(&swapped_path, swapped).expect("swapped route additions");
+    let first_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&first_path),
+        ],
+    );
+    let swapped_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&swapped_path),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&first_plan, "plan"), "token"),
+        compact_field(compact_record(&swapped_plan, "plan"), "token")
+    );
+    assert_eq!(
+        compact_field(compact_record(&first_plan, "revision"), "result"),
+        compact_field(compact_record(&swapped_plan, "revision"), "result")
+    );
+    let identities = |records: &[CompactRecord]| {
+        records
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .filter_map(|record| {
+                Some((
+                    compact_field(record, "symbol")?.to_owned(),
+                    compact_field(record, "id")?.to_owned(),
+                ))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    let first_identities = identities(&first_plan);
+    let swapped_identities = identities(&swapped_plan);
+    assert_eq!(
+        first_identities["$route_a"],
+        swapped_identities["$renamed_a"]
+    );
+    assert_eq!(
+        first_identities["$route_b"],
+        swapped_identities["$renamed_b"]
+    );
+    let add_token = compact_field(compact_record(&first_plan, "plan"), "token")
+        .expect("route-add plan token")
+        .to_owned();
+    let added = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&first_path),
+            "--plan",
+            &add_token,
+        ],
+    );
+    let added_revision = compact_field(compact_record(&added, "revision"), "result")
+        .expect("route-add revision")
+        .to_owned();
+    let route_a = first_identities["$route_a"].clone();
+
+    for (name, record, code) in [
+        (
+            "duplicate",
+            format!("add.http-route as=$duplicate target={target} method=GET path=/a port={port}"),
+            "kernel_http_route_duplicate",
+        ),
+        (
+            "method",
+            format!(
+                "add.http-route as=$bad_method target={target} method=GET/ path=/bad port={port}"
+            ),
+            "kernel_http_route_method",
+        ),
+        (
+            "path",
+            format!(
+                "add.http-route as=$bad_path target={target} method=GET path=relative port={port}"
+            ),
+            "kernel_http_route_path",
+        ),
+    ] {
+        let body = format!("request base={added_revision}\n{record}\n");
+        let request_path = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&request_path, body).expect("invalid route request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&request_path),
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(code),
+            "{name}"
+        );
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            added_revision,
+            "{name}"
+        );
+    }
+
+    let set = format!(
+        "request base={added_revision}\n\
+         set.http-route route={route} method=HEAD path=/probe port={port}\n"
+    );
+    let set_path = temporary.path().join("set-route.lkjc");
+    std::fs::write(&set_path, set).expect("route set request");
+    let set_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&set_path),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&set_plan, "summary"), "updated"),
+        Some("1")
+    );
+    let set_token = compact_field(compact_record(&set_plan, "plan"), "token")
+        .expect("route-set plan token")
+        .to_owned();
+    let set_applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&set_path),
+            "--plan",
+            &set_token,
+        ],
+    );
+    let set_revision = compact_field(compact_record(&set_applied, "revision"), "result")
+        .expect("route-set revision")
+        .to_owned();
+    let inspected_route = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "http_route",
+            &route,
+        ],
+    );
+    let route_owner = compact_record(&inspected_route, "owner");
+    assert_eq!(compact_field(route_owner, "id"), Some(route.as_str()));
+    assert_eq!(compact_field(route_owner, "method"), Some("HEAD"));
+    assert_eq!(compact_field(route_owner, "path"), Some("/probe"));
+    let inspected_target = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "target",
+            &target,
+        ],
+    );
+    let target_owner = compact_record(&inspected_target, "owner");
+    assert_eq!(compact_field(target_owner, "route-count"), Some("3"));
+    assert_ne!(
+        compact_field(target_owner, "route-set"),
+        Some(initial_route_set.as_str())
+    );
+
+    let stale = format!(
+        "request base={added_revision}\n\
+         set.http-route route={route} method=HEAD path=/stale port={port}\n"
+    );
+    let stale_path = temporary.path().join("stale-route.lkjc");
+    std::fs::write(&stale_path, stale).expect("stale route request");
+    let rejected = compact_failure_output_with_status(
+        command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&stale_path),
+            ],
+        ),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+
+    let deletion = format!(
+        "request base={set_revision}\n\
+         delete.owner owner={route_a} policy=reject\n"
+    );
+    let deletion_path = temporary.path().join("delete-route.lkjc");
+    std::fs::write(&deletion_path, deletion).expect("route deletion request");
+    let deletion_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&deletion_path),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&deletion_plan, "summary"), "deleted"),
+        Some("1")
+    );
+    let deletion_token = compact_field(compact_record(&deletion_plan, "plan"), "token")
+        .expect("route deletion plan token")
+        .to_owned();
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&deletion_path),
+            "--plan",
+            &deletion_token,
+        ],
+    );
+    let routes = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--kind",
+            "http_route",
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&routes, "summary"), "returned"),
+        Some("2")
+    );
+    assert!(!routes.iter().any(|record| {
+        record.operation == "owner" && compact_field(record, "id") == Some(route_a.as_str())
+    }));
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    let artifact = project.join("generated/application.lkja");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&artifact),
+        ],
+    );
+    assert!(artifact.is_file());
+}
+
+#[test]
 fn public_topology_validation_rejects_runner_port_component_and_requirement_mismatches() {
     let temporary = tempfile::TempDir::new().expect("isolated topology negatives");
     let copied_binary = temporary.path().join("lkjscript");
@@ -5727,9 +6225,24 @@ fn public_topology_validation_rejects_runner_port_component_and_requirement_mism
                  create.component as=$component module=$module name=application visibility=package\n\
                  type.function as=@entry result=text\n\
                  add.port as=$port component=$component name=http type=@entry function=$entry\n\
+                 create.target as=$target name=serve component=$component runner=http\n\
+                 add.http-route as=$route target=$target method=GET path=/ port=$port\n"
+            ),
+            "kernel_type_http_route_port",
+        ),
+        (
+            "http-universal-port",
+            format!(
+                "request base={base}\n\
+                 create.module as=$module name=application\n\
+                 expression.text as=$body value=hello\n\
+                 create.function as=$entry module=$module name=entry visibility=private result=text effect=pure body=$body\n\
+                 create.component as=$component module=$module name=application visibility=package\n\
+                 type.function as=@entry result=text\n\
+                 add.port as=$port component=$component name=http type=@entry function=$entry\n\
                  create.target as=$target name=serve component=$component port=$port runner=http\n"
             ),
-            "kernel_type_target_http_runner",
+            "change_target_port_condition",
         ),
         (
             "port-type",

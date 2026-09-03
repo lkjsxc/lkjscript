@@ -52,6 +52,7 @@ impl PackageInterfaceRecord {
             | OwnerRecord::Binding(_)
             | OwnerRecord::Expression(_)
             | OwnerRecord::Target(_)
+            | OwnerRecord::HttpRoute(_)
             | OwnerRecord::Documentation(_)
             | OwnerRecord::Annotation(_) => return Ok(None),
         }))

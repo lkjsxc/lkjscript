@@ -1,9 +1,9 @@
-//! Typed additions and contract updates for existing Graph 8 owners.
+//! Typed additions and contract updates for existing Graph 9 owners.
 
 use super::*;
 use crate::platform::kernel::{
-    CaseRecord, FieldRecord, ImplementationName, OperationRecord, PortImplementation, PortRecord,
-    RequirementRecord, ResourceLimit, TypeParameterRecord,
+    CaseRecord, FieldRecord, HttpRouteRecord, ImplementationName, OperationRecord,
+    PortImplementation, PortRecord, RequirementRecord, ResourceLimit, TypeParameterRecord,
 };
 
 pub(in crate::platform::change::request) fn collect_mutation_symbols(
@@ -52,6 +52,9 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
             }
             Ok(())
         }
+        AuthoredChange::AddHttpRoute { symbol, .. } => {
+            define_symbol(definitions, symbol, SymbolKind::HttpRoute)
+        }
         AuthoredChange::SetDeclarationVisibility { .. }
         | AuthoredChange::SetFunctionContract { .. }
         | AuthoredChange::SetExternalContract { .. }
@@ -60,7 +63,8 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
         | AuthoredChange::SetParameterType { .. }
         | AuthoredChange::SetOperationContract { .. }
         | AuthoredChange::SetRequirementContract { .. }
-        | AuthoredChange::SetTarget { .. } => Ok(()),
+        | AuthoredChange::SetTarget { .. }
+        | AuthoredChange::SetHttpRoute { .. } => Ok(()),
         _ => Err(mutation_corrupt(
             "change_mutation_symbol_dispatch",
             "non-mutation change reached mutation symbol collection",
@@ -95,6 +99,13 @@ pub(in crate::platform::change::request) fn lower_mutation<
             requirement,
         } => lower_add_requirement(lowerer, component, requirement),
         AuthoredChange::AddPort { component, port } => lower_add_port(lowerer, component, port),
+        AuthoredChange::AddHttpRoute {
+            symbol,
+            target,
+            method,
+            path,
+            port,
+        } => lower_add_http_route(lowerer, symbol, target, method, path, port),
         AuthoredChange::SetDeclarationVisibility {
             declaration,
             visibility,
@@ -167,6 +178,12 @@ pub(in crate::platform::change::request) fn lower_mutation<
             port,
             runner,
         } => lower_set_target(lowerer, target, component, port, *runner),
+        AuthoredChange::SetHttpRoute {
+            route,
+            method,
+            path,
+            port,
+        } => lower_set_http_route(lowerer, route, method, path, port),
         _ => Err(mutation_corrupt(
             "change_mutation_dispatch",
             "non-mutation change reached mutation lowering",
@@ -549,15 +566,59 @@ fn lower_set_requirement_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseR
     Ok(())
 }
 
+fn lower_add_http_route<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    symbol: &str,
+    target: &OwnerSelector,
+    method: &str,
+    path: &str,
+    port: &AuthoredPortReference,
+) -> Result<(), Diagnostic> {
+    let route = lowerer.http_route_symbol(symbol)?;
+    let target_owner = lowerer.resolve_creation_owner(target)?;
+    let OwnerKey::Target(target) = target_owner else {
+        return Err(mutation_kind("HTTP target", target_owner));
+    };
+    let port = lowerer.lower_port_reference(port)?;
+    lowerer.insert_created(OwnerRecord::HttpRoute(HttpRouteRecord {
+        header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute),
+        target,
+        method: method.to_owned(),
+        path: path.to_owned(),
+        port,
+    }))
+}
+
+fn lower_set_http_route<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    selector: &OwnerSelector,
+    method: &str,
+    path: &str,
+    port: &AuthoredPortReference,
+) -> Result<(), Diagnostic> {
+    let port = lowerer.lower_port_reference(port)?;
+    let owner = lowerer.resolve_owner(selector)?;
+    let OwnerRecord::HttpRoute(record) = lowerer.candidate_mut(owner)? else {
+        return Err(mutation_kind("HTTP route", owner));
+    };
+    record.method = method.to_owned();
+    record.path = path.to_owned();
+    record.port = port;
+    Ok(())
+}
+
 fn lower_set_target<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     selector: &OwnerSelector,
     component: &AuthoredDeclarationReference,
-    port: &AuthoredPortReference,
+    port: &Option<AuthoredPortReference>,
     runner: crate::platform::package::RunnerKind,
 ) -> Result<(), Diagnostic> {
     let component = lowerer.lower_declaration_reference(component)?;
-    let port = lowerer.lower_port_reference(port)?;
+    let port = port
+        .as_ref()
+        .map(|port| lowerer.lower_port_reference(port))
+        .transpose()?;
     let owner = lowerer.resolve_owner(selector)?;
     let OwnerRecord::Target(record) = lowerer.candidate_mut(owner)? else {
         return Err(mutation_kind("target", owner));

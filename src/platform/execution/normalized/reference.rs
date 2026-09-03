@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 8 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 9 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -233,20 +233,26 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 8 authority",
+                        "selected target is absent from canonical Graph 9 authority",
                     ));
                 }
             };
+            let port_reference = record.port.ok_or_else(|| {
+                reference_error(
+                    "normalized_reference_target_port_missing",
+                    "selected non-HTTP target has no exact port",
+                )
+            })?;
             if record.name != expected_name
                 || record.component.package != state.binding.package
-                || record.port.package != state.binding.package
+                || port_reference.package != state.binding.package
             {
                 return Err(reference_error(
                     "normalized_reference_target_binding",
                     "selected target disagrees with its exact prepared artifact binding",
                 ));
             }
-            let port = match state.owner(OwnerKey::Port(record.port.port))? {
+            let port = match state.owner(OwnerKey::Port(port_reference.port))? {
                 Some(OwnerRecord::Port(port)) => port,
                 Some(_) => {
                     return Err(reference_error(
@@ -257,7 +263,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 8 authority",
+                        "selected target port is absent from canonical Graph 9 authority",
                     ));
                 }
             };

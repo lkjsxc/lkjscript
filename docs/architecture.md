@@ -155,7 +155,7 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source is unreleased product snapshot 0.1.20; immutable public latest remains
+unchanged. Current source is unreleased product snapshot 0.1.21; immutable public latest remains
 v0.1.16. The source retains requirement-bound affine task handoff, the maintained worker split,
 identity-preserving private same-module function extraction, and catalog contract 2. It adds
 structured-session contract 1, canonical standard session types, one exact relational
@@ -163,7 +163,7 @@ structured-session contract 1, canonical standard session types, one exact relat
 not enter
 the distribution path above, alter the
 immutable release, or select deployment or operational data.
-Deployment 4 owns the strict interactive limits and topology. Project creation 3,
+Deployment 4 owns the strict interactive limits and topology. Project creation 4,
 HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
@@ -301,8 +301,8 @@ CapabilityResource<Interface> + parameter use / optional helper binding
  language-order affine validator + disjoint finite oracle
                  │ borrow / consume / one direct acyclic handoff
                  ▼
- compiler-unit 3 / bytecode 3 local loads + exact binding
-                 │ Artifact 13 shape/call-graph validation
+ compiler-unit 4 / bytecode 3 local loads + exact binding
+                 │ Artifact 14 shape/call-graph validation
                  ▼
  task resource scope: scope + kind + interface + requirement
                  │ reserve before effect; commit or release
@@ -335,7 +335,7 @@ The interactive path keeps semantic state and live ownership deliberately disjoi
 graph handler: (Option<State>, SessionEvent) -> SessionDecision<State>
                               │ exact closed repeated State relation
                               ▼
-                 Artifact 13 + deployment 4 preparation
+                 Artifact 14 + deployment 4 preparation
                               │ validate all session limits before readiness
                               ▼
           one parent session scope owns RFC 6455 connection
@@ -414,12 +414,39 @@ mutation rules. There is no source template, migration reader, path lookup, netw
 sidecar, or prebuilt application artifact.
 
 The Nostr relay-information recipe reuses that inbound topology and resolves the exact standard
-`HttpClient.get` interface/operation plus a pure media-type predicate. Its graph owns route,
+`HttpClient.get` interface/operation plus a pure media-type predicate. Its graph owns exact
+`GET /relay-info` route membership,
 ordered `Accept` header, status/media policy, byte-preserving response, and deterministic 502. Its
 descriptor adds one exact client grant whose normalized endpoint, address class, TLS trust, and
 independent limits remain operator authority. Project creation validates and synchronizes graph,
 descriptor, and empty generated directory before one destination rename; readiness performs no
 network request.
+
+## Exact inbound HTTP topology
+
+An HTTP target has no universal handler port. Stable route owners form its sole nonempty finite
+dispatch authority:
+
+```text
+HTTP target + component ── owns ── exact (method, path) route owners
+                                      │ each names one component port
+                                      ▼
+                         canonical compiler route table
+                                      │ strict artifact/load/preflight binding
+                                      ▼
+validated transport request ── one exact lookup ── selected handler at most once
+                                      │ no match
+                                      └──────────── fixed empty 404, no task or capability
+```
+
+The compiler table and prepared lookup index are derived and disposable. They bind route, target,
+component, port, function shape, and requirement closure back to accepted authority and cannot be
+overridden by a deployment descriptor. Canonical order is unsigned method bytes then path bytes;
+the runtime uses the adapter's validated path spelling without normalization or an implicit method.
+Route identity survives a supported method/path/port change, while target inspection exposes only
+the canonical route-set digest and count. Bounded context traversal exposes the ordinary
+route/target, route/port, port/function, component, and effect relations rather than a second route
+projection.
 
 ## Public stateful HTTP authoring path
 
@@ -437,8 +464,8 @@ copied binary discovery
                      │ semantic HEAD unchanged
                      ▼
           one compact typed authored request
- dependency + component + requirements + function-backed HTTP port
- + target + task effect + explicit generic/function values
+ dependency + component + requirements + function-backed HTTP ports
+ + target + exact routes + task effects + explicit generic/function values
                      │
             plan / exact-base apply
                      ▼
@@ -452,17 +479,19 @@ HTTP client -> HTTP adapter -> graph handler/domain policy
                              -> first-party ordered data adapter
 ```
 
-The graph owns route selection, header/body admission, strict JSON interpretation, post domain
-types and validation, response status/headers/body, space/schema/index policy, canonical typed
+The graph owns the finite exact route set and each route-to-port binding, plus header/body
+admission, strict JSON interpretation, post domain types and validation, response
+status/headers/body, space/schema/index policy, canonical typed
 encoding, expectations, and transaction boundaries. HTTP/domain functions call a narrow
 application-owned persistence layer and contain no filesystem representation. Deployment separately
 owns the confined first-party root, namespace, sharing domain, authority revision, data limits,
 listener, and runtime limits. Runtime facts are operational authority; they never become graph
 meaning or share semantic repository identities.
 
-The request creates the handler with its exact result and requirement closure, and topology
-validation checks port/function agreement, component requirement closure, component/port ownership,
-and HTTP runner shape before publication. Generic runtime call frames carry concrete graph type
+The request creates each handler with its exact result and requirement closure, and topology
+validation checks route keys, duplicate absence, port/function agreement, component requirement
+closure, component/port ownership, route/target ownership, and HTTP runner shape before
+publication. Generic runtime call frames carry concrete graph type
 substitutions for standard JSON/list declarations in both production and reference tiers. An
 idempotent apply retry reopens the accepted request's exact parent and hides only the child-added
 physical type objects, preserving logical reprepare even though immutable storage grows.

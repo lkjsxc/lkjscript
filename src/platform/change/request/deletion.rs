@@ -191,6 +191,7 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
             RelationKind::DeclarationModule
                 | RelationKind::DocumentationOwnership
                 | RelationKind::AnnotationOwnership
+                | RelationKind::HttpRouteTarget
         ) {
             continue;
         }
@@ -242,6 +243,7 @@ fn external_parent(record: &OwnerRecord) -> Option<OwnerKey> {
         OwnerRecord::Declaration(record) => Some(OwnerKey::Module(record.module)),
         OwnerRecord::Documentation(record) => Some(record.owner),
         OwnerRecord::Annotation(record) => Some(record.owner),
+        OwnerRecord::HttpRoute(record) => Some(OwnerKey::Target(record.target)),
         OwnerRecord::Module(_)
         | OwnerRecord::TypeParameter(_)
         | OwnerRecord::Field(_)
@@ -377,6 +379,7 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
         },
         OwnerRecord::Requirement(record) => OwnerKey::Declaration(record.declaration),
         OwnerRecord::Port(record) => OwnerKey::Declaration(record.declaration),
+        OwnerRecord::HttpRoute(_) => return Ok(()),
         OwnerRecord::Module(_)
         | OwnerRecord::Declaration(_)
         | OwnerRecord::Target(_)

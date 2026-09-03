@@ -1,4 +1,4 @@
-//! Exact Graph 8 repository reads and one locked, atomic accepted-HEAD publication point.
+//! Exact Graph 9 repository reads and one locked, atomic accepted-HEAD publication point.
 
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
 use super::idempotency::{
@@ -50,7 +50,7 @@ use std::path::{Path, PathBuf};
 const HEAD_FILE: &str = "HEAD";
 const LOCK_FILE: &str = "LOCK";
 const HEAD_STAGE_PREFIX: &str = ".HEAD-stage-";
-const REPOSITORY_STAGE_PREFIX: &str = ".lkjscript-graph8-stage-";
+const REPOSITORY_STAGE_PREFIX: &str = ".lkjscript-graph9-stage-";
 const PACKAGE_TRANSPORT_DIRECTORY: &str = "PACKAGE-TRANSPORTS";
 const PACKAGE_TRANSPORT_SELECTION_FILE: &str = "CURRENT";
 const PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX: &str = ".CURRENT-stage-";
@@ -233,7 +233,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_parent",
-                "Graph 8 repository destination has no existing parent",
+                "Graph 9 repository destination has no existing parent",
             )
         })?;
         let stage = parent.join(format!(
@@ -316,7 +316,7 @@ impl GraphRepository {
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_open_type",
-                "Graph 8 repository root is not a regular non-symlink directory",
+                "Graph 9 repository root is not a regular non-symlink directory",
             ));
         }
         let root = root
@@ -331,7 +331,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })?;
         let repository = Self { root };
@@ -380,7 +380,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })?;
         let installed = install_package_transport(&root_directory, &mut store, digest, packs)?;
@@ -471,7 +471,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })?;
         if before.head != expected {
@@ -518,7 +518,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })
     }
@@ -537,7 +537,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })?;
         Ok(RepositoryView::new(current, store))
@@ -566,7 +566,7 @@ impl GraphRepository {
             repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_unpublished",
-                "Graph 8 repository has no accepted HEAD",
+                "Graph 9 repository has no accepted HEAD",
             )
         })?;
         let binding = if current.receipt.idempotency_key.as_deref() == Some(key) {
@@ -638,7 +638,7 @@ impl GraphRepository {
             .prepare_change(edits, options)
     }
 
-    /// Prepares one high-level Graph 8 request against the currently observed exact revision.
+    /// Prepares one high-level Graph 9 request against the currently observed exact revision.
     pub fn prepare_authored_change(
         &self,
         request: &AuthoredChangeSet,
@@ -1110,7 +1110,7 @@ fn read_publication(
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_merge_unimplemented",
-                "two-parent Graph 8 history is reserved but not readable before typed merge cutover",
+                "two-parent Graph 9 history is reserved but not readable before typed merge cutover",
             ));
         }
         _ => unreachable!("revision codec rejects more than two parents"),
@@ -1828,7 +1828,13 @@ fn install_package_transport(
     let mut stage = ObjectStage::new(&*store);
     for pack in packs {
         let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
-        metadata.verify_all(pack).map_err(store_diagnostic)?;
+        metadata.verify_all(pack).map_err(|error| {
+            let mut diagnostic = store_diagnostic(error);
+            diagnostic
+                .notes
+                .push("failed while verifying one package-transport pack".to_owned());
+            diagnostic
+        })?;
         for entry in &metadata.entries {
             if !input_keys.insert(entry.key) {
                 return Err(repository_error(
@@ -1847,9 +1853,14 @@ fn install_package_transport(
                         "verified package pack lost one indexed object",
                     )
                 })?;
-            stage
-                .stage(entry.key, &bytes, &mut work)
-                .map_err(store_diagnostic)?;
+            stage.stage(entry.key, &bytes, &mut work).map_err(|error| {
+                let mut diagnostic = store_diagnostic(error);
+                diagnostic.notes.push(format!(
+                    "failed while staging {} package-transport bytes",
+                    entry.key.domain.name()
+                ));
+                diagnostic
+            })?;
         }
     }
     let root_bytes = stage
@@ -2322,7 +2333,7 @@ fn initialize_unpublished(root: &Path) -> Result<(), Diagnostic> {
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_stage_exists",
-                "private Graph 8 repository stage already exists",
+                "private Graph 9 repository stage already exists",
             ));
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -2364,7 +2375,7 @@ fn canonical_new_destination(destination: &Path) -> Result<PathBuf, Diagnostic> 
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "publication_repository_exists",
-                "Graph 8 repository destination already exists",
+                "Graph 9 repository destination already exists",
             ));
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -2380,14 +2391,14 @@ fn canonical_new_destination(destination: &Path) -> Result<PathBuf, Diagnostic> 
         repository_error(
             DiagnosticClass::Source,
             "publication_repository_destination",
-            "Graph 8 repository destination must name one new directory",
+            "Graph 9 repository destination must name one new directory",
         )
     })?;
     let parent = destination.parent().ok_or_else(|| {
         repository_error(
             DiagnosticClass::Source,
             "publication_repository_parent",
-            "Graph 8 repository destination has no existing parent",
+            "Graph 9 repository destination has no existing parent",
         )
     })?;
     let parent = if parent.as_os_str().is_empty() {
@@ -2401,7 +2412,7 @@ fn canonical_new_destination(destination: &Path) -> Result<PathBuf, Diagnostic> 
         return Err(repository_error(
             DiagnosticClass::Source,
             "publication_repository_parent_type",
-            "Graph 8 repository parent is not a regular non-symlink directory",
+            "Graph 9 repository parent is not a regular non-symlink directory",
         ));
     }
     let parent = parent
@@ -2455,7 +2466,7 @@ fn validate_lock(file: File) -> Result<File, Diagnostic> {
         return Err(repository_error(
             DiagnosticClass::Corrupt,
             "publication_repository_lock_type",
-            "Graph 8 publication lock is not an empty regular file",
+            "Graph 9 publication lock is not an empty regular file",
         ));
     }
     Ok(file)
@@ -2486,7 +2497,7 @@ fn open_or_reconstruct_lock(root_directory: &File, root: &Path) -> Result<File, 
                 repository_error(
                     DiagnosticClass::Source,
                     "publication_repository_unpublished",
-                    "Graph 8 repository has no accepted HEAD",
+                    "Graph 9 repository has no accepted HEAD",
                 )
             })?;
             FileExt::unlock(&lock).map_err(|error| {
@@ -2661,7 +2672,7 @@ fn collapse_diagnostics(mut diagnostics: Vec<Diagnostic>) -> Diagnostic {
         return repository_error(
             DiagnosticClass::Infrastructure,
             "publication_repository_empty_diagnostics",
-            "Graph 8 preparation failed without a diagnostic",
+            "Graph 9 preparation failed without a diagnostic",
         );
     }
     let additional = diagnostics.len().saturating_sub(1);

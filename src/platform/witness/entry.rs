@@ -75,6 +75,7 @@ pub enum BindingContainerRole {
 pub enum OwnershipRole {
     PackageModule,
     PackageTarget,
+    TargetHttpRoute,
     ModuleDeclaration,
     DeclarationTypeParameter,
     DeclarationField,
@@ -112,6 +113,7 @@ impl OwnershipRole {
                 | Self::OperationParameter
                 | Self::DeclarationRequirement
                 | Self::DeclarationPort
+                | Self::TargetHttpRoute
                 | Self::ExpressionRoot(_)
                 | Self::ExpressionChild { .. }
                 | Self::ExpressionBinding { .. }

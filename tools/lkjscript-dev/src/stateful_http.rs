@@ -31,8 +31,8 @@ const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
-const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
-const STATEFUL_SCHEMA_VERSION: u32 = 4;
+pub(crate) const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
+pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 5;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
@@ -200,13 +200,23 @@ struct AuthoringResult {
 struct TopologyObservation {
     module: String,
     component: String,
-    handler: String,
-    request_parameter: String,
     requirements: BTreeMap<String, String>,
-    port: String,
+    routes: Vec<HttpRouteObservation>,
     target: String,
     target_name: String,
     runner: String,
+    route_set: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteObservation {
+    route: String,
+    method: String,
+    path: String,
+    port: String,
+    handler: String,
+    request_parameter: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -539,9 +549,26 @@ pub(crate) fn read_transferred_receipt(
         || result.topology.target_name != "serve"
         || result.topology.runner != "http"
         || result.topology.requirements.len() != 4
+        || result.topology.routes.len() != 5
+        || result.topology.route_set.is_empty()
         || ["streams", "data", "identifiers", "clock"]
             .iter()
             .any(|name| !result.topology.requirements.contains_key(*name))
+        || [
+            ("GET", "/"),
+            ("GET", "/api/posts"),
+            ("POST", "/api/posts"),
+            ("PUT", "/api/posts"),
+            ("DELETE", "/api/posts"),
+        ]
+        .iter()
+        .any(|(method, path)| {
+            !result
+                .topology
+                .routes
+                .iter()
+                .any(|route| route.method == *method && route.path == *path)
+        })
         || result.incremental_sha256 != result.clean_sha256
         || result.evidence != evidence_root.display().to_string()
         || result.live.data_contract != "lkjscript-data-store-1"
@@ -1204,6 +1231,7 @@ fn verify_discovery(context: &mut Context, cwd: &Path) -> Result<(), DevError> {
         "add.requirement",
         "add.port",
         "create.target",
+        "add.http-route",
     ] {
         require_named_record(&change, "change.operation", "name", name)?;
     }
@@ -1519,48 +1547,192 @@ fn discover_authored_topology(
         "application",
         Some(&module),
     )?;
-    let handler = discover_project_owner(
-        context,
-        cwd,
-        project,
-        "task_function",
-        "handle",
-        Some(&module),
-    )?;
-    let request_parameter = discover_project_owner(
-        context,
-        cwd,
-        project,
-        "parameter",
-        "request",
-        Some(&handler),
-    )?;
     let mut requirements = BTreeMap::new();
     for name in ["streams", "data", "identifiers", "clock"] {
         let owner =
             discover_project_owner(context, cwd, project, "requirement", name, Some(&component))?;
         requirements.insert(name.to_owned(), owner);
     }
-    let port = discover_project_owner(context, cwd, project, "port", "http", Some(&component))?;
     let target = discover_project_owner(context, cwd, project, "target", "serve", Some("package"))?;
 
     let target_relations = project_relations(context, cwd, project, &target)?;
     require_relation(&target_relations, "target_component", &target, &component)?;
-    require_relation(&target_relations, "target_port", &target, &port)?;
-    let port_relations = project_relations(context, cwd, project, &port)?;
-    require_relation(&port_relations, "member_declaration", &port, &component)?;
-    require_relation(&port_relations, "function_value", &port, &handler)?;
+    if target_relations
+        .iter()
+        .any(|record| field(record, "kind") == Some("target_port"))
+    {
+        return Err(DevError::corrupt(
+            "HTTP target retained predecessor target_port authority",
+        ));
+    }
+
+    let target_detail = records(
+        &context
+            .success(
+                "inspect-http-target",
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "inspect",
+                    "owner",
+                    "target",
+                    &target,
+                ],
+                cwd,
+            )?
+            .bytes,
+    )?;
+    let target_owner = required_record(&target_detail, "owner")?;
+    if required_field(target_owner, "route-count")? != "5" {
+        return Err(DevError::corrupt(
+            "HTTP target inspection did not report five routes",
+        ));
+    }
+    let route_set = required_field(target_owner, "route-set")?.to_owned();
+
+    let route_inventory = records(
+        &context
+            .success(
+                "project-http-routes",
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "query",
+                    "owners",
+                    "--kind",
+                    "http_route",
+                    "--limit",
+                    "4096",
+                    "--bytes",
+                    "1048576",
+                ],
+                cwd,
+            )?
+            .bytes,
+    )?;
+    require_record_field(&route_inventory, "summary", "truncated", "false")?;
+    let route_ids = route_inventory
+        .iter()
+        .filter(|record| record.operation == "owner" && field(record, "kind") == Some("http_route"))
+        .map(|record| required_field(record, "id").map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()?;
+    if route_ids.len() != 5 {
+        return Err(DevError::corrupt(format!(
+            "authored project has {} HTTP routes instead of five",
+            route_ids.len()
+        )));
+    }
+
+    let expected = [
+        ("GET", "/", "home", "handle-home", "request"),
+        ("GET", "/api/posts", "list", "handle-list-route", "request"),
+        (
+            "POST",
+            "/api/posts",
+            "create",
+            "handle-create-route",
+            "request",
+        ),
+        (
+            "PUT",
+            "/api/posts",
+            "update",
+            "handle-update-route",
+            "request",
+        ),
+        (
+            "DELETE",
+            "/api/posts",
+            "delete",
+            "handle-delete-route",
+            "request",
+        ),
+    ];
+    let mut routes = Vec::with_capacity(expected.len());
+    for (method, path, port_name, handler_name, parameter_name) in expected {
+        let port =
+            discover_project_owner(context, cwd, project, "port", port_name, Some(&component))?;
+        let handler = discover_project_owner(
+            context,
+            cwd,
+            project,
+            "task_function",
+            handler_name,
+            Some(&module),
+        )?;
+        let request_parameter = discover_project_owner(
+            context,
+            cwd,
+            project,
+            "parameter",
+            parameter_name,
+            Some(&handler),
+        )?;
+        let port_relations = project_relations(context, cwd, project, &port)?;
+        require_relation(&port_relations, "member_declaration", &port, &component)?;
+        require_relation(&port_relations, "function_value", &port, &handler)?;
+
+        let mut matching = Vec::new();
+        for route in &route_ids {
+            let detail = records(
+                &context
+                    .success(
+                        &format!("inspect-http-route-{route}"),
+                        &[
+                            "--project",
+                            path_text(project)?,
+                            "inspect",
+                            "owner",
+                            "http_route",
+                            route,
+                        ],
+                        cwd,
+                    )?
+                    .bytes,
+            )?;
+            let owner = required_record(&detail, "owner")?;
+            if field(owner, "method") == Some(method) && field(owner, "path") == Some(path) {
+                if field(owner, "target") != Some(target.as_str())
+                    || !required_field(owner, "component")?.ends_with(&format!("/{component}"))
+                    || !required_field(owner, "port")?.ends_with(&format!("/{port}"))
+                {
+                    return Err(DevError::corrupt(format!(
+                        "HTTP route {method} {path} inspection disagrees with its target, component, or port"
+                    )));
+                }
+                matching.push(route.clone());
+            }
+        }
+        if matching.len() != 1 {
+            return Err(DevError::corrupt(format!(
+                "authored project has {} routes for exact key {method} {path}",
+                matching.len()
+            )));
+        }
+        let route = matching.remove(0);
+        let route_relations = project_relations(context, cwd, project, &route)?;
+        require_relation(&route_relations, "http_route_target", &route, &target)?;
+        require_relation(&route_relations, "http_route_port", &route, &port)?;
+        routes.push(HttpRouteObservation {
+            route,
+            method: method.to_owned(),
+            path: path.to_owned(),
+            port,
+            handler,
+            request_parameter,
+        });
+    }
+    routes.sort_by(|left, right| (&left.method, &left.path).cmp(&(&right.method, &right.path)));
 
     Ok(TopologyObservation {
         module,
         component,
-        handler,
-        request_parameter,
         requirements,
-        port,
+        routes,
         target,
         target_name: "serve".to_owned(),
         runner: "http".to_owned(),
+        route_set,
     })
 }
 
@@ -2091,7 +2263,12 @@ fn exercise_after_restart(
         b"",
         &[],
     )?;
-    require_http(&unsupported, 405, Some("application/json"))?;
+    require_http(&unsupported, 404, None)?;
+    if !unsupported.body.is_empty() {
+        return Err(DevError::corrupt(
+            "unmatched BBS method returned an application body",
+        ));
+    }
     let unknown = request(
         observations,
         address,
@@ -2101,7 +2278,12 @@ fn exercise_after_restart(
         b"",
         &[],
     )?;
-    require_http(&unknown, 404, Some("application/json"))?;
+    require_http(&unknown, 404, None)?;
+    if !unknown.body.is_empty() {
+        return Err(DevError::corrupt(
+            "unmatched BBS path returned an application body",
+        ));
+    }
     let deleted = request(
         observations,
         address,
@@ -2728,7 +2910,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode stateful schema"),
-            r#"{"identity":"lkjscript-stateful-http-acceptance","version":4}"#
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":5}"#
         );
         assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
     }

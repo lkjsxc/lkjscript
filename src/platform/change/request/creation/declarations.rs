@@ -1,4 +1,4 @@
-//! Authored builders for Graph 8 declarations, members, targets, and retained attachments.
+//! Authored builders for Graph 9 declarations, members, targets, and retained attachments.
 
 use super::*;
 use crate::platform::kernel::{
@@ -515,12 +515,15 @@ pub(in crate::platform::change::request) fn lower_target<
     symbol: &str,
     name: &Name,
     component: &AuthoredDeclarationReference,
-    port: &AuthoredPortReference,
+    port: &Option<AuthoredPortReference>,
     runner: RunnerKind,
 ) -> Result<(), Diagnostic> {
     let target = lowerer.target_symbol(symbol)?;
     let component = lowerer.lower_declaration_reference(component)?;
-    let port = lowerer.lower_port_reference(port)?;
+    let port = port
+        .as_ref()
+        .map(|port| lowerer.lower_port_reference(port))
+        .transpose()?;
     lowerer.insert_created(OwnerRecord::Target(TargetRecord {
         header: OwnerHeader::new(OwnerKey::Target(target), OwnerKind::Target),
         name: name.clone(),

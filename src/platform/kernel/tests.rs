@@ -5,10 +5,10 @@ use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
-    ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId, RevisionId, TargetId,
-    TypeParameterId,
+    HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId,
+    RevisionId, TargetId, TypeParameterId,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const TEST_SEED: &[u8] = b"graph-5-normalization-prototype";
 
@@ -231,7 +231,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
                 package,
                 declaration: component,
             },
-            port: PortReference { package, port },
+            port: Some(PortReference { package, port }),
             runner: RunnerKind::Command,
         }),
     );
@@ -609,7 +609,7 @@ fn normalized_prototype_passes_full_oracle() {
 }
 
 #[test]
-fn graph_eight_permits_a_structurally_empty_package() {
+fn graph_nine_permits_a_structurally_empty_package() {
     let snapshot = KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
@@ -628,9 +628,177 @@ fn graph_eight_permits_a_structurally_empty_package() {
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     };
-    let report = validate_full(&snapshot).expect("empty package is valid Graph 8 authority");
+    let report = validate_full(&snapshot).expect("empty package is valid Graph 9 authority");
     assert_eq!(report.owners_checked, 0);
     assert_eq!(report.relation_edges, 0);
+}
+
+#[test]
+fn exact_http_topology_full_oracle_rejects_structural_predecessors_and_drift() {
+    let base = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    validate_full(&base).expect("exact HTTP topology fixture");
+    let (target, route, port) = base
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match (owner, record) {
+            (OwnerKey::HttpRoute(route), OwnerRecord::HttpRoute(record)) => {
+                Some((record.target, *route, record.port.port))
+            }
+            _ => None,
+        })
+        .expect("HTTP route identities");
+    let codes = |snapshot: &KernelSnapshot| {
+        validate_full(snapshot)
+            .expect_err("invalid HTTP topology")
+            .into_iter()
+            .map(|diagnostic| diagnostic.code)
+            .collect::<BTreeSet<_>>()
+    };
+    let refresh = |snapshot: &mut KernelSnapshot| {
+        snapshot.root.owners = MapRoot::from_parts(
+            snapshot.root.owners.page(),
+            snapshot.owners.len() as u64,
+            snapshot.root.owners.content(),
+        );
+    };
+
+    let mut zero = base.clone();
+    zero.owners
+        .retain(|_, record| !matches!(record, OwnerRecord::HttpRoute(_)));
+    refresh(&mut zero);
+    assert!(codes(&zero).contains("kernel_http_target_route_count"));
+
+    let mut duplicate = base.clone();
+    let duplicate_id = HttpRouteId::migrate(b"duplicate-http-route", 0);
+    let Some(OwnerRecord::HttpRoute(mut duplicate_route)) =
+        duplicate.owners.get(&OwnerKey::HttpRoute(route)).cloned()
+    else {
+        panic!("HTTP route record")
+    };
+    duplicate_route.header =
+        OwnerHeader::new(OwnerKey::HttpRoute(duplicate_id), OwnerKind::HttpRoute);
+    duplicate.owners.insert(
+        OwnerKey::HttpRoute(duplicate_id),
+        OwnerRecord::HttpRoute(duplicate_route),
+    );
+    refresh(&mut duplicate);
+    assert!(codes(&duplicate).contains("kernel_http_route_duplicate"));
+
+    let mut malformed = base.clone();
+    let Some(OwnerRecord::HttpRoute(route_record)) =
+        malformed.owners.get_mut(&OwnerKey::HttpRoute(route))
+    else {
+        panic!("HTTP route record")
+    };
+    route_record.path = "relative".to_owned();
+    assert!(codes(&malformed).contains("kernel_http_route_path"));
+
+    let mut predecessor = base.clone();
+    let route_port = match predecessor.owners.get(&OwnerKey::HttpRoute(route)) {
+        Some(OwnerRecord::HttpRoute(route)) => route.port,
+        _ => panic!("HTTP route record"),
+    };
+    let Some(OwnerRecord::Target(target_record)) =
+        predecessor.owners.get_mut(&OwnerKey::Target(target))
+    else {
+        panic!("HTTP target record")
+    };
+    target_record.port = Some(route_port);
+    assert!(codes(&predecessor).contains("kernel_http_target_universal_port"));
+
+    let mut non_http = predecessor.clone();
+    let Some(OwnerRecord::Target(target_record)) =
+        non_http.owners.get_mut(&OwnerKey::Target(target))
+    else {
+        panic!("HTTP target record")
+    };
+    target_record.runner = RunnerKind::Command;
+    assert!(codes(&non_http).contains("kernel_http_route_non_http_target"));
+
+    let mut wrong_component = base.clone();
+    let Some(OwnerRecord::Port(port_record)) =
+        wrong_component.owners.get_mut(&OwnerKey::Port(port))
+    else {
+        panic!("HTTP route port record")
+    };
+    port_record.declaration = DeclarationId::migrate(b"foreign-http-component", 0);
+    assert!(codes(&wrong_component).contains("kernel_http_route_port_owner"));
+
+    let mut wrong_shape = base;
+    let text_type = wrong_shape
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::Text).then_some(*digest))
+        .expect("text type");
+    let Some(OwnerRecord::Port(port_record)) = wrong_shape.owners.get_mut(&OwnerKey::Port(port))
+    else {
+        panic!("HTTP route port record")
+    };
+    let previous_function_type = port_record.function_type;
+    port_record.function_type = text_type;
+    wrong_shape.types.remove(&previous_function_type);
+    let wrong_shape_codes = codes(&wrong_shape);
+    assert!(
+        wrong_shape_codes.contains("kernel_type_http_route_port"),
+        "{wrong_shape_codes:?}"
+    );
+}
+
+#[test]
+fn http_route_set_digest_enforces_exact_count_and_aggregate_boundaries() {
+    let snapshot = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let (target, port) = snapshot
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::HttpRoute(route) => Some((route.target, route.port)),
+            _ => None,
+        })
+        .expect("HTTP route fixture");
+    let route = |ordinal: u64, path: String| {
+        let id = HttpRouteId::migrate(b"http-route-boundary", ordinal);
+        HttpRouteRecord {
+            header: OwnerHeader::new(OwnerKey::HttpRoute(id), OwnerKind::HttpRoute),
+            target,
+            method: "G".to_owned(),
+            path,
+            port,
+        }
+    };
+
+    let mut exact_aggregate = (0..contract::MAXIMUM_HTTP_ROUTES_PER_TARGET as u64)
+        .map(|ordinal| {
+            let prefix = format!("/{ordinal:04x}");
+            route(
+                ordinal,
+                format!("{prefix}{}", "x".repeat(1023 - prefix.len())),
+            )
+        })
+        .collect::<Vec<_>>();
+    let digest = http_route_set_digest(&exact_aggregate).expect("exact aggregate boundary");
+    exact_aggregate.reverse();
+    assert_eq!(
+        http_route_set_digest(&exact_aggregate).expect("operation-order invariant route set"),
+        digest
+    );
+
+    exact_aggregate[0].path.push('x');
+    assert_eq!(
+        http_route_set_digest(&exact_aggregate)
+            .expect_err("one byte over aggregate bound")
+            .code,
+        "kernel_http_route_aggregate"
+    );
+
+    let excess_count = (0..=contract::MAXIMUM_HTTP_ROUTES_PER_TARGET as u64)
+        .map(|ordinal| route(ordinal, format!("/{ordinal}")))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        http_route_set_digest(&excess_count)
+            .expect_err("one route over count bound")
+            .code,
+        "kernel_http_route_count"
+    );
 }
 
 #[test]
@@ -941,7 +1109,7 @@ fn owner_codec_rejects_wrong_key_and_predecessor_magic() {
     assert_eq!(diagnostic.code, "kernel_owner_key_mismatch");
 
     let mut predecessor = bytes;
-    predecessor[..8].copy_from_slice(b"LKJMNG04");
+    predecessor[..8].copy_from_slice(b"LKJOWN08");
     let predecessor_digest = OwnerObjectDigest::of(&predecessor);
     assert!(
         decode_owner(
@@ -976,7 +1144,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "716a7168a2b25b08e55d0d2db66888f97665f9a9b15890872f88bd27393f7513"
+        "5d5d0d12c9f51a8b26fd6ab20ceb30eb2446ad4bc89cac527d06895886078bef"
     );
 }
 

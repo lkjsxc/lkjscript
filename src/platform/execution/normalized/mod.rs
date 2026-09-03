@@ -1,4 +1,4 @@
-//! Prepared execution over strict Graph 8 artifacts.
+//! Prepared execution over strict Graph 9 artifacts.
 
 mod byte_stream;
 mod capability;
@@ -46,4 +46,4 @@ pub(crate) use worker::NormalizedWorkerApplication;
 #[cfg(test)]
 mod lkjournal_tests;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

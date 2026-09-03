@@ -1,4 +1,4 @@
-//! Canonical Graph 8 authoring namespaces.
+//! Canonical Graph 9 authoring namespaces.
 //!
 //! Names are selector and presentation inputs. Accepted references use exact identities, so the
 //! namespace rule is deliberately separate from executable relation and dependency summaries.
@@ -141,6 +141,7 @@ pub fn owner_namespace(record: &OwnerRecord) -> Option<NamespaceEntryRef<'_>> {
         OwnerRecord::Target(target) => (None, NamespaceClass::Target, &target.name),
         OwnerRecord::Binding(_)
         | OwnerRecord::Expression(_)
+        | OwnerRecord::HttpRoute(_)
         | OwnerRecord::Documentation(_)
         | OwnerRecord::Annotation(_) => return None,
     };

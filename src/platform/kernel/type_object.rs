@@ -1,4 +1,4 @@
-//! Content-addressed, structural Graph 8 type objects.
+//! Content-addressed, structural Graph 9 type objects.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN};
 use super::digest::TypeObjectDigest;
@@ -248,7 +248,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(type_error(
             "kernel_type_child_count",
-            format!("{label} count {count} is outside the Graph 8 bound"),
+            format!("{label} count {count} is outside the Graph 9 bound"),
         ));
     }
     Ok(())

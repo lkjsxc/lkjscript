@@ -1,4 +1,4 @@
-//! Derived, implementation-free package interface records for exact Graph 8 dependencies.
+//! Derived, implementation-free package interface records for exact Graph 9 dependencies.
 //!
 //! These records are not accepted program authority. They are deterministic projections of one
 //! validated package revision. Exact dependency bindings select one storage-independent package
@@ -250,6 +250,7 @@ impl PackageInterfaceSelection {
             | OwnerKey::Binding(_)
             | OwnerKey::Expression(_)
             | OwnerKey::Target(_)
+            | OwnerKey::HttpRoute(_)
             | OwnerKey::Documentation(_)
             | OwnerKey::Annotation(_) => false,
         }
@@ -989,6 +990,7 @@ fn semantic_declaration(
         | OwnerKey::Binding(_)
         | OwnerKey::Expression(_)
         | OwnerKey::Target(_)
+        | OwnerKey::HttpRoute(_)
         | OwnerKey::Documentation(_)
         | OwnerKey::Annotation(_) => None,
     }
@@ -1228,6 +1230,7 @@ mod tests {
                 | OwnerKey::Expression(_)
                 | OwnerKey::Binding(_)
                 | OwnerKey::Target(_)
+                | OwnerKey::HttpRoute(_)
                 | OwnerKey::Documentation(_)
                 | OwnerKey::Annotation(_)
         )));

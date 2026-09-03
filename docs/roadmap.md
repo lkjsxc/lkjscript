@@ -23,7 +23,7 @@ rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are distinct: source is unreleased product 0.1.20, while v0.1.16 remains the supported
+`v0.1.16` are distinct: source is unreleased product 0.1.21, while v0.1.16 remains the supported
 public `x86_64-unknown-linux-musl` distribution. Its exact and latest
 downloads independently passed static inspection, distributed HTTP with complete function-definition
 projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker

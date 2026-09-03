@@ -27,8 +27,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-3";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 3;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-4";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {
@@ -810,7 +810,7 @@ mod tests {
         for (template, owners, dependencies, targets, tests) in [
             (ProjectTemplate::Minimal, 0, 0, 0, 0),
             (ProjectTemplate::Command, 10, 1, 1, 1),
-            (ProjectTemplate::Http, 20, 1, 1, 1),
+            (ProjectTemplate::Http, 21, 1, 1, 1),
         ] {
             let destination = temporary.path().join(template.name());
             let created = create_project(&destination, template.name(), template)
@@ -878,6 +878,7 @@ mod tests {
                         "add.port"
                     }
                     AuthoredChange::CreateTarget { .. } => "create.target",
+                    AuthoredChange::AddHttpRoute { .. } => "add.http-route",
                     AuthoredChange::CreateTest { .. } => "create.test",
                     other => panic!("recipe retained non-public authored operation: {other:?}"),
                 };
@@ -937,15 +938,15 @@ mod tests {
     }
 
     #[test]
-    fn nostr_recipe_retains_two_requirements_and_two_tests() {
+    fn nostr_recipe_retains_two_requirements_and_one_exact_route() {
         let temporary = tempfile::TempDir::new().expect("temporary Nostr parent");
         let destination = temporary.path().join("nostr");
         let created = create_project_with_relay(&destination, "nostr", "ws://127.0.0.1:7447/nostr")
             .expect("Nostr project");
-        assert_eq!(created.owners, 86);
+        assert_eq!(created.owners, 56);
         assert_eq!(created.dependencies, 1);
         assert_eq!(created.targets, 1);
-        assert_eq!(created.tests, 2);
+        assert_eq!(created.tests, 0);
         let deployment = created.deployment.expect("deployment");
         let descriptor = super::super::deployment::decode_deployment(
             &fs::read(deployment.descriptor).expect("descriptor"),

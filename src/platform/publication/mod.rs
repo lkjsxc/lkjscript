@@ -1,8 +1,8 @@
-//! Private Graph 8 accepted-history binding and publication protocol.
+//! Private Graph 9 accepted-history binding and publication protocol.
 
 #![allow(
     unused_imports,
-    reason = "private publication exports become repository consumers at the Graph 8 cutover"
+    reason = "private publication exports become repository consumers at the Graph 9 cutover"
 )]
 
 pub(crate) mod contract;

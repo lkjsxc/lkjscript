@@ -466,7 +466,8 @@ fn aggregation_mode(role: OwnershipRole) -> AggregationMode {
         | OwnershipRole::OperationParameter
         | OwnershipRole::DeclarationRequirement
         | OwnershipRole::DeclarationPort => AggregationMode::Interface,
-        OwnershipRole::ExpressionRoot(_)
+        OwnershipRole::TargetHttpRoute
+        | OwnershipRole::ExpressionRoot(_)
         | OwnershipRole::ExpressionChild { .. }
         | OwnershipRole::ExpressionBinding { .. } => AggregationMode::Implementation,
         OwnershipRole::PackageModule
@@ -924,6 +925,7 @@ pub(crate) fn aggregation_children(
         | OwnerRecord::Parameter(_)
         | OwnerRecord::Requirement(_)
         | OwnerRecord::Target(_)
+        | OwnerRecord::HttpRoute(_)
         | OwnerRecord::Documentation(_)
         | OwnerRecord::Annotation(_) => {}
     }
@@ -1098,6 +1100,12 @@ fn local_summary(
             implementation.piece(1, &record.component)?;
             implementation.piece(2, &record.port)?;
             implementation.piece(3, &record.runner)?;
+        }
+        OwnerRecord::HttpRoute(record) => {
+            implementation.piece(1, &record.target)?;
+            implementation.piece(2, &record.method)?;
+            implementation.piece(3, &record.path)?;
+            implementation.piece(4, &record.port)?;
         }
         OwnerRecord::Documentation(record) => {
             presentation.piece(1, &record.class)?;

@@ -33,8 +33,8 @@ use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const ACCEPTANCE_SCHEMA: &str = "lkjscript-outbound-http-acceptance";
-const ACCEPTANCE_SCHEMA_VERSION: u32 = 1;
+pub(crate) const ACCEPTANCE_SCHEMA: &str = "lkjscript-outbound-http-acceptance";
+pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 2;
 const ACCEPTANCE_WORKFLOW: &str = "outbound-http-application";
 const FIXTURE_GENERATOR: &str = "lkjscript-deterministic-ed25519-tls-fixture-1";
 const ROOT_ENVIRONMENT: &str = "LKJSCRIPT_OUTBOUND_HTTP_ROOT";
@@ -261,12 +261,28 @@ struct WorkflowResult {
     authority_before: AuthorityObservation,
     authority_after: AuthorityObservation,
     authority_unchanged: bool,
+    topology: RelayRouteTopologyObservation,
     responses: Vec<HttpObservation>,
     no_connection: Vec<NoConnectionObservation>,
     negative_cases: Vec<String>,
     restart_equal: bool,
     startup_failures_without_ready: u64,
     network: NetworkResources,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RelayRouteTopologyObservation {
+    target: String,
+    route: String,
+    component: String,
+    port: String,
+    method: String,
+    path: String,
+    route_count: u64,
+    route_set: String,
+    predecessor_port_absent: bool,
+    predecessor_predicate_absent: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -581,6 +597,8 @@ pub(crate) fn read_transferred_receipt(
         || receipt.candidate.mode != candidate.mode
         || receipt.copied_candidate.sha256 != candidate.sha256
         || receipt.failure.is_some()
+        || !relay_route_topology_is_current(&result.topology)
+        || !route_miss_no_connection_is_current(&result.no_connection, &result.negative_cases)
         || !result.authority_unchanged
         || !result.clean_incremental_equal
         || !result.restart_equal
@@ -601,6 +619,42 @@ pub(crate) fn read_transferred_receipt(
         runners: receipt.runners.len() as u64,
         requests: result.responses.len() as u64,
         cleanup_complete,
+    })
+}
+
+fn relay_route_topology_is_current(topology: &RelayRouteTopologyObservation) -> bool {
+    topology.target.starts_with("target_")
+        && topology.route.starts_with("route_")
+        && topology.component.contains("/decl_")
+        && topology.port.contains("/port_")
+        && topology.method == "GET"
+        && topology.path == "/relay-info"
+        && topology.route_count == 1
+        && topology.route_set.starts_with("http_routes_")
+        && topology.route_set.len() == 76
+        && topology.predecessor_port_absent
+        && topology.predecessor_predicate_absent
+}
+
+fn route_miss_no_connection_is_current(
+    observations: &[NoConnectionObservation],
+    negative_cases: &[String],
+) -> bool {
+    [
+        "route-miss-unknown",
+        "route-miss-case",
+        "route-miss-trailing",
+        "route-miss-percent",
+        "route-miss-method",
+        "route-miss-head",
+    ]
+    .into_iter()
+    .all(|name| {
+        negative_cases.iter().any(|case| case == name)
+            && observations.iter().any(|observation| {
+                observation.name == name
+                    && observation.connection_count_before == observation.connection_count_after
+            })
     })
 }
 
@@ -855,6 +909,30 @@ impl RawOracle {
             .recv_timeout(duration.saturating_add(Duration::from_secs(2)))
             .map_err(|error| AcceptanceFailure::infrastructure("oracle_no_connection", error))?
             .map_err(|error| AcceptanceFailure::acceptance("oracle_unexpected_connection", error))
+    }
+
+    fn expect_none_while<T>(
+        &self,
+        name: &str,
+        duration: Duration,
+        action: impl FnOnce() -> Result<T, AcceptanceFailure>,
+    ) -> Result<(T, NoConnectionObservation), AcceptanceFailure> {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        self.sender
+            .send(OracleCommand::ExpectNone {
+                name: name.to_owned(),
+                duration,
+                completed: sender,
+            })
+            .map_err(|error| AcceptanceFailure::infrastructure("oracle_command", error))?;
+        let action = action();
+        let observation = receiver
+            .recv_timeout(duration.saturating_add(Duration::from_secs(2)))
+            .map_err(|error| AcceptanceFailure::infrastructure("oracle_no_connection", error))?
+            .map_err(|error| {
+                AcceptanceFailure::acceptance("oracle_unexpected_connection", error)
+            })?;
+        Ok((action?, observation))
     }
 
     fn shutdown(&mut self) -> Result<(), AcceptanceFailure> {
@@ -1464,11 +1542,11 @@ fn run_workflow(
     let capability_records = compact_records("capabilities", &capabilities.stdout)?;
     let product = required_record(&capability_records, "product")?;
     if required_field(product, "name")? != "lkjscript"
-        || required_field(product, "version")? != "0.1.20"
+        || required_field(product, "version")? != "0.1.21"
     {
         return Err(AcceptanceFailure::acceptance(
             "capabilities_product",
-            "candidate did not advertise exact lkjscript 0.1.20 source",
+            "candidate did not advertise exact lkjscript 0.1.21 source",
         ));
     }
     let product_version = required_field(product, "version")?.to_owned();
@@ -1582,7 +1660,7 @@ fn run_workflow(
     let dependencies = parse_u64(required_field(summary, "dependencies")?, "dependency count")?;
     let targets = parse_u64(required_field(summary, "targets")?, "target count")?;
     let tests = parse_u64(required_field(summary, "tests")?, "test count")?;
-    if owners == 0 || dependencies != 1 || targets != 1 || tests != 2 {
+    if owners != 56 || dependencies != 1 || targets != 1 || tests != 0 {
         return Err(AcceptanceFailure::acceptance(
             "created_topology",
             "Nostr relay information recipe topology is not the closed maintained shape",
@@ -1591,6 +1669,7 @@ fn run_workflow(
     require_field(&created_records, "deployment", "target", "serve")?;
     require_field(&created_records, "deployment", "runner", "http")?;
     require_next_actions(&created_records)?;
+    let topology = inspect_relay_route_topology(context, isolated_root, &project)?;
 
     context.invoke(
         "status",
@@ -1722,6 +1801,7 @@ fn run_workflow(
         &tls_endpoint,
         &mut tls_oracle,
         &mut responses,
+        &mut no_connection,
         &mut negative_cases,
     )?;
     let restart = run_valid_once(
@@ -1825,12 +1905,163 @@ fn run_workflow(
         authority_before,
         authority_after,
         authority_unchanged,
+        topology,
         responses,
         no_connection,
         negative_cases,
         restart_equal,
         startup_failures_without_ready,
         network,
+    })
+}
+
+fn inspect_relay_route_topology(
+    context: &mut AcceptanceContext,
+    cwd: &Path,
+    project: &Path,
+) -> Result<RelayRouteTopologyObservation, AcceptanceFailure> {
+    let project_path = project.display().to_string();
+    let target_find = context.invoke(
+        "route-target-find",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "query".to_owned(),
+            "find".to_owned(),
+            "target".to_owned(),
+            "serve".to_owned(),
+        ],
+        cwd,
+        ExpectedCommand::Success,
+    )?;
+    let target_find = compact_records("relay target lookup", &target_find.stdout)?;
+    require_field(&target_find, "summary", "returned", "1")?;
+    let target = required_field(required_record(&target_find, "owner")?, "id")?.to_owned();
+    let target_inspect = context.invoke(
+        "route-target-inspect",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "target".to_owned(),
+            target.clone(),
+        ],
+        cwd,
+        ExpectedCommand::Success,
+    )?;
+    let target_inspect = compact_records("relay target inspection", &target_inspect.stdout)?;
+    let target_record = required_record(&target_inspect, "owner")?;
+    let component = required_field(target_record, "component")?.to_owned();
+    let route_count = parse_u64(required_field(target_record, "route-count")?, "route count")?;
+    let route_set = required_field(target_record, "route-set")?.to_owned();
+    let predecessor_port_absent = target_record
+        .fields
+        .iter()
+        .all(|field| field.name != "port");
+
+    let route_query = context.invoke(
+        "route-owner-inventory",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "query".to_owned(),
+            "owners".to_owned(),
+            "--kind".to_owned(),
+            "http_route".to_owned(),
+            "--limit".to_owned(),
+            "4096".to_owned(),
+            "--bytes".to_owned(),
+            "1048576".to_owned(),
+        ],
+        cwd,
+        ExpectedCommand::Success,
+    )?;
+    let route_query = compact_records("relay route inventory", &route_query.stdout)?;
+    require_field(&route_query, "summary", "returned", "1")?;
+    require_field(&route_query, "summary", "truncated", "false")?;
+    let routes = route_query
+        .iter()
+        .filter(|record| record.operation == "owner")
+        .collect::<Vec<_>>();
+    if routes.len() != 1 {
+        return Err(AcceptanceFailure::acceptance(
+            "route_inventory",
+            "relay recipe did not expose exactly one HTTP route owner",
+        ));
+    }
+    if required_field(routes[0], "kind")? != "http_route" {
+        return Err(AcceptanceFailure::acceptance(
+            "route_inventory_kind",
+            "relay route inventory returned another owner kind",
+        ));
+    }
+    let route = required_field(routes[0], "id")?.to_owned();
+    let route_inspect = context.invoke(
+        "route-owner-inspect",
+        vec![
+            "--project".to_owned(),
+            project_path.clone(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "http_route".to_owned(),
+            route.clone(),
+        ],
+        cwd,
+        ExpectedCommand::Success,
+    )?;
+    let route_inspect = compact_records("relay route inspection", &route_inspect.stdout)?;
+    let route_record = required_record(&route_inspect, "owner")?;
+    let method = required_field(route_record, "method")?.to_owned();
+    let path = required_field(route_record, "path")?.to_owned();
+    let port = required_field(route_record, "port")?.to_owned();
+
+    let all_owners = context.invoke(
+        "route-predecessor-inventory",
+        vec![
+            "--project".to_owned(),
+            project_path,
+            "query".to_owned(),
+            "owners".to_owned(),
+            "--limit".to_owned(),
+            "4096".to_owned(),
+            "--bytes".to_owned(),
+            "1048576".to_owned(),
+        ],
+        cwd,
+        ExpectedCommand::Success,
+    )?;
+    let all_owners = compact_records("relay predecessor inventory", &all_owners.stdout)?;
+    require_field(&all_owners, "summary", "truncated", "false")?;
+    let predecessor_predicate_absent = all_owners.iter().all(|record| {
+        record.operation != "owner"
+            || required_field(record, "name").ok() != Some("is-relay-info-request")
+    });
+    if !predecessor_port_absent
+        || !predecessor_predicate_absent
+        || route_count != 1
+        || !route_set.starts_with("http_routes_")
+        || required_field(route_record, "target")? != target
+        || required_field(route_record, "component")? != component
+        || method != "GET"
+        || path != "/relay-info"
+    {
+        return Err(AcceptanceFailure::acceptance(
+            "route_topology",
+            "relay recipe retained predecessor dispatch or changed its exact route binding",
+        ));
+    }
+    Ok(RelayRouteTopologyObservation {
+        target,
+        route,
+        component,
+        port,
+        method,
+        path,
+        route_count,
+        route_set,
+        predecessor_port_absent,
+        predecessor_predicate_absent,
     })
 }
 
@@ -1974,6 +2205,7 @@ fn exercise_primary_tls(
     endpoint: &str,
     oracle: &mut RawOracle,
     responses: &mut Vec<HttpObservation>,
+    no_connection: &mut Vec<NoConnectionObservation>,
     negative_cases: &mut Vec<String>,
 ) -> Result<HttpObservation, AcceptanceFailure> {
     let ready = start_exact_runner(
@@ -1985,6 +2217,44 @@ fn exercise_primary_tls(
         None,
     )?;
     let address = ready_address(&ready)?;
+    for (name, method, path, body) in [
+        ("route-miss-unknown", "GET", "/unknown", &b""[..]),
+        ("route-miss-case", "GET", "/Relay-info", &b""[..]),
+        ("route-miss-trailing", "GET", "/relay-info/", &b""[..]),
+        ("route-miss-percent", "GET", "/relay%2Dinfo", &b""[..]),
+        (
+            "route-miss-method",
+            "POST",
+            "/relay-info",
+            &b"body-must-be-closed"[..],
+        ),
+        ("route-miss-head", "HEAD", "/relay-info", &b""[..]),
+    ] {
+        let (response, observation) =
+            oracle.expect_none_while(name, Duration::from_millis(100), || {
+                http_probe::request(address, method, path, body, &[])
+                    .map_err(|error| AcceptanceFailure::infrastructure("route_miss_request", error))
+            })?;
+        if response.status != 404
+            || !response.body.is_empty()
+            || response
+                .headers
+                .keys()
+                .any(|header| !http_transport_owned_header(header))
+        {
+            return Err(AcceptanceFailure::acceptance(
+                "route_miss_response",
+                format!(
+                    "{method} {path} returned status {}, {} bytes, headers {:?}",
+                    response.status,
+                    response.body.len(),
+                    response.headers
+                ),
+            ));
+        }
+        no_connection.push(observation);
+        negative_cases.push(name.to_owned());
+    }
     let valid_response = raw_response(
         200,
         "OK",
@@ -2546,6 +2816,21 @@ fn run_exchange(
 fn request_inbound(address: SocketAddr) -> Result<http_probe::HttpResponse, AcceptanceFailure> {
     http_probe::request(address, "GET", "/relay-info", &[], &[])
         .map_err(|error| AcceptanceFailure::infrastructure("inbound_request", error))
+}
+
+fn http_transport_owned_header(name: &str) -> bool {
+    matches!(
+        name,
+        "connection"
+            | "content-length"
+            | "date"
+            | "keep-alive"
+            | "proxy-connection"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    )
 }
 
 fn open_inbound_request(address: SocketAddr) -> Result<TcpStream, AcceptanceFailure> {

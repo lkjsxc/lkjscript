@@ -24,6 +24,7 @@ const MODULE: &str = "$application_module";
 const COMPONENT: &str = "$application_component";
 const PORT: &str = "$application_port";
 const TARGET: &str = "$application_target";
+const HTTP_ROUTE: &str = "$application_http_route";
 const STREAMS: &str = "$streams_requirement";
 const RELAY: &str = "$relay_requirement";
 
@@ -45,7 +46,7 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_command_standard_types",
-            "built-in standard primitive types disagree with canonical Graph 8 types",
+            "built-in standard primitive types disagree with canonical Graph 9 types",
         ));
     }
 
@@ -115,7 +116,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_http_standard_types",
-            "built-in HTTP recipe declarations disagree with canonical Graph 8 primitive types",
+            "built-in HTTP recipe declarations disagree with canonical Graph 9 primitive types",
         ));
     }
 
@@ -200,6 +201,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
             )?,
             port("$handle", function_type)?,
             target("serve", RunnerKind::Http)?,
+            http_route("GET", "/")?,
             AuthoredChange::CreateTest {
                 symbol: "$status_is_200".to_owned(),
                 module: local_module(),
@@ -234,12 +236,11 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
     {
         return Err(recipe_error(
             "new_nostr_standard_types",
-            "built-in standard HTTP server and client types disagree with canonical Graph 8 types",
+            "built-in standard HTTP server and client types disagree with canonical Graph 9 types",
         ));
     }
 
     let bool_type = authored_type(&interner, bool_digest)?;
-    let text_type = authored_type(&interner, semantic_http.text_type)?;
     let request_type = authored_type(&interner, semantic_http.request_type)?;
     let response_type = authored_type(&interner, semantic_http.response_type)?;
     let header_type = authored_type(&interner, semantic_http.header_type)?;
@@ -273,26 +274,6 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
         exact_declaration(contract.bool_or),
         Vec::new(),
         vec![prior_match, this_header_matches],
-    );
-
-    let method_value = expressions.local("$method");
-    let get_text = expressions.text("GET");
-    let method_matches = expressions.call(
-        exact_declaration(contract.text_equal),
-        Vec::new(),
-        vec![method_value, get_text],
-    );
-    let path_value = expressions.local("$path");
-    let relay_path = expressions.text("/relay-info");
-    let path_matches = expressions.call(
-        exact_declaration(contract.text_equal),
-        Vec::new(),
-        vec![path_value, relay_path],
-    );
-    let route_body = expressions.call(
-        exact_declaration(contract.bool_and),
-        Vec::new(),
-        vec![method_matches, path_matches],
     );
 
     let accept_name = expressions.text("accept");
@@ -370,39 +351,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
         selected_remote,
     );
 
-    let request_method_source = expressions.local("$request");
-    let request_method = expressions.field(request_method_source, "method")?;
-    let request_path_source = expressions.local("$request");
-    let request_path = expressions.field(request_path_source, "path")?;
-    let route_matches = expressions.call(
-        local_declaration("$is_relay_info_request"),
-        Vec::new(),
-        vec![request_method, request_path],
-    );
-    let not_found = expressions.http_response(
-        exact_declaration(contract.bytes_from_text),
-        header_type.clone(),
-        404,
-        "not found",
-    )?;
-    let handler_body = expressions.if_value(route_matches, remote_scope, not_found);
-
-    let valid_method = expressions.text("GET");
-    let valid_path = expressions.text("/relay-info");
-    let valid_actual = expressions.call(
-        local_declaration("$is_relay_info_request"),
-        Vec::new(),
-        vec![valid_method, valid_path],
-    );
-    let valid_expected = expressions.bool(true);
-    let invalid_method = expressions.text("POST");
-    let invalid_path = expressions.text("/relay-info");
-    let invalid_actual = expressions.call(
-        local_declaration("$is_relay_info_request"),
-        Vec::new(),
-        vec![invalid_method, invalid_path],
-    );
-    let invalid_expected = expressions.bool(false);
+    let handler_body = remote_scope;
     let descriptor = encode_deployment(&starter_nostr_relay_deployment(
         &relay.endpoint,
         relay.address_policy,
@@ -436,24 +385,6 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
                 header_type.clone(),
             )?,
             AuthoredChange::CreateFunction {
-                symbol: "$is_relay_info_request".to_owned(),
-                module: local_module(),
-                name: name("is-relay-info-request")?,
-                visibility: DeclarationVisibility::Private,
-                type_parameters: Vec::new(),
-                parameters: Vec::new(),
-                result: bool_type.clone(),
-                effect: AuthoredFunctionEffect::Pure {},
-                body: route_body,
-            },
-            parameter(
-                "$is_relay_info_request",
-                "$method",
-                "method",
-                text_type.clone(),
-            )?,
-            parameter("$is_relay_info_request", "$path", "path", text_type)?,
-            AuthoredChange::CreateFunction {
                 symbol: "$handle".to_owned(),
                 module: local_module(),
                 name: name("handle")?,
@@ -484,22 +415,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
             )?,
             port("$handle", function_type)?,
             target("serve", RunnerKind::Http)?,
-            AuthoredChange::CreateTest {
-                symbol: "$relay_info_route_is_exact".to_owned(),
-                module: local_module(),
-                name: name("relay-info-route-is-exact")?,
-                visibility: DeclarationVisibility::Private,
-                actual: valid_actual,
-                expected: valid_expected,
-            },
-            AuthoredChange::CreateTest {
-                symbol: "$relay_info_route_rejects_other_method".to_owned(),
-                module: local_module(),
-                name: name("relay-info-route-rejects-other-method")?,
-                visibility: DeclarationVisibility::Private,
-                actual: invalid_actual,
-                expected: invalid_expected,
-            },
+            http_route("GET", "/relay-info")?,
         ],
         transports: vec![standard.transport()],
         template: ProjectTemplate::NostrRelayInfo,
@@ -530,10 +446,24 @@ fn target(target_name: &str, runner: RunnerKind) -> Result<AuthoredChange, Diagn
         symbol: TARGET.to_owned(),
         name: name(target_name)?,
         component: local_declaration(COMPONENT),
+        port: (runner != RunnerKind::Http).then(|| AuthoredPortReference::Symbol {
+            symbol: PORT.to_owned(),
+        }),
+        runner,
+    })
+}
+
+fn http_route(method: &str, path: &str) -> Result<AuthoredChange, Diagnostic> {
+    Ok(AuthoredChange::AddHttpRoute {
+        symbol: HTTP_ROUTE.to_owned(),
+        target: crate::platform::change::OwnerSelector::Symbol {
+            symbol: TARGET.to_owned(),
+        },
+        method: method.to_owned(),
+        path: path.to_owned(),
         port: AuthoredPortReference::Symbol {
             symbol: PORT.to_owned(),
         },
-        runner,
     })
 }
 

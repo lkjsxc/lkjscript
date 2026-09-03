@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::BTreeSet;
 
-pub const PACKAGE_CONTRACT_VERSION: u16 = 1;
+pub const PACKAGE_CONTRACT_VERSION: u16 = 2;
 #[cfg(test)]
 pub const MAXIMUM_PACKAGE_BYTES: usize = 1_048_576;
 #[cfg(test)]
@@ -168,8 +168,19 @@ impl RunnerKind {
 pub struct Target {
     pub name: String,
     pub component: String,
-    pub port: String,
+    #[serde(default)]
+    pub port: Option<String>,
+    #[serde(default)]
+    pub routes: Vec<HttpRoute>,
     pub runner: RunnerKind,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpRoute {
+    pub method: String,
+    pub path: String,
+    pub port: String,
 }
 
 #[cfg(test)]
@@ -220,7 +231,7 @@ pub fn semantic_dependency_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u
         name: &'a str,
         modules: Vec<&'a str>,
         dependencies: Vec<SemanticDependency<'a>>,
-        targets: Vec<&'a Target>,
+        targets: Vec<SemanticTarget<'a>>,
     }
     #[derive(Serialize)]
     struct SemanticDependency<'a> {
@@ -228,6 +239,14 @@ pub fn semantic_dependency_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u
         package_id: &'a PackageId,
         revision_digest: &'a str,
         artifact_digest: &'a str,
+    }
+    #[derive(Serialize)]
+    struct SemanticTarget<'a> {
+        name: &'a str,
+        component: &'a str,
+        port: Option<&'a str>,
+        routes: Vec<&'a HttpRoute>,
+        runner: RunnerKind,
     }
     let mut modules: Vec<_> = descriptor
         .modules
@@ -246,8 +265,27 @@ pub fn semantic_dependency_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u
         })
         .collect();
     dependencies.sort_by(|left, right| left.alias.cmp(right.alias));
-    let mut targets: Vec<_> = descriptor.targets.iter().collect();
-    targets.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut targets = descriptor
+        .targets
+        .iter()
+        .map(|target| {
+            let mut routes = target.routes.iter().collect::<Vec<_>>();
+            routes.sort_by(|left, right| {
+                left.method
+                    .as_bytes()
+                    .cmp(right.method.as_bytes())
+                    .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+            });
+            SemanticTarget {
+                name: &target.name,
+                component: &target.component,
+                port: target.port.as_deref(),
+                routes,
+                runner: target.runner,
+            }
+        })
+        .collect::<Vec<_>>();
+    targets.sort_by(|left, right| left.name.cmp(right.name));
     let semantic = SemanticPackage {
         contract_version: descriptor.contract_version,
         package_id: &descriptor.package_id,
@@ -352,11 +390,80 @@ fn validate_package(descriptor: &PackageDescriptor) -> Result<(), Diagnostic> {
     for target in &descriptor.targets {
         validate_name(&target.name, "target name", false)?;
         validate_qualified_owner(&target.component, "target component")?;
-        validate_name(&target.port, "target port", false)?;
+        match target.runner {
+            RunnerKind::Http => {
+                if target.port.is_some() {
+                    return Err(package_error(
+                        "package_http_target_port",
+                        "HTTP package target may not carry a universal port",
+                    ));
+                }
+                validate_package_http_routes(target)?;
+            }
+            _ => {
+                let port = target.port.as_deref().ok_or_else(|| {
+                    package_error(
+                        "package_target_port_missing",
+                        "non-HTTP package target requires one exact port",
+                    )
+                })?;
+                validate_name(port, "target port", false)?;
+                if !target.routes.is_empty() {
+                    return Err(package_error(
+                        "package_non_http_routes",
+                        "non-HTTP package target may not carry HTTP routes",
+                    ));
+                }
+            }
+        }
         if !targets.insert(&target.name) {
             return Err(package_error(
                 "package_target_duplicate",
                 format!("duplicate target name '{}'", target.name),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn validate_package_http_routes(target: &Target) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::contract::{
+        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+
+    if target.routes.is_empty() || target.routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
+        return Err(package_error(
+            "package_http_route_count",
+            format!(
+                "HTTP package target must contain 1 through {MAXIMUM_HTTP_ROUTES_PER_TARGET} routes"
+            ),
+        ));
+    }
+    let mut keys = BTreeSet::new();
+    let mut bytes = 0usize;
+    for route in &target.routes {
+        crate::platform::kernel::validate_http_route_key(&route.method, &route.path)?;
+        validate_name(&route.port, "HTTP route port", false)?;
+        bytes = bytes
+            .checked_add(route.method.len())
+            .and_then(|value| value.checked_add(route.path.len()))
+            .ok_or_else(|| {
+                package_error(
+                    "package_http_route_bytes",
+                    "HTTP package route key bytes overflowed",
+                )
+            })?;
+        if bytes > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+            return Err(package_error(
+                "package_http_route_bytes",
+                "HTTP package route keys exceed the aggregate byte limit",
+            ));
+        }
+        if !keys.insert((&route.method, &route.path)) {
+            return Err(package_error(
+                "package_http_route_duplicate",
+                "HTTP package target contains a duplicate exact method/path pair",
             ));
         }
     }
@@ -499,7 +606,7 @@ mod tests {
     use super::*;
 
     const PACKAGE: &[u8] = br#"{
-  "contract_version": 1,
+  "contract_version": 2,
   "package_id": "1234567890abcdef1234567890abcdef",
   "name": "resource-service",
   "modules": [
@@ -513,7 +620,7 @@ mod tests {
     "artifact_digest": "2222222222222222222222222222222222222222222222222222222222222222",
     "artifact": "dependencies/standard.lkpackage"
   }],
-  "targets": [{"name": "serve", "component": "service.http.Web", "port": "service", "runner": "http"}]
+  "targets": [{"name": "serve", "component": "service.http.Web", "routes": [{"method": "GET", "path": "/", "port": "service"}], "runner": "http"}]
 }"#;
 
     #[test]
@@ -552,9 +659,62 @@ mod tests {
     #[test]
     fn current_contract_rejects_a_predecessor_exactly() {
         let mut value: serde_json::Value = serde_json::from_slice(PACKAGE).expect("fixture json");
-        value["contract_version"] = serde_json::Value::from(0);
+        value["contract_version"] = serde_json::Value::from(1);
         let bytes = serde_json::to_vec(&value).expect("json");
         let error = decode_package(&bytes).expect_err("predecessor rejects");
         assert_eq!(error.code, "package_contract");
+    }
+
+    #[test]
+    fn package_http_routes_are_finite_exact_and_have_no_predecessor_port() {
+        let fixture =
+            || serde_json::from_slice::<serde_json::Value>(PACKAGE).expect("fixture json");
+
+        let mut empty = fixture();
+        empty["targets"][0]["routes"] = serde_json::json!([]);
+        assert_eq!(
+            decode_package(&serde_json::to_vec(&empty).unwrap())
+                .expect_err("zero-route HTTP target")
+                .code,
+            "package_http_route_count"
+        );
+
+        let mut duplicate = fixture();
+        let route = duplicate["targets"][0]["routes"][0].clone();
+        duplicate["targets"][0]["routes"] = serde_json::json!([route.clone(), route]);
+        assert_eq!(
+            decode_package(&serde_json::to_vec(&duplicate).unwrap())
+                .expect_err("duplicate exact HTTP routes")
+                .code,
+            "package_http_route_duplicate"
+        );
+
+        let mut malformed = fixture();
+        malformed["targets"][0]["routes"][0]["path"] = serde_json::json!("relative");
+        assert_eq!(
+            decode_package(&serde_json::to_vec(&malformed).unwrap())
+                .expect_err("malformed exact HTTP route")
+                .code,
+            "kernel_http_route_path"
+        );
+
+        let mut predecessor = fixture();
+        predecessor["targets"][0]["port"] = serde_json::json!("service");
+        assert_eq!(
+            decode_package(&serde_json::to_vec(&predecessor).unwrap())
+                .expect_err("predecessor universal HTTP port")
+                .code,
+            "package_http_target_port"
+        );
+
+        let mut non_http = fixture();
+        non_http["targets"][0]["runner"] = serde_json::json!("command");
+        non_http["targets"][0]["port"] = serde_json::json!("service");
+        assert_eq!(
+            decode_package(&serde_json::to_vec(&non_http).unwrap())
+                .expect_err("route on a non-HTTP target")
+                .code,
+            "package_non_http_routes"
+        );
     }
 }

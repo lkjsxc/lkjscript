@@ -1,4 +1,4 @@
-//! Small fixed Graph 8 semantic root plus exact dependency and retirement records.
+//! Small fixed Graph 9 semantic root plus exact dependency and retirement records.
 
 use super::contract::GRAPH_CONTRACT_VERSION;
 use super::digest::{

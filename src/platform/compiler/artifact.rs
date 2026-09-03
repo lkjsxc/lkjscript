@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 8 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 9 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -29,7 +29,8 @@ use crate::platform::package_transport::{
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
-    BindingId, DeclarationId, ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
+    BindingId, DeclarationId, HttpRouteId, ParameterId, RepositoryId, RevisionId, TargetId,
+    TypeParameterId,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
@@ -44,17 +45,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-13";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-13";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 13;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF13";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART13";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN13";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-14";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-14";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 14;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF14";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART14";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN14";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v13";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v13";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v13";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v13";
+    "lkjscript.artifact-manifest-envelope.v14";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v14";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v14";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v14";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -241,6 +242,7 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
             | OwnerKind::Requirement
             | OwnerKind::Port
             | OwnerKind::Target
+            | OwnerKind::HttpRoute
     )
 }
 
@@ -1032,8 +1034,14 @@ pub(crate) enum RuntimeOwnerExpectation {
     },
     Target {
         component: DeclarationReference,
-        port: PortReference,
+        port: Option<PortReference>,
         runner: crate::platform::package::RunnerKind,
+    },
+    HttpRoute {
+        target: TargetId,
+        method: String,
+        path: String,
+        port: PortReference,
     },
 }
 
@@ -1055,6 +1063,7 @@ impl RuntimeOwnerExpectation {
             Self::Requirement { .. } | Self::TaskRequirement { .. } => OwnerKind::Requirement,
             Self::Port { .. } => OwnerKind::Port,
             Self::Target { .. } => OwnerKind::Target,
+            Self::HttpRoute { .. } => OwnerKind::HttpRoute,
         }
     }
 
@@ -1172,6 +1181,20 @@ impl RuntimeOwnerExpectation {
                 },
                 OwnerRecord::Target(record),
             ) => record.component == *component && record.port == *port && record.runner == *runner,
+            (
+                Self::HttpRoute {
+                    target,
+                    method,
+                    path,
+                    port,
+                },
+                OwnerRecord::HttpRoute(record),
+            ) => {
+                record.target == *target
+                    && record.method == *method
+                    && record.path == *path
+                    && record.port == *port
+            }
             _ => false,
         }
     }
@@ -1399,6 +1422,7 @@ pub(crate) fn runtime_owner_expectations(
             CompilationPayload::Target {
                 component,
                 port,
+                routes,
                 runner,
             } => {
                 let OwnerKey::Target(target) = owner else {
@@ -1417,10 +1441,24 @@ pub(crate) fn runtime_owner_expectations(
                             *component,
                             "target component",
                         )?,
-                        port: table_value(&unit.tables.ports, *port, "target port")?,
+                        port: port
+                            .map(|port| table_value(&unit.tables.ports, port, "target port"))
+                            .transpose()?,
                         runner: *runner,
                     },
                 )?;
+                for route in routes {
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::HttpRoute(route.route)),
+                        RuntimeOwnerExpectation::HttpRoute {
+                            target: *target,
+                            method: route.method.clone(),
+                            path: route.path.clone(),
+                            port: table_value(&unit.tables.ports, route.port, "HTTP route port")?,
+                        },
+                    )?;
+                }
             }
             CompilationPayload::Constant { .. } | CompilationPayload::Test { .. } => {}
         }
@@ -2246,7 +2284,14 @@ fn validate_artifact_session_relations(
     }
     let standard = artifact_standard_session_declarations(&read)?;
     for (package, target) in interactive {
-        if target.port.package != package {
+        let port_reference = target.port.ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_port_missing",
+                "interactive target has no exact runtime port",
+            )
+        })?;
+        if port_reference.package != package {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
                 "artifact_session_port_package",
@@ -2254,7 +2299,7 @@ fn validate_artifact_session_relations(
             ));
         }
         let Some(OwnerRecord::Port(port)) =
-            runtime_owners.get(&(package, OwnerKey::Port(target.port.port)))
+            runtime_owners.get(&(package, OwnerKey::Port(port_reference.port)))
         else {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,

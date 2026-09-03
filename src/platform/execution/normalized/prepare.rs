@@ -23,7 +23,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
-    ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
+    HttpRouteId, ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
@@ -61,6 +61,7 @@ pub struct NormalizedPreparationWork {
     pub components: u64,
     pub ports: u64,
     pub targets: u64,
+    pub http_routes: u64,
     pub tests: u64,
     pub map: MapWork,
     pub store: StoreWork,
@@ -251,6 +252,15 @@ pub struct NormalizedTarget {
     pub name: Name,
     pub runner: RunnerKind,
     pub component: ComponentIndex,
+    pub port: Option<PortIndex>,
+    pub http_routes: Arc<[NormalizedHttpRoute]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedHttpRoute {
+    pub route: HttpRouteId,
+    pub method: Arc<str>,
+    pub path: Arc<str>,
     pub port: PortIndex,
 }
 
@@ -330,7 +340,7 @@ impl NormalizedProgram {
         )?;
         let tests = prepare_tests(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
         let (targets, root_target_names) =
-            prepare_targets(&artifact, &units, &indexes, &runtime_owners)?;
+            prepare_targets(&artifact, &units, &indexes, &runtime_owners, &ports)?;
 
         work.functions = functions.len() as u64;
         work.record_layouts = records.len() as u64;
@@ -340,6 +350,10 @@ impl NormalizedProgram {
         work.components = components.len() as u64;
         work.ports = ports.len() as u64;
         work.targets = targets.len() as u64;
+        work.http_routes = targets
+            .values()
+            .map(|target| target.http_routes.len() as u64)
+            .sum();
         work.tests = tests.len() as u64;
         let program = Self {
             root_repository: root_compilation.repository_id,
@@ -1526,6 +1540,7 @@ fn prepare_targets(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
+    ports: &[NormalizedPort],
 ) -> Result<(TargetMap, RootTargetNames), Diagnostic> {
     let mut targets = BTreeMap::new();
     let mut root_names = BTreeMap::new();
@@ -1536,6 +1551,7 @@ fn prepare_targets(
         let CompilationPayload::Target {
             component,
             port,
+            routes,
             runner,
         } = &unit.payload
         else {
@@ -1544,14 +1560,18 @@ fn prepare_targets(
                 "target unit has another compiler payload",
             ));
         };
-        let component = index_copy(
+        let component_reference = index_copy(
             &unit.tables.declarations,
             *component,
             "normalized target component",
         )?;
-        let component = required_index(&indexes.components, component, "component")?;
-        let port = index_copy(&unit.tables.ports, *port, "normalized target port")?;
-        let port = required_index(&indexes.ports, port, "port")?;
+        let component = required_index(&indexes.components, component_reference, "component")?;
+        let port = port
+            .map(|port| {
+                index_copy(&unit.tables.ports, port, "normalized target port")
+                    .and_then(|port| required_index(&indexes.ports, port, "port"))
+            })
+            .transpose()?;
         let OwnerRecord::Target(record) = exact_runtime_owner(
             runtime_owners,
             *package,
@@ -1564,6 +1584,103 @@ fn prepare_targets(
                 "target owner binding decoded another owner kind",
             ));
         };
+        if record.component != component_reference
+            || record.port != port.map(|port| ports[port.0 as usize].reference)
+            || record.runner != *runner
+        {
+            return Err(runtime_corrupt(
+                "normalized_target_owner_binding",
+                "target compiler payload disagrees with its exact runtime owner",
+            ));
+        }
+        use crate::platform::kernel::contract::{
+            MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+        };
+        if (*runner == RunnerKind::Http)
+            && (routes.is_empty() || routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET)
+        {
+            return Err(runtime_corrupt(
+                "normalized_http_route_count",
+                "prepared HTTP target route count is outside the supported bounds",
+            ));
+        }
+        let mut route_bytes = 0usize;
+        let mut previous_route_key = None;
+        for route in routes {
+            crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
+                |_| {
+                    runtime_corrupt(
+                        "normalized_http_route_key",
+                        "prepared HTTP route contains an invalid method or path",
+                    )
+                },
+            )?;
+            let route_key = (route.method.as_bytes(), route.path.as_bytes());
+            if previous_route_key.is_some_and(|previous| previous >= route_key) {
+                return Err(runtime_corrupt(
+                    "normalized_http_route_order",
+                    "prepared HTTP routes are duplicate or outside canonical key order",
+                ));
+            }
+            previous_route_key = Some(route_key);
+            route_bytes = route_bytes
+                .checked_add(route.method.len())
+                .and_then(|value| value.checked_add(route.path.len()))
+                .ok_or_else(|| {
+                    runtime_corrupt(
+                        "normalized_http_route_bytes",
+                        "prepared HTTP route-key byte accounting overflowed",
+                    )
+                })?;
+            if route_bytes > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+                return Err(runtime_corrupt(
+                    "normalized_http_route_bytes",
+                    "prepared HTTP route keys exceed the aggregate byte bound",
+                ));
+            }
+        }
+        let mut normalized_routes = Vec::with_capacity(routes.len());
+        for route in routes {
+            let reference =
+                index_copy(&unit.tables.ports, route.port, "normalized HTTP route port")?;
+            let route_port = required_index(&indexes.ports, reference, "HTTP route port")?;
+            let prepared_port = ports.get(route_port.0 as usize).ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_http_route_port_index",
+                    "HTTP route port escaped the prepared port table",
+                )
+            })?;
+            let OwnerRecord::HttpRoute(route_owner) = exact_runtime_owner(
+                runtime_owners,
+                *package,
+                OwnerKey::HttpRoute(route.route),
+                "HTTP route",
+            )?
+            else {
+                return Err(runtime_corrupt(
+                    "normalized_http_route_owner_kind",
+                    "HTTP route owner binding decoded another owner kind",
+                ));
+            };
+            if route_owner.target != *target
+                || route_owner.method != route.method
+                || route_owner.path != route.path
+                || route_owner.port != reference
+                || prepared_port.component != component
+                || !matches!(prepared_port.entry, NormalizedEntryPoint::Function(_))
+            {
+                return Err(runtime_corrupt(
+                    "normalized_http_route_binding",
+                    "HTTP route table disagrees with its owner, component, or function-backed port",
+                ));
+            }
+            normalized_routes.push(NormalizedHttpRoute {
+                route: route.route,
+                method: Arc::from(route.method.as_str()),
+                path: Arc::from(route.path.as_str()),
+                port: route_port,
+            });
+        }
         let target_value = NormalizedTarget {
             package: *package,
             target: *target,
@@ -1571,6 +1688,7 @@ fn prepare_targets(
             runner: *runner,
             component,
             port,
+            http_routes: normalized_routes.into(),
         };
         if targets.insert((*package, *target), target_value).is_some() {
             return Err(runtime_corrupt(

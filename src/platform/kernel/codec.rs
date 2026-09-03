@@ -1,4 +1,4 @@
-//! Strict canonical Graph 8 record codecs.
+//! Strict canonical Graph 9 record codecs.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -327,7 +327,7 @@ fn verify_canonical(
     if input != canonical || canonical_digest != expected_digest {
         return Err(codec_error(
             "kernel_noncanonical_encoding",
-            format!("{label} object does not use the canonical Graph 8 encoding"),
+            format!("{label} object does not use the canonical Graph 9 encoding"),
         ));
     }
     Ok(())

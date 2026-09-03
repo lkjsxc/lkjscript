@@ -117,6 +117,10 @@ pub(crate) fn ownership_contributions(
             OwnershipParent::Package,
             OwnershipRole::PackageTarget,
         )),
+        OwnerRecord::HttpRoute(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Target(record.target)),
+            OwnershipRole::TargetHttpRoute,
+        )),
         OwnerRecord::Documentation(record) => Some(OwnershipEntry::new(
             OwnershipParent::Owner(record.owner),
             OwnershipRole::Documentation,

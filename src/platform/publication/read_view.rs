@@ -1,4 +1,4 @@
-//! Revision-pinned, bounded reads over accepted Graph 8 authority and its committed witness.
+//! Revision-pinned, bounded reads over accepted Graph 9 authority and its committed witness.
 
 use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
@@ -649,7 +649,7 @@ fn logical_plan_evidence(
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
-/// Packs are append-only in the current Graph 8 store, so a later HEAD publication cannot alter
+/// Packs are append-only in the current Graph 9 store, so a later HEAD publication cannot alter
 /// any object visible through this view. Future physical deletion must add an explicit lease
 /// before it may coexist with these views.
 #[derive(Debug)]
@@ -1047,7 +1047,7 @@ impl RepositoryView {
         Ok(self.read(value, work))
     }
 
-    /// Reconstructs the complete logical Graph 8 view for independent full validation and
+    /// Reconstructs the complete logical Graph 9 view for independent full validation and
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
@@ -1306,7 +1306,14 @@ impl RepositoryView {
             if let OwnerRecord::Target(target) = record
                 && target.runner == RunnerKind::Interactive
             {
-                interactive_ports.insert(target.port);
+                let port = target.port.ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_session_port_missing",
+                        "interactive target has no exact port",
+                    )
+                })?;
+                interactive_ports.insert(port);
             }
             Ok(())
         })?);
@@ -3148,6 +3155,40 @@ impl WitnessBaseRead for RepositoryView {
         self.incoming_relations_admitted(
             endpoint,
             None,
+            maximum_items,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_relation_read)
+    }
+
+    fn read_incoming_relations_of_kind(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        RepositoryView::incoming_relations(self, endpoint, Some(kind), maximum_items)
+            .map(witness_relation_read)
+    }
+
+    fn read_incoming_relations_of_kind_admitted(
+        &self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        self.incoming_relations_admitted(
+            endpoint,
+            Some(kind),
             maximum_items,
             &mut RepositoryReadAdmission::witness(admission),
         )

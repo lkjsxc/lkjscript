@@ -1,8 +1,8 @@
-//! Private Graph 8 generic semantic-change substrate.
+//! Private Graph 9 generic semantic-change substrate.
 
 #![allow(
     unused_imports,
-    reason = "private change exports become crate consumers at the Graph 8 repository cutover"
+    reason = "private change exports become crate consumers at the Graph 9 repository cutover"
 )]
 
 mod authority;

@@ -410,9 +410,10 @@ fn stateful_http_walkthrough(snapshot: &CapabilitiesSnapshot) -> Result<String, 
             vec![
                 (
                     "operations",
-                    "create.component+add.requirement+add.port+create.target",
+                    "create.component+add.requirement+add.port+create.target+add.http-route",
                 ),
                 ("port", "function-backed"),
+                ("route", "GET+/"),
                 ("runner", "http"),
             ],
         ),

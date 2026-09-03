@@ -4,6 +4,7 @@ use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{ExecutionError, ExecutionFailureClass};
 use super::kernel::{Name, StructuralTypeField, TypeForm, TypeObjectDigest, TypeObjectInterner};
 use super::runtime::ShutdownReceipt;
+use super::semantic_id::HttpRouteId;
 use super::stream::ByteStreamProducer;
 use axum::body::Body;
 use axum::http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
@@ -12,7 +13,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 1;
+pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_HTTP_HEADER_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_HTTP_HEADERS: usize = 1_024;
@@ -190,7 +191,8 @@ pub struct HttpResponse {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HttpDispatchObservation {
-    pub task_id: u64,
+    pub route: Option<HttpRouteId>,
+    pub task_id: Option<u64>,
     pub queue_nanoseconds: u64,
     pub execution_nanoseconds: u64,
     pub instructions: u64,
@@ -499,17 +501,16 @@ pub(crate) fn validate_request(
     request: &HttpRequest,
     limits: &HttpLimits,
 ) -> Result<(), ExecutionError> {
-    if request.method.is_empty() || request.method.len() > 32 {
-        return Err(protocol_error(
-            "http_request_method",
-            "HTTP request method is empty or excessive",
-        ));
-    }
-    if request.path.is_empty() || request.path.len() > 16 * 1024 || request.query.len() > 16 * 1024
-    {
+    super::kernel::validate_http_route_key(&request.method, &request.path).map_err(|_| {
+        protocol_error(
+            "http_request_route_key",
+            "HTTP request method or path is not a valid exact route key",
+        )
+    })?;
+    if request.query.len() > 16 * 1024 {
         return Err(protocol_error(
             "http_request_target",
-            "HTTP request target is empty or excessive",
+            "HTTP request query is excessive",
         ));
     }
     if request.body.len() > limits.maximum_request_body_bytes {

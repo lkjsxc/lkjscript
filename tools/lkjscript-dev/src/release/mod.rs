@@ -1695,6 +1695,20 @@ mod tests {
         );
         assert!(job.contains(&schema), "release job omitted {schema}");
         for predicate in [
+            "(.result.responses | length) == 14",
+            ".result.topology.method == \"GET\"",
+            ".result.topology.path == \"/\"",
+            ".result.topology.route_count == 1",
+            ".result.topology.route | test(\"^route_[0-9a-f]{32}$\")",
+            ".result.topology.target | test(\"^target_[0-9a-f]{32}$\")",
+            ".result.topology.component | test(\"^pkg_[0-9a-f]{32}/decl_[0-9a-f]{32}$\")",
+            ".result.topology.port | test(\"^pkg_[0-9a-f]{32}/port_[0-9a-f]{32}$\")",
+            ".result.topology.function | test(\"^decl_[0-9a-f]{32}$\")",
+            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
+            ".result.topology.context_owners == 5",
+            ".result.topology.context_relations == 5",
+            ".result.topology.predecessor_port_absent == true",
+            ".result.topology.context_complete == true",
             ".result.definition_projection.function | test(\"^decl_[0-9a-f]{32}$\")",
             ".result.definition_projection.initial_revision == .result.initial_revision",
             ".result.definition_projection.accepted_revision == .result.accepted_revision",
@@ -1730,6 +1744,54 @@ mod tests {
             assert!(
                 job.contains(predicate),
                 "release job omitted distributed projection predicate {predicate}"
+            );
+        }
+    }
+
+    fn assert_current_outbound_route_acceptance(job: &str) {
+        let schema = format!(
+            ".schema == {{identity:\"{}\",version:{}}}",
+            crate::outbound_http::ACCEPTANCE_SCHEMA,
+            crate::outbound_http::ACCEPTANCE_SCHEMA_VERSION
+        );
+        assert!(job.contains(&schema), "release job omitted {schema}");
+        for predicate in [
+            "(.result.responses | length) == 17",
+            "(.result.no_connection | length) == 7",
+            ".result.topology.method == \"GET\"",
+            ".result.topology.path == \"/relay-info\"",
+            ".result.topology.route_count == 1",
+            ".result.topology.route | test(\"^route_[0-9a-f]{32}$\")",
+            ".result.topology.target | test(\"^target_[0-9a-f]{32}$\")",
+            ".result.topology.component | test(\"^pkg_[0-9a-f]{32}/decl_[0-9a-f]{32}$\")",
+            ".result.topology.port | test(\"^pkg_[0-9a-f]{32}/port_[0-9a-f]{32}$\")",
+            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
+            ".result.topology.predecessor_port_absent == true",
+            ".result.topology.predecessor_predicate_absent == true",
+        ] {
+            assert!(
+                job.contains(predicate),
+                "release job omitted outbound route predicate {predicate}"
+            );
+        }
+    }
+
+    fn assert_current_stateful_route_acceptance(job: &str) {
+        let schema = format!(
+            ".schema == {{identity:\"{}\",version:{}}}",
+            crate::stateful_http::STATEFUL_SCHEMA,
+            crate::stateful_http::STATEFUL_SCHEMA_VERSION
+        );
+        assert!(job.contains(&schema), "release job omitted {schema}");
+        for predicate in [
+            "(.result.topology.routes | length) == 5",
+            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
+            ".result.live.routes_checked == 25",
+            "(.result.live.requests | length) == 25",
+        ] {
+            assert!(
+                job.contains(predicate),
+                "release job omitted stateful route predicate {predicate}"
             );
         }
     }
@@ -2011,10 +2073,8 @@ mod tests {
         assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
         assert_current_distributed_projection_acceptance(pre_publication);
-        assert!(
-            pre_publication
-                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
-        );
+        assert_current_outbound_route_acceptance(pre_publication);
+        assert_current_stateful_route_acceptance(pre_publication);
         assert!(pre_publication.contains(".result.initial_template == \"minimal\""));
         assert!(pre_publication.contains(".result.initial_owners == 0"));
         assert!(pre_publication.contains(".result.initial_dependencies == 0"));
@@ -2077,10 +2137,8 @@ mod tests {
         assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
         assert_current_distributed_projection_acceptance(post_release);
-        assert!(
-            post_release
-                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
-        );
+        assert_current_outbound_route_acceptance(post_release);
+        assert_current_stateful_route_acceptance(post_release);
         assert!(post_release.contains(".result.initial_template == \"minimal\""));
         assert!(post_release.contains(".result.initial_owners == 0"));
         assert!(post_release.contains(".result.initial_dependencies == 0"));
@@ -2121,26 +2179,41 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
-        let distributed_schema = format!(
-            ".schema == {{identity:\"{}\",version:{}}}",
-            crate::distributed_http::ACCEPTANCE_SCHEMA,
-            crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
-        );
-        assert_eq!(workflow.matches(&distributed_schema).count(), 2);
+        for schema in [
+            format!(
+                ".schema == {{identity:\"{}\",version:{}}}",
+                crate::distributed_http::ACCEPTANCE_SCHEMA,
+                crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
+            ),
+            format!(
+                ".schema == {{identity:\"{}\",version:{}}}",
+                crate::outbound_http::ACCEPTANCE_SCHEMA,
+                crate::outbound_http::ACCEPTANCE_SCHEMA_VERSION
+            ),
+            format!(
+                ".schema == {{identity:\"{}\",version:{}}}",
+                crate::stateful_http::STATEFUL_SCHEMA,
+                crate::stateful_http::STATEFUL_SCHEMA_VERSION
+            ),
+        ] {
+            assert_eq!(
+                workflow.matches(&schema).count(),
+                2,
+                "workflow omitted {schema}"
+            );
+        }
         assert!(
             !workflow.contains(
-                ".schema == {identity:\"lkjscript-distributed-http-acceptance\",version:2}"
+                ".schema == {identity:\"lkjscript-distributed-http-acceptance\",version:3}"
             )
         );
         assert!(
             !workflow
-                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:3}")
+                .contains(".schema == {identity:\"lkjscript-outbound-http-acceptance\",version:1}")
         );
-        assert_eq!(
-            workflow
-                .matches(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
-                .count(),
-            2
+        assert!(
+            !workflow
+                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
         );
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));

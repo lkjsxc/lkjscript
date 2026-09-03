@@ -1,4 +1,4 @@
-//! Structured worker topology for exact Graph 8 resident deployments.
+//! Structured worker topology for exact Graph 9 resident deployments.
 
 use super::resident::NormalizedResidentDeployment;
 use super::value::NormalizedValue;
@@ -31,10 +31,17 @@ impl NormalizedWorkerApplication {
                 "normalized worker topology requires a worker runner target",
             ));
         }
+        let port_index = resident.target().port.ok_or_else(|| {
+            worker_diagnostic(
+                DiagnosticClass::Corrupt,
+                "normalized_worker_target_port",
+                "normalized worker target has no exact port",
+            )
+        })?;
         let port = resident
             .program()
             .ports
-            .get(resident.target().port.0 as usize)
+            .get(port_index.0 as usize)
             .ok_or_else(|| {
                 worker_diagnostic(
                     DiagnosticClass::Corrupt,

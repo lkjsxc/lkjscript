@@ -1,4 +1,4 @@
-//! Normalized Graph 8 semantic owner records.
+//! Normalized Graph 9 semantic owner records.
 
 use super::contract::{
     GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_DOCUMENTATION_BYTES,
@@ -16,7 +16,7 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
     CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId,
-    RequirementId, TypeParameterId,
+    RequirementId, TargetId, TypeParameterId,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,7 @@ pub enum OwnerRecord {
     Target(TargetRecord),
     Documentation(DocumentationRecord),
     Annotation(AnnotationRecord),
+    HttpRoute(HttpRouteRecord),
 }
 
 impl OwnerRecord {
@@ -58,6 +59,7 @@ impl OwnerRecord {
             Self::Requirement(record) => record.header,
             Self::Port(record) => record.header,
             Self::Target(record) => record.header,
+            Self::HttpRoute(record) => record.header,
             Self::Documentation(record) => record.header,
             Self::Annotation(record) => record.header,
         }
@@ -84,6 +86,7 @@ impl OwnerRecord {
             Self::Requirement(value) => Some(&value.name),
             Self::Port(value) => Some(&value.name),
             Self::Target(value) => Some(&value.name),
+            Self::HttpRoute(_) => None,
             Self::Expression(_) | Self::Documentation(_) | Self::Annotation(_) => None,
         }
     }
@@ -101,6 +104,7 @@ impl OwnerRecord {
             Self::Requirement(value) => Some(&mut value.name),
             Self::Port(value) => Some(&mut value.name),
             Self::Target(value) => Some(&mut value.name),
+            Self::HttpRoute(_) => None,
             Self::Expression(_) | Self::Documentation(_) | Self::Annotation(_) => None,
         }
     }
@@ -140,6 +144,7 @@ impl OwnerRecord {
                 validate_header_domain(record.header, OwnerKind::Target)?;
                 validate_names([&record.name])
             }
+            Self::HttpRoute(record) => record.validate_local(),
             Self::Documentation(record) => record.validate_local(),
             Self::Annotation(record) => record.validate_local(),
         }
@@ -159,6 +164,7 @@ impl OwnerRecord {
             | Self::TypeParameter(_)
             | Self::Requirement(_)
             | Self::Target(_)
+            | Self::HttpRoute(_)
             | Self::Documentation(_)
             | Self::Annotation(_) => Vec::new(),
         }
@@ -190,6 +196,7 @@ impl OwnerRecord {
             | Self::Requirement(_)
             | Self::Port(_)
             | Self::Target(_)
+            | Self::HttpRoute(_)
             | Self::Annotation(_) => Vec::new(),
         }
     }
@@ -596,8 +603,142 @@ pub struct TargetRecord {
     pub header: OwnerHeader,
     pub name: Name,
     pub component: DeclarationReference,
-    pub port: PortReference,
+    pub port: Option<PortReference>,
     pub runner: RunnerKind,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpRouteRecord {
+    pub header: OwnerHeader,
+    pub target: TargetId,
+    pub method: String,
+    pub path: String,
+    pub port: PortReference,
+}
+
+impl HttpRouteRecord {
+    fn validate_local(&self) -> Result<(), Diagnostic> {
+        validate_header_domain(self.header, OwnerKind::HttpRoute)?;
+        validate_http_route_key(&self.method, &self.path)
+    }
+}
+
+pub fn validate_http_route_key(method: &str, path: &str) -> Result<(), Diagnostic> {
+    if method.is_empty()
+        || method.len() > super::contract::MAXIMUM_HTTP_ROUTE_METHOD_BYTES
+        || !method.bytes().all(is_http_token_byte)
+    {
+        return Err(owner_error(
+            "kernel_http_route_method",
+            format!(
+                "HTTP route method must be a nonempty ASCII token of at most {} bytes",
+                super::contract::MAXIMUM_HTTP_ROUTE_METHOD_BYTES
+            ),
+        ));
+    }
+    if path.is_empty()
+        || path.len() > super::contract::MAXIMUM_HTTP_ROUTE_PATH_BYTES
+        || !path.starts_with('/')
+        || path
+            .bytes()
+            .any(|byte| byte == b'?' || byte == b'#' || byte.is_ascii_control())
+    {
+        return Err(owner_error(
+            "kernel_http_route_path",
+            format!(
+                "HTTP route path must begin with '/', contain no query, fragment, or control bytes, and use at most {} bytes",
+                super::contract::MAXIMUM_HTTP_ROUTE_PATH_BYTES
+            ),
+        ));
+    }
+    Ok(())
+}
+
+pub fn http_route_set_digest(routes: &[HttpRouteRecord]) -> Result<[u8; 32], Diagnostic> {
+    use super::contract::{
+        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+
+    if routes.is_empty() || routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
+        return Err(owner_error(
+            "kernel_http_route_count",
+            "HTTP route-set digest requires one bounded nonempty target route set",
+        ));
+    }
+    let mut routes = routes.iter().collect::<Vec<_>>();
+    routes.sort_by(|left, right| {
+        left.method
+            .as_bytes()
+            .cmp(right.method.as_bytes())
+            .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+            .then_with(|| left.header.owner.bytes().cmp(&right.header.owner.bytes()))
+    });
+    let mut aggregate = 0usize;
+    let mut previous = None;
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.http-route-set.v1");
+    hasher.update(&(routes.len() as u64).to_be_bytes());
+    for route in routes {
+        route.validate_local()?;
+        let key = (route.method.as_bytes(), route.path.as_bytes());
+        if previous.is_some_and(|previous| previous == key) {
+            return Err(owner_error(
+                "kernel_http_route_duplicate",
+                "HTTP route-set digest rejects duplicate exact method/path keys",
+            ));
+        }
+        previous = Some(key);
+        aggregate = aggregate
+            .checked_add(route.method.len())
+            .and_then(|value| value.checked_add(route.path.len()))
+            .ok_or_else(|| {
+                owner_error(
+                    "kernel_http_route_aggregate",
+                    "HTTP route-set byte accounting overflowed",
+                )
+            })?;
+        if aggregate > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+            return Err(owner_error(
+                "kernel_http_route_aggregate",
+                "HTTP route-set keys exceed the aggregate byte bound",
+            ));
+        }
+        let OwnerKey::HttpRoute(route_id) = route.header.owner else {
+            return Err(owner_error(
+                "kernel_http_route_identity",
+                "HTTP route record has another owner identity domain",
+            ));
+        };
+        hasher.update(&route_id.bytes());
+        hasher.update(&(route.method.len() as u64).to_be_bytes());
+        hasher.update(route.method.as_bytes());
+        hasher.update(&(route.path.len() as u64).to_be_bytes());
+        hasher.update(route.path.as_bytes());
+        hasher.update(&route.port.package.bytes());
+        hasher.update(&route.port.port.bytes());
+    }
+    Ok(*hasher.finalize().as_bytes())
+}
+
+fn is_http_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -726,6 +867,7 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
             | (OwnerKey::Requirement(_), OwnerKind::Requirement)
             | (OwnerKey::Port(_), OwnerKind::Port)
             | (OwnerKey::Target(_), OwnerKind::Target)
+            | (OwnerKey::HttpRoute(_), OwnerKind::HttpRoute)
             | (OwnerKey::Documentation(_), OwnerKind::Documentation)
             | (OwnerKey::Annotation(_), OwnerKind::Annotation)
     );
@@ -772,7 +914,7 @@ fn validate_ordered_unique<T: Ord + Copy>(
     if (!allow_zero && values.is_empty()) || values.len() > MAXIMUM_CHILDREN {
         return Err(owner_error(
             "kernel_owner_child_count",
-            format!("{label} count is outside the Graph 8 bound"),
+            format!("{label} count is outside the Graph 9 bound"),
         ));
     }
     let unique = values.iter().copied().collect::<BTreeSet<_>>();

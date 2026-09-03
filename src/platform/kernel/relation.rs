@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 8 records.
+//! Single deterministic relation extractor for Graph 9 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -50,6 +50,8 @@ pub enum RelationKind {
     ComponentPort,
     TargetComponent,
     TargetPort,
+    HttpRouteTarget,
+    HttpRoutePort,
     TestExecutionDependency,
     DocumentationOwnership,
     AnnotationOwnership,
@@ -71,7 +73,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 30] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -95,6 +97,8 @@ impl RelationKind {
         Self::ComponentPort,
         Self::TargetComponent,
         Self::TargetPort,
+        Self::HttpRouteTarget,
+        Self::HttpRoutePort,
         Self::TestExecutionDependency,
         Self::DocumentationOwnership,
         Self::AnnotationOwnership,
@@ -128,6 +132,8 @@ impl RelationKind {
             Self::ComponentPort => 19,
             Self::TargetComponent => 20,
             Self::TargetPort => 21,
+            Self::HttpRouteTarget => 29,
+            Self::HttpRoutePort => 30,
             Self::TestExecutionDependency => 22,
             Self::DocumentationOwnership => 23,
             Self::AnnotationOwnership => 24,
@@ -164,6 +170,8 @@ impl RelationKind {
             Self::ComponentPort => "component_port",
             Self::TargetComponent => "target_component",
             Self::TargetPort => "target_port",
+            Self::HttpRouteTarget => "http_route_target",
+            Self::HttpRoutePort => "http_route_port",
             Self::TestExecutionDependency => "test_execution_dependency",
             Self::DocumentationOwnership => "documentation_ownership",
             Self::AnnotationOwnership => "annotation_ownership",
@@ -207,7 +215,10 @@ impl RelationKind {
             | Self::CapabilityOperation
             | Self::ComponentRequirement
             | Self::ComponentPort => PropagationClass::Capability,
-            Self::TargetComponent | Self::TargetPort => PropagationClass::Target,
+            Self::TargetComponent
+            | Self::TargetPort
+            | Self::HttpRouteTarget
+            | Self::HttpRoutePort => PropagationClass::Target,
             Self::TestExecutionDependency => PropagationClass::Test,
             Self::DocumentationOwnership | Self::AnnotationOwnership => {
                 PropagationClass::Presentation
@@ -579,12 +590,30 @@ where
                 target.component.package,
                 OwnerKey::Declaration(target.component.declaration),
             )?;
+            if let Some(port) = target.port {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::TargetPort,
+                    port.package,
+                    OwnerKey::Port(port.port),
+                )?;
+            }
+        }
+        OwnerRecord::HttpRoute(route) => {
+            owner_edge(
+                edges,
+                source,
+                RelationKind::HttpRouteTarget,
+                package,
+                OwnerKey::Target(route.target),
+            )?;
             exact_edge(
                 edges,
                 source,
-                RelationKind::TargetPort,
-                target.port.package,
-                OwnerKey::Port(target.port.port),
+                RelationKind::HttpRoutePort,
+                route.port.package,
+                OwnerKey::Port(route.port.port),
             )?;
         }
         OwnerRecord::Documentation(documentation) => owner_edge(

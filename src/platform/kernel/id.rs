@@ -1,9 +1,10 @@
-//! Closed Graph 8 semantic owner identity domain.
+//! Closed Graph 9 semantic owner identity domain.
 
 use super::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
-    ModuleId, OperationId, ParameterId, PortId, RequirementId, TargetId, TypeParameterId,
+    HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RequirementId, TargetId,
+    TypeParameterId,
 };
 use crate::platform::{
     diagnostic::Diagnostic, diagnostic::DiagnosticClass, semantic_id::encode_hex,
@@ -43,10 +44,11 @@ pub enum OwnerKind {
     Target,
     Documentation,
     Annotation,
+    HttpRoute,
 }
 
 impl OwnerKind {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Module,
         Self::Record,
         Self::Variant,
@@ -69,11 +71,12 @@ impl OwnerKind {
         Self::Target,
         Self::Documentation,
         Self::Annotation,
+        Self::HttpRoute,
     ];
 
     /// Coarse durable owner kinds that survive the scoped-identity cutover and may therefore be
     /// selected by the current public exact-owner command.
-    pub const PUBLIC_EXACT: [Self; 11] = [
+    pub const PUBLIC_EXACT: [Self; 12] = [
         Self::Module,
         Self::Record,
         Self::Variant,
@@ -85,6 +88,7 @@ impl OwnerKind {
         Self::Component,
         Self::Test,
         Self::Target,
+        Self::HttpRoute,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -109,6 +113,7 @@ impl OwnerKind {
             Self::Requirement => 18,
             Self::Port => 19,
             Self::Target => 20,
+            Self::HttpRoute => 23,
             Self::Documentation => 21,
             Self::Annotation => 22,
         }
@@ -138,6 +143,7 @@ impl OwnerKind {
             Self::Target => "target",
             Self::Documentation => "documentation",
             Self::Annotation => "annotation",
+            Self::HttpRoute => "http_route",
         }
     }
 
@@ -177,6 +183,7 @@ impl OwnerKind {
                 | (Self::Requirement, OwnerKey::Requirement(_))
                 | (Self::Port, OwnerKey::Port(_))
                 | (Self::Target, OwnerKey::Target(_))
+                | (Self::HttpRoute, OwnerKey::HttpRoute(_))
                 | (Self::Documentation, OwnerKey::Documentation(_))
                 | (Self::Annotation, OwnerKey::Annotation(_))
         )
@@ -223,6 +230,7 @@ pub enum OwnerKey {
     Target(TargetId),
     Documentation(DocumentationId),
     Annotation(AnnotationId),
+    HttpRoute(HttpRouteId),
 }
 
 impl OwnerKey {
@@ -240,6 +248,7 @@ impl OwnerKey {
             Self::Requirement(_) => IdentityKind::Requirement,
             Self::Port(_) => IdentityKind::Port,
             Self::Target(_) => IdentityKind::Target,
+            Self::HttpRoute(_) => IdentityKind::HttpRoute,
             Self::Documentation(_) => IdentityKind::Documentation,
             Self::Annotation(_) => IdentityKind::Annotation,
         }
@@ -259,6 +268,7 @@ impl OwnerKey {
             Self::Requirement(id) => id.bytes(),
             Self::Port(id) => id.bytes(),
             Self::Target(id) => id.bytes(),
+            Self::HttpRoute(id) => id.bytes(),
             Self::Documentation(id) => id.bytes(),
             Self::Annotation(id) => id.bytes(),
         }
@@ -280,6 +290,7 @@ impl fmt::Display for OwnerKey {
             Self::Requirement(value) => value.fmt(formatter),
             Self::Port(value) => value.fmt(formatter),
             Self::Target(value) => value.fmt(formatter),
+            Self::HttpRoute(value) => value.fmt(formatter),
             Self::Documentation(value) => value.fmt(formatter),
             Self::Annotation(value) => value.fmt(formatter),
         }
@@ -314,6 +325,8 @@ impl FromStr for OwnerKey {
             value.parse().map(Self::Port)
         } else if value.starts_with(TargetId::PREFIX) {
             value.parse().map(Self::Target)
+        } else if value.starts_with(HttpRouteId::PREFIX) {
+            value.parse().map(Self::HttpRoute)
         } else if value.starts_with(DocumentationId::PREFIX) {
             value.parse().map(Self::Documentation)
         } else if value.starts_with(AnnotationId::PREFIX) {
@@ -344,6 +357,7 @@ pub enum IdentityKind {
     Target,
     Documentation,
     Annotation,
+    HttpRoute,
 }
 
 impl IdentityKind {
@@ -361,6 +375,7 @@ impl IdentityKind {
             Self::Requirement => 10,
             Self::Port => 11,
             Self::Target => 12,
+            Self::HttpRoute => 15,
             Self::Documentation => 13,
             Self::Annotation => 14,
         }
@@ -405,7 +420,7 @@ impl EncodedOwnerKey {
         self.0
     }
 
-    /// Strictly decodes the canonical tagged owner-key representation used by Graph 8 maps and
+    /// Strictly decodes the canonical tagged owner-key representation used by Graph 9 maps and
     /// witness entries.
     pub fn decode(bytes: &[u8]) -> Result<OwnerKey, Diagnostic> {
         let encoded: [u8; 17] = bytes.try_into().map_err(|_| {
@@ -432,6 +447,7 @@ impl EncodedOwnerKey {
             12 => TargetId::from_bytes(identity).map(OwnerKey::Target),
             13 => DocumentationId::from_bytes(identity).map(OwnerKey::Documentation),
             14 => AnnotationId::from_bytes(identity).map(OwnerKey::Annotation),
+            15 => HttpRouteId::from_bytes(identity).map(OwnerKey::HttpRoute),
             tag => {
                 return Err(id_error(
                     DiagnosticClass::Corrupt,

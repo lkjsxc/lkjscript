@@ -1,4 +1,4 @@
-//! Repository-bound command and graph-owned test runners for normalized Graph 8 artifacts.
+//! Repository-bound command and graph-owned test runners for normalized Graph 9 artifacts.
 
 use super::capability::NormalizedCapabilities;
 use super::codec::{decode_value, encode_typed};
@@ -308,7 +308,14 @@ fn prepare_command_invocation<'a>(
             "selected target is not a command, batch, or test runner",
         ));
     }
-    let port = program.ports.get(target.port.0 as usize).ok_or_else(|| {
+    let port_index = target.port.ok_or_else(|| {
+        runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_runner_target_port",
+            "selected non-HTTP target has no exact port",
+        )
+    })?;
+    let port = program.ports.get(port_index.0 as usize).ok_or_else(|| {
         runner_error(
             DiagnosticClass::Corrupt,
             "normalized_runner_port",

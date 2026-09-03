@@ -6,9 +6,10 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits, OwnerKey,
-    OwnerRecord, PackageId, TypeObject, TypeObjectDigest, validate_affine_roots_with_limits,
-    validate_expression_roots_with_limits,
+    ExactOwnerKey, ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
+    OwnerKey, OwnerRecord, PackageId, RelationEdge, RelationEndpoint, RelationKind, TypeObject,
+    TypeObjectDigest, validate_affine_roots_with_limits, validate_expression_roots_with_limits,
+    validate_http_route_key,
 };
 use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
 use std::collections::{BTreeMap, BTreeSet};
@@ -133,6 +134,16 @@ pub(crate) fn validate_incremental_frontier_with_admission<
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     let mut work = 0_usize;
+    if let Err(diagnostic) = validate_http_topology_frontier(
+        overlay,
+        impact,
+        canonical,
+        base_witness,
+        &mut structural.work,
+        admission,
+    ) {
+        push_bounded_diagnostic(&mut diagnostics, diagnostic, admission)?;
+    }
     let mut live_semantic_roots = Vec::new();
     for owner in &impact.semantically_checked {
         match overlay.owner(*owner) {
@@ -238,6 +249,336 @@ pub(crate) fn validate_incremental_frontier_with_admission<
         })
     } else {
         Err(diagnostics)
+    }
+}
+
+fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
+    impact: &ImpactPlan,
+    canonical: &CanonicalDelta,
+    base_witness: &W,
+    work: &mut IncrementalValidationWork,
+    admission: ValidationAdmission,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::PortImplementation;
+    use crate::platform::kernel::contract::{
+        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+    use crate::platform::package::RunnerKind;
+
+    let package = overlay.package_id();
+    let mut targets = BTreeSet::new();
+    let removed_route_edges = candidate_http_route_relation_removals(canonical, overlay)?;
+    let added_route_edges = canonical_http_route_relation_additions(canonical, overlay)?;
+    for owner in &impact.semantically_checked {
+        match owner {
+            OwnerKey::Target(target) => {
+                targets.insert(*target);
+            }
+            OwnerKey::HttpRoute(_) => {
+                if let Some(OwnerRecord::HttpRoute(route)) = overlay.owner(*owner)? {
+                    targets.insert(route.target);
+                }
+            }
+            _ => {}
+        }
+    }
+    for edge in removed_route_edges.iter().chain(&added_route_edges) {
+        let RelationEndpoint::Owner(ExactOwnerKey {
+            package: target_package,
+            owner: OwnerKey::Target(target),
+        }) = edge.target
+        else {
+            return Err(validation_error(
+                DiagnosticClass::Corrupt,
+                "change_validate_http_route_target_relation",
+                "HTTP route target relation has a foreign target endpoint",
+            ));
+        };
+        if target_package != package {
+            return Err(validation_error(
+                DiagnosticClass::Corrupt,
+                "change_validate_http_route_target_package",
+                "HTTP route target relation escaped the root package",
+            ));
+        }
+        targets.insert(target);
+    }
+
+    let http_function_type = crate::platform::http::semantic_http_types(
+        &mut crate::platform::kernel::TypeObjectInterner::default(),
+    )?
+    .function_type;
+    for target in targets {
+        charge_http_owner(work, admission, "HTTP target topology")?;
+        let target_owner = OwnerKey::Target(target);
+        let candidate_target = overlay.owner(target_owner)?;
+        let base_read = base_witness.read_incoming_relations_of_kind(
+            target_owner,
+            RelationKind::HttpRouteTarget,
+            MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1),
+        )?;
+        work.witness_reads.add(base_read.work);
+        if base_read.value.truncated {
+            return Err(validation_error(
+                DiagnosticClass::Corrupt,
+                "change_validate_http_route_base_count",
+                "accepted HTTP route relations exceed the graph contract bound",
+            ));
+        }
+        let target_endpoint = RelationEndpoint::Owner(ExactOwnerKey {
+            package,
+            owner: target_owner,
+        });
+        let mut edges = base_read.value.edges.into_iter().collect::<BTreeSet<_>>();
+        for edge in &removed_route_edges {
+            if edge.kind == RelationKind::HttpRouteTarget && edge.target == target_endpoint {
+                if !edges.remove(edge) {
+                    return Err(validation_error(
+                        DiagnosticClass::Corrupt,
+                        "change_validate_http_route_remove",
+                        "candidate HTTP route delta removes an absent accepted target relation",
+                    ));
+                }
+            }
+        }
+        for edge in &added_route_edges {
+            if edge.kind == RelationKind::HttpRouteTarget && edge.target == target_endpoint {
+                edges.insert(*edge);
+            }
+        }
+
+        let Some(OwnerRecord::Target(target_record)) = candidate_target else {
+            if !edges.is_empty() {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_target_missing",
+                    "a live HTTP route relation names a deleted or foreign target",
+                ));
+            }
+            continue;
+        };
+        match target_record.runner {
+            RunnerKind::Http => {
+                if target_record.port.is_some() {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_http_target_universal_port",
+                        "HTTP target must not retain a universal port",
+                    ));
+                }
+                if edges.is_empty() || edges.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_http_target_route_count",
+                        format!(
+                            "HTTP target must own 1 through {MAXIMUM_HTTP_ROUTES_PER_TARGET} routes"
+                        ),
+                    ));
+                }
+            }
+            _ => {
+                if target_record.port.is_none() {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_target_port_missing",
+                        "non-HTTP target must select one exact port",
+                    ));
+                }
+                if !edges.is_empty() {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_http_route_non_http_target",
+                        "HTTP routes may belong only to an HTTP target",
+                    ));
+                }
+                continue;
+            }
+        }
+
+        let mut keys = BTreeSet::new();
+        let mut aggregate = 0usize;
+        for edge in edges {
+            if edge.kind != RelationKind::HttpRouteTarget || edge.target != target_endpoint {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_relation",
+                    "candidate HTTP route read returned an unrelated relation",
+                ));
+            }
+            let RelationEndpoint::Owner(ExactOwnerKey {
+                package: route_package,
+                owner: route_owner @ OwnerKey::HttpRoute(_),
+            }) = edge.source
+            else {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_source",
+                    "HTTP route target relation has a foreign source endpoint",
+                ));
+            };
+            if route_package != package {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_source_package",
+                    "HTTP route target relation has a foreign source package",
+                ));
+            }
+            charge_http_owner(work, admission, "HTTP route topology")?;
+            let Some(OwnerRecord::HttpRoute(route)) = overlay.owner(route_owner)? else {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_owner",
+                    "HTTP route target relation names a missing or foreign owner",
+                ));
+            };
+            validate_http_route_key(&route.method, &route.path)?;
+            if route.target != target {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_binding",
+                    "HTTP route owner and target relation disagree",
+                ));
+            }
+            if !keys.insert((route.method.clone(), route.path.clone())) {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_duplicate",
+                    "HTTP target contains a duplicate exact method/path pair",
+                ));
+            }
+            aggregate = aggregate
+                .checked_add(route.method.len())
+                .and_then(|value| value.checked_add(route.path.len()))
+                .ok_or_else(|| {
+                    validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_http_target_route_bytes",
+                        "HTTP target route-key byte count overflowed",
+                    )
+                })?;
+            if aggregate > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_target_route_bytes",
+                    format!(
+                        "HTTP target route keys exceed {MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET} bytes"
+                    ),
+                ));
+            }
+            if route.port.package != package {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_port_package",
+                    "HTTP route port must belong to the root package",
+                ));
+            }
+            charge_http_owner(work, admission, "HTTP route port topology")?;
+            let Some(OwnerRecord::Port(port)) = overlay.owner(OwnerKey::Port(route.port.port))?
+            else {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_port_missing",
+                    "HTTP route references a missing or foreign port",
+                ));
+            };
+            if port.declaration != target_record.component.declaration {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_port_owner",
+                    "HTTP route port does not belong to its target component",
+                ));
+            }
+            if !matches!(port.implementation, PortImplementation::Function(_)) {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_http_route_port_implementation",
+                    "HTTP route port must be function-backed",
+                ));
+            }
+            if port.function_type != http_function_type {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_type_http_route_port",
+                    "HTTP route requires the exact semantic HTTP function-backed port shape",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn charge_http_owner(
+    work: &mut IncrementalValidationWork,
+    admission: ValidationAdmission,
+    label: &str,
+) -> Result<(), Diagnostic> {
+    if work.owner_records_checked >= admission.maximum_owner_records {
+        return Err(validation_budget_error(
+            "change_budget_validation_owner_records",
+            format!(
+                "{label} exceeds the declared {}-owner-record validation budget",
+                admission.maximum_owner_records
+            ),
+        ));
+    }
+    work.owner_records_checked = work.owner_records_checked.saturating_add(1);
+    Ok(())
+}
+
+fn candidate_http_route_relation_removals<B: CanonicalBaseRead + ?Sized>(
+    canonical: &CanonicalDelta,
+    overlay: &KernelOverlay<'_, B>,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
+    let mut edges = Vec::new();
+    for (owner, edit) in &canonical.owners {
+        if !matches!(owner, OwnerKey::HttpRoute(_)) || edit.before.is_none() {
+            continue;
+        }
+        if let Some(OwnerRecord::HttpRoute(route)) = overlay.base_owner(*owner)? {
+            edges.push(http_route_target_edge(
+                overlay.package_id(),
+                *owner,
+                route.target,
+            ));
+        }
+    }
+    Ok(edges)
+}
+
+fn canonical_http_route_relation_additions<B: CanonicalBaseRead + ?Sized>(
+    canonical: &CanonicalDelta,
+    overlay: &KernelOverlay<'_, B>,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
+    let mut edges = Vec::new();
+    for (owner, edit) in &canonical.owners {
+        let Some((_, OwnerRecord::HttpRoute(route))) = &edit.after else {
+            continue;
+        };
+        edges.push(http_route_target_edge(
+            overlay.package_id(),
+            *owner,
+            route.target,
+        ));
+    }
+    Ok(edges)
+}
+
+fn http_route_target_edge(
+    package: PackageId,
+    route: OwnerKey,
+    target: crate::platform::semantic_id::TargetId,
+) -> RelationEdge {
+    RelationEdge {
+        source: RelationEndpoint::Owner(ExactOwnerKey {
+            package,
+            owner: route,
+        }),
+        kind: RelationKind::HttpRouteTarget,
+        target: RelationEndpoint::Owner(ExactOwnerKey {
+            package,
+            owner: OwnerKey::Target(target),
+        }),
     }
 }
 

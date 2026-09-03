@@ -157,8 +157,8 @@ pub use semantic_digest::{
 };
 pub use semantic_id::{
     AnnotationId, BindingId, CaseId, ConflictId, DeclarationId, DocumentationId, DraftId,
-    ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId,
-    RevisionId, TargetId, TypeParameterId,
+    ExpressionId, FieldId, HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RepositoryId,
+    RequirementId, RevisionId, TargetId, TypeParameterId,
 };
 pub use session::{
     STRUCTURED_SESSION_CONTRACT_VERSION, SessionLimits, SessionObservation, SessionServerReceipt,

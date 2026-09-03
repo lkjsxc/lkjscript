@@ -237,6 +237,7 @@ semantic_id!(ConflictId, "conflict_", "conflict", 14u8);
 semantic_id!(DocumentationId, "doc_", "documentation", 15u8);
 semantic_id!(AnnotationId, "annotation_", "annotation", 16u8);
 semantic_id!(TypeParameterId, "typeparam_", "type_parameter", 17u8);
+semantic_id!(HttpRouteId, "route_", "http_route", 18u8);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RevisionId([u8; 32]);

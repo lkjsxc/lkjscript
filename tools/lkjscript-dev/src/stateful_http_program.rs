@@ -570,7 +570,7 @@ pub(crate) fn build_program_request(
     add_types_and_domain(&mut builder)?;
     add_capability_requirements(&mut builder)?;
     add_response_functions(&mut builder)?;
-    add_validation_and_route_functions(&mut builder)?;
+    add_validation_functions(&mut builder)?;
     add_data_helpers(&mut builder)?;
     add_persistence_functions(&mut builder)?;
     add_handler(&mut builder)?;
@@ -664,19 +664,6 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
                 ("$posts_result_corrupt", "Corrupt", None),
             ],
         ),
-        (
-            "$route",
-            "Route",
-            vec![
-                ("$route_home", "Home", None),
-                ("$route_list", "List", None),
-                ("$route_create", "Create", None),
-                ("$route_update", "Update", None),
-                ("$route_delete", "Delete", None),
-                ("$route_method_not_allowed", "MethodNotAllowed", None),
-                ("$route_missing", "NotFound", None),
-            ],
-        ),
     ] {
         builder.record(
             "create.variant",
@@ -705,7 +692,6 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
     builder.type_named("@maybe_text", "$maybe_text")?;
     builder.type_named("@post_result", "$post_result")?;
     builder.type_named("@posts_result", "$posts_result")?;
-    builder.type_named("@route", "$route")?;
     builder.type_list("@posts", "@post")?;
     builder.type_named(
         "@data_key_part",
@@ -914,7 +900,7 @@ fn add_response_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
     Ok(())
 }
 
-fn add_validation_and_route_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
+fn add_validation_functions(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let author_record = builder.local("$valid_write_value")?;
     let author = builder.field_nominal(author_record, "$write_author")?;
     let author_for_empty = author;
@@ -961,86 +947,6 @@ fn add_validation_and_route_functions(builder: &mut Builder<'_>) -> Result<(), D
         &[("$valid_id_value", "value", "text")],
     )?;
 
-    let method_get = route_method_equal(builder, "GET")?;
-    let root_code = builder.i64(1)?;
-    let method_not_allowed = builder.i64(6)?;
-    let root = builder.if_expression(method_get, root_code, method_not_allowed)?;
-
-    let method_delete = route_method_equal(builder, "DELETE")?;
-    let delete_code = builder.i64(5)?;
-    let method_not_allowed = builder.i64(6)?;
-    let api = builder.if_expression(method_delete, delete_code, method_not_allowed)?;
-    let method_put = route_method_equal(builder, "PUT")?;
-    let put_code = builder.i64(4)?;
-    let api = builder.if_expression(method_put, put_code, api)?;
-    let method_post = route_method_equal(builder, "POST")?;
-    let post_code = builder.i64(3)?;
-    let api = builder.if_expression(method_post, post_code, api)?;
-    let method_get = route_method_equal(builder, "GET")?;
-    let get_code = builder.i64(2)?;
-    let api = builder.if_expression(method_get, get_code, api)?;
-
-    let path = builder.local("$route_path")?;
-    let api_path = builder.text("/api/posts")?;
-    let path_is_api = builder.external_call("text-equal", vec![path, api_path])?;
-    let unknown = builder.i64(7)?;
-    let non_root = builder.if_expression(path_is_api, api, unknown)?;
-    let path = builder.local("$route_path")?;
-    let root_path = builder.text("/")?;
-    let path_is_root = builder.external_call("text-equal", vec![path, root_path])?;
-    let route = builder.if_expression(path_is_root, root, non_root)?;
-    builder.create_function(
-        "$route_code",
-        "route-code",
-        "i64",
-        &[],
-        route,
-        &[
-            ("$route_method", "method", "text"),
-            ("$route_path", "path", "text"),
-        ],
-    )?;
-
-    let method_get = select_route_method_equal(builder, "GET")?;
-    let home = builder.variant("$route_home", None)?;
-    let method_not_allowed = builder.variant("$route_method_not_allowed", None)?;
-    let root = builder.if_expression(method_get, home, method_not_allowed)?;
-
-    let method_delete = select_route_method_equal(builder, "DELETE")?;
-    let delete = builder.variant("$route_delete", None)?;
-    let method_not_allowed = builder.variant("$route_method_not_allowed", None)?;
-    let api = builder.if_expression(method_delete, delete, method_not_allowed)?;
-    let method_put = select_route_method_equal(builder, "PUT")?;
-    let update = builder.variant("$route_update", None)?;
-    let api = builder.if_expression(method_put, update, api)?;
-    let method_post = select_route_method_equal(builder, "POST")?;
-    let create = builder.variant("$route_create", None)?;
-    let api = builder.if_expression(method_post, create, api)?;
-    let method_get = select_route_method_equal(builder, "GET")?;
-    let list = builder.variant("$route_list", None)?;
-    let api = builder.if_expression(method_get, list, api)?;
-
-    let path = builder.local("$select_route_path")?;
-    let api_path = builder.text("/api/posts")?;
-    let path_is_api = builder.external_call("text-equal", vec![path, api_path])?;
-    let missing = builder.variant("$route_missing", None)?;
-    let non_root = builder.if_expression(path_is_api, api, missing)?;
-    let path = builder.local("$select_route_path")?;
-    let root_path = builder.text("/")?;
-    let path_is_root = builder.external_call("text-equal", vec![path, root_path])?;
-    let route = builder.if_expression(path_is_root, root, non_root)?;
-    builder.create_function(
-        "$select_route",
-        "select-route",
-        "@route",
-        &[],
-        route,
-        &[
-            ("$select_route_method", "method", "text"),
-            ("$select_route_path", "path", "text"),
-        ],
-    )?;
-
     let previous = builder.local("$header_match_state")?;
     let header = builder.local("$header_match_header")?;
     let name = builder.field_name(header, "name")?;
@@ -1079,21 +985,6 @@ fn add_validation_and_route_functions(builder: &mut Builder<'_>) -> Result<(), D
         &[("$header_values", "headers", "@headers")],
     )?;
     Ok(())
-}
-
-fn route_method_equal(builder: &mut Builder<'_>, expected: &str) -> Result<String, DevError> {
-    let method = builder.local("$route_method")?;
-    let expected = builder.text(expected)?;
-    builder.external_call("text-equal", vec![method, expected])
-}
-
-fn select_route_method_equal(
-    builder: &mut Builder<'_>,
-    expected: &str,
-) -> Result<String, DevError> {
-    let method = builder.local("$select_route_method")?;
-    let expected = builder.text(expected)?;
-    builder.external_call("text-equal", vec![method, expected])
 }
 
 fn add_data_helpers(builder: &mut Builder<'_>) -> Result<(), DevError> {
@@ -1907,83 +1798,172 @@ fn empty_bytes(builder: &mut Builder<'_>) -> Result<String, DevError> {
 fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     add_route_handlers(builder)?;
 
-    let request = builder.local("$request")?;
-    let method = builder.field_name(request, "method")?;
-    let request = builder.local("$request")?;
-    let path = builder.field_name(request, "path")?;
-    let route = builder.call("$select_route", &[], vec![method, path])?;
-
     let homepage = text_response(
         builder,
         200,
         "text/html; charset=utf-8",
         "<!doctype html><html><body><h1>lkjscript BBS</h1></body></html>",
     )?;
+    let homepage = schema_guard(builder, homepage)?;
+    add_http_handler(
+        builder,
+        "$handle_home",
+        "handle-home",
+        "$home_request",
+        homepage,
+        &["$data"],
+        "$http_port_home",
+        "home",
+    )?;
+
     let list = builder.call("$handle_list", &[], vec![])?;
-    let request = builder.local("$request")?;
+    let list = schema_guard(builder, list)?;
+    add_http_handler(
+        builder,
+        "$handle_list_route",
+        "handle-list-route",
+        "$list_request",
+        list,
+        &["$data"],
+        "$http_port_list",
+        "list",
+    )?;
+
+    let request = builder.local("$create_request")?;
     let headers = builder.field_name(request, "headers")?;
-    let request = builder.local("$request")?;
+    let request = builder.local("$create_request")?;
     let body_stream = builder.field_name(request, "body")?;
     let create = builder.call("$handle_create", &[], vec![headers, body_stream])?;
-    let id = request_query_identity(builder)?;
-    let request = builder.local("$request")?;
+    let create = schema_guard(builder, create)?;
+    add_http_handler(
+        builder,
+        "$handle_create_route",
+        "handle-create-route",
+        "$create_request",
+        create,
+        &["$streams", "$data", "$identifiers", "$clock"],
+        "$http_port_create",
+        "create",
+    )?;
+
+    let id = request_query_identity(builder, "$update_request")?;
+    let request = builder.local("$update_request")?;
     let headers = builder.field_name(request, "headers")?;
-    let request = builder.local("$request")?;
+    let request = builder.local("$update_request")?;
     let body_stream = builder.field_name(request, "body")?;
     let update = builder.call("$handle_update", &[], vec![id, headers, body_stream])?;
-    let id = request_query_identity(builder)?;
-    let delete = builder.call("$handle_delete", &[], vec![id])?;
-    let method_not_allowed = error_response(builder, 405, "method_not_allowed")?;
-    let not_found = error_response(builder, 404, "not_found")?;
-    let routed = builder.match_expression(
-        route,
-        vec![
-            MatchArm::plain("$route_home", homepage),
-            MatchArm::plain("$route_list", list),
-            MatchArm::plain("$route_create", create),
-            MatchArm::plain("$route_update", update),
-            MatchArm::plain("$route_delete", delete),
-            MatchArm::plain("$route_method_not_allowed", method_not_allowed),
-            MatchArm::plain("$route_missing", not_found),
-        ],
+    let update = schema_guard(builder, update)?;
+    add_http_handler(
+        builder,
+        "$handle_update_route",
+        "handle-update-route",
+        "$update_request",
+        update,
+        &["$streams", "$data", "$clock"],
+        "$http_port_update",
+        "update",
     )?;
-    let migration = builder.call("$migrate", &[], vec![])?;
-    let schema_error = error_response(builder, 500, "schema_mismatch")?;
-    let body = builder.if_expression(migration, routed, schema_error)?;
 
-    builder.create_function(
-        "$handle",
-        "handle",
-        "@response",
-        &["$streams", "$data", "$identifiers", "$clock"],
-        body,
-        &[("$request", "request", "@request")],
+    let id = request_query_identity(builder, "$delete_request")?;
+    let delete = builder.call("$handle_delete", &[], vec![id])?;
+    let delete = schema_guard(builder, delete)?;
+    add_http_handler(
+        builder,
+        "$handle_delete_route",
+        "handle-delete-route",
+        "$delete_request",
+        delete,
+        &["$data"],
+        "$http_port_delete",
+        "delete",
     )?;
-    builder.record(
-        "add.port",
-        vec![
-            ("as", "$http_port".to_owned()),
-            ("component", "$application_component".to_owned()),
-            ("name", "http".to_owned()),
-            ("type", "@http_function".to_owned()),
-            ("function", "$handle".to_owned()),
-        ],
-    )?;
+
     builder.record(
         "create.target",
         vec![
             ("as", "$serve_target".to_owned()),
             ("name", "serve".to_owned()),
             ("component", "$application_component".to_owned()),
-            ("port", "$http_port".to_owned()),
             ("runner", "http".to_owned()),
         ],
     )?;
+    for (route, method, path, port) in [
+        ("$http_route_home", "GET", "/", "$http_port_home"),
+        ("$http_route_list", "GET", "/api/posts", "$http_port_list"),
+        (
+            "$http_route_create",
+            "POST",
+            "/api/posts",
+            "$http_port_create",
+        ),
+        (
+            "$http_route_update",
+            "PUT",
+            "/api/posts",
+            "$http_port_update",
+        ),
+        (
+            "$http_route_delete",
+            "DELETE",
+            "/api/posts",
+            "$http_port_delete",
+        ),
+    ] {
+        builder.record(
+            "add.http-route",
+            vec![
+                ("as", route.to_owned()),
+                ("target", "$serve_target".to_owned()),
+                ("method", method.to_owned()),
+                ("path", path.to_owned()),
+                ("port", port.to_owned()),
+            ],
+        )?;
+    }
     Ok(())
 }
 
-fn request_query_identity(builder: &mut Builder<'_>) -> Result<String, DevError> {
-    let request = builder.local("$request")?;
+fn schema_guard(builder: &mut Builder<'_>, success: String) -> Result<String, DevError> {
+    let migration = builder.call("$migrate", &[], vec![])?;
+    let schema_error = error_response(builder, 500, "schema_mismatch")?;
+    builder.if_expression(migration, success, schema_error)
+}
+
+fn add_http_handler(
+    builder: &mut Builder<'_>,
+    function: &str,
+    name: &str,
+    request: &str,
+    body: String,
+    requirements: &[&str],
+    port: &str,
+    port_name: &str,
+) -> Result<(), DevError> {
+    builder.create_function(
+        function,
+        name,
+        "@response",
+        requirements,
+        body,
+        &[(request, "request", "@request")],
+    )?;
+    builder.record(
+        "add.port",
+        vec![
+            ("as", port.to_owned()),
+            ("component", "$application_component".to_owned()),
+            ("name", port_name.to_owned()),
+            ("type", "@http_function".to_owned()),
+            ("function", function.to_owned()),
+        ],
+    )
+}
+
+fn request_query_identity(
+    builder: &mut Builder<'_>,
+    request_parameter: &str,
+) -> Result<String, DevError> {
+    let request = builder.local(request_parameter)?;
     let query = builder.field_name(request, "query_parameters")?;
     let key = builder.text("id")?;
     let fallback = builder.list("text", vec![])?;
@@ -2207,25 +2187,6 @@ fn add_graph_tests(builder: &mut Builder<'_>) -> Result<(), DevError> {
         expected,
     )?;
 
-    let method = builder.text("GET")?;
-    let path = builder.text("/")?;
-    let selected = builder.call("$select_route", &[], vec![method, path])?;
-    let actual = route_variant_code(builder, selected)?;
-    let expected = builder.i64(1)?;
-    add_test(
-        builder,
-        "$test_select_route_root",
-        "select-route-root",
-        actual,
-        expected,
-    )?;
-
-    let method = builder.text("GET")?;
-    let path = builder.text("/")?;
-    let actual = builder.call("$route_code", &[], vec![method, path])?;
-    let expected = builder.i64(1)?;
-    add_test(builder, "$test_route_root", "route-root", actual, expected)?;
-
     let valid_write = write_post_value(builder, "agent", "first post")?;
     let actual = builder.call("$valid_write", &[], vec![valid_write])?;
     let expected = builder.boolean(true)?;
@@ -2244,30 +2205,6 @@ fn add_graph_tests(builder: &mut Builder<'_>) -> Result<(), DevError> {
         builder,
         "$test_invalid_write",
         "invalid-write-post",
-        actual,
-        expected,
-    )?;
-
-    let method = builder.text("GET")?;
-    let path = builder.text("/api/posts")?;
-    let actual = builder.call("$route_code", &[], vec![method, path])?;
-    let expected = builder.i64(2)?;
-    add_test(
-        builder,
-        "$test_route_list",
-        "route-list-posts",
-        actual,
-        expected,
-    )?;
-
-    let method = builder.text("PATCH")?;
-    let path = builder.text("/api/posts")?;
-    let actual = builder.call("$route_code", &[], vec![method, path])?;
-    let expected = builder.i64(6)?;
-    add_test(
-        builder,
-        "$test_route_method",
-        "route-method-not-allowed",
         actual,
         expected,
     )?;
@@ -2355,28 +2292,6 @@ fn add_graph_tests(builder: &mut Builder<'_>) -> Result<(), DevError> {
         expected,
     )?;
     Ok(())
-}
-
-fn route_variant_code(builder: &mut Builder<'_>, route: String) -> Result<String, DevError> {
-    let home = builder.i64(1)?;
-    let list = builder.i64(2)?;
-    let create = builder.i64(3)?;
-    let update = builder.i64(4)?;
-    let delete = builder.i64(5)?;
-    let method = builder.i64(6)?;
-    let missing = builder.i64(7)?;
-    builder.match_expression(
-        route,
-        vec![
-            MatchArm::plain("$route_home", home),
-            MatchArm::plain("$route_list", list),
-            MatchArm::plain("$route_create", create),
-            MatchArm::plain("$route_update", update),
-            MatchArm::plain("$route_delete", delete),
-            MatchArm::plain("$route_method_not_allowed", method),
-            MatchArm::plain("$route_missing", missing),
-        ],
-    )
 }
 
 fn write_post_value(
