@@ -1,4 +1,4 @@
-//! Explicit canonical Graph 7 name value.
+//! Explicit canonical Graph 8 name value.
 
 use super::contract::MAXIMUM_NAME_BYTES;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -7,6 +7,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -27,6 +28,12 @@ impl Name {
 impl fmt::Display for Name {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
+    }
+}
+
+impl Borrow<str> for Name {
+    fn borrow(&self) -> &str {
+        self.as_str()
     }
 }
 

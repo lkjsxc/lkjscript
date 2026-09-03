@@ -1,4 +1,4 @@
-//! Implementation-disjoint finite oracle for Graph 7 affine capability flow.
+//! Implementation-disjoint finite oracle for Graph 8 affine capability flow.
 //!
 //! This test oracle reads only complete `KernelSnapshot` values. It deliberately does not call the
 //! production affine validator or reuse its provenance, transfer, or branch-merge structures.

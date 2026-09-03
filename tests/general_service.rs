@@ -45,7 +45,12 @@ fn stage_current_artifact(directory: &Path) -> PathBuf {
 fn maintained_descriptors_name_the_current_artifact_and_exact_targets() {
     let service = descriptor("service.deployment.json");
     let worker = descriptor("worker.deployment.json");
-    for name in ["service.deployment.json", "worker.deployment.json"] {
+    let live = descriptor("live.deployment.json");
+    for name in [
+        "service.deployment.json",
+        "worker.deployment.json",
+        "live.deployment.json",
+    ] {
         let bytes = std::fs::read(repository().join(APPLICATION).join(name))
             .expect("read maintained descriptor bytes");
         assert!(!String::from_utf8_lossy(&bytes).contains("contract_version"));
@@ -54,8 +59,15 @@ fn maintained_descriptors_name_the_current_artifact_and_exact_targets() {
     assert_eq!(worker.artifact, "generated/lkjournal.lkja");
     assert_eq!(service.target, "serve");
     assert_eq!(worker.target, "work");
+    assert_eq!(live.target, "lkjournal-live-1");
     assert!(service.http.is_some() && service.worker.is_none());
     assert!(worker.http.is_none() && worker.worker.is_some());
+    assert!(
+        live.http.is_none()
+            && live.session.is_some()
+            && live.worker.is_none()
+            && live.listen.is_some()
+    );
 }
 
 #[test]
@@ -70,6 +82,7 @@ fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
             Some("runtime"),
         ),
         ("http", "service.deployment.json", "serve", Some("http")),
+        ("session", "live.deployment.json", "serve", Some("session")),
         ("worker", "worker.deployment.json", "worker", Some("worker")),
     ] {
         let mut value: serde_json::Value = serde_json::from_slice(
@@ -119,6 +132,7 @@ fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
 fn maintained_descriptors_cover_every_selected_component_requirement() {
     let service = descriptor("service.deployment.json");
     let worker = descriptor("worker.deployment.json");
+    let live = descriptor("live.deployment.json");
     assert_eq!(
         service
             .grants
@@ -146,49 +160,70 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from(["clock", "jobs"])
     );
+    assert_eq!(
+        live.grants
+            .iter()
+            .map(|grant| grant.requirement.as_str())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["clock", "data", "streams"])
+    );
+    assert!(live.configuration.is_empty());
+    assert!(live.secrets.is_empty());
 }
 
 #[test]
-fn checked_in_service_artifact_uses_only_bundle_contract_11() {
+fn checked_in_service_artifact_uses_only_bundle_contract_13() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART12".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJART13".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART10".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART04".as_slice()));
     assert!(bytes.len() < 128 * 1024 * 1024);
 }
 
 #[test]
-fn both_public_service_commands_reject_minimal_artifact4_before_readiness() {
+fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness() {
     let temporary = tempfile::tempdir().expect("isolated predecessor deployment");
-    let artifact = temporary.path().join("predecessor.lkja");
-    let mut predecessor = vec![0_u8; 100];
-    predecessor[..8].copy_from_slice(b"LKJART04");
-    std::fs::write(&artifact, predecessor).expect("write minimal predecessor marker");
-    for (operation, source) in [
-        ("serve", "service.deployment.json"),
-        ("worker", "worker.deployment.json"),
-    ] {
-        let mut descriptor = descriptor(source);
-        descriptor.artifact = "predecessor.lkja".to_owned();
-        let path = temporary.path().join(format!("{operation}.json"));
-        std::fs::write(
-            &path,
-            serde_json::to_vec(&descriptor).expect("encode isolated descriptor"),
-        )
-        .expect("write isolated descriptor");
-        let output = run_isolated(
-            temporary.path(),
-            &[
-                operation,
-                "--deployment",
-                path.to_str().expect("UTF-8 descriptor path"),
-            ],
-        );
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stderr.is_empty());
-        let stdout = String::from_utf8(output.stdout).expect("diagnostic UTF-8");
-        assert!(stdout.contains("artifact_bundle_contract"), "{stdout}");
-        assert!(!stdout.contains("\"event\":\"ready\""), "{stdout}");
+    for magic in [b"LKJART12", b"LKJART04"] {
+        let artifact = temporary.path().join(format!(
+            "predecessor-{}.lkja",
+            String::from_utf8_lossy(magic)
+        ));
+        let mut predecessor = vec![0_u8; 100];
+        predecessor[..8].copy_from_slice(magic);
+        std::fs::write(&artifact, predecessor).expect("write minimal predecessor marker");
+        for (name, operation, source) in [
+            ("http", "serve", "service.deployment.json"),
+            ("interactive", "serve", "live.deployment.json"),
+            ("worker", "worker", "worker.deployment.json"),
+        ] {
+            let mut descriptor = descriptor(source);
+            descriptor.artifact = artifact
+                .file_name()
+                .expect("predecessor artifact name")
+                .to_string_lossy()
+                .into_owned();
+            let path = temporary
+                .path()
+                .join(format!("{name}-{}.json", String::from_utf8_lossy(magic)));
+            std::fs::write(
+                &path,
+                serde_json::to_vec(&descriptor).expect("encode isolated descriptor"),
+            )
+            .expect("write isolated descriptor");
+            let output = run_isolated(
+                temporary.path(),
+                &[
+                    operation,
+                    "--deployment",
+                    path.to_str().expect("UTF-8 descriptor path"),
+                ],
+            );
+            assert_eq!(output.status.code(), Some(2), "{name}");
+            assert!(output.stderr.is_empty(), "{name}");
+            let stdout = String::from_utf8(output.stdout).expect("diagnostic UTF-8");
+            assert!(stdout.contains("artifact_bundle_contract"), "{stdout}");
+            assert!(!stdout.contains("\"event\":\"ready\""), "{stdout}");
+        }
     }
 }
 

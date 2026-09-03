@@ -1,4 +1,4 @@
-//! Generic immutable object and packed physical storage under Graph 7 construction.
+//! Generic immutable object and packed physical storage under Graph 8 construction.
 
 pub(crate) mod catalog;
 pub(crate) mod contract;

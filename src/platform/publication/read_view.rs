@@ -1,4 +1,4 @@
-//! Revision-pinned, bounded reads over accepted Graph 7 authority and its committed witness.
+//! Revision-pinned, bounded reads over accepted Graph 8 authority and its committed witness.
 
 use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
@@ -28,6 +28,7 @@ use crate::platform::kernel::{
     decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
     encode_dependency, encode_retirement, owner_map_key, retirement_map_key,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::package_interface::{
     PackageInterfaceBuild, PackageInterfaceOwner, PackageInterfaceSelection,
     PackageInterfaceValidation, build_package_interface, package_interface_digest,
@@ -117,6 +118,24 @@ impl RepositoryReadWork {
             .map
             .entries_skipped
             .saturating_add(other.entries_skipped);
+    }
+
+    fn add_canonical(&mut self, other: CanonicalReadWork) {
+        self.map.pages_read = self.map.pages_read.saturating_add(other.map_pages_read);
+        self.map.entries_visited = self
+            .map
+            .entries_visited
+            .saturating_add(other.map_entries_visited);
+        self.store.catalog_lookups = self
+            .store
+            .catalog_lookups
+            .saturating_add(other.catalog_lookups);
+        self.store.objects_read = self.store.objects_read.saturating_add(other.objects_read);
+        self.store.bytes_read = self.store.bytes_read.saturating_add(other.bytes_read);
+        self.canonical_records_decoded = self
+            .canonical_records_decoded
+            .saturating_add(other.canonical_records_decoded);
+        self.items_returned = self.items_returned.saturating_add(other.point_reads);
     }
 }
 
@@ -630,7 +649,7 @@ fn logical_plan_evidence(
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
-/// Packs are append-only in the current Graph 7 store, so a later HEAD publication cannot alter
+/// Packs are append-only in the current Graph 8 store, so a later HEAD publication cannot alter
 /// any object visible through this view. Future physical deletion must add an explicit lease
 /// before it may coexist with these views.
 #[derive(Debug)]
@@ -1028,7 +1047,7 @@ impl RepositoryView {
         Ok(self.read(value, work))
     }
 
-    /// Reconstructs the complete logical Graph 7 view for independent full validation and
+    /// Reconstructs the complete logical Graph 8 view for independent full validation and
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
@@ -1280,10 +1299,46 @@ impl RepositoryView {
     pub(crate) fn build_package_revision(&self) -> Result<BuiltPackageRevision, Diagnostic> {
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
+        let mut interactive_ports = BTreeSet::new();
         let mut read_work = dependencies.work;
-        read_work
-            .add(self.for_each_owner_record(|_, record| selection.observe_declaration(record))?);
+        read_work.add(self.for_each_owner_record(|_, record| {
+            selection.observe_declaration(record)?;
+            if let OwnerRecord::Target(target) = record
+                && target.runner == RunnerKind::Interactive
+            {
+                interactive_ports.insert(target.port);
+            }
+            Ok(())
+        })?);
         read_work.add(self.for_each_owner_record(|_, record| selection.observe_operation(record))?);
+        for port in interactive_ports {
+            if port.package != self.package() {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_session_port_package",
+                    "interactive target port belongs to another package",
+                ));
+            }
+            let canonical = self.owner(OwnerKey::Port(port.port))?;
+            read_work.add(canonical.work);
+            let Some(OwnerRecord::Port(port)) = canonical.value else {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_session_port",
+                    "interactive target references a missing or foreign port owner",
+                ));
+            };
+            let standard =
+                crate::platform::builtin_standard::BuiltinStandard::load()?.session_contract()?;
+            let session_read = crate::platform::session::CanonicalSessionRead::new(self);
+            let validation = crate::platform::session::validate_session_function_type(
+                &session_read,
+                standard,
+                port.function_type,
+            );
+            read_work.add_canonical(session_read.work());
+            let _ = validation?;
+        }
 
         let mut interface_owners = BTreeMap::new();
         let mut type_roots = std::collections::BTreeSet::new();

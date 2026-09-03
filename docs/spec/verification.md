@@ -41,6 +41,15 @@ and preserved/changed/generated owner classes. Finite negative agreement include
 roots, generic and recursive targets, resource results and containers, ambiguous provenance, and
 unsafe affine boundaries.
 
+Structured-session acceptance independently reconstructs the exact
+`(Option<State>, SessionEvent) -> SessionDecision<State>` relation from nominal layouts and type
+structure without calling the production relation validator. It must agree at accepted graph,
+package, compiler, artifact, and deployment boundaries and reject a different repeated state plus
+every retained live/secret/callable/unresolved type. Runtime tests use controlled time, fault
+points, accounting peaks, and join/permit observations to prove one transition, complete output
+reservation, event ordering, coalesced ticks, item/byte backpressure, cancellation, phase failures,
+and zero resources after parent completion.
+
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
 predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
@@ -112,6 +121,13 @@ identically; author nested private task helpers and a caller solely through comp
 inspect their complete definitions; check/build the accepted direct handoff; and reject stale,
 predecessor, missing/wrong binding, unsupported signature, caller-reuse, duplicate-transfer,
 branch-mismatch, indirect-call, and recursive forms with an unchanged complete authority inventory.
+
+A copied executable in an empty temporary `minimal` project must discover `interactive`, export and
+stage the exact built-in transport, author the canonical session types, handler, component,
+requirement, function-backed port, and target solely through ordinary compact plan/apply, then
+inspect, check, build, and prepare/serve it. It must reject stale, predecessor, foreign, malformed,
+and relationally invalid inputs without a checkout-only authoring helper or a semantic-authority
+change during runtime.
 
 The copied executable must discover function-definition inspection offline, force multiple pages
 with changed resume budgets, and independently recompute the complete digest from raw compact
@@ -212,6 +228,17 @@ failure, or cleanup failure remains a typed non-pass. Workflow shell cannot recl
 The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. None of the
 three application oracles replaces another at release admission.
 
+The maintained service owner also starts `lkjournal-live-1` against the same isolated initialized
+data root as HTTP and worker coverage. Its bounded raw TCP client computes the upgrade accept value,
+masks client frames, parses server frames, and emits malformed cases without importing production
+handshake/frame/close helpers. Two authenticated connections prove independent subscriptions;
+HTTP create/update prove tick-driven push; replace/unsubscribe and actor isolation remain graph
+policy; slow-reader, fragmentation, ping/pong, close, unmasked/invalid/oversized/stalled/abrupt,
+overload, cancellation, shutdown, restart, and resubscription cases retain transcript digests,
+accounting peaks, unchanged semantic authority, and complete cleanup. Fixtures may own only bounded
+expected transcripts, never application route, token, grammar, filter, order, or subscription
+policy.
+
 The outbound owner creates `nostr-relay-info` only through copied-candidate discovery and project
 creation, checks it, compares clean and exact-current artifact bytes, and serves it from an isolated
 root. Its implementation-disjoint raw HTTP/1.1 and TLS oracle records exact request line, Host,
@@ -276,7 +303,7 @@ cargo run --locked -p lkjscript-dev -- check PROFILE
 `focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
 widening rules. `product` builds release and verifies copied-binary workflows, maintained typed
 meaning graph consumers, generated docs, and built-in/generated assets. `service` owns isolated
-standalone artifact bundle service acceptance. The data cutover additionally requires the
+standalone artifact bundle HTTP/interactive/worker service acceptance. The data cutover additionally requires the
 contributor PostgreSQL differential/resource receipt. `full` owns formatting, lints, workspace
 targets, all tests, release/product/service classification, and diff checks; final full evidence
 must be fresh.

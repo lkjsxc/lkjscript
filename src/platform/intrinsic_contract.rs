@@ -126,6 +126,23 @@ pub fn validate_intrinsic(
             }
             _ => false,
         },
+        "core.option.some" => match signature.parameters.as_slice() {
+            [value] => signature.result == ResolvedType::Option(Box::new(value.clone())),
+            _ => false,
+        },
+        "core.option.none" => {
+            signature.parameters.is_empty() && matches!(&signature.result, ResolvedType::Option(_))
+        }
+        "core.option.get-or" => match signature.parameters.as_slice() {
+            [ResolvedType::Option(item), fallback] => {
+                **item == *fallback && signature.result == **item
+            }
+            _ => false,
+        },
+        "core.option.present" => {
+            matches!(signature.parameters.as_slice(), [ResolvedType::Option(_)])
+                && signature.result == ResolvedType::Bool
+        }
         "core.map.length" => {
             matches!(signature.parameters.as_slice(), [ResolvedType::Map(_, _)])
                 && signature.result == ResolvedType::I64
@@ -153,6 +170,29 @@ pub fn validate_intrinsic(
                 **key == *actual_key
                     && **value == *actual_value
                     && signature.result == ResolvedType::Map(key.clone(), value.clone())
+            }
+            _ => false,
+        },
+        "core.map.remove" => match signature.parameters.as_slice() {
+            [ResolvedType::Map(key, value), actual_key] => {
+                **key == *actual_key
+                    && signature.result == ResolvedType::Map(key.clone(), value.clone())
+            }
+            _ => false,
+        },
+        "core.map.entries" => match signature.parameters.as_slice() {
+            [ResolvedType::Map(key, value)] => {
+                signature.result
+                    == ResolvedType::List(Box::new(ResolvedType::Record(vec![
+                        ResolvedField {
+                            name: "key".to_owned(),
+                            ty: (**key).clone(),
+                        },
+                        ResolvedField {
+                            name: "value".to_owned(),
+                            ty: (**value).clone(),
+                        },
+                    ])))
             }
             _ => false,
         },

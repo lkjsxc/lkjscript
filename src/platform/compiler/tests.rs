@@ -722,7 +722,7 @@ fn task_unit_uses_exact_dense_nominal_and_capability_operands() {
 }
 
 #[test]
-fn every_graph7_expression_form_lowers_with_verified_control_flow() {
+fn every_graph8_expression_form_lowers_with_verified_control_flow() {
     let snapshot = complete_expression_snapshot();
     let caller = declaration_named(&snapshot, "caller");
     let receipt = compile_memory(&snapshot, OwnerKey::Declaration(caller));
@@ -925,7 +925,7 @@ fn body_reorder_changes_unit_key_but_repository_point_lowering_matches_memory() 
 
     let temporary = tempfile::tempdir().expect("compiler repository parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let view = created
         .repository
         .view_current()
@@ -995,7 +995,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("compiler manifest parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 8 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1021,7 +1021,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     assert_eq!(validation.map.entries_visited, 22);
 
     drop(created);
-    let reopened = GraphRepository::open(&root).expect("reopen Graph 7 repository");
+    let reopened = GraphRepository::open(&root).expect("reopen Graph 8 repository");
     let cached = load_current_compilation(&reopened)
         .expect("load reopened compilation")
         .expect("reopened cache head");
@@ -1039,7 +1039,7 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
     let snapshot = structurally_empty_snapshot(b"empty-compiler-manifest");
     let temporary = tempfile::tempdir().expect("empty compiler parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("empty Graph 7 repository");
+        .expect("empty Graph 8 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1082,7 +1082,7 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("incremental manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1201,7 +1201,7 @@ fn rename_and_move_reuse_the_complete_compilation_unit_map() {
     let destination = module_named(&snapshot, "second");
     let temporary = tempfile::tempdir().expect("rename manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1302,7 +1302,7 @@ fn declaration_deletion_removes_one_unit_and_matches_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("deletion manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1380,7 +1380,7 @@ fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("cache recovery parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 8 repository");
     let original_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1425,7 +1425,7 @@ fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("manifest decoder parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let built = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1464,7 +1464,7 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
     let outside = temporary.path().join("outside");
     let sentinel = b"outside cache sentinel";
     std::fs::write(&outside, sentinel).expect("outside sentinel");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 8 repository");
     let initial_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1513,11 +1513,11 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
 }
 
 #[test]
-fn graph7_artifact_links_deterministically_and_reopens_without_graph4_modules() {
+fn graph8_artifact_links_deterministically_and_reopens_without_graph4_modules() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact link parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 7 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 8 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1525,9 +1525,9 @@ fn graph7_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     .expect("clean normalized compilation");
 
     let first = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("link Graph 7 artifact");
+        .expect("link Graph 8 artifact");
     let second = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("repeat Graph 7 link");
+        .expect("repeat Graph 8 link");
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
@@ -1708,11 +1708,11 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
 }
 
 #[test]
-fn graph7_artifact_links_exact_compiled_dependency_closure() {
+fn graph8_artifact_links_exact_compiled_dependency_closure() {
     let temporary = tempfile::tempdir().expect("dependency artifact parent");
     let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
     let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
-        .expect("source Graph 7 repository");
+        .expect("source Graph 8 repository");
     let source_compilation = build_clean(
         &source.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1778,7 +1778,7 @@ fn graph7_artifact_links_exact_compiled_dependency_closure() {
 
     let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
     let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
-        .expect("target Graph 7 repository");
+        .expect("target Graph 8 repository");
     target
         .repository
         .stage_package_transport(exported.transport_digest, &exported.packs)
@@ -1919,7 +1919,7 @@ fn graph7_artifact_links_exact_compiled_dependency_closure() {
         &unrelated_snapshot,
         None,
     )
-    .expect("unrelated Graph 7 repository");
+    .expect("unrelated Graph 8 repository");
     let unrelated_compilation = build_clean(
         &unrelated.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1946,11 +1946,11 @@ fn graph7_artifact_links_exact_compiled_dependency_closure() {
 }
 
 #[test]
-fn graph7_artifact_rejects_predecessor_corruption_and_inexact_closures() {
+fn graph8_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact rejection parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,

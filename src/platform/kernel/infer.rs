@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 7.
+//! Independent exact-ID expression type and effect oracle for Graph 8.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -381,6 +381,20 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "kernel_type_target_http_runner",
                             "http target requires the exact semantic HTTP function-backed port shape",
                         ),
+                        RunnerKind::Interactive => {
+                            let standard = crate::platform::builtin_standard::BuiltinStandard::load()
+                                .and_then(|standard| standard.session_contract());
+                            match standard.and_then(|standard| {
+                                crate::platform::session::validate_session_function_type(
+                                    &crate::platform::session::ExpressionSessionRead::new(self.read),
+                                    standard,
+                                    port.function_type,
+                                )
+                            }) {
+                                Ok(_) => {}
+                                Err(diagnostic) => self.push_diagnostic(diagnostic),
+                            }
+                        }
                         RunnerKind::Command if port.function_type == http_type => self.error(
                             "kernel_type_target_command_runner",
                             "command target cannot select the semantic HTTP port shape",

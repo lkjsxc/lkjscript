@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 7 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 8 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -12,14 +12,17 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     CaseReference, DeclarationPayload, DeclarationReference, DeclarationVisibility,
     EncodedOwnerKey, ExpressionOperation, ExternalVisibility, FieldReference, FunctionEffect,
-    Idempotency, LocalValueReference, OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest,
-    OwnerRecord, PackageId, PackageInterfaceDigest, PackageRevisionDigest, ParameterParent,
+    Idempotency, LocalValueReference, Name, OperationReference, OwnerKey, OwnerKind,
+    OwnerObjectDigest, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
+    PackageInterfaceDigest, PackageInterfaceRecord, PackageRevisionDigest, ParameterParent,
     PortImplementation, PortReference, RequirementReference, ResourceLimit, SemanticStateDigest,
-    TypeForm, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
+    TypeForm, TypeObject, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
     encode_type_object,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::package_interface::{
-    build_package_interface, package_interface_digest, validate_package_interface,
+    PackageInterfaceValidation, build_package_interface, package_interface_digest,
+    validate_package_interface,
 };
 use crate::platform::package_transport::{
     PackageRevision, validate_package_interface_closure, validate_package_revision_closure,
@@ -41,17 +44,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-12";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-12";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 12;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF12";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART12";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN12";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-13";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-13";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 13;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF13";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART13";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN13";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v12";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v12";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v12";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v12";
+    "lkjscript.artifact-manifest-envelope.v13";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v13";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v13";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v13";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -1785,9 +1788,9 @@ fn trace_object_closure(
     )?;
     let relocations = validate_unit_relocations(&units)?;
 
-    let mut types = BTreeSet::new();
+    let mut types = BTreeMap::new();
     while let Some(digest) = type_roots.pop_first() {
-        if !types.insert(digest) {
+        if types.contains_key(&digest) {
             continue;
         }
         let key = ObjectKey::from_digest(ObjectDomain::Type, digest.bytes());
@@ -1822,7 +1825,9 @@ fn trace_object_closure(
             _ => {}
         }
         type_roots.extend(object.child_types());
+        types.insert(digest, object);
     }
+    validate_artifact_session_relations(manifest, &units, &runtime_owners, &interfaces, &types)?;
     for (digest, expected_length) in blobs {
         let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());
         let bytes = required_object(
@@ -1841,6 +1846,439 @@ fn trace_object_closure(
     }
     work.store.add(store_work);
     Ok(store.visited())
+}
+
+enum ArtifactSessionRecord {
+    Local(OwnerRecord),
+    Interface(PackageInterfaceRecord),
+}
+
+struct ArtifactSessionRead<'a> {
+    types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+    units: &'a BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime_owners: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    interfaces: BTreeMap<PackageId, &'a PackageInterfaceValidation>,
+}
+
+impl ArtifactSessionRead<'_> {
+    fn record(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<ArtifactSessionRecord, Diagnostic> {
+        if let Some(record) = self.runtime_owners.get(&(package, owner)) {
+            return Ok(ArtifactSessionRecord::Local(record.clone()));
+        }
+        self.interfaces
+            .get(&package)
+            .and_then(|interface| interface.owners.get(&owner))
+            .map(|owner| ArtifactSessionRecord::Interface(owner.record.clone()))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_session_nominal_owner",
+                    "session relation references a nominal owner outside the exact artifact closure",
+                )
+            })
+    }
+}
+
+impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
+        self.types.get(&digest).cloned().ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_type",
+                "session relation references a type outside the exact artifact closure",
+            )
+        })
+    }
+
+    fn nominal_shape(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<crate::platform::session::SessionNominalShape, Diagnostic> {
+        if let Some(unit) = self.units.get(&(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        )) {
+            match &unit.payload {
+                CompilationPayload::Record { fields } => {
+                    let mut shape = BTreeMap::new();
+                    for field in fields {
+                        let reference = table_value(
+                            &unit.tables.fields,
+                            field.field,
+                            "session record field reference",
+                        )?;
+                        let ty =
+                            table_value(&unit.tables.types, field.ty, "session record field type")?;
+                        let name = match self
+                            .record(declaration.package, OwnerKey::Field(reference.field))?
+                        {
+                            ArtifactSessionRecord::Local(OwnerRecord::Field(record)) => {
+                                if record.ty != ty {
+                                    return Err(artifact_error(
+                                        DiagnosticClass::Corrupt,
+                                        "artifact_session_nominal_member",
+                                        "compiled session field type disagrees with runtime metadata",
+                                    ));
+                                }
+                                record.name
+                            }
+                            ArtifactSessionRecord::Interface(PackageInterfaceRecord::Field(
+                                record,
+                            )) => {
+                                if record.ty != ty {
+                                    return Err(artifact_error(
+                                        DiagnosticClass::Corrupt,
+                                        "artifact_session_nominal_member",
+                                        "compiled session field type disagrees with package interface",
+                                    ));
+                                }
+                                record.name
+                            }
+                            _ => {
+                                return Err(artifact_error(
+                                    DiagnosticClass::Corrupt,
+                                    "artifact_session_nominal_member",
+                                    "compiled session field names another owner kind",
+                                ));
+                            }
+                        };
+                        if shape.insert(name, ty).is_some() {
+                            return Err(artifact_error(
+                                DiagnosticClass::Corrupt,
+                                "artifact_session_nominal_member",
+                                "compiled session record repeats one field name",
+                            ));
+                        }
+                    }
+                    return Ok(crate::platform::session::SessionNominalShape::Record(shape));
+                }
+                CompilationPayload::Variant { cases } => {
+                    let mut shape = BTreeMap::new();
+                    for case in cases {
+                        let reference = table_value(
+                            &unit.tables.cases,
+                            case.case,
+                            "session variant case reference",
+                        )?;
+                        let payload = case
+                            .payload
+                            .map(|index| {
+                                table_value(
+                                    &unit.tables.types,
+                                    index,
+                                    "session variant payload type",
+                                )
+                            })
+                            .transpose()?;
+                        let name = match self
+                            .record(declaration.package, OwnerKey::Case(reference.case))?
+                        {
+                            ArtifactSessionRecord::Local(OwnerRecord::Case(record)) => {
+                                if record.payload != payload {
+                                    return Err(artifact_error(
+                                        DiagnosticClass::Corrupt,
+                                        "artifact_session_nominal_member",
+                                        "compiled session case type disagrees with runtime metadata",
+                                    ));
+                                }
+                                record.name
+                            }
+                            ArtifactSessionRecord::Interface(PackageInterfaceRecord::Case(
+                                record,
+                            )) => {
+                                if record.payload != payload {
+                                    return Err(artifact_error(
+                                        DiagnosticClass::Corrupt,
+                                        "artifact_session_nominal_member",
+                                        "compiled session case type disagrees with package interface",
+                                    ));
+                                }
+                                record.name
+                            }
+                            _ => {
+                                return Err(artifact_error(
+                                    DiagnosticClass::Corrupt,
+                                    "artifact_session_nominal_member",
+                                    "compiled session case names another owner kind",
+                                ));
+                            }
+                        };
+                        if shape.insert(name, payload).is_some() {
+                            return Err(artifact_error(
+                                DiagnosticClass::Corrupt,
+                                "artifact_session_nominal_member",
+                                "compiled session variant repeats one case name",
+                            ));
+                        }
+                    }
+                    return Ok(crate::platform::session::SessionNominalShape::Variant(
+                        shape,
+                    ));
+                }
+                _ => {}
+            }
+        }
+        let record = self.record(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        )?;
+        let (record, members) = match record {
+            ArtifactSessionRecord::Local(OwnerRecord::Declaration(record)) => {
+                match record.payload {
+                    DeclarationPayload::Record { fields } => (
+                        true,
+                        fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
+                    ),
+                    DeclarationPayload::Variant { cases } => (
+                        false,
+                        cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
+                    ),
+                    _ => {
+                        return Err(artifact_error(
+                            DiagnosticClass::Corrupt,
+                            "artifact_session_nominal_kind",
+                            "session nominal declaration is not a record or variant",
+                        ));
+                    }
+                }
+            }
+            ArtifactSessionRecord::Interface(PackageInterfaceRecord::Declaration(record)) => {
+                match record.payload {
+                    PackageInterfaceDeclarationPayload::Record { fields } => (
+                        true,
+                        fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
+                    ),
+                    PackageInterfaceDeclarationPayload::Variant { cases } => (
+                        false,
+                        cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
+                    ),
+                    _ => {
+                        return Err(artifact_error(
+                            DiagnosticClass::Corrupt,
+                            "artifact_session_nominal_kind",
+                            "session interface declaration is not a record or variant",
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_session_nominal_kind",
+                    "session nominal identity names another owner kind",
+                ));
+            }
+        };
+        let mut shape = BTreeMap::new();
+        for owner in members {
+            let (name, ty) = match self.record(declaration.package, owner)? {
+                ArtifactSessionRecord::Local(OwnerRecord::Field(field)) if record => {
+                    (field.name, Some(field.ty))
+                }
+                ArtifactSessionRecord::Interface(PackageInterfaceRecord::Field(field))
+                    if record =>
+                {
+                    (field.name, Some(field.ty))
+                }
+                ArtifactSessionRecord::Local(OwnerRecord::Case(case)) if !record => {
+                    (case.name, case.payload)
+                }
+                ArtifactSessionRecord::Interface(PackageInterfaceRecord::Case(case)) if !record => {
+                    (case.name, case.payload)
+                }
+                _ => {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_session_nominal_member",
+                        "session nominal member has another owner kind",
+                    ));
+                }
+            };
+            if shape.insert(name, ty).is_some() {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_session_nominal_member",
+                    "session nominal shape repeats one member name",
+                ));
+            }
+        }
+        if record {
+            Ok(crate::platform::session::SessionNominalShape::Record(
+                shape
+                    .into_iter()
+                    .map(|(name, ty)| {
+                        ty.map(|ty| (name, ty)).ok_or_else(|| {
+                            artifact_error(
+                                DiagnosticClass::Corrupt,
+                                "artifact_session_nominal_member",
+                                "session record field omits its type",
+                            )
+                        })
+                    })
+                    .collect::<Result<BTreeMap<Name, TypeObjectDigest>, Diagnostic>>()?,
+            ))
+        } else {
+            Ok(crate::platform::session::SessionNominalShape::Variant(
+                shape,
+            ))
+        }
+    }
+}
+
+fn artifact_standard_session_declarations(
+    read: &ArtifactSessionRead<'_>,
+) -> Result<crate::platform::session::SessionStandardDeclarations, Diagnostic> {
+    let package =
+        crate::platform::builtin_standard::builtin_standard_package().map_err(|error| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_standard_package",
+                format!(
+                    "built-in standard package identity is invalid: {}",
+                    error.code
+                ),
+            )
+        })?;
+    let interface = read.interfaces.get(&package).ok_or_else(|| {
+        artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_session_standard_package",
+            "interactive artifact omits the canonical standard package interface",
+        )
+    })?;
+    let names = [
+        crate::platform::session::SESSION_EVENT_NAME,
+        crate::platform::session::SESSION_MESSAGE_KIND_NAME,
+        crate::platform::session::SESSION_DECISION_KIND_NAME,
+        crate::platform::session::SESSION_OUTBOUND_NAME,
+        crate::platform::session::SESSION_REJECT_NAME,
+        crate::platform::session::SESSION_CLOSE_NAME,
+    ];
+    let mut declarations = BTreeMap::new();
+    for (owner, value) in &interface.owners {
+        let (OwnerKey::Declaration(declaration), PackageInterfaceRecord::Declaration(record)) =
+            (owner, &value.record)
+        else {
+            continue;
+        };
+        if names.contains(&record.name.as_str())
+            && declarations
+                .insert(record.name.as_str().to_owned(), *declaration)
+                .is_some()
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_standard_declaration",
+                "canonical standard interface repeats a session declaration name",
+            ));
+        }
+    }
+    let reference = |name: &'static str| {
+        declarations
+            .get(name)
+            .copied()
+            .map(|declaration| DeclarationReference {
+                package,
+                declaration,
+            })
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_session_standard_declaration",
+                    format!("canonical standard interface omits {name}"),
+                )
+            })
+    };
+    Ok(crate::platform::session::SessionStandardDeclarations {
+        event: reference(crate::platform::session::SESSION_EVENT_NAME)?,
+        message_kind: reference(crate::platform::session::SESSION_MESSAGE_KIND_NAME)?,
+        decision_kind: reference(crate::platform::session::SESSION_DECISION_KIND_NAME)?,
+        outbound: reference(crate::platform::session::SESSION_OUTBOUND_NAME)?,
+        reject: reference(crate::platform::session::SESSION_REJECT_NAME)?,
+        close: reference(crate::platform::session::SESSION_CLOSE_NAME)?,
+    })
+}
+
+fn validate_artifact_session_relations(
+    manifest: &ArtifactManifest,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime_owners: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    let package_interfaces = manifest
+        .packages
+        .iter()
+        .map(|package| {
+            interfaces
+                .get(&package.package_revision)
+                .map(|interface| (package.package, interface))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_session_package_interface",
+                        "artifact session validation lost one package interface",
+                    )
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>, Diagnostic>>()?;
+    let read = ArtifactSessionRead {
+        types,
+        units,
+        runtime_owners,
+        interfaces: package_interfaces,
+    };
+    let interactive = runtime_owners
+        .iter()
+        .filter_map(|((package, _), record)| {
+            let OwnerRecord::Target(target) = record else {
+                return None;
+            };
+            (target.runner == RunnerKind::Interactive).then_some((*package, target))
+        })
+        .collect::<Vec<_>>();
+    if interactive.is_empty() {
+        return Ok(());
+    }
+    let standard = artifact_standard_session_declarations(&read)?;
+    for (package, target) in interactive {
+        if target.port.package != package {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_port_package",
+                "interactive target port belongs to another package",
+            ));
+        }
+        let Some(OwnerRecord::Port(port)) =
+            runtime_owners.get(&(package, OwnerKey::Port(target.port.port)))
+        else {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_port",
+                "interactive target references a missing or foreign runtime port",
+            ));
+        };
+        crate::platform::session::validate_session_function_type(
+            &read,
+            standard,
+            port.function_type,
+        )
+        .map_err(|error| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_session_relation",
+                format!(
+                    "interactive port failed independent relation reconstruction: {}",
+                    error.code
+                ),
+            )
+        })?;
+    }
+    Ok(())
 }
 
 fn validate_runtime_owners(

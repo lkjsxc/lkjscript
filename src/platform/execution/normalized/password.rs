@@ -1,4 +1,4 @@
-//! Exact Graph 7 binding for password hashing and verification.
+//! Exact Graph 8 binding for password hashing and verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

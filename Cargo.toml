@@ -1,6 +1,6 @@
 [package]
 name = "lkjscript"
-version = "0.1.19"
+version = "0.1.20"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
@@ -10,14 +10,14 @@ members = [".", "tools/lkjscript-dev"]
 resolver = "3"
 
 [dependencies]
-axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 bincode = { version = "2.0.1", default-features = false, features = ["derive", "std"] }
 blake3 = "1.8.2"
 bytes = "1.12.1"
 fs2 = "0.4.3"
-futures-util = { version = "0.3.34", default-features = false }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
 getrandom = "0.3.4"
 httparse = "1.10.1"
 object_store = { version = "0.14.1", default-features = false, features = ["aws", "fs"] }

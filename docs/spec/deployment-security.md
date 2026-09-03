@@ -8,8 +8,9 @@ not own application authentication/authorization policy, semantic identity, or o
 
 A deployment descriptor is strict JSON, at most 1 MiB and 1,024 grants. It has no public version
 discriminator and names a
-relative component artifact, exact target, optional listener, resident/execution/HTTP/worker/stream
-limits, typed configuration map, secret environment bindings, and grants. Outbound-client limits
+relative component artifact, exact target, optional listener,
+resident/execution/HTTP/session/worker/stream limits, typed configuration map, secret environment
+bindings, and grants. Outbound-client limits
 are owned by each exact `http_client` adapter rather than folded into the inbound HTTP limit record.
 Relative paths reject
 absolute, backslash, empty, `.` and `..` components. Artifact paths and local object roots reject
@@ -21,6 +22,16 @@ and exact root target/component/runner/requirement closure, then loads named sec
 and preflights adapters, computes redacted descriptor digests, and only then permits readiness or
 listener/worker admission. A failure closes already-created adapters and emits no ready event or
 application work. Artifacts contain none of these deployment facts.
+
+An interactive descriptor must provide the complete session limit record and no HTTP or worker
+record. Preparation reconstructs the canonical relational port, checks each positive limit against
+its global ceiling, checks cross-field stream/frame/message/mailbox/transition and lifetime
+relations with overflow-safe arithmetic, and reserves process-wide accounting before readiness.
+The independently bounded dimensions include pending and active sessions, header/frame/message
+bytes, mailbox items and aggregate bytes, retained-state nodes and bytes, messages and bytes per
+transition, tick interval, idle and total lifetime, close/cancellation grace, and process-wide
+session-buffer bytes. The separately supplied stream and resident/execution records continue to
+bound callback streams, work, deadlines, and cleanup.
 
 `deployment inspect` returns public descriptor structure; runtime readiness returns the
 domain-tagged artifact-bundle digest,
@@ -80,7 +91,7 @@ restart re-reads descriptor/artifact/secrets and reconstructs data/object/queue 
 task IDs, random state, locks, and compiled code are disposable.
 
 The trust and denial model is normative in `docs/security.md`. First-party Rust forbids `unsafe`,
-but dependencies and the operator/OS are trusted. The HTTP listener is plaintext; inbound TLS
+but dependencies and the operator/OS are trusted. The HTTP/RFC 6455 listener is plaintext; inbound TLS
 termination, certificate management, and ACME are deliberately out of scope. Outbound HTTPS
 authenticates the exact endpoint under its selected closed trust mode but is not a privacy layer,
 browser trust UI, pinning system, or client-certificate facility. The local data root is neither

@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -806,7 +806,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("exact_expression", "expr_HEX"),
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
-        ("runner_kind", "command|http"),
+        ("runner_kind", "command|http|interactive"),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.field-form"
@@ -1484,7 +1484,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("18")
+        Some("27")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2606,7 +2606,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("14"));
+    assert_eq!(compact_field(tests, "passed"), Some("21"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -2674,7 +2674,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("14")
+        Some("21")
     );
 
     let artifact = temporary.path().join("sample.lkja");
@@ -5369,6 +5369,327 @@ fn copied_binary_authors_dependency_and_complete_command_topology_from_minimal()
     assert_eq!(
         compact_field(compact_record(&status, "summary"), "dependencies"),
         Some("1")
+    );
+}
+
+#[test]
+fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
+    const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
+    const SESSION_EVENT: &str = "decl_66b80a34dfaac5f8ccf47ce707ec8731";
+    const SESSION_DECISION_KIND: &str = "decl_b939d019fb10a24344c2c947a20f2c02";
+    const SESSION_ACCEPT: &str = "case_5a63db5058f770aa377ed18c03d8a0e3";
+    const SESSION_OUTBOUND: &str = "decl_effe692dc8cecc3b5dafaec348b5622e";
+    const SESSION_REJECT: &str = "decl_d50d3cf51bf092ed8b1437e1664010fc";
+    const SESSION_CLOSE: &str = "decl_a2baeefacf23b620d7f814eda4cfe0ba";
+    const BYTE_STREAM: &str = "decl_e29e0ac407696662f355e9056172ac2b";
+    const BYTE_STREAM_READ_ALL: &str = "op_30cd44d5491201efdafea2b9e22adff0";
+    const OPTION_SOME: &str = "decl_693b43d38b8a4fa7d66ea171980e78a7";
+    const OPTION_NONE: &str = "decl_6e7cd674bd6163894e173e52a285ee43";
+
+    let temporary = tempfile::TempDir::new().expect("isolated interactive workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("application");
+
+    let grammar = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["capabilities", "--section", "change"],
+    );
+    assert!(grammar.iter().any(|record| {
+        record.operation == "change.operation-field"
+            && compact_field(record, "operation") == Some("create.target")
+            && compact_field(record, "name") == Some("runner")
+            && compact_field(record, "form") == Some("runner_kind")
+    }));
+    assert!(grammar.iter().any(|record| {
+        record.operation == "change.field-form"
+            && compact_field(record, "name") == Some("runner_kind")
+            && compact_field(record, "syntax") == Some("command|http|interactive")
+    }));
+
+    let builtin = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["package", "builtin", "inspect"],
+    );
+    let builtin = compact_record(&builtin, "package");
+    let dependency_package = compact_field(builtin, "id").expect("built-in package");
+    let dependency_revision = compact_field(builtin, "revision").expect("built-in revision");
+    let dependency_package_revision =
+        compact_field(builtin, "package-revision").expect("built-in package revision");
+    let dependency_transport = compact_field(builtin, "transport").expect("built-in transport");
+    assert_eq!(dependency_package, STANDARD_PACKAGE);
+
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "minimal",
+            "--name",
+            "authored-interactive",
+        ],
+    );
+    let base = compact_field(compact_record(&created, "revision"), "id")
+        .expect("minimal revision")
+        .to_owned();
+    let transport = temporary.path().join("standard.transport");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "package",
+            "builtin",
+            "export",
+            "--kind",
+            "transport",
+            "--output",
+            path(&transport),
+        ],
+    );
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "package",
+            "dependency",
+            "stage",
+            "--transport",
+            dependency_transport,
+            "--input-file",
+            path(&transport),
+        ],
+    );
+
+    let request = format!(
+        "request base={base} idempotency=public-interactive-1 intent=author-structured-session\n\
+         create.module as=$module name=application\n\
+         create.component as=$component module=$module name=Live visibility=package\n\
+         add.requirement as=$streams component=$component name=streams interface={STANDARD_PACKAGE}/{BYTE_STREAM}\n\
+         requirement.operation parent=$streams index=0 operation={STANDARD_PACKAGE}/{BYTE_STREAM_READ_ALL}\n\
+         requirement.limit parent=$streams index=0 name=maximum_calls maximum=64 unit=calls\n\
+         type.named as=@event declaration={STANDARD_PACKAGE}/{SESSION_EVENT}\n\
+         type.named as=@decision-kind declaration={STANDARD_PACKAGE}/{SESSION_DECISION_KIND}\n\
+         type.named as=@outbound declaration={STANDARD_PACKAGE}/{SESSION_OUTBOUND}\n\
+         type.named as=@reject declaration={STANDARD_PACKAGE}/{SESSION_REJECT}\n\
+         type.named as=@close declaration={STANDARD_PACKAGE}/{SESSION_CLOSE}\n\
+         type.option as=@state-option item=unit\n\
+         type.list as=@messages item=@outbound\n\
+         type.option as=@rejection item=@reject\n\
+         type.option as=@closing item=@close\n\
+         type.structural-record as=@decision\n\
+         type.field parent=@decision index=0 name=closing type=@closing\n\
+         type.field parent=@decision index=1 name=kind type=@decision-kind\n\
+         type.field parent=@decision index=2 name=messages type=@messages\n\
+         type.field parent=@decision index=3 name=rejection type=@rejection\n\
+         type.field parent=@decision index=4 name=state type=@state-option\n\
+         type.function as=@handler-type result=@decision\n\
+         type.argument parent=@handler-type index=0 type=@state-option\n\
+         type.argument parent=@handler-type index=1 type=@event\n\
+         expression.unit as=$unit\n\
+         expression.call as=$next-state function={STANDARD_PACKAGE}/{OPTION_SOME}\n\
+         type.argument parent=$next-state index=0 type=unit\n\
+         expression.argument parent=$next-state index=0 expression=$unit\n\
+         expression.variant as=$accept case={STANDARD_PACKAGE}/{SESSION_ACCEPT}\n\
+         expression.list as=$output item=@outbound\n\
+         expression.call as=$no-rejection function={STANDARD_PACKAGE}/{OPTION_NONE}\n\
+         type.argument parent=$no-rejection index=0 type=@reject\n\
+         expression.call as=$no-close function={STANDARD_PACKAGE}/{OPTION_NONE}\n\
+         type.argument parent=$no-close index=0 type=@close\n\
+         expression.record as=$body\n\
+         expression.record-field parent=$body index=0 name=closing value=$no-close\n\
+         expression.record-field parent=$body index=1 name=kind value=$accept\n\
+         expression.record-field parent=$body index=2 name=messages value=$output\n\
+         expression.record-field parent=$body index=3 name=rejection value=$no-rejection\n\
+         expression.record-field parent=$body index=4 name=state value=$next-state\n\
+         create.function as=$handler module=$module name=session visibility=private result=@decision effect=task body=$body\n\
+         add.parameter as=$state function=$handler name=state type=@state-option\n\
+         add.parameter as=$event function=$handler name=event type=@event\n\
+         effect.requirement parent=$handler index=0 requirement=$streams\n\
+         add.port as=$port component=$component name=live type=@handler-type function=$handler\n\
+         create.target as=$target name=live component=$component port=$port runner=interactive\n\
+         add.dependency package={dependency_package} semantic-revision={dependency_revision} package-revision={dependency_package_revision}\n"
+    );
+    let request_path = temporary.path().join("interactive.lkjc");
+    std::fs::write(&request_path, &request).expect("interactive request");
+    let planned = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ],
+    );
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
+        .expect("interactive plan")
+        .to_owned();
+    let target = planned
+        .iter()
+        .find(|record| {
+            record.operation == "identity" && compact_field(record, "symbol") == Some("$target")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .expect("interactive target identity")
+        .to_owned();
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&request_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted interactive revision")
+        .to_owned();
+    let inspected = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "target",
+            &target,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspected, "owner"), "name"),
+        Some("live")
+    );
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+
+    let artifact = project.join("generated/session.lkja");
+    std::fs::create_dir(project.join("generated")).expect("artifact directory");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&artifact),
+        ],
+    );
+    let descriptor = project.join("session.deployment.json");
+    std::fs::write(
+        &descriptor,
+        serde_json::to_vec(&serde_json::json!({
+            "artifact": "generated/session.lkja",
+            "target": "live",
+            "listen": "127.0.0.1:0",
+            "runtime": {
+                "maximum_concurrent_tasks": 4,
+                "maximum_queued_tasks": 8,
+                "request_deadline_milliseconds": 30_000,
+                "shutdown_grace_milliseconds": 3_000,
+                "cancellation_grace_milliseconds": 1_000
+            },
+            "execution": {
+                "instruction_fuel": 1_000_000,
+                "maximum_call_depth": 256,
+                "maximum_value_stack": 4_096
+            },
+            "http": null,
+            "session": {
+                "maximum_active_sessions": 2,
+                "maximum_pending_handshakes": 2,
+                "maximum_message_bytes": 4_096,
+                "maximum_frame_bytes": 4_096,
+                "maximum_header_bytes": 8_192,
+                "maximum_headers": 32,
+                "maximum_inbound_mailbox_items": 2,
+                "maximum_inbound_mailbox_bytes": 8_192,
+                "maximum_outbound_mailbox_items": 8,
+                "maximum_outbound_mailbox_bytes": 8_192,
+                "maximum_state_nodes": 1_024,
+                "maximum_state_bytes": 4_096,
+                "maximum_transition_messages": 8,
+                "maximum_transition_bytes": 8_192,
+                "tick_interval_milliseconds": 1_000,
+                "idle_timeout_milliseconds": 60_000,
+                "maximum_lifetime_milliseconds": 86_400_000,
+                "close_grace_milliseconds": 1_000,
+                "cancellation_grace_milliseconds": 1_000,
+                "maximum_process_buffer_bytes": 1_048_576
+            },
+            "worker": null,
+            "streams": {
+                "maximum_chunk_bytes": 4_096,
+                "maximum_buffered_chunks": 4,
+                "maximum_total_bytes": 65_536,
+                "maximum_live_streams": 16
+            },
+            "configuration": {},
+            "secrets": [],
+            "grants": [{
+                "requirement": "streams",
+                "sharing_domain": "test-streams",
+                "authority_revision": "9999999999999999999999999999999999999999999999999999999999999999",
+                "adapter": { "kind": "byte_stream" }
+            }]
+        }))
+        .expect("encode interactive descriptor"),
+    )
+    .expect("write interactive descriptor");
+    let before_serve = std::fs::read(project.join("HEAD")).expect("HEAD before serve");
+    let mut child = Command::new(&copied_binary)
+        .args(["serve", "--deployment", path(&descriptor)])
+        .current_dir(temporary.path())
+        .env_clear()
+        .env("LANG", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn authored interactive service");
+    let mut output = BufReader::new(child.stdout.take().expect("interactive service stdout"));
+    let mut ready = String::new();
+    output
+        .read_line(&mut ready)
+        .expect("read interactive readiness");
+    let ready: Value = serde_json::from_str(&ready).expect("interactive readiness JSON");
+    assert_eq!(
+        ready.get("ok").and_then(Value::as_bool),
+        Some(true),
+        "{ready}"
+    );
+    assert_eq!(ready.get("event").and_then(Value::as_str), Some("ready"));
+    assert_eq!(
+        ready.pointer("/deployment/runner").and_then(Value::as_str),
+        Some("interactive")
+    );
+    drop(output);
+    child.kill().expect("stop isolated interactive service");
+    let stopped = child.wait_with_output().expect("join interactive service");
+    assert!(!stopped.status.success());
+    assert_eq!(
+        std::fs::read(project.join("HEAD")).expect("HEAD after serve"),
+        before_serve
+    );
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
     );
 }
 

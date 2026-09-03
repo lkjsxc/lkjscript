@@ -1,10 +1,10 @@
 # standard
 
 This directory is the maintained typed meaning authority for the exact built-in standard package.
-Its 12 modules define deterministic core operations and typed interfaces for HTTP values, JSON,
+Its 13 modules define deterministic core operations and typed interfaces for HTTP values, JSON,
 canonical typed application data, the ordered `DataStore`, configuration, secrets, clocks, secure
 randomness, identifiers, password hashing, byte streams, deployment-bound outbound HTTP, named
-object storage, and durable queues.
+object storage, durable queues, and structured interactive-session events and decisions.
 
 An external declaration is not arbitrary FFI. Its dotted implementation name must match the
 closed semantic-validator/runtime intrinsic inventory before publication or execution. Capability
@@ -21,12 +21,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_02a0f86cf6b5bf17bc5227b898afd59fe9d7f5228eb297f69e4acf12f79c0261`;
-- package revision: `package_revision_03dba0a36440d6d0cba6fcc7d22b626db113a927aab40163500a322f1a666705`;
-- package transport: `package_transport_8d351f69935443c3a4276605ffd86e9f5c91fa05511258ccf4414c6f2b8678e9`;
-- artifact manifest: `artifact_manifest_a44c48ac71f99688c22b1fb3a39f9bafe36792e3a697546d8bd2e06644bcc55f`;
-- artifact bundle: `artifact_bundle_bbdebe268c69488400dbd99d6da9056b6fa436e250910d8674ea64c431c03a05`;
-- 431 live semantic owners, 83 compiler units, and 13 graph tests.
+- semantic revision: `rev_c9502434e3b0ce4434fddf7ce56e18f3d7bf5a197ac242878d819554a040bdde`;
+- package revision: `package_revision_64569dc96f354374a465c95b4287861716a57e9093c58184b425831be04da562`;
+- package transport: `package_transport_c2698e7d88f16120e6aef4215ef1704183eab1e623492021a6ccc290877b6d96`;
+- artifact manifest: `artifact_manifest_a59e32e589d8d670348e281c4cf678008ec290c333b86116d1edee640ed12eb3`;
+- artifact bundle: `artifact_bundle_a2eccd58b0a94442b0e56922472b218caed74a3e4daa1e94283a4247367b559a`;
+- 550 live semantic owners, 106 compiler units, and 20 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -59,6 +59,13 @@ references, and the rest of the public interface are executable-generated in
 The `HttpClient` interface has exactly one idempotent, possibly externally visible `get` operation.
 It accepts only ordered headers and returns status, ordered headers, and whole body bytes; endpoint,
 DNS/address, TLS trust, retry/redirect, deadline, and cleanup policy remain deployment authority.
+
+The canonical session family owns `SessionEvent`, `SessionMessageKind`, `SessionDecisionKind`,
+`SessionOutbound`, `SessionReject`, and `SessionClose`. A structural `SessionDecision<State>`
+reuses one exact closed ordinary state type across callbacks; no connection, stream, capability,
+function, secret, or runtime handle can enter retained state. The normative relation and phase
+protocol are specified in
+[`docs/spec/structured-sessions.md`](../../docs/spec/structured-sessions.md).
 
 `generated/standard.lkjp` and `generated/standard.lkja` are deterministic derived owners for the
 executable's embedded package transport and artifact bundle bytes. Product verification regenerates

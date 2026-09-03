@@ -341,7 +341,7 @@ impl NormalizedProgram {
         work.ports = ports.len() as u64;
         work.targets = targets.len() as u64;
         work.tests = tests.len() as u64;
-        Ok(Self {
+        let program = Self {
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
             root_revision: root_compilation.revision,
@@ -360,7 +360,9 @@ impl NormalizedProgram {
             root_target_names,
             tests,
             types,
-        })
+        };
+        super::session::validate_program_interactive_targets(&program)?;
+        Ok(program)
     }
 
     pub fn artifact(&self) -> &LoadedArtifact {

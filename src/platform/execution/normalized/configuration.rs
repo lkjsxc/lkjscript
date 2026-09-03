@@ -1,4 +1,4 @@
-//! Exact Graph 7 binding for deployment configuration reads.
+//! Exact Graph 8 binding for deployment configuration reads.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

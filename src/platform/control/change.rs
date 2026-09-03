@@ -5,9 +5,9 @@ use crate::platform::change::{
     AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
     AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredExpression,
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMatchExpressionArm,
-    AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPort,
-    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter,
+    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
     AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
@@ -28,8 +28,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-11";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 11;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-12";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 12;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-9";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 9;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -238,7 +238,7 @@ impl CompactChangeFieldForm {
             Self::RequestFragment => "%NAME",
             Self::DeclarationReference => "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
             Self::PortReference => "$NAME|pkg_HEX/port_HEX",
-            Self::RunnerKind => "command|http",
+            Self::RunnerKind => "command|http|interactive",
             Self::OperationSelector => "$NAME|op_HEX",
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
@@ -1145,6 +1145,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "variant",
     "field",
     "list",
+    "map",
     "match",
     "capability-call",
     "transaction",
@@ -1553,6 +1554,24 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         syntax: "type-reference",
     },
     CompactFormField {
+        form: "map",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "map",
+        name: "key",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "map",
+        name: "value",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
         form: "match",
         name: "as",
         required: true,
@@ -1872,6 +1891,37 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         ],
     },
     CompactEdgeDescriptor {
+        name: "expression.map-entry",
+        parent: "map-expression",
+        child: "map-entry",
+        fields: &[
+            CompactFormField {
+                form: "expression.map-entry",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.map-entry",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.map-entry",
+                name: "key",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.map-entry",
+                name: "value",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.match-arm",
         parent: "match-expression",
         child: "match-arm",
@@ -2050,6 +2100,9 @@ impl Decoder {
                     record,
                     &["parent", "index", "name", "field", "value"],
                 )?,
+                "expression.map-entry" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "key", "value"])?
+                }
                 "expression.match-arm" => self.insert_indexed_record_edge(
                     record,
                     &["parent", "index", "case", "as", "name", "type", "body"],
@@ -2978,6 +3031,23 @@ impl Decoder {
                     items: self.decode_expression_edges(symbol)?,
                 }
             }
+            "expression.map" => {
+                check_fields(&record, &["as", "key", "value"])?;
+                let mut entries = Vec::new();
+                for edge in self.ordered_record_edges("expression.map-entry", symbol)? {
+                    let key = required(&edge.record, "key")?.to_owned();
+                    let value = required(&edge.record, "value")?.to_owned();
+                    entries.push(AuthoredMapExpressionEntry {
+                        key: self.decode_expression(&key)?,
+                        value: self.decode_expression(&value)?,
+                    });
+                }
+                AuthoredExpressionOperation::Map {
+                    key_type: self.decode_type(required(&record, "key")?)?,
+                    value_type: self.decode_type(required(&record, "value")?)?,
+                    entries,
+                }
+            }
             "expression.match" => {
                 check_fields(&record, &["as", "value"])?;
                 let value = required(&record, "value")?.to_owned();
@@ -3690,11 +3760,12 @@ fn parse_runner_kind(record: &CompactRecord, field_name: &str) -> Result<RunnerK
     match required(record, field_name)? {
         "command" => Ok(RunnerKind::Command),
         "http" => Ok(RunnerKind::Http),
+        "interactive" => Ok(RunnerKind::Interactive),
         value => Err(field_error(
             record,
             field_name,
             "change_runner_kind",
-            format!("runner must be command or http; observed '{value}'"),
+            format!("runner must be command, http, or interactive; observed '{value}'"),
         )),
     }
 }
@@ -4233,6 +4304,47 @@ mod tests {
         assert!(matches!(
             &items[0].operation,
             AuthoredExpressionOperation::Text { value } if value == "first"
+        ));
+    }
+
+    #[test]
+    fn map_expressions_and_entries_decode_through_the_public_vocabulary() {
+        let input = format!(
+            "request base={}\n\
+             type.map as=@map key=text value=i64\n\
+             expression.text as=$second_key value=second\n\
+             expression.i64 as=$second_value value=2\n\
+             expression.text as=$first_key value=first\n\
+             expression.i64 as=$first_value value=1\n\
+             expression.map as=$body key=text value=i64\n\
+             expression.map-entry parent=$body index=1 key=$second_key value=$second_value\n\
+             expression.map-entry parent=$body index=0 key=$first_key value=$first_value\n\
+             create.module as=$module name=maps\n\
+             create.function as=$function module=$module name=values visibility=private result=@map effect=pure body=$body\n",
+            revision()
+        );
+        let decoded = decode_compact_change("map.lkjc", input.as_bytes()).unwrap();
+        let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1] else {
+            panic!("function operation")
+        };
+        let AuthoredExpressionOperation::Map {
+            key_type,
+            value_type,
+            entries,
+        } = &body.operation
+        else {
+            panic!("map body")
+        };
+        assert_eq!(*key_type, AuthoredType::Text {});
+        assert_eq!(*value_type, AuthoredType::I64 {});
+        assert_eq!(entries.len(), 2);
+        assert!(matches!(
+            &entries[0].key.operation,
+            AuthoredExpressionOperation::Text { value } if value == "first"
+        ));
+        assert!(matches!(
+            &entries[1].value.operation,
+            AuthoredExpressionOperation::I64 { value: 2 }
         ));
     }
 

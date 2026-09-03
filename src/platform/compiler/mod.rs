@@ -1,4 +1,4 @@
-//! Declaration-sized compiler units for normalized Graph 7 authority.
+//! Declaration-sized compiler units for normalized Graph 8 authority.
 //!
 //! This boundary is intentionally separate from the predecessor recursive-AST compiler. It reads
 //! exact stable-ID records through the same revision-pinned surfaces as validation and emits
@@ -7,7 +7,7 @@
 
 #![allow(
     unused_imports,
-    reason = "private compiler exports become artifact and runtime consumers at the Graph 7 cutover"
+    reason = "private compiler exports become artifact and runtime consumers at the Graph 8 cutover"
 )]
 
 mod artifact;

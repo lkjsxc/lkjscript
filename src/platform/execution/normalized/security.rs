@@ -1,4 +1,4 @@
-//! Exact Graph 7 bindings for time, randomness, and identifier capabilities.
+//! Exact Graph 8 bindings for time, randomness, and identifier capabilities.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

@@ -1,4 +1,4 @@
-//! Strict standalone Artifact 12 deployment and normalized resident execution.
+//! Strict standalone Artifact 13 deployment and normalized resident execution.
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
 use super::configuration::{
@@ -17,7 +17,8 @@ use super::execution::normalized::{
     NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
     NormalizedGrantAuthorityRevision, NormalizedGrantLimit, NormalizedHttpApplication,
     NormalizedPreparedDeployment, NormalizedProgram, NormalizedResidentDeployment,
-    NormalizedRunPolicy, NormalizedSharingDomain, NormalizedWorkerApplication,
+    NormalizedRunPolicy, NormalizedSessionApplication, NormalizedSharingDomain,
+    NormalizedWorkerApplication,
 };
 use super::http::{
     HttpDispatchObservation, HttpLimits, HttpRequest, HttpResponse, HttpServerReceipt,
@@ -44,6 +45,15 @@ use super::runtime::{
 };
 use super::secrets::{EnvironmentSecretBinding, MAXIMUM_SECRET_BYTES, SecretCatalog};
 use super::security::PasswordHashPolicy;
+use super::session::{
+    MAXIMUM_ACTIVE_SESSIONS, MAXIMUM_PENDING_HANDSHAKES, MAXIMUM_PROCESS_SESSION_BUFFER_BYTES,
+    MAXIMUM_SESSION_FRAME_BYTES, MAXIMUM_SESSION_GRACE_MILLISECONDS, MAXIMUM_SESSION_HEADER_BYTES,
+    MAXIMUM_SESSION_HEADERS, MAXIMUM_SESSION_INTERVAL_MILLISECONDS,
+    MAXIMUM_SESSION_LIFETIME_MILLISECONDS, MAXIMUM_SESSION_MAILBOX_BYTES,
+    MAXIMUM_SESSION_MAILBOX_ITEMS, MAXIMUM_SESSION_MESSAGE_BYTES, MAXIMUM_SESSION_STATE_BYTES,
+    MAXIMUM_SESSION_STATE_NODES, MAXIMUM_SESSION_TRANSITION_BYTES,
+    MAXIMUM_SESSION_TRANSITION_MESSAGES, SessionLimits, SessionObservation, SessionServerReceipt,
+};
 use super::stream::{
     MAXIMUM_LIVE_STREAMS, MAXIMUM_STREAM_BUFFERED_CHUNKS, MAXIMUM_STREAM_CHUNK_BYTES, StreamLimits,
 };
@@ -59,7 +69,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 3;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
@@ -107,6 +117,7 @@ pub struct DeploymentDescriptor {
     pub runtime: ResidentLimits,
     pub execution: RunPolicy,
     pub http: Option<HttpLimits>,
+    pub session: Option<SessionLimits>,
     pub worker: Option<WorkerLimits>,
     pub streams: StreamLimits,
     pub configuration: BTreeMap<String, ConfigurationValue>,
@@ -277,6 +288,14 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         Some("http"),
     ),
     optional_schema_field(
+        "deployment.session",
+        "null|object",
+        None,
+        None,
+        false,
+        Some("session"),
+    ),
+    optional_schema_field(
         "deployment.worker",
         "null|object",
         None,
@@ -411,6 +430,166 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         Some(MAXIMUM_HTTP_HEADERS as u64),
         false,
         None,
+    ),
+    schema_field(
+        "session.maximum_active_sessions",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_ACTIVE_SESSIONS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_pending_handshakes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_PENDING_HANDSHAKES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_message_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_MESSAGE_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_frame_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_FRAME_BYTES as u64),
+        false,
+        Some("at-most-session.maximum_message_bytes"),
+    ),
+    schema_field(
+        "session.maximum_header_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_HEADER_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_headers",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_HEADERS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_inbound_mailbox_items",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_MAILBOX_ITEMS as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_inbound_mailbox_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_MAILBOX_BYTES as u64),
+        false,
+        Some("at-least-session.maximum_message_bytes"),
+    ),
+    schema_field(
+        "session.maximum_outbound_mailbox_items",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_MAILBOX_ITEMS as u64),
+        false,
+        Some("at-least-session.maximum_transition_messages"),
+    ),
+    schema_field(
+        "session.maximum_outbound_mailbox_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_MAILBOX_BYTES as u64),
+        false,
+        Some("at-least-session.maximum_transition_bytes"),
+    ),
+    schema_field(
+        "session.maximum_state_nodes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_STATE_NODES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_state_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_STATE_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_transition_messages",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_TRANSITION_MESSAGES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_transition_bytes",
+        "usize",
+        Some(1),
+        Some(MAXIMUM_SESSION_TRANSITION_BYTES as u64),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.tick_interval_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_SESSION_INTERVAL_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.idle_timeout_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_SESSION_LIFETIME_MILLISECONDS),
+        false,
+        Some("at-most-session.maximum_lifetime_milliseconds"),
+    ),
+    schema_field(
+        "session.maximum_lifetime_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_SESSION_LIFETIME_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.close_grace_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_SESSION_GRACE_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.cancellation_grace_milliseconds",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_SESSION_GRACE_MILLISECONDS),
+        false,
+        None,
+    ),
+    schema_field(
+        "session.maximum_process_buffer_bytes",
+        "u64",
+        Some(1),
+        Some(MAXIMUM_PROCESS_SESSION_BUFFER_BYTES),
+        false,
+        Some("at-least-one-session-reservation"),
     ),
     schema_field(
         "worker.maximum_workers",
@@ -1182,6 +1361,7 @@ pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnost
             maximum_headers: 128,
             ..HttpLimits::default()
         }),
+        session: None,
         worker: None,
         streams: StreamLimits {
             maximum_chunk_bytes: 64 * 1024,
@@ -1472,6 +1652,16 @@ impl PreparedDeployment {
         })?;
         NormalizedWorkerApplication::new(self.resident()?, limits).map(PreparedWorkerApplication)
     }
+
+    pub fn session_application(&self) -> Result<PreparedSessionApplication, Diagnostic> {
+        let limits = self.descriptor.session.clone().ok_or_else(|| {
+            deployment_error(
+                "deployment_session_missing",
+                "interactive target requires a structured-session limits descriptor",
+            )
+        })?;
+        NormalizedSessionApplication::new(self.resident()?, limits).map(PreparedSessionApplication)
+    }
 }
 
 #[derive(Clone)]
@@ -1522,6 +1712,31 @@ impl PreparedWorkerApplication {
     }
 }
 
+#[derive(Clone)]
+pub struct PreparedSessionApplication(NormalizedSessionApplication);
+
+impl PreparedSessionApplication {
+    pub async fn serve(
+        self,
+        listener: TcpListener,
+        shutdown: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<SessionServerReceipt, Diagnostic> {
+        self.0.serve(listener, shutdown).await
+    }
+
+    pub fn observe_sessions(&self) -> SessionObservation {
+        self.0.observe()
+    }
+
+    pub fn observe_resident(&self) -> ResidentObservation {
+        self.0.resident().observe()
+    }
+
+    pub async fn shutdown(&self) -> ShutdownReceipt {
+        self.0.shutdown().await
+    }
+}
+
 pub fn decode_deployment(bytes: &[u8]) -> Result<DeploymentDescriptor, Diagnostic> {
     if bytes.len() > MAXIMUM_DEPLOYMENT_BYTES {
         return Err(deployment_error(
@@ -1557,6 +1772,23 @@ fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
             format!("deployment descriptor is not strict JSON: {error}"),
         )
     })?;
+    let root = value.as_object().ok_or_else(|| {
+        deployment_error(
+            "deployment_json",
+            "deployment descriptor must be one strict JSON object",
+        )
+    })?;
+    let expected_root = DEPLOYMENT_SCHEMA_FIELDS
+        .iter()
+        .filter_map(|field| field.path.strip_prefix("deployment."))
+        .filter(|field| !field.contains('.'))
+        .collect::<BTreeSet<_>>();
+    if root.keys().map(String::as_str).collect::<BTreeSet<_>>() != expected_root {
+        return Err(deployment_error(
+            "deployment_json",
+            "deployment descriptor has a missing, duplicate, or unknown top-level field",
+        ));
+    }
     let grants = value
         .get("grants")
         .and_then(serde_json::Value::as_array)
@@ -1648,6 +1880,9 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
     }
     if let Some(http) = &descriptor.http {
         http.validate()?;
+    }
+    if let Some(session) = &descriptor.session {
+        session.validate()?;
     }
     if let Some(worker) = &descriptor.worker {
         worker.validate(descriptor.runtime.maximum_concurrent_tasks)?;
@@ -1920,10 +2155,24 @@ fn validate_runner_descriptor(
                     "HTTP target requires listen and http descriptors",
                 ));
             }
-            if descriptor.worker.is_some() {
+            if descriptor.worker.is_some() || descriptor.session.is_some() {
                 return Err(deployment_error(
                     "deployment_runner_foreign",
-                    "HTTP target may not declare worker topology",
+                    "HTTP target may not declare worker or interactive topology",
+                ));
+            }
+        }
+        RunnerKind::Interactive => {
+            if descriptor.listen.is_none() || descriptor.session.is_none() {
+                return Err(deployment_error(
+                    "deployment_session_incomplete",
+                    "interactive target requires listen and session descriptors",
+                ));
+            }
+            if descriptor.http.is_some() || descriptor.worker.is_some() {
+                return Err(deployment_error(
+                    "deployment_runner_foreign",
+                    "interactive target may not declare HTTP or worker topology",
                 ));
             }
         }
@@ -1934,21 +2183,25 @@ fn validate_runner_descriptor(
                     "worker target requires a worker descriptor",
                 ));
             }
-            if descriptor.listen.is_some() || descriptor.http.is_some() {
+            if descriptor.listen.is_some()
+                || descriptor.http.is_some()
+                || descriptor.session.is_some()
+            {
                 return Err(deployment_error(
                     "deployment_runner_foreign",
-                    "worker target may not declare listener or HTTP topology",
+                    "worker target may not declare listener, HTTP, or interactive topology",
                 ));
             }
         }
-        RunnerKind::Command | RunnerKind::Interactive | RunnerKind::Batch | RunnerKind::Test => {
+        RunnerKind::Command | RunnerKind::Batch | RunnerKind::Test => {
             if descriptor.listen.is_some()
                 || descriptor.http.is_some()
+                || descriptor.session.is_some()
                 || descriptor.worker.is_some()
             {
                 return Err(deployment_error(
                     "deployment_runner_foreign",
-                    "nonresident target may not declare HTTP or worker topology",
+                    "nonresident target may not declare HTTP, interactive, or worker topology",
                 ));
             }
         }
@@ -2189,6 +2442,7 @@ mod tests {
             "runtime": ResidentLimits::default(),
             "execution": RunPolicy::default(),
             "http": HttpLimits::default(),
+            "session": null,
             "worker": null,
             "streams": StreamLimits::default(),
             "configuration": {},

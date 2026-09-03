@@ -10,7 +10,8 @@ meaning, deployment author, host OS/filesystem administrator, first-party data-r
 object-store administrator are trusted within their named authority. Packed graph/artifact bytes,
 data-format/revision/head/logical-backup bytes, public change and query requests, continuation
 handles, deployment descriptors, HTTP input, JSON, object responses, queue records, and environment
-values are hostile decoding inputs. Outbound DNS answers, certificate chains, HTTP responses, and
+values are hostile decoding inputs. WebSocket upgrade headers, masked frames, fragmentation,
+control payloads, text, close codes, and close reasons are hostile transport inputs. Outbound DNS answers, certificate chains, HTTP responses, and
 named PEM-root secret bytes are also hostile at their owning validation boundaries.
 
 Accepted lkjscript meaning is validated and resource-bounded but is not isolated as hostile tenant
@@ -56,6 +57,7 @@ filesystems and platforms not covered by retained evidence are not claimed.
 | Cross-actor access | graph-owned session and owner checks with deterministic denial tests | one confined first-party data authority is trusted |
 | Password theft | bounded Argon2 hashes, random salt, generic verification | deployment protects transport and local data/object roots |
 | Request denial | bounded headers/body/admission/tasks/streams and operational deadlines | no per-IP limiter or TLS proxy is included |
+| Interactive-session exhaustion or protocol confusion | bounded pending/admitted sessions, frame/message/mailbox/state/transition/process bytes, finite callbacks, exact phase pairs, reserved output capacity, one structured parent, cancellation and joined cleanup, RFC 6455 validation | descriptor author chooses limits for the host; no per-IP policy, TLS, origin policy, or service-level guarantee is included |
 | Object overwrite or traversal | existing real local-root components, validated opaque keys/prefixes, no-replace publication, checksums | object root and credentials are operator-controlled |
 | Possibly visible write | post-head data interruption is separately reconcilable; object effects use closed `possible_visibility` plus application reconciliation | data head and object-provider truth remain distinct authorities |
 | Duplicate background work | idempotency key, exact attempt/lease owner, stale completion rejection | handlers keep domain publication idempotent |
@@ -68,7 +70,7 @@ does not own lkjournal routes, spaces/indexes, roles, object keys, or queue tran
 ## Native and test boundaries
 
 First-party Rust forbids `unsafe`. `rustix` supplies safe Linux filesystem/process wrappers;
-Axum/Tokio own inbound HTTP and task mechanics; `httparse`, Rustls, Tokio-Rustls, and the locked
+Axum/Tokio and Tokio-Tungstenite own inbound HTTP/RFC 6455 and task mechanics; `httparse`, Rustls, Tokio-Rustls, and the locked
 WebPKI root set own outbound HTTP/TLS mechanics; `object_store` owns local/S3 mechanics; Argon2 and OS
 randomness own cryptographic mechanics. The `postgres` crate exists only in contributor differential
 tooling and is absent from the product dependency graph. Locked dependencies may contain unsafe code
@@ -125,8 +127,10 @@ distributed consensus, multi-node publication, cross-authority transactions, inb
 management, CSRF middleware, audit-log durability, or production portability beyond retained
 exact Linux x86-64 target and userland evidence.
 
-The inbound HTTP listener is plaintext, and first-party data roots/backups are not encrypted.
-lkjscript does not implement inbound TLS termination, certificate issuance/rotation, ACME, outbound
+The inbound HTTP/RFC 6455 listener is plaintext, and first-party data roots/backups are not
+encrypted. The transport negotiates no WebSocket extension or subprotocol and does not provide
+application authentication, origin, browser, proxy, or NIP-01 policy. lkjscript does not implement
+inbound TLS termination, certificate issuance/rotation, ACME, outbound WebSocket clients, outbound
 client certificates, insecure trust bypass, a browser trust UI, or a pinning framework. Outbound
 HTTPS authenticates only the exact deployment endpoint under locked public roots or one named PEM
 root; it does not protect inbound transport or local storage and is not a privacy layer. External

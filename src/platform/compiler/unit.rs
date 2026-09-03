@@ -432,7 +432,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 7 inline bound",
+                        "compiled inline text exceeds the Graph 8 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }

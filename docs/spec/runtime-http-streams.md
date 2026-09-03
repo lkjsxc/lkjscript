@@ -66,9 +66,12 @@ data/object/queue publication. Adapter-generated failure responses contain a bou
 The in-memory dispatcher constructs the same `HttpRequest`, registers the same body stream, and
 invokes the same prepared port used by the live listener. Tests may replace grants but not handlers.
 Current inbound responses are whole bounded byte values; response streaming, trailers, HTTP/2/3,
-multipart, compression, and WebSocket are not part of the current inbound boundary. The listener
-is plaintext. Inbound TLS termination, certificate management, and ACME remain outside the current
-product scope; encrypted inbound deployments require an external trusted transport boundary.
+multipart, and compression are not part of this request/response boundary. Structured
+`interactive` targets use the separate relational session contract and RFC 6455 adapter specified
+in [structured-sessions.md](structured-sessions.md); they do not turn an HTTP response into a graph
+stream. The listener is plaintext. Inbound TLS termination, certificate management, and ACME
+remain outside the current product scope; encrypted inbound deployments require an external
+trusted transport boundary.
 
 ## Outbound HTTP client
 

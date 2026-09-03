@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 7 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 8 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -267,7 +267,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph7_dense_bytecode_3",
+                production_tier: "graph8_dense_bytecode_3",
             },
         };
         let result = (|| {
@@ -1345,6 +1345,17 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
                     pending.push(payload);
                 }
             }
+            NormalizedValue::Option(value) => {
+                if let Some(value) = value {
+                    items = items.checked_add(1).ok_or_else(|| {
+                        resource_error(
+                            "normalized_external_value",
+                            "external option item count overflowed",
+                        )
+                    })?;
+                    pending.push(value);
+                }
+            }
             NormalizedValue::List(values) => {
                 items = items.checked_add(values.len() as u64).ok_or_else(|| {
                     resource_error(
@@ -1795,13 +1806,41 @@ fn call_core_intrinsic(
             output.push(value.clone());
             Ok(NormalizedValue::List(Arc::new(output)))
         }
+        "core.option.some" => {
+            let [value] = arguments.as_slice() else {
+                return Err(type_error("option constructor received a foreign arity"));
+            };
+            Ok(NormalizedValue::Option(Some(Box::new(value.clone()))))
+        }
+        "core.option.none" => {
+            if !arguments.is_empty() {
+                return Err(type_error("empty option constructor received arguments"));
+            }
+            Ok(NormalizedValue::Option(None))
+        }
+        "core.option.get-or" => {
+            let [NormalizedValue::Option(value), fallback] = arguments.as_slice() else {
+                return Err(type_error("option fallback received foreign values"));
+            };
+            Ok(value
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| fallback.clone()))
+        }
+        "core.option.present" => {
+            let [NormalizedValue::Option(value)] = arguments.as_slice() else {
+                return Err(type_error("option predicate received a foreign value"));
+            };
+            Ok(NormalizedValue::Bool(value.is_some()))
+        }
         "core.map.length" => {
             let [NormalizedValue::Map(values)] = arguments.as_slice() else {
                 return Err(type_error("map length received a foreign value"));
             };
             Ok(NormalizedValue::I64(normalized_length(values.len())?))
         }
-        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert" => {
+        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert"
+        | "core.map.remove" | "core.map.entries" => {
             normalized_map_intrinsic(implementation, arguments)
         }
         _ => Err(runtime_error(
@@ -1925,6 +1964,18 @@ fn normalized_map_intrinsic(
         Some(NormalizedValue::Map(values)) => values,
         _ => return Err(type_error("map intrinsic received a foreign map")),
     };
+    if implementation == "core.map.entries" {
+        if arguments.len() != 1 {
+            return Err(type_error("map entries received a foreign arity"));
+        }
+        let entries = values
+            .iter()
+            .map(|(key, value)| {
+                normalized_structural_record([("key", key.to_value()), ("value", value.clone())])
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(NormalizedValue::List(Arc::new(entries)));
+    }
     let key = arguments
         .get(1)
         .cloned()
@@ -1950,6 +2001,11 @@ fn normalized_map_intrinsic(
         "core.map.insert" if arguments.len() == 3 => {
             let mut output = values.as_ref().clone();
             output.insert(key, arguments[2].clone());
+            Ok(NormalizedValue::Map(Arc::new(output)))
+        }
+        "core.map.remove" if arguments.len() == 2 => {
+            let mut output = values.as_ref().clone();
+            output.remove(&key);
             Ok(NormalizedValue::Map(Arc::new(output)))
         }
         _ => Err(type_error("map intrinsic received a foreign arity")),
@@ -2020,6 +2076,11 @@ pub(crate) fn normalized_equal(
             (Some(left), Some(right)) => normalized_equal(left, right),
             _ => Ok(false),
         },
+        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => match (left, right) {
+            (None, None) => Ok(true),
+            (Some(left), Some(right)) => normalized_equal(left, right),
+            _ => Ok(false),
+        },
         (NormalizedValue::List(left), NormalizedValue::List(right))
             if left.len() == right.len() =>
         {
@@ -2068,6 +2129,9 @@ fn value_contains_affine_resource(value: &NormalizedValue) -> bool {
         NormalizedValue::Variant { payload, .. } => payload
             .as_deref()
             .is_some_and(value_contains_affine_resource),
+        NormalizedValue::Option(value) => {
+            value.as_deref().is_some_and(value_contains_affine_resource)
+        }
         NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
             fields.iter().any(value_contains_affine_resource)
         }

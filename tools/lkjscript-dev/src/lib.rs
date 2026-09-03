@@ -13,6 +13,7 @@ mod measure;
 mod outbound_http;
 mod postgres;
 mod process;
+mod raw_websocket;
 mod release;
 mod scale;
 mod service;

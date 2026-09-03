@@ -14,14 +14,18 @@ deployment boundary without Cargo, a checkout, or an application helper. Its sta
 uses a deployment-selected first-party local data root and durable queue; no product or public
 verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot `0.1.19`; the immutable supported release remains
-`v0.1.16`. Both include
-public exact built-in dependency, component, requirement, function-backed
-port, and command/HTTP target authoring. All four built-in recipes lower through that same typed
+Current source is unreleased product snapshot `0.1.20`; the immutable supported release remains
+`v0.1.16`. Both include public exact built-in dependency, component, requirement, function-backed
+port, and command/HTTP target authoring. Source 0.1.20 additionally admits one exact relational
+`interactive` target whose graph-owned ordinary state crosses finite callbacks while a structured
+resident parent owns the connection, bounded mailboxes, timers, cancellation, and joined children.
+All four built-in recipes lower through the same typed
 authored-operation engine without changing their resulting meaning or atomic project-creation
 contract. The release also includes one deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-No deployment, live relay, WebSocket, or NIP-01 event flow is claimed here.
+The maintained source `lkjournal-live-1` consumer proves authenticated multi-subscription server
+push over plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound
+WebSocket, TLS, a deployment, a live-relay observation, or released behavior.
 
 Unreleased product 0.1.19 replaces the disposable monolithic object locator with one atomic
 manifest over bounded immutable sorted segments. Healthy repository open and accepted sealing no
@@ -219,18 +223,26 @@ through one copied candidate's application-facing discovery:
 
 The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.16`.
 
-Public compact change records can add an exact staged built-in dependency, components,
-requirements, function-backed ports, command/HTTP targets, interfaces, operations and externals,
-create task functions, rebind requirements/dependencies, and compose structural records, lexical
+In current source, public compact change records can add an exact staged built-in dependency,
+components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
+operations and externals, create task functions, rebind requirements/dependencies, and compose structural records, lexical
 bindings, fields, lists, variants, matches, exact built-in calls, requirement-scoped capability
-calls, and lexical transactions. The topology records are:
+calls, and lexical transactions. The immutable v0.1.16 executable has the same topology grammar
+without the `interactive` runner. The current-source topology records are:
 
 ```text
 add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
 create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
 add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
-create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http
+create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http|interactive
 ```
+
+An interactive port must have the exact structural relation
+`(Option<State>, SessionEvent) -> SessionDecision<State>` with one closed ordinary concrete
+`State`. The same relation is independently reconstructed during accepted validation, package and
+artifact construction/loading, and deployment preparation. `serve` selects either exact HTTP or
+interactive topology; public `run` remains pure-command-only. See the normative
+[structured-session contract](docs/spec/structured-sessions.md).
 
 The public
 vocabulary also includes exactly
@@ -439,19 +451,21 @@ cd applications/lkjournal
 mkdir -p state state/objects
 ../../target/release/lkjscript data initialize --root state/data
 ../../target/release/lkjscript serve --deployment service.deployment.json
+../../target/release/lkjscript serve --deployment live.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
 
-Readiness binds the domain-tagged `artifact_bundle_...` identity after exact target, requirement,
-grant, secret, adapter, and external-authority preflight. HTTP and worker effects execute once
-through production; only pure deterministic behavior uses the reference interpreter.
+Readiness binds the domain-tagged `artifact_bundle_...` identity after exact target, relational
+session shape where applicable, limits, requirement, grant, secret, adapter, and external-authority
+preflight. HTTP, interactive, and worker effects execute once through production; only pure
+deterministic behavior uses the reference interpreter.
 
 Service and worker use separately validated `data` and `durable_queue_data` grants that share
 `state/data`; object bytes remain beneath `state/objects`. The HTTP listener is plaintext and the
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.19 source its stable
+Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.20 source its stable
 entry claims and matches the live resource, then transfers that lease once into a private
 requirement-bound task helper. The helper borrows `QueueLeaseInfo`, consumes through heartbeat,
 matches the renewed lease, and consumes through complete or fail. A handle is bound to the exact

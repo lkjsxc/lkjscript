@@ -1,6 +1,6 @@
 //! Exact first-party standard package material embedded in the released executable.
 //!
-//! The maintained Graph 7 package owns both generated assets. This module validates the complete
+//! The maintained Graph 8 package owns both generated assets. This module validates the complete
 //! package transport and artifact closure before exposing either one to project creation, linking,
 //! inspection, or export.
 
@@ -18,6 +18,10 @@ use super::package_transport::{PackageTransportBinding, validate_package_transpo
 use super::persistent_map::MapWork;
 use super::publication::InitialPackageTransport;
 use super::semantic_id::{DeclarationId, RevisionId};
+use super::session::{
+    SESSION_CLOSE_NAME, SESSION_DECISION_KIND_NAME, SESSION_EVENT_NAME, SESSION_MESSAGE_KIND_NAME,
+    SESSION_OUTBOUND_NAME, SESSION_REJECT_NAME, SessionStandardDeclarations,
+};
 use super::storage::memory::MemoryPackedStore;
 use super::storage::object::{StoreError, StoreErrorClass, StoreWork};
 use super::storage::pack::{PackId, PackMetadata, SealedPack};
@@ -30,11 +34,11 @@ const STANDARD_TRANSPORT_PACK: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69";
+    "rev_c9502434e3b0ce4434fddf7ce56e18f3d7bf5a197ac242878d819554a040bdde";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_987d74de0827e4a710a0aaa6991075227d4e24830ee0654ff0a73b2717015b9f";
+    "package_revision_64569dc96f354374a465c95b4287861716a57e9093c58184b425831be04da562";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_875deeb0623c0fe50e8f806c277c57df1fd7eb385a2af2b2224b43ec2b8176d4";
+    "package_transport_c2698e7d88f16120e6aef4215ef1704183eab1e623492021a6ccc290877b6d96";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
@@ -45,6 +49,10 @@ const HTTP_BYTE_STREAM_INTERFACE: &str = "ByteStream";
 const HTTP_CLIENT_INTERFACE: &str = "HttpClient";
 
 static BUILTIN_STANDARD: OnceLock<Result<BuiltinStandard, Diagnostic>> = OnceLock::new();
+
+pub(crate) fn builtin_standard_package() -> Result<PackageId, Diagnostic> {
+    PackageId::from_str(STANDARD_PACKAGE)
+}
 
 #[derive(Clone, Debug)]
 pub struct BuiltinStandard {
@@ -101,6 +109,60 @@ impl BuiltinStandard {
 
     pub const fn artifact_bytes(&self) -> &'static [u8] {
         STANDARD_ARTIFACT
+    }
+
+    pub(crate) fn session_contract(&self) -> Result<SessionStandardDeclarations, Diagnostic> {
+        let mut declarations = BTreeMap::new();
+        for (owner, value) in &self.interface_owners {
+            let (OwnerKey::Declaration(declaration), PackageInterfaceRecord::Declaration(record)) =
+                (owner, &value.record)
+            else {
+                continue;
+            };
+            if [
+                SESSION_EVENT_NAME,
+                SESSION_MESSAGE_KIND_NAME,
+                SESSION_DECISION_KIND_NAME,
+                SESSION_OUTBOUND_NAME,
+                SESSION_REJECT_NAME,
+                SESSION_CLOSE_NAME,
+            ]
+            .contains(&record.name.as_str())
+                && declarations
+                    .insert(record.name.as_str(), *declaration)
+                    .is_some()
+            {
+                return Err(builtin_error(
+                    DiagnosticClass::Corrupt,
+                    "builtin_standard_session_ambiguous",
+                    "built-in standard repeats a canonical session declaration",
+                ));
+            }
+        }
+        let reference = |name: &'static str| {
+            declarations
+                .get(name)
+                .copied()
+                .map(|declaration| DeclarationReference {
+                    package: self.package,
+                    declaration,
+                })
+                .ok_or_else(|| {
+                    builtin_error(
+                        DiagnosticClass::Corrupt,
+                        "builtin_standard_session_missing",
+                        format!("built-in standard omits canonical {name}"),
+                    )
+                })
+        };
+        Ok(SessionStandardDeclarations {
+            event: reference(SESSION_EVENT_NAME)?,
+            message_kind: reference(SESSION_MESSAGE_KIND_NAME)?,
+            decision_kind: reference(SESSION_DECISION_KIND_NAME)?,
+            outbound: reference(SESSION_OUTBOUND_NAME)?,
+            reject: reference(SESSION_REJECT_NAME)?,
+            close: reference(SESSION_CLOSE_NAME)?,
+        })
     }
 
     pub fn command_text_from_static(&self) -> Result<DeclarationReference, Diagnostic> {
@@ -956,7 +1018,7 @@ mod tests {
     #[test]
     fn maintained_standard_is_the_byte_owner_of_embedded_assets() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
-        let repository = GraphRepository::open(&root).expect("open maintained Graph 7 standard");
+        let repository = GraphRepository::open(&root).expect("open maintained Graph 8 standard");
         let exported = repository
             .export_package_transport()
             .expect("export maintained standard transport");

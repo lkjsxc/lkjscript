@@ -1,4 +1,4 @@
-//! Typed domain-separated Graph 7 accepted-history object digests.
+//! Typed domain-separated Graph 8 accepted-history object digests.
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use bincode::de::Decoder;

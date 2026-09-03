@@ -71,6 +71,7 @@ pub mod semantic_digest;
 pub mod semantic_fact;
 pub mod semantic_id;
 pub mod semantic_summary;
+pub mod session;
 #[allow(
     dead_code,
     reason = "storage implementations remain private behind GraphRepository"
@@ -102,7 +103,7 @@ pub use data::{
 };
 pub use deployment::{
     AdapterDescriptor, DEPLOYMENT_CONTRACT_VERSION, DeploymentDescriptor, DeploymentGrant,
-    DeploymentObservation, PreparedDeployment, decode_deployment,
+    DeploymentObservation, PreparedDeployment, PreparedSessionApplication, decode_deployment,
 };
 pub use diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 pub use execution::{ExecutionControl, ExecutionError, ExecutionFailureClass, RunPolicy};
@@ -158,6 +159,9 @@ pub use semantic_id::{
     AnnotationId, BindingId, CaseId, ConflictId, DeclarationId, DocumentationId, DraftId,
     ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId,
     RevisionId, TargetId, TypeParameterId,
+};
+pub use session::{
+    STRUCTURED_SESSION_CONTRACT_VERSION, SessionLimits, SessionObservation, SessionServerReceipt,
 };
 pub use stream::{
     ByteStreamProducer, STREAM_CONTRACT_VERSION, StreamLease, StreamLimits, StreamRegistry,

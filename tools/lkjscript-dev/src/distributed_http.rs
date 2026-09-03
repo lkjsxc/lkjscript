@@ -1198,7 +1198,7 @@ fn run_workflow(
     if !clean_incremental_equal {
         return Err(AcceptanceFailure::acceptance(
             "artifact_determinism",
-            "clean and incremental Artifact 12 bytes disagree",
+            "clean and incremental Artifact 13 bytes disagree",
         ));
     }
 
@@ -1389,7 +1389,7 @@ fn exercise_artifact_startup_failures(
 
     let mut corrupt = valid_bytes.to_vec();
     let last = corrupt.last_mut().ok_or_else(|| {
-        AcceptanceFailure::acceptance("artifact_empty", "valid Artifact 12 bytes are empty")
+        AcceptanceFailure::acceptance("artifact_empty", "valid Artifact 13 bytes are empty")
     })?;
     *last ^= 0x01;
     publish_product_input(artifact, &corrupt)?;

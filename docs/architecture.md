@@ -155,14 +155,16 @@ Immutable `v0.1.8` remains an unclosed historical recovery point: its applicatio
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
 advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
 no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source is unreleased product snapshot 0.1.19; immutable public latest remains
-v0.1.16. The source retains requirement-bound affine task handoff and the maintained worker split,
-and adds one identity-preserving private same-module function-extraction operation plus its
-maintained `update-resource` cutover. It also replaces the disposable monolithic object locator
-with catalog contract 2 and advances contributor scale evidence to contract 3. It does not enter
+unchanged. Current source is unreleased product snapshot 0.1.20; immutable public latest remains
+v0.1.16. The source retains requirement-bound affine task handoff, the maintained worker split,
+identity-preserving private same-module function extraction, and catalog contract 2. It adds
+structured-session contract 1, canonical standard session types, one exact relational
+`interactive` target, a bounded RFC 6455 server adapter, and maintained `lkjournal-live-1`. It does
+not enter
 the distribution path above, alter the
 immutable release, or select deployment or operational data.
-Project creation 3, deployment 3, HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
+Deployment 4 owns the strict interactive limits and topology. Project creation 3,
+HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
 
@@ -239,12 +241,13 @@ derived and cannot select or advance semantic authority.
 | Inspection and query | `platform/cli.rs`, `platform/normalized_query`, publication read views | exact-owner summary, complete bounded local-function definition projection, namespace, relation, and bounded local-context reads with stateless logical continuations | mutable cursors, body/query indexes, repair, dependency bodies, source export, or authoring authority |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
-| Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
+| Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/interactive/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
-| Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, WebSocket, or application response policy |
+| Structured-session semantic boundary | `platform/session.rs`, `packages/standard` | canonical event/decision family, exact repeated ordinary state relation, phase and retained-state admission | connections, framing, timers, application policy, or deployment bounds |
+| Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, outbound WebSocket, or application response policy |
 | Operational data | `platform/data.rs`, normalized data/queue adapters, `platform/queue.rs`, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, private queue attempt tuples and one durable queue backend | program meaning, public raw lease authority, object bytes, deployment policy, or remote database service |
-| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/interactive/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
@@ -299,7 +302,7 @@ CapabilityResource<Interface> + parameter use / optional helper binding
                  │ borrow / consume / one direct acyclic handoff
                  ▼
  compiler-unit 3 / bytecode 3 local loads + exact binding
-                 │ Artifact 12 shape/call-graph validation
+                 │ Artifact 13 shape/call-graph validation
                  ▼
  task resource scope: scope + kind + interface + requirement
                  │ reserve before effect; commit or release
@@ -323,6 +326,43 @@ Borrow leaves the entry live, while consume removes lexical ownership before eit
 helper call or adapter call. Failure after helper transfer does not restore the caller. Task
 cleanup drops only local entries and never performs an implicit queue transition. This ordering prevents
 avoidable post-effect allocation loss without claiming exactly-once work.
+
+## Structured interactive-session path
+
+The interactive path keeps semantic state and live ownership deliberately disjoint:
+
+```text
+graph handler: (Option<State>, SessionEvent) -> SessionDecision<State>
+                              │ exact closed repeated State relation
+                              ▼
+                 Artifact 13 + deployment 4 preparation
+                              │ validate all session limits before readiness
+                              ▼
+          one parent session scope owns RFC 6455 connection
+       reader ── ordered byte-bounded inbox ── transition driver
+                    │ one finite callback at a time
+       tick (coalesced)                    reserved outbound capacity
+                    │                              │
+                    └──────────────── driver ──────┘
+                                                   ▼
+                              byte-bounded outbox ── writer
+```
+
+Axum/Tungstenite owns generic HTTP/1.1 upgrade and RFC 6455 framing. The parent scope owns reader,
+driver, writer, tick source, cancellation lineage, task-scoped inbound streams, retained ordinary
+state, mailbox/process-buffer permits, and every child join. The graph owns open/path/authentication
+policy, message decoding, subscription and data transitions, output values, and close decisions.
+No callback receives a connection handle, no child detaches, and no Rust callback stores
+application sequence, filter, or subscription state.
+
+Transport events are ordered, while a coalesced tick is admitted only behind events already in the
+inbox. Before invoking a potentially effectful callback, the driver reserves enough writer capacity
+for the configured maximum transition output. It validates the complete decision, next state, and
+batch before enqueue and state installation. Failure or cancellation therefore cannot install
+partial state or partial output; prior possibly visible graph effects retain their existing
+contract and are not replayed. Peer close, transport faults, overload, timeout, and shutdown stop
+new callbacks, cancel and join siblings, close task streams, discard operational state, attempt one
+bounded close where valid, and release permits once.
 
 ## Publication and derived cache handoff
 
@@ -473,7 +513,8 @@ strict deployment descriptor + relative artifact bundle
               normalized resident VM exactly once
                   ┌──────┴──────┐
                   ▼             ▼
-                serve         worker
+          serve: HTTP or      worker
+            interactive
                   │             │
                   └──────┬──────┘
                          ▼

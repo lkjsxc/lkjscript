@@ -15,6 +15,7 @@
     "maximum_value_stack": 1000000
   },
   "http": null,
+  "session": null,
   "worker": {
     "maximum_workers": 2,
     "idle_wait_milliseconds": 250

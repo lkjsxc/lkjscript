@@ -7,7 +7,7 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-4";
 pub const WITNESS_CONTRACT_VERSION: u16 = 4;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-3";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 3;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-7";
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-8";
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT04";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM07";
@@ -17,7 +17,7 @@ pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelop
 pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v4";
 pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v3";
 pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v4";
-pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v7";
+pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v8";
 
 pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v3";
 pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v3";
@@ -44,7 +44,7 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 17] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 18] = [
     ValidatorFeatureDescriptor {
         name: "graph_5_full_validation",
         version: 1,
@@ -112,6 +112,10 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 17] = [
     ValidatorFeatureDescriptor {
         name: "affine_capability_resources",
         version: 2,
+    },
+    ValidatorFeatureDescriptor {
+        name: "structured_session_relations",
+        version: 1,
     },
 ];
 

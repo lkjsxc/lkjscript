@@ -1,4 +1,4 @@
-//! Normalized Graph 7 semantic owner records.
+//! Normalized Graph 8 semantic owner records.
 
 use super::contract::{
     GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_DOCUMENTATION_BYTES,
@@ -772,7 +772,7 @@ fn validate_ordered_unique<T: Ord + Copy>(
     if (!allow_zero && values.is_empty()) || values.len() > MAXIMUM_CHILDREN {
         return Err(owner_error(
             "kernel_owner_child_count",
-            format!("{label} count is outside the Graph 7 bound"),
+            format!("{label} count is outside the Graph 8 bound"),
         ));
     }
     let unique = values.iter().copied().collect::<BTreeSet<_>>();

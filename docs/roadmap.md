@@ -15,11 +15,15 @@ resource-owned maintained durable-queue worker cutover, plus complete revision-p
 definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
 bound consume-only private task-function handoff with the maintained worker split, plus one bounded
 identity-preserving graph-native function extraction and the maintained `update-resource` split are
-current architecture. One crash-safe rebuildable incremental object-location catalog now keeps
+current architecture. Graph-owned structured sessions now admit one relational `interactive`
+target over a byte-bounded RFC 6455 server: ordinary state crosses finite callbacks while one
+resident parent owns the connection and all joined resources. Maintained `lkjournal-live-1` proves
+authenticated multi-subscription push with an implementation-disjoint raw client. One crash-safe
+rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are distinct: source is unreleased product 0.1.19, while v0.1.16 remains the supported
+`v0.1.16` are distinct: source is unreleased product 0.1.20, while v0.1.16 remains the supported
 public `x86_64-unknown-linux-musl` distribution. Its exact and latest
 downloads independently passed static inspection, distributed HTTP with complete function-definition
 projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker
@@ -32,12 +36,13 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
 1. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-2. **Nostr WebSocket and event semantics from a maintained consumer.** Reuse the exact endpoint,
-   DNS/address, TLS trust, cancellation, and resource ownership established by `HttpClient` without
-   widening it into an ambient URL or socket capability. Define persistent connection ownership,
-   framing, subscriptions, reconnect/backoff, NIP-01 event canonicalization, signing/key authority,
-   relay authentication, replay visibility, and an independent raw WebSocket oracle before adding
-   graph meaning or a deployment adapter.
+2. **Outbound WebSocket clients and Nostr event semantics from a maintained consumer.** Reuse the
+   exact endpoint, DNS/address, TLS trust, cancellation, and resource ownership established by
+   `HttpClient` without widening it into an ambient URL or socket capability. Keep the implemented
+   inbound structured-session server independent. Define outbound connection ownership,
+   reconnect/backoff, NIP-01 event canonicalization, signing/key authority, relay authentication,
+   replay visibility, and an implementation-disjoint client oracle before adding graph meaning or
+   an outbound adapter.
 3. **Broader affine lifetime or result protocols from a maintained workload.** The current direct
    handoff intentionally admits only one final consume parameter on a private same-package acyclic
    task helper. Add resource results, borrowing parameters, public or cross-package signatures,

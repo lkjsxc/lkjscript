@@ -1,4 +1,4 @@
-//! Implementation-disjoint full validator for normalized Graph 7 authority.
+//! Implementation-disjoint full validator for normalized Graph 8 authority.
 
 use super::affine::validate_affine_meaning;
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};

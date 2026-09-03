@@ -3,6 +3,7 @@ use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
+use crate::raw_websocket::{RawHandshake, RawMessage, RawWebSocket, RawWebSocketError};
 use lkjscript::platform::contributor::{
     FunctionDefinitionOracle, function_definition_oracle, largest_function_definition_oracle,
 };
@@ -27,7 +28,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 7;
+const SERVICE_CONTRACT_VERSION: u32 = 8;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -45,7 +46,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "c08dedb8312c4613873df5e4bf45e6e4a2e9a6464fa162d9dc5c561f3c4b3340";
+    "2bdf2f1d2b4871b8aba7cf57932149685b9f8735334b71c21bab4f708d89b83d";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -160,12 +161,38 @@ struct RunnerStopped {
     cleanup_failures: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     productive_iterations: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sessions: Option<SessionRuntimeObservation>,
 }
 
 impl RunnerStopped {
     fn clean(&self) -> bool {
-        self.admission_stopped && self.remaining_tasks == 0 && self.cleanup_failures == 0
+        self.admission_stopped
+            && self.remaining_tasks == 0
+            && self.cleanup_failures == 0
+            && self.sessions.as_ref().is_none_or(|sessions| {
+                sessions.pending_handshakes == 0 && sessions.active_sessions == 0
+            })
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SessionRuntimeObservation {
+    pending_handshakes: u64,
+    active_sessions: u64,
+    admitted_sessions: u64,
+    rejected_handshakes: u64,
+    completed_sessions: u64,
+    failed_sessions: u64,
+    overloaded_handshakes: u64,
+    inbound_messages: u64,
+    inbound_bytes: u64,
+    outbound_messages: u64,
+    outbound_bytes: u64,
+    maximum_pending_handshakes: u64,
+    maximum_active_sessions: u64,
+    maximum_process_buffer_bytes: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -211,8 +238,43 @@ struct ServiceResult {
     shutdown_cleanup_failures: u64,
     initialization_transport: InitializationTransport,
     initialization_observation: InitializationObservation,
+    structured_session: StructuredSessionObservation,
     request_elapsed_nanoseconds: BTreeMap<String, u64>,
     definition_projection: MaintainedDefinitionObservation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StructuredSessionObservation {
+    target: String,
+    oracle_boundary: String,
+    handshake_count: u64,
+    accept_values_recomputed: bool,
+    extensions_absent: bool,
+    subprotocols_absent: bool,
+    independent_actor_clients: u64,
+    initial_snapshot_ends: u64,
+    create_push_revision: u64,
+    update_push_revision: u64,
+    replacement_isolated: bool,
+    unsubscribe_isolated: bool,
+    actor_isolated: bool,
+    slow_client_contained: bool,
+    overload_rejected_before_upgrade: bool,
+    overload_isolated: bool,
+    abrupt_disconnects: u64,
+    fragmentation_observed: bool,
+    ping_pong_observed: bool,
+    binary_graph_close_code: u16,
+    application_error_codes: Vec<String>,
+    transport_negative_results: BTreeMap<String, String>,
+    shutdown_close_code: u16,
+    reconnect_snapshot_revision: u64,
+    transcript_digests: Vec<String>,
+    transcript_bytes: u64,
+    payloads_retained: bool,
+    first_runtime: SessionRuntimeObservation,
+    restart_runtime: SessionRuntimeObservation,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -654,7 +716,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-12 service bundle",
+        "maintained artifact-13 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -717,6 +779,73 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.shutdown_cleanup_failures != 0
         || result.initialization_transport.status == 0
         || result.initialization_observation.status == 0
+        || result.structured_session.target != "lkjournal-live-1"
+        || result.structured_session.handshake_count != 29
+        || !result.structured_session.accept_values_recomputed
+        || !result.structured_session.extensions_absent
+        || !result.structured_session.subprotocols_absent
+        || result.structured_session.independent_actor_clients < 2
+        || result.structured_session.initial_snapshot_ends < 3
+        || result.structured_session.create_push_revision != 0
+        || result.structured_session.update_push_revision != 1
+        || !result.structured_session.replacement_isolated
+        || !result.structured_session.unsubscribe_isolated
+        || !result.structured_session.actor_isolated
+        || !result.structured_session.slow_client_contained
+        || !result.structured_session.overload_rejected_before_upgrade
+        || !result.structured_session.overload_isolated
+        || result.structured_session.abrupt_disconnects != 13
+        || !result.structured_session.fragmentation_observed
+        || !result.structured_session.ping_pong_observed
+        || result.structured_session.binary_graph_close_code != 1003
+        || result.structured_session.application_error_codes
+            != ["invalid_message", "unknown_operation"]
+        || result.structured_session.transport_negative_results.len() != 7
+        || result.structured_session.shutdown_close_code != 1001
+        || result.structured_session.reconnect_snapshot_revision != 1
+        || result.structured_session.transcript_digests.len() != 27
+        || result.structured_session.transcript_bytes == 0
+        || result.structured_session.payloads_retained
+        || result.structured_session.first_runtime.pending_handshakes != 0
+        || result.structured_session.first_runtime.active_sessions != 0
+        || result.structured_session.first_runtime.admitted_sessions != 26
+        || result.structured_session.first_runtime.rejected_handshakes != 1
+        || result
+            .structured_session
+            .first_runtime
+            .completed_sessions
+            .checked_add(result.structured_session.first_runtime.failed_sessions)
+            != Some(result.structured_session.first_runtime.admitted_sessions)
+        || result
+            .structured_session
+            .first_runtime
+            .overloaded_handshakes
+            != 1
+        || result
+            .structured_session
+            .first_runtime
+            .maximum_active_sessions
+            != 16
+        || result
+            .structured_session
+            .first_runtime
+            .maximum_process_buffer_bytes
+            != 208 * 1024 * 1024
+        || result.structured_session.restart_runtime.pending_handshakes != 0
+        || result.structured_session.restart_runtime.active_sessions != 0
+        || result.structured_session.restart_runtime.admitted_sessions != 1
+        || result.structured_session.restart_runtime.completed_sessions != 1
+        || result.structured_session.restart_runtime.failed_sessions != 0
+        || result
+            .structured_session
+            .restart_runtime
+            .maximum_active_sessions
+            != 1
+        || result
+            .structured_session
+            .restart_runtime
+            .maximum_process_buffer_bytes
+            != 13 * 1024 * 1024
         || result.definition_projection.function != WORKER_FUNCTION
         || result.definition_projection.total_records == 0
         || result.definition_projection.contract_records == 0
@@ -813,7 +942,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-12 service bundle",
+            "maintained artifact-13 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1202,6 +1331,7 @@ fn run_acceptance(
     let artifact_source = application.join(SERVICE_ARTIFACT_RELATIVE);
     let service_source = application.join("service.deployment.json");
     let worker_source = application.join("worker.deployment.json");
+    let live_source = application.join("live.deployment.json");
     let artifact_bytes = process::read_bounded(&artifact_source, MAXIMUM_ARTIFACT_BYTES)
         .map_err(|error| ServiceFailure::infrastructure("artifact_read", error))?;
     let fresh_artifact = context.run_directory.join("fresh-lkjournal.lkja");
@@ -1257,11 +1387,32 @@ fn run_acceptance(
         &service_path,
         Some(service_port),
         "state/data",
+        None,
     )?;
     context.retain(&service_path)?;
     let worker_path = context.run_directory.join("worker.json");
-    write_descriptor(&worker_source, &worker_path, None, "state/data")?;
+    write_descriptor(&worker_source, &worker_path, None, "state/data", None)?;
     context.retain(&worker_path)?;
+    let live_port = free_port()?;
+    let live_path = context.run_directory.join("live.json");
+    write_descriptor(
+        &live_source,
+        &live_path,
+        Some(live_port),
+        "state/data",
+        None,
+    )?;
+    context.retain(&live_path)?;
+    let observer_service_port = free_port()?;
+    let observer_service_path = context.run_directory.join("service-observer.json");
+    write_descriptor(
+        &service_source,
+        &observer_service_path,
+        Some(observer_service_port),
+        "state/data",
+        Some("observer"),
+    )?;
+    context.retain(&observer_service_path)?;
 
     let mut runner_environment = process::environment();
     runner_environment.insert(
@@ -1318,7 +1469,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-12 build",
+        "service readiness disagrees with the exact fresh artifact-13 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -1405,6 +1556,170 @@ fn run_acceptance(
     context.secret_values.push(token.as_bytes().to_vec());
     let authorization = format!("Bearer {token}");
 
+    let observer_password = random_hex(16)?;
+    context
+        .secret_values
+        .push(observer_password.as_bytes().to_vec());
+    let observer_service_index = context.start_runner(
+        "service-observer-initialization",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "serve".to_owned(),
+            "--deployment".to_owned(),
+            "service-observer.json".to_owned(),
+        ],
+        &context.run_directory.clone(),
+        runner_environment.clone(),
+    )?;
+    let observer_service_ready = context.runner_ready(observer_service_index)?;
+    require(
+        observer_service_ready.artifact_digest == artifact_identity.artifact_bundle
+            && observer_service_ready.target == "serve"
+            && observer_service_ready.runner == "http",
+        "structured_session_second_actor_service",
+        "second actor initialization service changed artifact or target identity",
+    )?;
+    let observer_initialize_path = format!("/initialize?{}", query(&[("actor", "observer")]));
+    let observer_initialized = context.request(
+        "initialize-observer",
+        observer_service_port,
+        "POST",
+        &observer_initialize_path,
+        observer_password.as_bytes(),
+        &[("Authorization", &bootstrap_authorization)],
+    )?;
+    require(
+        observer_initialized.status == 200
+            && boolean_at(
+                &parse_json_body(&observer_initialized.body)?,
+                "actor_inserted",
+            )?,
+        "structured_session_second_actor",
+        format!(
+            "second actor initialization failed with status {} and bounded response {}",
+            observer_initialized.status,
+            String::from_utf8_lossy(&observer_initialized.body)
+        ),
+    )?;
+    let observer_login_path = format!("/login?{}", query(&[("actor", "observer")]));
+    let observer_login = context.request(
+        "login-observer",
+        observer_service_port,
+        "POST",
+        &observer_login_path,
+        observer_password.as_bytes(),
+        &[],
+    )?;
+    let observer_login_json = parse_json_body(&observer_login.body)?;
+    require(
+        observer_login.status == 200 && string_at(&observer_login_json, "actor")? == "observer",
+        "structured_session_second_actor_login",
+        "second actor login failed",
+    )?;
+    let observer_token = string_at(&observer_login_json, "token")?;
+    context
+        .secret_values
+        .push(observer_token.as_bytes().to_vec());
+    let observer_authorization = format!("Bearer {observer_token}");
+    context.stop_runner(observer_service_index)?;
+
+    let live_index = context.start_runner(
+        "interactive-first",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "serve".to_owned(),
+            "--deployment".to_owned(),
+            "live.json".to_owned(),
+        ],
+        &context.run_directory.clone(),
+        runner_environment.clone(),
+    )?;
+    let live_ready = context.runner_ready(live_index)?;
+    require(
+        live_ready.artifact_digest == artifact_identity.artifact_bundle
+            && live_ready.target == "lkjournal-live-1"
+            && live_ready.runner == "interactive"
+            && live_ready.secret_names.is_empty(),
+        "structured_session_artifact_identity",
+        "interactive readiness disagrees with the exact maintained artifact and target",
+    )?;
+
+    let live_address = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, live_port));
+    let (unauthorized_socket, unauthorized_handshake) = raw_websocket(
+        RawWebSocket::request_upgrade(live_address, "/live", &[], Duration::from_secs(3)),
+        "structured_session_rejection",
+    )?;
+    require(
+        unauthorized_socket.is_none() && unauthorized_handshake.status == 401,
+        "structured_session_rejection",
+        "graph-owned authentication rejection did not return bounded HTTP before upgrade",
+    )?;
+
+    let (mut client_a, handshake_a) = connect_live_client(live_port, &authorization)?;
+    let (mut client_b, handshake_b) = connect_live_client(live_port, &authorization)?;
+    let (mut observer_client, observer_handshake) =
+        connect_live_client(live_port, &observer_authorization)?;
+    for handshake in [&handshake_a, &handshake_b, &observer_handshake] {
+        require_live_handshake(handshake)?;
+    }
+    raw_websocket(
+        client_a.send_text(r#"["subscribe","alpha"]"#),
+        "structured_session_subscribe",
+    )?;
+    raw_websocket(
+        client_b.send_text(r#"["subscribe","beta"]"#),
+        "structured_session_subscribe",
+    )?;
+    raw_websocket(
+        observer_client.send_text(r#"["subscribe","other"]"#),
+        "structured_session_subscribe",
+    )?;
+    require_snapshot_end(&mut client_a, "alpha")?;
+    require_snapshot_end(&mut client_b, "beta")?;
+    require_snapshot_end(&mut observer_client, "other")?;
+
+    let mut capacity_clients = Vec::with_capacity(13);
+    for _ in 0..13 {
+        let (client, handshake) = connect_live_client(live_port, &authorization)?;
+        require_live_handshake(&handshake)?;
+        capacity_clients.push(client);
+    }
+    let (overload_socket, overload_handshake) = raw_websocket(
+        RawWebSocket::request_upgrade(
+            live_address,
+            "/live",
+            &[("Authorization", &authorization)],
+            Duration::from_secs(3),
+        ),
+        "structured_session_overload",
+    )?;
+    require(
+        overload_socket.is_none()
+            && overload_handshake.status == 503
+            && !overload_handshake.accept_matches,
+        "structured_session_overload",
+        "the seventeenth active session was not rejected before upgrade",
+    )?;
+    raw_websocket(
+        client_b.send_ping(b"overload-isolation"),
+        "structured_session_overload_isolation",
+    )?;
+    match raw_websocket(
+        client_b.read_message(),
+        "structured_session_overload_isolation",
+    )? {
+        RawMessage::Pong(payload) if payload == b"overload-isolation" => {}
+        _ => {
+            return Err(ServiceFailure::failed(
+                "structured_session_overload_isolation",
+                "session overload disturbed an already admitted client",
+            ));
+        }
+    }
+    for client in &capacity_clients {
+        raw_websocket(client.disconnect(), "structured_session_disconnect")?;
+    }
+
     let create_body =
         br##"{"title":"Acceptance entry","body":"# Initial\nLive service evidence."}"##;
     let created = context.request(
@@ -1433,6 +1748,83 @@ fn run_acceptance(
         "resource_identity",
         "service returned an unsafe resource identity",
     )?;
+    require(
+        require_resource_message(&mut client_a, "alpha", 0)? == resource_id
+            && require_resource_message(&mut client_b, "beta", 0)? == resource_id,
+        "structured_session_create_push",
+        "independent actor-owned subscriptions disagreed with the HTTP create",
+    )?;
+    require(
+        raw_websocket(
+            observer_client.is_quiet_for(Duration::from_millis(350)),
+            "structured_session_actor_isolation",
+        )?,
+        "structured_session_actor_isolation",
+        "second actor observed the first actor's resource",
+    )?;
+    raw_websocket(
+        client_a.send_ping(b"session-oracle-ping"),
+        "structured_session_ping",
+    )?;
+    match raw_websocket(client_a.read_message(), "structured_session_pong")? {
+        RawMessage::Pong(payload) if payload == b"session-oracle-ping" => {}
+        _ => {
+            return Err(ServiceFailure::failed(
+                "structured_session_pong",
+                "transport did not return the exact bounded ping payload",
+            ));
+        }
+    }
+    raw_websocket(
+        client_a.send_fragmented_text(b"[\"subscribe\",", b"\"alpha\"]"),
+        "structured_session_fragmentation",
+    )?;
+    require(
+        require_resource_message(&mut client_a, "alpha", 0)? == resource_id,
+        "structured_session_replacement",
+        "replaced subscription did not reconstruct its current snapshot",
+    )?;
+    require_snapshot_end(&mut client_a, "alpha")?;
+    require(
+        raw_websocket(
+            client_b.is_quiet_for(Duration::from_millis(250)),
+            "structured_session_replacement_isolation",
+        )?,
+        "structured_session_replacement_isolation",
+        "replacing one connection-local identifier affected another client",
+    )?;
+    raw_websocket(
+        client_a.send_text(r#"["unsubscribe","alpha"]"#),
+        "structured_session_unsubscribe",
+    )?;
+    require(
+        raw_websocket(
+            client_a.is_quiet_for(Duration::from_millis(250)),
+            "structured_session_unsubscribe",
+        )?,
+        "structured_session_unsubscribe",
+        "unsubscribe unexpectedly emitted application output",
+    )?;
+
+    let (mut slow_client, slow_handshake) = connect_live_client(live_port, &authorization)?;
+    require_live_handshake(&slow_handshake)?;
+    raw_websocket(
+        slow_client.send_text(r#"["subscribe","slow"]"#),
+        "structured_session_slow_subscribe",
+    )?;
+    raw_websocket(
+        client_b.send_ping(b"independent-client"),
+        "structured_session_slow_isolation",
+    )?;
+    match raw_websocket(client_b.read_message(), "structured_session_slow_isolation")? {
+        RawMessage::Pong(payload) if payload == b"independent-client" => {}
+        _ => {
+            return Err(ServiceFailure::failed(
+                "structured_session_slow_isolation",
+                "an unread client prevented another session's transport progress",
+            ));
+        }
+    }
 
     let listed = context.request(
         "list-resources",
@@ -1491,6 +1883,22 @@ fn run_acceptance(
         updated.status == 200 && u64_at(&parse_json_body(&updated.body)?, "revision")? == 1,
         "resource_update",
         "exact-base update failed",
+    )?;
+    require(
+        require_resource_message(&mut client_b, "beta", 1)? == resource_id,
+        "structured_session_update_push",
+        "subscribed client did not observe the HTTP update",
+    )?;
+    require(
+        raw_websocket(
+            client_a.is_quiet_for(Duration::from_millis(350)),
+            "structured_session_unsubscribe_isolation",
+        )? && raw_websocket(
+            observer_client.is_quiet_for(Duration::from_millis(350)),
+            "structured_session_actor_isolation",
+        )?,
+        "structured_session_unsubscribe_isolation",
+        "unsubscribed or foreign-actor client observed an update",
     )?;
     let stale = context.request(
         "stale-update",
@@ -1565,6 +1973,60 @@ fn run_acceptance(
         "unknown JSON field did not reject",
     )?;
 
+    let (mut application_error_client, application_error_handshake) =
+        connect_live_client(live_port, &authorization)?;
+    require_live_handshake(&application_error_handshake)?;
+    raw_websocket(
+        application_error_client.send_text("{"),
+        "structured_session_malformed_json",
+    )?;
+    require_application_error(&mut application_error_client, "invalid_message")?;
+    raw_websocket(
+        application_error_client.send_text(r#"["unknown","id"]"#),
+        "structured_session_unknown_operation",
+    )?;
+    require_application_error(&mut application_error_client, "unknown_operation")?;
+
+    let (mut binary_client, binary_handshake) = connect_live_client(live_port, &authorization)?;
+    require_live_handshake(&binary_handshake)?;
+    raw_websocket(
+        binary_client.send_binary(b"not-application-text"),
+        "structured_session_binary",
+    )?;
+    require_close(&mut binary_client, 1003, "binary-graph-close")?;
+
+    let mut transport_negative_results = BTreeMap::new();
+    let mut negative_transcript_digests = Vec::new();
+    let mut negative_transcript_bytes = 0_u64;
+    for case in [
+        "invalid-text",
+        "unmasked",
+        "reserved-opcode",
+        "reserved-bit",
+        "orphan-continuation",
+        "fragmented-control",
+        "oversized-frame",
+    ] {
+        let (result, digest, bytes) = run_transport_negative(live_port, &authorization, case)?;
+        require(
+            transport_negative_results
+                .insert(case.to_owned(), result)
+                .is_none(),
+            "structured_session_negative_duplicate",
+            "raw transport negative matrix repeated a case",
+        )?;
+        negative_transcript_digests.push(digest);
+        negative_transcript_bytes =
+            negative_transcript_bytes
+                .checked_add(bytes)
+                .ok_or_else(|| {
+                    ServiceFailure::failed(
+                        "structured_session_transcript_overflow",
+                        "raw transport transcript bytes overflowed",
+                    )
+                })?;
+    }
+
     let object_payload = vec![b'z'; 200_000];
     let object_path_query = format!("/objects?{}", query(&[("name", "acceptance-200k.bin")]));
     let object = context.request(
@@ -1613,7 +2075,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-12 build",
+        "worker readiness disagrees with the exact fresh artifact-13 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -1632,7 +2094,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-12 build",
+        "second worker readiness disagrees with the exact fresh artifact-13 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -1653,6 +2115,154 @@ fn run_acceptance(
         "two-worker acceptance reported insufficient productive work",
     )?;
     let queue_observation = observe_queue_oracle(&data_root, productive_iterations)?;
+
+    raw_websocket(
+        application_error_client.send_close(1000, "oracle-complete"),
+        "structured_session_peer_close",
+    )?;
+    require_close(&mut application_error_client, 1000, "peer-close-reply")?;
+    raw_websocket(client_a.disconnect(), "structured_session_disconnect")?;
+    raw_websocket(
+        observer_client.disconnect(),
+        "structured_session_disconnect",
+    )?;
+    raw_websocket(slow_client.disconnect(), "structured_session_disconnect")?;
+    let live_stopped = context.stop_runner(live_index)?;
+    require_close(&mut client_b, 1001, "service-shutdown-close")?;
+    let first_runtime = live_stopped.sessions.ok_or_else(|| {
+        ServiceFailure::failed(
+            "structured_session_runtime_observation",
+            "interactive runner omitted its bounded session observation",
+        )
+    })?;
+    require(
+        first_runtime.pending_handshakes == 0
+            && first_runtime.active_sessions == 0
+            && first_runtime.overloaded_handshakes == 1
+            && first_runtime.maximum_active_sessions == 16
+            && first_runtime.maximum_process_buffer_bytes == 208 * 1024 * 1024,
+        "structured_session_runtime_observation",
+        "interactive runtime limits, overload, peaks, or terminal cleanup changed",
+    )?;
+
+    let live_restart_index = context.start_runner(
+        "interactive-restart",
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "serve".to_owned(),
+            "--deployment".to_owned(),
+            "live.json".to_owned(),
+        ],
+        &context.run_directory.clone(),
+        runner_environment.clone(),
+    )?;
+    let live_restart_ready = context.runner_ready(live_restart_index)?;
+    require(
+        live_restart_ready.artifact_digest == artifact_identity.artifact_bundle
+            && live_restart_ready.target == "lkjournal-live-1"
+            && live_restart_ready.runner == "interactive",
+        "structured_session_restart_identity",
+        "restarted interactive target changed identity",
+    )?;
+    let (mut reconnect_client, reconnect_handshake) =
+        connect_live_client(live_port, &authorization)?;
+    require_live_handshake(&reconnect_handshake)?;
+    raw_websocket(
+        reconnect_client.send_text(r#"["subscribe","reconnect"]"#),
+        "structured_session_reconnect",
+    )?;
+    require(
+        require_resource_message(&mut reconnect_client, "reconnect", 1)? == resource_id,
+        "structured_session_reconnect_snapshot",
+        "reconnected subscription did not reconstruct current durable state",
+    )?;
+    require_snapshot_end(&mut reconnect_client, "reconnect")?;
+    raw_websocket(
+        reconnect_client.send_close(1000, "reconnect-complete"),
+        "structured_session_reconnect_close",
+    )?;
+    require_close(&mut reconnect_client, 1000, "reconnect-peer-close-reply")?;
+    let restart_stopped = context.stop_runner(live_restart_index)?;
+    let restart_runtime = restart_stopped.sessions.ok_or_else(|| {
+        ServiceFailure::failed(
+            "structured_session_restart_observation",
+            "restarted interactive runner omitted its bounded session observation",
+        )
+    })?;
+
+    let mut transcript_digests = vec![
+        client_a.transcript_digest(),
+        client_b.transcript_digest(),
+        observer_client.transcript_digest(),
+        slow_client.transcript_digest(),
+        application_error_client.transcript_digest(),
+        binary_client.transcript_digest(),
+        reconnect_client.transcript_digest(),
+    ];
+    transcript_digests.extend(capacity_clients.iter().map(RawWebSocket::transcript_digest));
+    transcript_digests.extend(negative_transcript_digests);
+    let transcript_bytes = [
+        client_a.transcript_bytes(),
+        client_b.transcript_bytes(),
+        observer_client.transcript_bytes(),
+        slow_client.transcript_bytes(),
+        application_error_client.transcript_bytes(),
+        binary_client.transcript_bytes(),
+        reconnect_client.transcript_bytes(),
+        capacity_clients
+            .iter()
+            .try_fold(0_u64, |total, client| {
+                total.checked_add(client.transcript_bytes())
+            })
+            .ok_or_else(|| {
+                ServiceFailure::failed(
+                    "structured_session_transcript_overflow",
+                    "capacity-client transcript byte total overflowed",
+                )
+            })?,
+        negative_transcript_bytes,
+    ]
+    .into_iter()
+    .try_fold(0_u64, u64::checked_add)
+    .ok_or_else(|| {
+        ServiceFailure::failed(
+            "structured_session_transcript_overflow",
+            "raw transcript byte total overflowed",
+        )
+    })?;
+    let structured_session = StructuredSessionObservation {
+        target: "lkjournal-live-1".to_owned(),
+        oracle_boundary:
+            "manual TCP/HTTP/SHA-1/Base64/masking/framing/close; no production WebSocket helper"
+                .to_owned(),
+        handshake_count: 29,
+        accept_values_recomputed: true,
+        extensions_absent: true,
+        subprotocols_absent: true,
+        independent_actor_clients: 2,
+        initial_snapshot_ends: 3,
+        create_push_revision: 0,
+        update_push_revision: 1,
+        replacement_isolated: true,
+        unsubscribe_isolated: true,
+        actor_isolated: true,
+        slow_client_contained: true,
+        overload_rejected_before_upgrade: true,
+        overload_isolated: true,
+        abrupt_disconnects: u64::try_from(capacity_clients.len()).unwrap_or(u64::MAX),
+        fragmentation_observed: true,
+        ping_pong_observed: true,
+        binary_graph_close_code: 1003,
+        application_error_codes: vec!["invalid_message".to_owned(), "unknown_operation".to_owned()],
+        transport_negative_results,
+        shutdown_close_code: 1001,
+        reconnect_snapshot_revision: 1,
+        transcript_digests,
+        transcript_bytes,
+        payloads_retained: false,
+        first_runtime,
+        restart_runtime,
+    };
     context.stop_runner(service_index)?;
 
     let restart_index = context.start_runner(
@@ -1778,6 +2388,7 @@ fn run_acceptance(
         &restored_descriptor,
         Some(restored_port),
         "state/restored-data",
+        None,
     )?;
     context.retain(&restored_descriptor)?;
     let restored_index = context.start_runner(
@@ -1795,7 +2406,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-12 bundle identity",
+        "restored service readiness changed the exact artifact-13 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -1817,7 +2428,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 7 authority inventory",
+        "service acceptance changed the maintained Graph 8 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -1840,6 +2451,7 @@ fn run_acceptance(
         shutdown_cleanup_failures: 0,
         initialization_transport,
         initialization_observation,
+        structured_session,
         request_elapsed_nanoseconds: timings,
         definition_projection,
     })
@@ -2384,6 +2996,217 @@ fn http_request(
     http_probe::request(address, method, path, body, headers)
         .map_err(|error| ServiceFailure::infrastructure("http_probe", error))
 }
+
+fn raw_websocket<T>(
+    result: Result<T, RawWebSocketError>,
+    boundary: &'static str,
+) -> Result<T, ServiceFailure> {
+    result.map_err(|error| {
+        ServiceFailure::failed(
+            boundary,
+            format!(
+                "raw WebSocket oracle failed at {}: {}",
+                error.code, error.message
+            ),
+        )
+    })
+}
+
+fn connect_live_client(
+    port: u16,
+    authorization: &str,
+) -> Result<(RawWebSocket, RawHandshake), ServiceFailure> {
+    let address = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
+    raw_websocket(
+        RawWebSocket::connect(
+            address,
+            "/live",
+            &[("Authorization", authorization)],
+            Duration::from_secs(3),
+        ),
+        "structured_session_connect",
+    )
+}
+
+fn require_live_handshake(handshake: &RawHandshake) -> Result<(), ServiceFailure> {
+    require(
+        handshake.status == 101
+            && handshake.accept_matches
+            && handshake.extensions_absent
+            && handshake.subprotocol_absent,
+        "structured_session_handshake",
+        "raw WebSocket handshake did not match the exact RFC 6455 server boundary",
+    )
+}
+
+fn raw_text(socket: &mut RawWebSocket) -> Result<String, ServiceFailure> {
+    match raw_websocket(socket.read_message(), "structured_session_read_message")? {
+        RawMessage::Text(value) => Ok(value),
+        RawMessage::Binary(_) => Err(ServiceFailure::failed(
+            "structured_session_message_kind",
+            "graph emitted binary where a JSON text message was required",
+        )),
+        RawMessage::Pong(_) => Err(ServiceFailure::failed(
+            "structured_session_message_order",
+            "pong overtook an expected application message",
+        )),
+        RawMessage::Close { code, .. } => Err(ServiceFailure::failed(
+            "structured_session_unexpected_close",
+            format!("session closed before its expected message with code {code:?}"),
+        )),
+    }
+}
+
+fn raw_json(socket: &mut RawWebSocket) -> Result<Value, ServiceFailure> {
+    serde_json::from_str(&raw_text(socket)?).map_err(|_| {
+        ServiceFailure::failed(
+            "structured_session_json",
+            "graph-owned session output is not strict JSON",
+        )
+    })
+}
+
+fn require_snapshot_end(
+    socket: &mut RawWebSocket,
+    subscription: &str,
+) -> Result<(), ServiceFailure> {
+    let value = raw_json(socket)?;
+    require(
+        value.get("kind").and_then(Value::as_str) == Some("snapshot-end")
+            && value.get("subscription").and_then(Value::as_str) == Some(subscription),
+        "structured_session_snapshot_end",
+        "subscription snapshot omitted its deterministic terminal marker",
+    )
+}
+
+fn require_resource_message(
+    socket: &mut RawWebSocket,
+    subscription: &str,
+    revision: u64,
+) -> Result<String, ServiceFailure> {
+    let value = raw_json(socket)?;
+    require(
+        value.get("kind").and_then(Value::as_str) == Some("resource")
+            && value.get("subscription").and_then(Value::as_str) == Some(subscription)
+            && value
+                .get("resource")
+                .and_then(|resource| resource.get("revision"))
+                .and_then(Value::as_u64)
+                == Some(revision),
+        "structured_session_resource",
+        "server-pushed resource does not match its subscription and revision",
+    )?;
+    value
+        .get("resource")
+        .and_then(|resource| resource.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            ServiceFailure::failed(
+                "structured_session_resource_identity",
+                "server-pushed resource omitted its bounded identity",
+            )
+        })
+}
+
+fn require_application_error(
+    socket: &mut RawWebSocket,
+    expected: &str,
+) -> Result<(), ServiceFailure> {
+    let value = raw_json(socket)?;
+    require(
+        value.get("kind").and_then(Value::as_str) == Some("error")
+            && value.get("code").and_then(Value::as_str) == Some(expected),
+        "structured_session_application_error",
+        "graph-owned deterministic application error changed",
+    )
+}
+
+fn require_close(
+    socket: &mut RawWebSocket,
+    expected: u16,
+    boundary: &'static str,
+) -> Result<(), ServiceFailure> {
+    let message = socket.read_message().map_err(|error| {
+        ServiceFailure::failed(
+            "structured_session_close",
+            format!(
+                "raw WebSocket close oracle failed at {boundary} ({}): {}",
+                error.code, error.message
+            ),
+        )
+    })?;
+    match message {
+        RawMessage::Close {
+            code: Some(code), ..
+        } if code == expected => Ok(()),
+        RawMessage::Close { code, .. } => Err(ServiceFailure::failed(
+            "structured_session_close_code",
+            format!("session close code {code:?} did not equal {expected}"),
+        )),
+        _ => Err(ServiceFailure::failed(
+            "structured_session_close_kind",
+            "session did not terminate with one close frame",
+        )),
+    }
+}
+
+fn observe_transport_terminal(socket: &mut RawWebSocket) -> Result<String, ServiceFailure> {
+    match socket.read_message() {
+        Ok(RawMessage::Close { code, .. }) => Ok(format!("close:{code:?}")),
+        Err(error)
+            if matches!(
+                error.code,
+                "raw_websocket_read" | "raw_websocket_closed" | "raw_websocket_peek"
+            ) =>
+        {
+            Ok("connection-contained".to_owned())
+        }
+        Ok(_) => Err(ServiceFailure::failed(
+            "structured_session_negative_output",
+            "malformed transport input produced application output",
+        )),
+        Err(error) => Err(ServiceFailure::failed(
+            "structured_session_negative_oracle",
+            format!(
+                "raw negative oracle failed at {}: {}",
+                error.code, error.message
+            ),
+        )),
+    }
+}
+
+fn run_transport_negative(
+    port: u16,
+    authorization: &str,
+    case: &'static str,
+) -> Result<(String, String, u64), ServiceFailure> {
+    let (mut socket, handshake) = connect_live_client(port, authorization)?;
+    require_live_handshake(&handshake)?;
+    let sent = match case {
+        "invalid-text" => socket.send_invalid_text(),
+        "unmasked" => socket.send_unmasked_text("unmasked"),
+        "reserved-opcode" => socket.send_reserved_opcode(),
+        "reserved-bit" => socket.send_reserved_bit(),
+        "orphan-continuation" => socket.send_orphan_continuation(),
+        "fragmented-control" => socket.send_fragmented_ping(),
+        "oversized-frame" => socket.send_oversized(262_145),
+        _ => {
+            return Err(ServiceFailure::failed(
+                "structured_session_negative_case",
+                "raw transport oracle named an unknown negative case",
+            ));
+        }
+    };
+    raw_websocket(sent, "structured_session_negative_send")?;
+    let result = observe_transport_terminal(&mut socket)?;
+    Ok((
+        result,
+        socket.transcript_digest(),
+        socket.transcript_bytes(),
+    ))
+}
+
 fn parse_ready_event(line: &[u8]) -> Result<RunnerReady, ServiceFailure> {
     let value: Value = serde_json::from_slice(line).map_err(|_| {
         ServiceFailure::failed("runner_ready_json", "runner readiness was not machine JSON")
@@ -2478,6 +3301,10 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
                         })
                     })
                     .transpose()?,
+                sessions: receipt
+                    .get("sessions")
+                    .map(parse_session_runtime_observation)
+                    .transpose()?,
             });
         }
     }
@@ -2486,6 +3313,27 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
             "runner_stop_missing",
             "runner omitted a successful stop receipt",
         )
+    })
+}
+
+fn parse_session_runtime_observation(
+    value: &Value,
+) -> Result<SessionRuntimeObservation, ServiceFailure> {
+    Ok(SessionRuntimeObservation {
+        pending_handshakes: u64_at(value, "pending_handshakes")?,
+        active_sessions: u64_at(value, "active_sessions")?,
+        admitted_sessions: u64_at(value, "admitted_sessions")?,
+        rejected_handshakes: u64_at(value, "rejected_handshakes")?,
+        completed_sessions: u64_at(value, "completed_sessions")?,
+        failed_sessions: u64_at(value, "failed_sessions")?,
+        overloaded_handshakes: u64_at(value, "overloaded_handshakes")?,
+        inbound_messages: u64_at(value, "inbound_messages")?,
+        inbound_bytes: u64_at(value, "inbound_bytes")?,
+        outbound_messages: u64_at(value, "outbound_messages")?,
+        outbound_bytes: u64_at(value, "outbound_bytes")?,
+        maximum_pending_handshakes: u64_at(value, "maximum_pending_handshakes")?,
+        maximum_active_sessions: u64_at(value, "maximum_active_sessions")?,
+        maximum_process_buffer_bytes: u64_at(value, "maximum_process_buffer_bytes")?,
     })
 }
 
@@ -2587,6 +3435,7 @@ fn write_descriptor(
     destination: &Path,
     port: Option<u16>,
     data_root: &str,
+    initial_actor: Option<&str>,
 ) -> Result<(), ServiceFailure> {
     let bytes = process::read_bounded(source, MAXIMUM_DESCRIPTOR_BYTES)
         .map_err(|error| ServiceFailure::infrastructure("descriptor_read", error))?;
@@ -2602,7 +3451,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-12 bundle",
+            "maintained deployment descriptor does not bind the current artifact-13 bundle",
         ));
     }
     if let Some(port) = port {
@@ -2610,6 +3459,21 @@ fn write_descriptor(
             "listen".to_owned(),
             Value::String(format!("127.0.0.1:{port}")),
         );
+    }
+    if let Some(actor) = initial_actor {
+        let value = object
+            .get_mut("configuration")
+            .and_then(Value::as_object_mut)
+            .and_then(|configuration| configuration.get_mut("initial-actor"))
+            .and_then(Value::as_object_mut)
+            .and_then(|entry| entry.get_mut("value"))
+            .ok_or_else(|| {
+                ServiceFailure::failed(
+                    "descriptor_initial_actor",
+                    "service descriptor omits its graph-owned initial actor configuration",
+                )
+            })?;
+        *value = Value::String(actor.to_owned());
     }
     let grants = object
         .get_mut("grants")
@@ -4077,7 +4941,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 7);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 8);
     }
 
     #[test]

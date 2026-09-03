@@ -1,4 +1,4 @@
-//! Typed additions and contract updates for existing Graph 7 owners.
+//! Typed additions and contract updates for existing Graph 8 owners.
 
 use super::*;
 use crate::platform::kernel::{

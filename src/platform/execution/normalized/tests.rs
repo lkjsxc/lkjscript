@@ -91,15 +91,15 @@ fn prepare_repository(
 ) -> (tempfile::TempDir, GraphRepository, NormalizedProgram) {
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
-        .expect("Graph 7 repository");
+        .expect("Graph 8 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
     )
     .expect("normalized compilation");
     let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("Graph 7 artifact");
-    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 7 artifact");
+        .expect("Graph 8 artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 8 artifact");
     let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
     (temporary, created.repository, program)
 }
@@ -1574,7 +1574,7 @@ fn transaction_result_snapshot() -> crate::platform::kernel::KernelSnapshot {
 }
 
 #[test]
-fn strict_graph7_artifact_prepares_only_dense_runtime_bindings() {
+fn strict_graph8_artifact_prepares_only_dense_runtime_bindings() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let caller = snapshot
         .owners
@@ -2540,7 +2540,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph7_dense_bytecode_3");
+    assert_eq!(observation.production_tier, "graph8_dense_bytecode_3");
 }
 
 #[test]
@@ -2836,7 +2836,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph7_reference_records_2"
+        "graph8_reference_records_2"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -2917,7 +2917,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
 }
 
 #[test]
-fn every_graph7_expression_form_executes_equally_in_both_tiers() {
+fn every_graph8_expression_form_executes_equally_in_both_tiers() {
     let snapshot = transaction_result_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();
@@ -2944,7 +2944,7 @@ fn every_graph7_expression_form_executes_equally_in_both_tiers() {
 }
 
 #[test]
-fn both_graph7_execution_tiers_commit_and_rollback_exact_transactions() {
+fn both_graph8_execution_tiers_commit_and_rollback_exact_transactions() {
     let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();

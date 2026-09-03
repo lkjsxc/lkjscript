@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 7 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 8 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -8,6 +8,7 @@ use super::unit::{
     CompiledRequirement, CompiledSignature, CompiledText, CompiledVariantJump,
     MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
 };
+use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::change::{
     CanonicalBaseRead, CanonicalReadWork, WitnessBaseRead, WitnessReadWork,
 };
@@ -19,10 +20,12 @@ use crate::platform::kernel::{
     PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation, PortReference,
     RequirementReference, TextValue, TypeForm, TypeObjectDigest,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, ExpressionId, FieldId, OperationId, ParameterId, PortId,
     RequirementId,
 };
+use crate::platform::session::{CanonicalSessionRead, validate_session_function_type};
 use crate::platform::storage::object::ObjectKey;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -172,6 +175,33 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 self.compile_declaration(declaration, record)
             }
             (OwnerKey::Target(_), OwnerRecord::Target(record)) => {
+                if record.runner == RunnerKind::Interactive {
+                    if record.port.package != self.package {
+                        return Err(compiler_corrupt(
+                            "compiler_session_port_package",
+                            "interactive target port must belong to the compiled root package",
+                        ));
+                    }
+                    let OwnerRecord::Port(port_record) = self.required_owner(
+                        OwnerKey::Port(record.port.port),
+                        "interactive target references a missing port",
+                    )?
+                    else {
+                        return Err(compiler_corrupt(
+                            "compiler_session_port_kind",
+                            "interactive target port identity names another owner kind",
+                        ));
+                    };
+                    let standard = BuiltinStandard::load()?.session_contract()?;
+                    let session_read = CanonicalSessionRead::new(self.canonical);
+                    let validation = validate_session_function_type(
+                        &session_read,
+                        standard,
+                        port_record.function_type,
+                    );
+                    self.work.canonical.add(session_read.work());
+                    let _ = validation?;
+                }
                 let component = self.tables.declaration(record.component)?;
                 let port = self.tables.port(record.port)?;
                 Ok(CompilationPayload::Target {

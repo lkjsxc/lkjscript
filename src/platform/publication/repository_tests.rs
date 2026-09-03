@@ -47,7 +47,7 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
         &logical,
         Some("repository fixture".to_owned()),
     )
-    .expect("Graph 7 repository creation");
+    .expect("Graph 8 repository creation");
 
     assert_eq!(created.repository.root(), destination.as_path());
     assert_eq!(created.current.head, created.initial.publication.head);
@@ -5276,7 +5276,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
 }
 
 #[test]
-fn authored_type_builder_interns_every_unrestricted_graph_seven_type_form() {
+fn authored_type_builder_interns_every_unrestricted_graph_eight_type_form() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -6316,7 +6316,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
 }
 
 #[test]
-fn authored_expression_builder_covers_every_graph_seven_operation() {
+fn authored_expression_builder_covers_every_graph_eight_operation() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();

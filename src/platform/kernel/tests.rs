@@ -609,7 +609,7 @@ fn normalized_prototype_passes_full_oracle() {
 }
 
 #[test]
-fn graph_seven_permits_a_structurally_empty_package() {
+fn graph_eight_permits_a_structurally_empty_package() {
     let snapshot = KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
@@ -628,7 +628,7 @@ fn graph_seven_permits_a_structurally_empty_package() {
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     };
-    let report = validate_full(&snapshot).expect("empty package is valid Graph 7 authority");
+    let report = validate_full(&snapshot).expect("empty package is valid Graph 8 authority");
     assert_eq!(report.owners_checked, 0);
     assert_eq!(report.relation_edges, 0);
 }
@@ -976,7 +976,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "03ac90418cdec0bd465ae24ee495da51b1b74e8d0e29571125172edf7ab9f3fb"
+        "716a7168a2b25b08e55d0d2db66888f97665f9a9b15890872f88bd27393f7513"
     );
 }
 

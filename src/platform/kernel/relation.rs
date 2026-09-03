@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 7 records.
+//! Single deterministic relation extractor for Graph 8 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;

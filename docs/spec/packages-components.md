@@ -61,8 +61,9 @@ stable ID, function type, and exact function or expression implementation. Crede
 adapters, sockets, and deployment topology are excluded.
 
 A target binds stable target identity and mutable target name to exact component and port
-identities plus one runner kind. Public `create.target` accepts only `command` or `http`; the
-released `run` command accepts only a pure command target.
+identities plus one runner kind. Public `create.target` accepts exactly `command`, `http`, or
+`interactive`; `run` accepts only a pure command target, while `serve` accepts exact HTTP or
+interactive topology.
 Tests are graph-owned actual/expected expressions with exact comparison policy. Task functions may
 name exact requirements; artifact linking retains their exact requirement owner closure without
 treating a use by multiple task functions as duplicate semantic definition.
@@ -70,7 +71,10 @@ treating a use by multiple task functions as duplicate semantic definition.
 Validation rejects foreign domains, absent or retired owners, invalid type/effect shape,
 requirement widening, unavailable operations, a port/function type disagreement, a target whose
 port belongs to another component, a missing component requirement closure, incompatible ports,
-and runner mismatch before publication or execution. Request-local forward references are resolved
+and runner mismatch before publication or execution. An interactive port must reconstruct the
+canonical `(Option<State>, SessionEvent) -> SessionDecision<State>` relation with one closed
+ordinary concrete `State`; graph validation, package construction, compilation, strict artifact
+loading, and deployment preparation each reject relation or retained-state drift. Request-local forward references are resolved
 within one normalized authored request and never weaken those checks.
 
 ## Compilation and artifact closure
@@ -117,13 +121,14 @@ binds requirement aliases to generic adapters and secret/configuration sources, 
 limits/topology. Application routes, data spaces/indexes/encodings, authorization, representations,
 object keys, and queue transitions belong in graph meaning; Rust owns generic host mechanisms.
 
-Current `serve` and `worker` descriptors select the maintained artifact bundle. Standalone
+Current `serve` and `worker` descriptors select the maintained artifact bundle. `serve` dispatches
+only an exact HTTP or interactive target; one descriptor cannot select both. Standalone
 preparation strictly loads the bundle without project discovery, resolves the exact root-package
 target, component, runner, and complete requirement closure, then binds external grants. Live
 effects execute once through the normalized production VM; reference execution remains limited to
 pure or deterministic oracle work and never repeats external effects.
 
-The HTTP listener is plaintext. Encrypted transport requires an external trusted boundary or a
+The HTTP and RFC 6455 listener boundary is plaintext. Encrypted transport requires an external trusted boundary or a
 future explicitly selected adapter; no TLS or certificate machinery is implied by the component
 model. The first-party data root is local trusted-host authority, not encrypted storage or a remote
 database service.

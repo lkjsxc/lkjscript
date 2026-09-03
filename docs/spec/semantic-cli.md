@@ -308,7 +308,7 @@ The public exact-dependency and topology slice is:
 add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
 create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
 add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
-create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http
+create.target as=$TARGET name=NAME component=DECLARATION port=PORT runner=command|http|interactive
 ```
 
 `add.dependency` accepts only the exact current built-in binding after its immutable transport has
@@ -318,8 +318,11 @@ unchecked-file lookup; unavailable, duplicate, stale, foreign, and mismatched bi
 independently budgeted operations. An `add.port` explicit function type must exactly agree with its
 function implementation. `create.target` binds exact component and port identities and checks that
 the port is owned by the component, the function's requirement closure is present on that component,
-and the port shape matches `command` or `http`. Expression-backed ports, `SetTarget`, dependency
-removal, arbitrary transports, and additional runner values are not exposed.
+and the port shape matches `command`, `http`, or `interactive`. For `interactive`, the exact shape
+is `(Option<State>, SessionEvent) -> SessionDecision<State>` with one repeated closed ordinary
+concrete state type; streams, capabilities, functions, secrets, unresolved parameters, and other
+live values cannot enter retained state. Expression-backed ports, `SetTarget`, dependency removal,
+arbitrary transports, and additional runner values are not exposed.
 
 Request-local forward references work across the complete request. The four records participate in
 the same strict decoder, canonical request commitment, allocation, logical plan, impact/relations,
@@ -437,10 +440,14 @@ are not duplicated. Run never advances authority.
 operations, not current graph build commands. Their descriptors reference an explicitly isolated
 artifact bundle. Loading reads descriptor, artifact, environment, and named host resources only;
 it does not discover a repository. Preparation resolves the exact target and grants before
-readiness, and `artifact_digest` is the domain-tagged artifact bundle identity. Resident events are
-bounded and resources are released on failure, cancellation, exhaustion, and shutdown. The HTTP
-listener is plaintext and requires an external trusted encryption boundary when network encryption
-is required. The local first-party data root is a trusted-host boundary and is not encrypted.
+readiness, and `artifact_digest` is the domain-tagged artifact bundle identity. `serve` admits only
+exact HTTP or interactive topology. Interactive preparation reconstructs its relational state type
+and every session bound before binding the listener; each connection belongs to one structured
+parent whose finite callbacks cannot retain transport resources. Resident events are bounded and
+resources are released on failure, cancellation, exhaustion, and shutdown. The HTTP/1.1 and RFC
+6455 listener is plaintext and requires an external trusted encryption boundary when network
+encryption is required. The local first-party data root is a trusted-host boundary and is not
+encrypted.
 
 ## Removed behavior and non-goals
 
@@ -451,5 +458,5 @@ project behavior. Predecessor repositories and binary formats reject.
 
 The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
 package manager, remote registry, source language, full owner-body projection, generic impact, an
-agent daemon, inbound TLS, arbitrary network destinations, WebSocket, sandboxing, or multi-tenant
-isolation.
+agent daemon, inbound TLS, arbitrary network destinations, outbound WebSocket clients, NIP-01,
+sandboxing, or multi-tenant isolation.

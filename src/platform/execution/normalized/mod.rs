@@ -1,4 +1,4 @@
-//! Prepared execution over strict Graph 7 artifacts.
+//! Prepared execution over strict Graph 8 artifacts.
 
 mod byte_stream;
 mod capability;
@@ -20,6 +20,7 @@ mod resource;
 mod runner;
 mod secret;
 mod security;
+mod session;
 mod value;
 mod vm;
 mod worker;
@@ -39,6 +40,7 @@ pub(crate) use runner::{
     NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt, run_graph_tests,
     run_pure_command,
 };
+pub(crate) use session::NormalizedSessionApplication;
 pub(crate) use vm::NormalizedRunPolicy;
 pub(crate) use worker::NormalizedWorkerApplication;
 #[cfg(test)]

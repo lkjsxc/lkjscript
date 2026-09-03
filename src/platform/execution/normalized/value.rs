@@ -1,4 +1,4 @@
-//! Runtime-only dense values for normalized Graph 7 execution.
+//! Runtime-only dense values for normalized Graph 8 execution.
 
 use super::resource::NormalizedResourceHandle;
 use crate::platform::kernel::{Name, TypeObjectDigest};
@@ -45,6 +45,7 @@ pub enum NormalizedValue {
         case: u32,
         payload: Option<Box<NormalizedValue>>,
     },
+    Option(Option<Box<NormalizedValue>>),
     List(Arc<Vec<NormalizedValue>>),
     Map(Arc<BTreeMap<NormalizedMapKey, NormalizedValue>>),
     Function {
@@ -81,6 +82,7 @@ impl NormalizedValue {
             Self::Variant { payload, .. } => {
                 payload.as_ref().is_none_or(|payload| payload.is_durable())
             }
+            Self::Option(value) => value.as_ref().is_none_or(|value| value.is_durable()),
             Self::List(items) => items.iter().all(Self::is_durable),
             Self::Map(entries) => entries.values().all(Self::is_durable),
             Self::Unit
@@ -113,10 +115,20 @@ impl NormalizedMapKey {
             NormalizedValue::Unit
             | NormalizedValue::Record(_)
             | NormalizedValue::Variant { .. }
+            | NormalizedValue::Option(_)
             | NormalizedValue::List(_)
             | NormalizedValue::Map(_)
             | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => None,
+        }
+    }
+
+    pub(crate) fn to_value(&self) -> NormalizedValue {
+        match self {
+            Self::Bool(value) => NormalizedValue::Bool(*value),
+            Self::I64(value) => NormalizedValue::I64(*value),
+            Self::Bytes(value) => NormalizedValue::bytes(value.clone()),
+            Self::Text(value) => NormalizedValue::text(value.clone()),
         }
     }
 }

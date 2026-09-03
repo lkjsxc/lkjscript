@@ -1,4 +1,4 @@
-//! Stable-owner semantic diffs for Graph 7 accepted history.
+//! Stable-owner semantic diffs for Graph 8 accepted history.
 
 use super::contract::{
     MAXIMUM_INLINE_HISTORY_EDITS, MAXIMUM_SEMANTIC_DIFF_BYTES, SEMANTIC_DIFF_CONTRACT_VERSION,

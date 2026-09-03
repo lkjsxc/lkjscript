@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 7 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 8 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -233,7 +233,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 7 authority",
+                        "selected target is absent from canonical Graph 8 authority",
                     ));
                 }
             };
@@ -257,7 +257,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 7 authority",
+                        "selected target port is absent from canonical Graph 8 authority",
                     ));
                 }
             };
@@ -358,7 +358,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: 0,
                 canonical_objects_read: 0,
                 canonical_bytes_read: 0,
-                production_tier: "graph7_reference_records_2",
+                production_tier: "graph8_reference_records_2",
             },
         };
         match operation(&mut state) {
@@ -2182,13 +2182,41 @@ fn reference_intrinsic(
             }
             _ => Err(reference_type_error("list append received foreign values")),
         },
+        "core.option.some" => match arguments.as_slice() {
+            [value] => Ok(NormalizedValue::Option(Some(Box::new(value.clone())))),
+            _ => Err(reference_type_error(
+                "option constructor received a foreign arity",
+            )),
+        },
+        "core.option.none" => match arguments.as_slice() {
+            [] => Ok(NormalizedValue::Option(None)),
+            _ => Err(reference_type_error(
+                "empty option constructor received arguments",
+            )),
+        },
+        "core.option.get-or" => match arguments.as_slice() {
+            [NormalizedValue::Option(value), fallback] => Ok(value
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| fallback.clone())),
+            _ => Err(reference_type_error(
+                "option fallback received foreign values",
+            )),
+        },
+        "core.option.present" => match arguments.as_slice() {
+            [NormalizedValue::Option(value)] => Ok(NormalizedValue::Bool(value.is_some())),
+            _ => Err(reference_type_error(
+                "option predicate received a foreign value",
+            )),
+        },
         "core.map.length" => match arguments.as_slice() {
             [NormalizedValue::Map(values)] => {
                 Ok(NormalizedValue::I64(reference_length(values.len())?))
             }
             _ => Err(reference_type_error("map length received a foreign value")),
         },
-        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert" => {
+        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert"
+        | "core.map.remove" | "core.map.entries" => {
             reference_map_intrinsic(implementation, arguments)
         }
         _ => Err(reference_error(
@@ -2413,6 +2441,19 @@ fn reference_map_intrinsic(
     let Some(NormalizedValue::Map(entries)) = arguments.first() else {
         return Err(reference_type_error("map intrinsic received a foreign map"));
     };
+    if implementation == "core.map.entries" {
+        if arguments.len() != 1 {
+            return Err(reference_type_error("map entries received a foreign arity"));
+        }
+        let mut output = Vec::with_capacity(entries.len());
+        for (key, value) in entries.iter() {
+            output.push(reference_structural_record(vec![
+                ("key", key.to_value()),
+                ("value", value.clone()),
+            ])?);
+        }
+        return Ok(NormalizedValue::List(Arc::new(output)));
+    }
     let Some(key_value) = arguments.get(1) else {
         return Err(reference_type_error("map intrinsic omitted its key"));
     };
@@ -2438,6 +2479,15 @@ fn reference_map_intrinsic(
                 updated.insert(existing_key.clone(), existing_value.clone());
             }
             updated.insert(key, arguments[2].clone());
+            Ok(NormalizedValue::Map(Arc::new(updated)))
+        }
+        ("core.map.remove", 2) => {
+            let mut updated = BTreeMap::new();
+            for (existing_key, existing_value) in entries.iter() {
+                if existing_key != &key {
+                    updated.insert(existing_key.clone(), existing_value.clone());
+                }
+            }
             Ok(NormalizedValue::Map(Arc::new(updated)))
         }
         _ => Err(reference_type_error(
@@ -2502,6 +2552,11 @@ pub(crate) fn reference_equal(
                 payload: right,
             },
         ) if left_layout == right_layout && left_case == right_case => match (left, right) {
+            (None, None) => Ok(true),
+            (Some(left), Some(right)) => reference_equal(left, right),
+            _ => Ok(false),
+        },
+        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => match (left, right) {
             (None, None) => Ok(true),
             (Some(left), Some(right)) => reference_equal(left, right),
             _ => Ok(false),
@@ -2632,6 +2687,17 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
                     pending.push(payload);
                 }
             }
+            NormalizedValue::Option(value) => {
+                if let Some(value) = value {
+                    items = items.checked_add(1).ok_or_else(|| {
+                        reference_resource(
+                            "normalized_reference_external_value",
+                            "external option item accounting overflowed",
+                        )
+                    })?;
+                    pending.push(value);
+                }
+            }
             NormalizedValue::List(values) => {
                 items = items.checked_add(values.len() as u64).ok_or_else(|| {
                     reference_resource(
@@ -2688,6 +2754,9 @@ fn reference_value_contains_resource(value: &NormalizedValue) -> bool {
             .iter()
             .any(|(_, value)| reference_value_contains_resource(value)),
         NormalizedValue::Variant { payload, .. } => payload
+            .as_deref()
+            .is_some_and(reference_value_contains_resource),
+        NormalizedValue::Option(value) => value
             .as_deref()
             .is_some_and(reference_value_contains_resource),
         NormalizedValue::List(items) => items.iter().any(reference_value_contains_resource),

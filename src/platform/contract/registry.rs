@@ -82,6 +82,9 @@ use super::super::queue::DURABLE_QUEUE_CONTRACT_VERSION;
 use super::super::runtime::RESIDENT_RUNTIME_CONTRACT_VERSION;
 use super::super::secrets::{SECRET_CATALOG_CONTRACT_VERSION, SECRET_VERIFIER_CONTRACT_VERSION};
 use super::super::security::SECURITY_ADAPTER_CONTRACT_VERSION;
+use super::super::session::{
+    STRUCTURED_SESSION_CONTRACT_IDENTITY, STRUCTURED_SESSION_CONTRACT_VERSION,
+};
 use super::super::storage::contract as storage_contract;
 use super::super::stream::STREAM_CONTRACT_VERSION;
 use super::super::witness::contract as witness_contract;
@@ -89,9 +92,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-8";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 8;
-pub const CLI_CONTRACT_VERSION: u16 = 20;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-9";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 9;
+pub const CLI_CONTRACT_VERSION: u16 = 21;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -308,8 +311,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("schema", "capabilities"),
 ];
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v7";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v7";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v8";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v8";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -422,6 +425,7 @@ pub enum ContractKey {
     ObjectAdapter,
     QueueAdapter,
     ResidentRuntime,
+    StructuredSession,
     SecretCatalog,
     SecretVerifier,
     SecurityAdapter,
@@ -471,6 +475,7 @@ impl ContractKey {
             Self::ObjectAdapter => "object_adapter",
             Self::QueueAdapter => "queue_adapter",
             Self::ResidentRuntime => "resident_runtime",
+            Self::StructuredSession => "structured_session",
             Self::SecretCatalog => "secret_catalog",
             Self::SecretVerifier => "secret_verifier",
             Self::SecurityAdapter => "security_adapter",
@@ -589,7 +594,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN07", "LKJTYP07", "LKJSMR01", "LKJDEP07", "LKJRET07"],
+            magic_values: &["LKJOWN08", "LKJTYP08", "LKJSMR01", "LKJDEP08", "LKJRET08"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -749,7 +754,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 7,
+            version: 8,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -854,7 +859,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF05"],
+            magic_values: &["LKJPIF06"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -930,7 +935,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF12"],
+            magic_values: &["LKJAMF13"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -944,7 +949,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART12", "LKJAEN12"],
+            magic_values: &["LKJART13", "LKJAEN13"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -1039,6 +1044,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             "normalized artifact resident runtime",
             "lkjscript-resident-runtime-3",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
+            ContractAuthority::Runtime,
+        ),
+        simple_contract(
+            ContractKey::StructuredSession,
+            "graph-owned structured session",
+            STRUCTURED_SESSION_CONTRACT_IDENTITY,
+            STRUCTURED_SESSION_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
@@ -2209,7 +2221,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_runner_kind",
             DiagnosticClass::Source,
             "A target runner is outside the public topology slice.",
-            "Use command or http as reported by focused change discovery.",
+            "Use command, http, or interactive as reported by focused change discovery.",
         ),
         diagnostic(
             "change_dependency_binding_unsupported",

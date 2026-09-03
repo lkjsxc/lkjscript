@@ -467,8 +467,66 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
     let address = prepared
         .listen()
-        .ok_or_else(|| cli_error("service deployment requires a concrete listen address"))?;
+        .ok_or_else(|| cli_error("service deployment requires a concrete listen address"))?
+        .to_owned();
+    match prepared.observe_redacted().runner.as_str() {
+        "http" => serve_http(prepared, &address).await,
+        "interactive" => serve_interactive(prepared, &address).await,
+        _ => Err(cli_error(
+            "serve requires an http or interactive resident target",
+        )),
+    }
+}
+
+async fn serve_http(prepared: PreparedDeployment, address: &str) -> Result<(), Diagnostic> {
     let application = prepared.http_application()?;
+    let listener = match TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(source) => {
+            let mut error = Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "serve_bind",
+                format!("listener could not bind: {source}"),
+            );
+            append_shutdown_evidence(&mut error, &application.shutdown().await);
+            return Err(error);
+        }
+    };
+    let local_address = match listener.local_addr() {
+        Ok(address) => address,
+        Err(source) => {
+            let mut error = Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "serve_address",
+                format!("listener address is unavailable: {source}"),
+            );
+            append_shutdown_evidence(&mut error, &application.shutdown().await);
+            return Err(error);
+        }
+    };
+    if let Err(mut error) = write_json(&json!({
+        "ok": true,
+        "event": "ready",
+        "local_address": local_address.to_string(),
+        "deployment": prepared.observe_redacted(),
+    })) {
+        append_shutdown_evidence(&mut error, &application.shutdown().await);
+        return Err(error);
+    }
+    let receipt = application
+        .serve(listener, async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await?;
+    write_json(&json!({
+        "ok": true,
+        "event": "stopped",
+        "receipt": receipt,
+    }))
+}
+
+async fn serve_interactive(prepared: PreparedDeployment, address: &str) -> Result<(), Diagnostic> {
+    let application = prepared.session_application()?;
     let listener = match TcpListener::bind(address).await {
         Ok(listener) => listener,
         Err(source) => {

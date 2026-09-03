@@ -1,4 +1,4 @@
-//! Exact Graph 7 byte-stream capability over task-owned opaque handles.
+//! Exact Graph 8 byte-stream capability over task-owned opaque handles.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;
