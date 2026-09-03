@@ -1,8 +1,10 @@
 # Resident runtime, HTTP, and streams
 
 This specification owns generic resident admission, structured request/worker task scopes, HTTP/1
-transport adaptation, byte-stream lifetime, overload, and shutdown. It does not own routes,
-middleware order, actor policy, response content, data-space/index policy, or job meaning.
+transport adaptation, byte-stream lifetime, overload, and shutdown. Exact route meaning is owned
+by [http-route-topology.md](http-route-topology.md); this adapter owns only bounded preparation and
+lookup. It does not own middleware order, actor policy, response content, data-space/index policy,
+or job meaning.
 
 ## Resident tasks
 
@@ -46,19 +48,24 @@ faultable bounded pipes are the test oracles.
 ## HTTP adapter
 
 The HTTP adapter accepts a validated method, path, raw query, deterministically decoded map
-of query names to ordered values, validated bounded headers, and a `Stream Bytes` body. The
-component returns signed status, validated headers, and bounded whole bytes. Current global maxima
-are 64 MiB body, 256 KiB headers, and 1,024 headers; deployment chooses request/response limits.
+of query names to ordered values, validated bounded headers, and a `Stream Bytes` body. After
+transport validation it selects one graph-owned exact method/path route and invokes that route's
+component port. The component returns signed status, validated headers, and bounded whole bytes.
+Current global maxima are 64 MiB body, 256 KiB headers, and 1,024 headers; deployment chooses
+request/response limits.
 
 Axum/Hyper own socket acceptance, HTTP/1 parsing, connection lifecycle, transport backpressure, and
 disconnect. The adapter owns percent/query decoding, header validation/canonicalization,
-transport-owned header rejection, request-body streaming into a bounded pipe, response validation,
-and safe protocol error mapping. Application modules own route matching, precedence, authentication,
-authorization, request decoding, status selection, and content.
+transport-owned header rejection, exact prepared-table lookup, request-body streaming into a
+bounded pipe, response validation, and safe protocol error mapping. Graph route owners select
+handlers; application functions own authentication, authorization, request decoding, status
+selection, and content.
 
 Malformed method/URI/query/header, excess, disconnect, closed body, component failure, overload,
-deadline, and shutdown have distinct stable adapter/runtime outcomes. Request rejection occurs
-before component admission where transport facts suffice. Response emission cannot roll back prior
+deadline, and shutdown have distinct stable adapter/runtime outcomes. A valid unmatched pair
+returns an empty header-free 404 without task admission or application effects; the body remains
+transport-owned and is drained or closed within bounds. Other request rejection occurs before
+component admission where transport facts suffice. Response emission cannot roll back prior
 data/object/queue publication. Adapter-generated failure responses contain a bounded
 `x-lkjscript-failure-class` and, when representable in at most 128 bytes, an
 `x-lkjscript-failure-code`; they never contain the provider diagnostic message.
