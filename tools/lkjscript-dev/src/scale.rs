@@ -385,7 +385,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         );
     }
     let mut not_run_reason = None;
-    let run_result = (|| -> Result<RunCompletion, DevError> {
+    let mut run_result = (|| -> Result<RunCompletion, DevError> {
         source = Some(source_identity(&repository)?);
         toolchain = Some(toolchain_identity(&repository)?);
         let copied = copy_candidate(&repository, &evidence_root, &options.binary)?;
@@ -441,6 +441,16 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         .flatten();
     let total_run_bytes = directory_bytes(&evidence_root).ok();
     let cleanup = cleanup_project(&project, options.retain.is_some());
+    if matches!(run_result, Ok(RunCompletion::Completed))
+        && elapsed_reaches_wall_limit(
+            started.elapsed(),
+            Duration::from_secs(options.maximum_wall_seconds),
+        )
+    {
+        run_result = Err(DevError::unavailable(
+            "scale maximum wall time was reached during terminal oracle or cleanup work",
+        ));
+    }
 
     let (mut status, mut admission, mut failure) = match run_result {
         Ok(RunCompletion::Completed) => (
@@ -546,6 +556,10 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     } else {
         1
     })
+}
+
+fn elapsed_reaches_wall_limit(elapsed: Duration, maximum: Duration) -> bool {
+    elapsed >= maximum
 }
 
 fn publish_invalid_options_receipt(
@@ -810,6 +824,7 @@ fn run_scale(
         changes.logical,
     )?;
     changes.logical.shape_digest = Some(shape_digest(options, changes.logical)?);
+    changes.runner.admit_resources()?;
     changes.logical.complete = true;
     Ok(())
 }
@@ -2781,6 +2796,22 @@ mod tests {
             serde_json::from_str::<ScaleReceipt>(r#"{"unexpected":true}"#).is_err(),
             "strict contract-3 decoding must reject foreign receipt fields"
         );
+    }
+
+    #[test]
+    fn terminal_wall_limit_includes_the_exact_boundary() {
+        assert!(!super::elapsed_reaches_wall_limit(
+            Duration::from_nanos(999),
+            Duration::from_nanos(1_000),
+        ));
+        assert!(super::elapsed_reaches_wall_limit(
+            Duration::from_nanos(1_000),
+            Duration::from_nanos(1_000),
+        ));
+        assert!(super::elapsed_reaches_wall_limit(
+            Duration::from_nanos(1_001),
+            Duration::from_nanos(1_000),
+        ));
     }
 
     #[test]
