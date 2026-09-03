@@ -1,0 +1,642 @@
+{
+  "schema": {
+    "identity": "lkjscript-structured-sessions-evidence",
+    "version": 1
+  },
+  "assembled_at_utc": "2026-09-03T18:35:13Z",
+  "campaign": "202609032212-graph-owned-structured-sessions",
+  "status": "incomplete",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "orientation_head": "2107a73ca7f91d384ff6ed9201a9075e78e26d00",
+    "orientation_tree": "a5010c66397d6a73b5352cedda64a87c36e5dc18",
+    "orientation_origin_main": "2107a73ca7f91d384ff6ed9201a9075e78e26d00",
+    "orientation_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "3698746b9baf5b4435f61846b1c88fe6a8ba8874",
+        "tree": "cc4280e1c30a6a213cc0576ffbfd264413dd46b5",
+        "summary": "Archive structured sessions campaign mandate"
+      },
+      {
+        "sha": "959caad21620b6932a870c5c328adab9233013bf",
+        "tree": "7053f469376c195de6ecc9e388fe346570ce4373",
+        "summary": "Implement graph-owned structured sessions"
+      },
+      {
+        "sha": "bee98547cddd36546f626e42a20181c2052ecbe7",
+        "tree": "b89d80b0e807689878b098e32cb7a20d42a382bc",
+        "summary": "Update distributed HTTP migrated test count"
+      },
+      {
+        "sha": "92c0a8421615bbb55d629281ab98f86af205593f",
+        "tree": "c5afda6bdc38c727c704361b2975ddc9048b60f5",
+        "summary": "Migrate stateful HTTP deployment fixture"
+      }
+    ],
+    "preliminary_verified_head": "92c0a8421615bbb55d629281ab98f86af205593f",
+    "preliminary_verified_tree": "c5afda6bdc38c727c704361b2975ddc9048b60f5",
+    "preliminary_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 4
+    },
+    "preliminary_worktree": "clean",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      }
+    ],
+    "closure_note": "The assembled-evidence commit, its exact final full-profile and target-admission receipts, the lifecycle-only containing commit, terminal-tree full receipt, and any normal push necessarily postdate this initial bounded record; final non-self-referential identities are installed during lifecycle closure and reported in the handoff."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "host": "Linux x86_64",
+    "target": "x86_64-unknown-linux-musl",
+    "transport_dependency": "existing axum 0.8.9 ws feature plus futures-util sink feature; locked transitive tokio-tungstenite/tungstenite 0.29.0",
+    "dependency_disposition": "no new direct transport dependency and no unsafe production code"
+  },
+  "identity_cutover": {
+    "advanced": {
+      "source_product": {
+        "from": "0.1.19",
+        "to": "0.1.20",
+        "state": "unreleased source-only"
+      },
+      "meaning_graph": {
+        "from": 7,
+        "to": 8
+      },
+      "semantic_validator": {
+        "from": "lkjscript-semantic-validator-7",
+        "to": "lkjscript-semantic-validator-8"
+      },
+      "package_interface": {
+        "from": 5,
+        "to": 6
+      },
+      "artifact": {
+        "from": 12,
+        "to": 13
+      },
+      "compact_change": {
+        "from": 11,
+        "to": 12
+      },
+      "contract_registry": {
+        "from": 8,
+        "to": 9
+      },
+      "cli": {
+        "from": 20,
+        "to": 21
+      },
+      "deployment": {
+        "from": 3,
+        "to": 4
+      },
+      "service_receipt": {
+        "from": 7,
+        "to": 8
+      },
+      "structured_session": {
+        "from": null,
+        "to": "lkjscript-structured-session-1"
+      }
+    },
+    "capabilities_digest": {
+      "to": "599f421f6d957a76d62be3d841380122c2a23bfa53f13f02cd542149f387ed75",
+      "operations": 13,
+      "sections": 14
+    },
+    "unchanged": {
+      "validation_witness": 4,
+      "owner_summary": 3,
+      "authored_change": 9,
+      "logical_change_plan": 3,
+      "compiler_unit": 3,
+      "bytecode": 3,
+      "compilation_manifest": 3,
+      "package_revision": 1,
+      "package_transport": 1,
+      "package_transport_selection": 1,
+      "resident_runtime": 3,
+      "byte_stream": 1,
+      "http_adapter": 1,
+      "data_store": 1,
+      "durable_queue": 2,
+      "object_store": "lkjscript-immutable-object-store-1",
+      "object_pack": "lkjscript-immutable-object-pack-1",
+      "object_catalog": "lkjscript-object-catalog-2",
+      "accepted_revision": 7,
+      "accepted_receipt": 5,
+      "transaction": 5,
+      "semantic_diff": 3
+    },
+    "public_latest": {
+      "tag": "v0.1.16",
+      "immutable": true,
+      "mutated": false
+    }
+  },
+  "relational_session_contract": {
+    "classification": "fresh passed",
+    "function_shape": "(Option<State>, SessionEvent) -> SessionDecision<State>",
+    "state_relation": "every State occurrence is the same concrete closed ordinary type",
+    "state_exclusions": [
+      "streams",
+      "capability resources",
+      "functions",
+      "unresolved type parameters",
+      "runtime handles",
+      "secret handles"
+    ],
+    "events": [
+      "open",
+      "message",
+      "tick",
+      "peer_close",
+      "shutdown"
+    ],
+    "decisions": [
+      "accept",
+      "continue",
+      "reject",
+      "close",
+      "finish"
+    ],
+    "phases": {
+      "open": "None plus open -> accept or reject",
+      "active": "Some(State) plus message or tick -> continue or close",
+      "terminal": "Some(State) plus peer_close or shutdown -> finish"
+    },
+    "validation_boundaries": [
+      "compact public authoring",
+      "accepted full-graph validation",
+      "package-interface extraction",
+      "compiler lowering",
+      "artifact-13 strict loading",
+      "deployment-4 preparation"
+    ],
+    "independent_oracle": "src/platform/session.rs reconstructs the relation through a disjoint SessionShapeRead implementation and rejects mismatched repeated state or live retained stream state",
+    "transition_commit": "one callback at a time; reserve configured maximum output first; validate complete next state and output; commit the whole batch; then install state",
+    "failure": "failure, cancellation, exhaustion, malformed output, or a phase-invalid decision installs neither next state nor partial output, ends admission, cancels and joins children, closes streams, drops queued state/output, and releases permits once",
+    "effects": "already performed effects retain the existing possible-visibility contract and are never replayed"
+  },
+  "standard_package": {
+    "classification": "fresh passed",
+    "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+    "package": "pkg_10000000000000000000000000000001",
+    "revision": "rev_c9502434e3b0ce4434fddf7ce56e18f3d7bf5a197ac242878d819554a040bdde",
+    "semantic_state": "semantic_state_d7ce1a3b6b930b23652a5878574ac1ac0145847359974530930399564ba36359",
+    "package_revision": "package_revision_64569dc96f354374a465c95b4287861716a57e9093c58184b425831be04da562",
+    "package_transport": "package_transport_c2698e7d88f16120e6aef4215ef1704183eab1e623492021a6ccc290877b6d96",
+    "compilation_manifest": "compilation_manifest_0f3b7c9d4e7af6d9c65aa433e9a5cb5a2cf6743f8af309934d01f58b5cf71c8a",
+    "artifact_manifest": "artifact_manifest_a59e32e589d8d670348e281c4cf678008ec290c333b86116d1edee640ed12eb3",
+    "artifact_bundle": "artifact_bundle_a2eccd58b0a94442b0e56922472b218caed74a3e4daa1e94283a4247367b559a",
+    "artifact_bytes": 327518,
+    "artifact_sha256": "215e52eb961a4b8894082ee7260e6b1ff9c503dd7159075f4a0032a9d5aaa350",
+    "transport_bytes": 114656,
+    "transport_sha256": "1923d107aeaae208cc35582bb0ae7f98ac0546cfa0b02d45710cca713aac7877",
+    "owners": 550,
+    "compiler_units": 106,
+    "tests": 20,
+    "closure_objects": 1057,
+    "session_declarations": {
+      "SessionEvent": "decl_66b80a34dfaac5f8ccf47ce707ec8731",
+      "SessionClose": "decl_a2baeefacf23b620d7f814eda4cfe0ba",
+      "SessionDecisionKind": "decl_b939d019fb10a24344c2c947a20f2c02",
+      "SessionReject": "decl_d50d3cf51bf092ed8b1437e1664010fc",
+      "SessionOutbound": "decl_effe692dc8cecc3b5dafaec348b5622e"
+    }
+  },
+  "public_path": {
+    "classification": "fresh passed",
+    "runner": "interactive",
+    "runner_aliases": [],
+    "runner_grammar": "command|http|interactive",
+    "executable_test": "tests/public_cli.rs::copied_binary_authors_builds_and_serves_interactive_topology_from_minimal",
+    "flow": [
+      "copy one release-mode lkjscript executable",
+      "discover change grammar and built-in standard identities",
+      "create an empty minimal project",
+      "export and stage the canonical built-in package transport",
+      "author the component, requirement, canonical session relation, function-backed port, interactive target, and dependency in one ordinary compact request",
+      "plan against the exact base",
+      "apply the exact plan",
+      "inspect the allocated target",
+      "check and build the graph",
+      "prepare a strict deployment-4 descriptor",
+      "serve to interactive readiness without changing semantic HEAD"
+    ],
+    "negative_boundaries": [
+      "stale base and plan",
+      "wrong runner or port relation",
+      "mismatched repeated State",
+      "live or unresolved retained State",
+      "stale graph/package/artifact/deployment encodings",
+      "truncated, corrupt, symlinked, non-regular, and foreign artifacts",
+      "missing or invalid session limits and grants"
+    ],
+    "checkout_only_authoring": false
+  },
+  "runtime_and_bounds": {
+    "classification": "fresh passed",
+    "ownership": "one resident parent session scope owns the upgraded connection, reader, ordered driver, writer, coalesced tick, cancellation lineage, child joins, retained ordinary state, task stream leases, permits, and byte-accounted mailboxes; children cannot detach",
+    "callback": "each transition is a finite resident task with its own deadline, work, and resource scope; the maintained descriptor uses a 30-second callback deadline while session lifetime is independently 24 hours",
+    "transport_event_order": "completed application messages and one coalesced tick enter one ordered driver; a tick never overtakes an accepted transport event and at most one tick is pending",
+    "backpressure": "the writer reserves one maximum transition batch before a potentially effectful callback, so a slow writer prevents a later callback rather than exposing an effect followed only by queue failure",
+    "global_policy_maximums": {
+      "active_sessions": 4096,
+      "pending_handshakes": 4096,
+      "message_bytes": 16777216,
+      "frame_bytes": 16777216,
+      "header_bytes": 262144,
+      "headers": 1024,
+      "inbound_mailbox_items": 4096,
+      "inbound_mailbox_bytes": 67108864,
+      "outbound_mailbox_items": 4096,
+      "outbound_mailbox_bytes": 67108864,
+      "state_nodes": 1000000,
+      "state_bytes": 67108864,
+      "transition_messages": 4096,
+      "transition_bytes": 67108864,
+      "stream_chunk_bytes": 1048576,
+      "stream_buffered_chunks": 1024,
+      "stream_total_bytes": 18446744073709551615,
+      "live_streams": 65536,
+      "tick_interval_milliseconds": 86400000,
+      "idle_timeout_milliseconds": 604800000,
+      "lifetime_milliseconds": 604800000,
+      "close_grace_milliseconds": 60000,
+      "cancellation_grace_milliseconds": 60000,
+      "process_buffer_bytes": 4294967296
+    },
+    "maintained_descriptor": {
+      "active_sessions": 16,
+      "pending_handshakes": 16,
+      "message_bytes": 1048576,
+      "frame_bytes": 262144,
+      "header_bytes": 32768,
+      "headers": 128,
+      "inbound_mailbox_items": 16,
+      "inbound_mailbox_bytes": 4194304,
+      "outbound_mailbox_items": 64,
+      "outbound_mailbox_bytes": 4194304,
+      "state_nodes": 100000,
+      "state_bytes": 4194304,
+      "transition_messages": 64,
+      "transition_bytes": 1048576,
+      "tick_interval_milliseconds": 100,
+      "idle_timeout_milliseconds": 300000,
+      "lifetime_milliseconds": 86400000,
+      "close_grace_milliseconds": 2000,
+      "cancellation_grace_milliseconds": 2000,
+      "process_buffer_bytes": 268435456,
+      "stream_chunk_bytes": 65536,
+      "stream_buffered_chunks": 8,
+      "stream_total_bytes": 67108864,
+      "live_streams": 1024,
+      "maximum_concurrent_callback_tasks": 16,
+      "maximum_queued_callback_tasks": 64,
+      "callback_deadline_milliseconds": 30000,
+      "runtime_shutdown_grace_milliseconds": 30000,
+      "runtime_cancellation_grace_milliseconds": 5000,
+      "per_session_reserved_bytes": 13631488,
+      "maximum_16_session_reserved_bytes": 218103808
+    },
+    "cleanup": "overload rejects before upgrade; failure or shutdown stops callbacks, cancels siblings, joins children, closes task streams, drops state and queued messages, attempts one bounded close where valid, and returns active/pending counters to zero"
+  },
+  "maintained_lkjournal": {
+    "classification": "fresh passed",
+    "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+    "package": "pkg_20000000000000000000000000000001",
+    "revision": "rev_f71930edbba61200b2130aaad44e9b1e5e21982cef810185ab9259984f478580",
+    "semantic_state": "semantic_state_39fdb8b778a411a4cf40c0fda249982b08047ce175c3dad4cdd23fdfd127d0cf",
+    "package_revision": "package_revision_37904fd33a7db989bef78361a9138aa0b57d00e79f32a8dbb5dd90235bd483a6",
+    "compilation_manifest": "compilation_manifest_f975a9316c256b6639baffb1326e03db39c9051134344d2ecb8ad9f9339aa7c4",
+    "artifact_manifest": "artifact_manifest_6141c850a10f6250412450f9c42be7196bd7eed545588cafe5db62f306aaa7db",
+    "artifact_bundle": "artifact_bundle_620b8802e9105addba8a36b828ac4c3afd046ef8f5d74a2e6c5d146f6dbf5189",
+    "artifact_bytes": 1083675,
+    "artifact_sha256": "2bdf2f1d2b4871b8aba7cf57932149685b9f8735334b71c21bab4f708d89b83d",
+    "application_owners": 2125,
+    "application_compiler_units": 91,
+    "closure_compiler_units": 197,
+    "application_tests": 7,
+    "closure_tests": 27,
+    "closure_objects": 3625,
+    "targets": {
+      "http_serve": "target_e6f0a45c5f938ba39a19de585e8fc0d7",
+      "worker_work": "target_3608e4377fe1adb3ef15e610a9b5e0e5",
+      "interactive_lkjournal_live_1": "target_4370908b66ee6a998ac707bbe43f351b"
+    },
+    "interactive_topology": {
+      "component": "decl_86f146314787babcd661bd7eaac2f0cb",
+      "port": "port_27498cc6bdf4350bc78149ceaeca2930",
+      "handler": "decl_ae536cdd5ddc1027b129376ee9d9f9b2",
+      "state": "decl_4b1b98503b2c9216e0891bb98ce6a57f"
+    },
+    "authority": "the graph owns /live selection, bearer-session validation, strict JSON-array grammar, subscription transition state, actor filtering, data scans, revision detection, deterministic ordering, message construction, errors, and close decisions",
+    "host_exclusions": "Rust owns no lkjournal route, token rule, JSON operation parser, subscription map, scan/filter/order rule, sequence or revision cursor, message shape, or actor policy",
+    "behavior": [
+      "two raw clients authenticated as one actor retain independent subscription maps",
+      "subscribe or replace emits the current deterministic actor-owned snapshot and end marker",
+      "HTTP create at revision 0 and update at revision 1 are pushed after graph ticks",
+      "replacement and unsubscribe on one connection do not affect the other",
+      "a second actor observes none of the first actor's resources",
+      "an unread subscribed client does not block ping/pong on another admitted client",
+      "restart drops connection state but preserves durable data; reconnect and resubscribe reconstruct revision 1"
+    ],
+    "protocol_nonclaim": "application-specific and not Nostr"
+  },
+  "rfc6455_and_raw_oracle": {
+    "classification": "fresh passed",
+    "server": "plaintext RFC 6455 over the existing HTTP/1.1 listener; no extension or subprotocol negotiation",
+    "codec": "one production path supplied by the enabled locked Axum/Tokio/Tungstenite graph",
+    "graph_boundary": "graph sees normalized open metadata, completed text/binary message identity with a task-scoped byte stream, coalesced ticks, validated peer close, and shutdown; it never sees frames, masking, fragmentation, ping, or pong",
+    "raw_client": "tools/lkjscript-dev/src/raw_websocket.rs independently implements bounded TCP HTTP upgrade, SHA-1, Base64, client masking, server frame decoding, fragmentation, ping/pong, close, and malformed cases without importing production WebSocket helpers",
+    "handshakes": 29,
+    "accept_values_recomputed": true,
+    "extensions_absent": true,
+    "subprotocols_absent": true,
+    "positive_cases": [
+      "authenticated upgrade",
+      "text",
+      "binary delivered to graph-selected close 1003",
+      "fragmented text",
+      "ping/pong payload identity",
+      "peer close and reply 1000",
+      "service shutdown close 1001"
+    ],
+    "transport_negative_results": {
+      "invalid_text": "close 1002",
+      "unmasked": "close 1002",
+      "reserved_opcode": "close 1002",
+      "reserved_bit": "close 1002",
+      "orphan_continuation": "close 1002",
+      "fragmented_control": "close 1002",
+      "oversized_frame": "close 1002"
+    },
+    "containment": {
+      "unread_slow_client": true,
+      "abrupt_disconnects": 13,
+      "overload_rejected_before_upgrade": true,
+      "overload_did_not_disturb_admitted_client": true,
+      "shutdown_joined": true
+    },
+    "transcripts": {
+      "count": 27,
+      "bytes": 275097,
+      "payloads_retained": false,
+      "digests_retained_in": ".artifacts/lkjscript-dev/service/1788460161869065685-2782811-0/receipt.json"
+    }
+  },
+  "preliminary_static_target": {
+    "classification": "fresh passed",
+    "source_head": "92c0a8421615bbb55d629281ab98f86af205593f",
+    "target": "x86_64-unknown-linux-musl",
+    "candidate": ".artifacts/campaign/202609032212/target-preliminary/lkjscript",
+    "candidate_bytes": 18295008,
+    "candidate_sha256": "3aa72ed8fc241bc0995fcf742202e35413dfa4319a8769178e025b641cd5d63f",
+    "build_receipt": ".artifacts/campaign/202609032212/target-preliminary/build-receipt.json",
+    "build_receipt_sha256": "34f6103236bed0ffa4afb388e67daeb2e6d594b206c3a72f6bbfff29e8e84272",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "elf": {
+      "class": "ELF64",
+      "machine": "x86-64",
+      "object_type": "position-independent-executable",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0,
+      "runtime_linkage": "static-musl"
+    },
+    "admission_receipt": ".artifacts/campaign/202609032212/target-preliminary/target-admission/receipt.json",
+    "admission_receipt_sha256": "e5800aa04a3954d289593623f313378bc81561fb5065a10c149cf4f2244de4ad",
+    "admission_receipt_digest": "verification_c51d6160597948c5d206c4ce6723f23a644b5403fdb4d671c8514e5721eab82c",
+    "admission_elapsed_nanoseconds": 120199276537,
+    "userlands": [
+      {
+        "role": "musl",
+        "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+        "version": "Alpine 3.22.5 / musl 1.2",
+        "commands": 12,
+        "classification": "fresh passed"
+      },
+      {
+        "role": "older-glibc",
+        "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+        "version": "Debian 11 / glibc 2.31",
+        "commands": 12,
+        "classification": "fresh passed"
+      }
+    ],
+    "copied_binary_oracles": {
+      "distributed_http": {
+        "classification": "fresh passed",
+        "commands": 41,
+        "runners": 2
+      },
+      "outbound_http": {
+        "classification": "fresh passed",
+        "commands": 13,
+        "runners": 8,
+        "requests": 17
+      },
+      "stateful_http": {
+        "classification": "fresh passed",
+        "commands": 83,
+        "runners": 3,
+        "requests": 25
+      },
+      "service_acceptance": {
+        "classification": "fresh passed",
+        "commands": 33,
+        "runners": 8,
+        "requests": 17,
+        "receipt": ".artifacts/lkjscript-dev/service/1788460161869065685-2782811-0/receipt.json",
+        "receipt_sha256": "a0585e4db2935d040a06f1d86d497726b8a7c76558ee4c302ffc02e0df2a0f5e"
+      }
+    },
+    "cleanup_complete": true
+  },
+  "resource_observation": {
+    "classification": "fresh passed",
+    "service_elapsed_nanoseconds": 17084136605,
+    "first_runtime": {
+      "admitted_sessions": 26,
+      "rejected_handshakes": 1,
+      "completed_sessions": 3,
+      "failed_sessions": 23,
+      "overloaded_handshakes": 1,
+      "inbound_messages": 9,
+      "inbound_bytes": 163,
+      "outbound_messages": 13,
+      "outbound_bytes": 1158,
+      "maximum_pending_handshakes": 1,
+      "maximum_active_sessions": 16,
+      "maximum_process_buffer_bytes": 218103808,
+      "runner_peak_rss_kib": 11080,
+      "terminal_pending_handshakes": 0,
+      "terminal_active_sessions": 0
+    },
+    "restart_runtime": {
+      "admitted_sessions": 1,
+      "completed_sessions": 1,
+      "inbound_messages": 1,
+      "inbound_bytes": 25,
+      "outbound_messages": 2,
+      "outbound_bytes": 201,
+      "maximum_pending_handshakes": 1,
+      "maximum_active_sessions": 1,
+      "maximum_process_buffer_bytes": 13631488,
+      "runner_peak_rss_kib": 9296,
+      "terminal_pending_handshakes": 0,
+      "terminal_active_sessions": 0
+    },
+    "authority": {
+      "unchanged": true,
+      "files": 17,
+      "bytes": 3296329,
+      "head_sha256": "d0c5196b045ac26c27dbd21df753b2cb1d5009436a63935b507806d0967ac6f5",
+      "inventory_sha256": "a51a9e62d6620dc609e366a2574df80217c26eba61c213c2a3d17b1ab8a940e1"
+    },
+    "cleanup_complete": true
+  },
+  "verification": {
+    "preliminary_source_full": {
+      "classification": "fresh passed",
+      "source_head": "92c0a8421615bbb55d629281ab98f86af205593f",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "skipped": 0,
+      "unrun": 0,
+      "fresh_required": true,
+      "input_stable": true,
+      "worktree_input_digest": "verification_bd9f2c5b7f153560c06e2cb64befae18cdf3d8366ec346a32adeb2c4dbeb1ea6",
+      "profile_definition_digest": "verification_7c4f84ef070cba4a5cdb40ab8d36ae06e614f18a5bf434bf6f464943e62f262f",
+      "elapsed_nanoseconds": 321320022578,
+      "receipt": ".artifacts/lkjscript-dev/check/1788459721427917015-2775157-0/receipt.json",
+      "receipt_sha256": "ad64d6f3a59b1463e2a886204aaae9901df9a99c5c09800b62f6e5c5e6ae7c40",
+      "receipt_digest": "verification_d0b7138718aa6c2a1c1e760d7a2d9af9ade66e365f7fcc203eb0ac1ad7534d1f"
+    },
+    "assembled_evidence_full": {
+      "classification": "not run",
+      "reason": "runs after this initial evidence record is committed"
+    },
+    "final_static_target": {
+      "classification": "not run",
+      "reason": "build and admission run after this initial evidence record is committed"
+    },
+    "terminal_tree_full": {
+      "classification": "not run",
+      "recording": "terminal handoff",
+      "reason": "runs after the lifecycle-only containing commit and cannot be named by that commit without changing its verified input"
+    },
+    "invalidated_or_failed_observations": [
+      {
+        "classification": "unavailable",
+        "observation": "the first target-build invocation inherited a shell PATH that omitted the installed cargo executable",
+        "raw": ".artifacts/campaign/202609032212/target-preflight/",
+        "disposition": "no product or environment mutation; rerun with the explicit existing toolchain PATH passed"
+      },
+      {
+        "classification": "failed",
+        "observation": "the first copied-binary target preflight found distributed_http still expecting 14 built-in standard tests after the migrated standard closure contained 21",
+        "build_receipt": ".artifacts/campaign/202609032212/target-preflight-path/build-receipt.json",
+        "build_receipt_sha256": "923b415c58e1097fa44d80b24dd02d37a66802f0c6e149ed819bdc95b341f4ad",
+        "oracle_receipt": ".artifacts/campaign/202609032212/distributed-http-preflight/receipt.json",
+        "oracle_receipt_sha256": "51bc6c32367369e4cc8506c2b3da4c48251b81a9015f87725e8f6b3bec87bc63",
+        "correction": "bee98547 updated the migrated expectation; the preliminary full and exact target admission then passed"
+      },
+      {
+        "classification": "failed",
+        "observation": "the first full profile passed 23 of 24 gates and found the stateful HTTP generated deployment-v4 fixture omitted the required explicit null session field",
+        "receipt": ".artifacts/lkjscript-dev/check/1788459325754062082-2767012-0/receipt.json",
+        "receipt_sha256": "ad0243f1684e8d606a3fb8015763aed6d10afa13b7e6562f0db3cf4a9e163564",
+        "correction": "92c0a842 migrated the fixture; the subsequent 24-of-24 preliminary full profile and exact target admission passed"
+      }
+    ]
+  },
+  "ses_dispositions": {
+    "SES-1": {
+      "classification": "fresh passed",
+      "claim": "the repeated exact concrete State relation, phase pairs, and retained-live-state exclusions are independently reconstructed at every required semantic, package, artifact, and preparation boundary"
+    },
+    "SES-2": {
+      "classification": "fresh passed",
+      "claim": "one copied release binary discovers, authors from minimal, plans, applies, inspects, checks, builds, and serves an interactive target while stale, malformed, foreign, and predecessor inputs reject"
+    },
+    "SES-3": {
+      "classification": "fresh passed",
+      "claim": "one parent owns all session resources; byte/item reservations precede callbacks; ordering, coalesced ticks, cancellation, joined cleanup, and zero terminal permits are observed under overload and disconnect faults"
+    },
+    "SES-4": {
+      "classification": "fresh passed",
+      "claim": "lkjournal-live-1 proves authenticated independent subscriptions, deterministic data-backed push, replace/unsubscribe and actor isolation, slow-client containment, restart, and resubscription without application-private Rust"
+    },
+    "SES-5": {
+      "classification": "fresh passed",
+      "claim": "the production RFC 6455 path passes upgrade, text/binary identity, fragmentation, ping/pong, peer close, malformed-frame matrix, slow/unread and abrupt peers, overload isolation, cancellation, and shutdown containment"
+    },
+    "SES-6": {
+      "classification": "fresh passed",
+      "claim": "the raw TCP oracle independently computes the accept value, masks and decodes frames, records bounded transcripts, emits selected malformed cases, and shares no production WebSocket helper"
+    },
+    "SES-7": {
+      "classification": "fresh passed",
+      "claim": "the preliminary fresh full profile and exact copied static-musl candidate pass both pinned userlands and all four transferred application/service oracles; final assembled-evidence repetitions are recorded during closure"
+    }
+  },
+  "deletion": {
+    "classification": "fresh passed",
+    "removed": [
+      "public and generated claims that interactive is reserved or universally unrunnable",
+      "command-or-http-only public target grammar and validation",
+      "HTTP-only normalized serve selection",
+      "deployment-3 descriptors and fixtures that lack an explicit session branch",
+      "graph-7, package-interface-5, artifact-12, compact-change-11, registry-8, and CLI-20 generated or stored predecessor forms"
+    ],
+    "absent": [
+      "websocket runner alias",
+      "send or receive session intrinsics",
+      "resource-bearing state or results",
+      "detached tasks",
+      "unbounded session channels",
+      "duplicate frame codec",
+      "application-private lkjournal parser or subscription cache",
+      "tracked raw logs"
+    ]
+  },
+  "external_actions": {
+    "fetch": "read-only orientation fetch observed origin/main at 2107a73ca7f91d384ff6ed9201a9075e78e26d00; final fetch is pending closure",
+    "container_images": "read-only exact-digest Alpine and Debian images were inspected and used in ephemeral isolated target admission; containers and exported roots were removed",
+    "push": "conditionally authorized normal fast-forward push pending final proof, fetch, closure, and clean tree",
+    "workflow_dispatch": "not run",
+    "tag_or_release": "not run",
+    "package_publication": "not run",
+    "deployment": "not run",
+    "public_relay_contact": "not run",
+    "hosted_data_mutation": "not run",
+    "schema_or_data_migration": "not run",
+    "credential_or_settings_mutation": "not run",
+    "published_object_mutation": "not run"
+  },
+  "limitations": [
+    "source product 0.1.20 remains unreleased and immutable public v0.1.16 remains unchanged",
+    "the admitted transport is plaintext RFC 6455 over HTTP/1.1; TLS termination, confidentiality, origin/proxy/browser policy, compression, extensions, and subprotocol negotiation are not claimed",
+    "the lkjournal live protocol is not Nostr and adds no event, filter, signature, key, relay persistence, authentication-NIP, reconnect, or outbound WebSocket behavior",
+    "the measured limits, wall time, RSS, and byte totals are one exact Linux x86-64 loopback observation, not service objectives, allocation totals, or generic portability claims",
+    "session state is connection-local ordinary memory and is intentionally discarded on disconnect or restart; durable application data remains the sole reconstruction authority",
+    "no hostile-code sandbox, multi-tenant isolation, encrypted graph storage, binary signing, reproducible build, general provenance, consensus, HTTP/2, HTTP/3, or hosted-production claim is added"
+  ]
+}
