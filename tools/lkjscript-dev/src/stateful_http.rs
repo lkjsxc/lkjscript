@@ -1129,6 +1129,7 @@ fn write_descriptor(path: &Path, artifact: &Path, data_root: &str) -> Result<(),
             "maximum_header_bytes": 32768,
             "maximum_headers": 128
         },
+        "session": null,
         "worker": null,
         "streams": {
             "maximum_chunk_bytes": 65536,
