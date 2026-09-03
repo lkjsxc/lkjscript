@@ -49,7 +49,7 @@ must be deleted after materialization. The retained projection is evidence, neve
 
 Object-catalog acceptance has a separate footer oracle. It enumerates and strictly decodes
 immutable pack footers, deterministically resolves duplicate physical objects, and computes entry
-count and packing-independent logical commitment without calling the contract-2 manifest reader,
+count and packing-independent logical commitment without calling the current catalog manifest reader,
 segment lookup, merge, or commitment implementation. It must agree with the selected manifest after
 healthy incremental construction and recovery. Repeated-process open, lookup, plan, apply, and seal
 fixtures separately require zero complete footer scans and zero full reconstructions; recovery and

@@ -266,7 +266,8 @@ canonical full reconstruction validates all owner records, types, scopes, effect
 relations, components, ports, targets, tests, dependency interfaces, and reachability. Sparse
 change preparation and point reads retain that complete reconstruction as an independent oracle.
 
-On disk, immutable typed objects and persistent-map pages are sealed into bounded contract-1 packs.
+On disk, immutable typed objects and persistent-map pages are sealed into bounded pack contract 1
+files.
 Catalog contract 2 is a disposable physical index: one atomic manifest selects a bounded set of
 content-addressed sorted segments, and each segment binds bounded blocks plus exact pack
 descriptors. Healthy open and lookup read only the manifest, selected segment metadata, candidate
