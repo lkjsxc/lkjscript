@@ -5,7 +5,8 @@
   },
   "assembled_at_utc": "2026-09-03T18:35:13Z",
   "campaign": "202609032212-graph-owned-structured-sessions",
-  "status": "incomplete",
+  "closed_at_utc": "2026-09-03T18:45:33Z",
+  "status": "complete",
   "repository": {
     "name": "lkjsxc/lkjscript",
     "branch": "main",
@@ -37,6 +38,11 @@
         "sha": "92c0a8421615bbb55d629281ab98f86af205593f",
         "tree": "c5afda6bdc38c727c704361b2975ddc9048b60f5",
         "summary": "Migrate stateful HTTP deployment fixture"
+      },
+      {
+        "sha": "fb1b755f51716bd5dfa2de293f1ccdd060097e24",
+        "tree": "2336198213b7ebc8cd20f24e6fd1e830591a4907",
+        "summary": "Record structured session admission evidence"
       }
     ],
     "preliminary_verified_head": "92c0a8421615bbb55d629281ab98f86af205593f",
@@ -46,6 +52,9 @@
       "ahead_of_origin_main": 4
     },
     "preliminary_worktree": "clean",
+    "assembled_evidence_verified_head": "fb1b755f51716bd5dfa2de293f1ccdd060097e24",
+    "assembled_evidence_verified_tree": "2336198213b7ebc8cd20f24e6fd1e830591a4907",
+    "assembled_evidence_worktree": "clean",
     "preserved_work": [
       {
         "stash": "stash@{0}",
@@ -55,7 +64,7 @@
         "disposition": "preserved without apply, drop, or rewrite"
       }
     ],
-    "closure_note": "The assembled-evidence commit, its exact final full-profile and target-admission receipts, the lifecycle-only containing commit, terminal-tree full receipt, and any normal push necessarily postdate this initial bounded record; final non-self-referential identities are installed during lifecycle closure and reported in the handoff."
+    "closure_note": "The exact final full profile and target admission bind the non-self-referential assembled-evidence commit. The lifecycle-only containing commit, terminal-tree full receipt, and any normal push necessarily postdate this bounded record and are reported in the handoff."
   },
   "toolchain": {
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
@@ -397,7 +406,7 @@
       "count": 27,
       "bytes": 275097,
       "payloads_retained": false,
-      "digests_retained_in": ".artifacts/lkjscript-dev/service/1788460161869065685-2782811-0/receipt.json"
+      "digests_retained_in": ".artifacts/lkjscript-dev/service/1788461090510157510-2796559-0/receipt.json"
     }
   },
   "preliminary_static_target": {
@@ -470,7 +479,9 @@
   },
   "resource_observation": {
     "classification": "fresh passed",
-    "service_elapsed_nanoseconds": 17084136605,
+    "service_receipt": ".artifacts/lkjscript-dev/service/1788461090510157510-2796559-0/receipt.json",
+    "service_receipt_sha256": "567d9a2fa452f98ed676cd026f6b257b86e0799b1222a241a2d1d96b43997064",
+    "service_elapsed_nanoseconds": 15958920431,
     "first_runtime": {
       "admitted_sessions": 26,
       "rejected_handshakes": 1,
@@ -484,7 +495,7 @@
       "maximum_pending_handshakes": 1,
       "maximum_active_sessions": 16,
       "maximum_process_buffer_bytes": 218103808,
-      "runner_peak_rss_kib": 11080,
+      "runner_peak_rss_kib": 11336,
       "terminal_pending_handshakes": 0,
       "terminal_active_sessions": 0
     },
@@ -498,7 +509,7 @@
       "maximum_pending_handshakes": 1,
       "maximum_active_sessions": 1,
       "maximum_process_buffer_bytes": 13631488,
-      "runner_peak_rss_kib": 9296,
+      "runner_peak_rss_kib": 9304,
       "terminal_pending_handshakes": 0,
       "terminal_active_sessions": 0
     },
@@ -530,12 +541,46 @@
       "receipt_digest": "verification_d0b7138718aa6c2a1c1e760d7a2d9af9ade66e365f7fcc203eb0ac1ad7534d1f"
     },
     "assembled_evidence_full": {
-      "classification": "not run",
-      "reason": "runs after this initial evidence record is committed"
+      "classification": "fresh passed",
+      "source_head": "fb1b755f51716bd5dfa2de293f1ccdd060097e24",
+      "source_tree": "2336198213b7ebc8cd20f24e6fd1e830591a4907",
+      "passed": 24,
+      "selected": 24,
+      "reused": 0,
+      "skipped": 0,
+      "unrun": 0,
+      "input_stable": true,
+      "worktree_input_digest": "verification_2b914e735a7ba4ba5e6740a5fcd92933c3a9ab46b3425b600ee3518d342083ba",
+      "profile_definition_digest": "verification_7c4f84ef070cba4a5cdb40ab8d36ae06e614f18a5bf434bf6f464943e62f262f",
+      "elapsed_nanoseconds": 242394811099,
+      "receipt": ".artifacts/lkjscript-dev/check/1788460721081032913-2789733-0/receipt.json",
+      "receipt_sha256": "036c0cd97fc0995e06dccc860860d249cdd66469ca44a279f29cbae05fc61d39",
+      "receipt_digest": "verification_f867619acf337f512500d91434a9670d007b8c023f11a66b340af53b09fc5d23"
     },
     "final_static_target": {
-      "classification": "not run",
-      "reason": "build and admission run after this initial evidence record is committed"
+      "classification": "fresh passed",
+      "source_head": "fb1b755f51716bd5dfa2de293f1ccdd060097e24",
+      "source_tree": "2336198213b7ebc8cd20f24e6fd1e830591a4907",
+      "target": "x86_64-unknown-linux-musl",
+      "candidate": ".artifacts/campaign/202609032212/target-final/lkjscript",
+      "candidate_bytes": 18295008,
+      "candidate_sha256": "3aa72ed8fc241bc0995fcf742202e35413dfa4319a8769178e025b641cd5d63f",
+      "runtime_linkage": "static-musl",
+      "build_receipt": ".artifacts/campaign/202609032212/target-final/build-receipt.json",
+      "build_receipt_sha256": "ef40fa7d2898ecea3252a3c12498797b9314eb3cc7e05e6eef467cd22b0f1e70",
+      "build_elapsed_nanoseconds": 185950588,
+      "build_peak_rss_kib": 65720,
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "admission_receipt": ".artifacts/campaign/202609032212/target-final/target-admission/receipt.json",
+      "admission_receipt_sha256": "d4ea27456a7517d596f90fb642ff7424b0f3bb073bec3127da0b6514cf1f2013",
+      "admission_receipt_digest": "verification_759d55c0bcc9ea11fc5b6f3a2c1c52c10be0ab4b2c86385ef2dd9fadafa86bf4",
+      "admission_elapsed_nanoseconds": 118628658266,
+      "userlands": 2,
+      "oracles": 4,
+      "classifications": 7,
+      "service_receipt": ".artifacts/lkjscript-dev/service/1788461090510157510-2796559-0/receipt.json",
+      "service_receipt_sha256": "567d9a2fa452f98ed676cd026f6b257b86e0799b1222a241a2d1d96b43997064",
+      "cleanup_complete": true
     },
     "terminal_tree_full": {
       "classification": "not run",
@@ -564,6 +609,11 @@
         "receipt": ".artifacts/lkjscript-dev/check/1788459325754062082-2767012-0/receipt.json",
         "receipt_sha256": "ad0243f1684e8d606a3fb8015763aed6d10afa13b7e6562f0db3cf4a9e163564",
         "correction": "92c0a842 migrated the fixture; the subsequent 24-of-24 preliminary full profile and exact target admission passed"
+      },
+      {
+        "classification": "not run",
+        "observation": "the first final-build command stopped during option preflight because its private target-final parent did not yet exist",
+        "disposition": "no build output or receipt was created; the exact ignored parent was created mode 0700 and the unchanged command then passed"
       }
     ]
   },
@@ -594,7 +644,7 @@
     },
     "SES-7": {
       "classification": "fresh passed",
-      "claim": "the preliminary fresh full profile and exact copied static-musl candidate pass both pinned userlands and all four transferred application/service oracles; final assembled-evidence repetitions are recorded during closure"
+      "claim": "the assembled-evidence full profile passes 24 of 24 gates fresh with zero reuse, and its exact copied static-musl candidate passes both pinned userlands plus all four transferred application/service oracles with exact identities and cleanup"
     }
   },
   "deletion": {
@@ -618,7 +668,7 @@
     ]
   },
   "external_actions": {
-    "fetch": "read-only orientation fetch observed origin/main at 2107a73ca7f91d384ff6ed9201a9075e78e26d00; final fetch is pending closure",
+    "fetch": "fresh passed; final read-only fetch left origin/main at 2107a73ca7f91d384ff6ed9201a9075e78e26d00 with zero behind and five local commits ahead before lifecycle closure",
     "container_images": "read-only exact-digest Alpine and Debian images were inspected and used in ephemeral isolated target admission; containers and exported roots were removed",
     "push": "conditionally authorized normal fast-forward push pending final proof, fetch, closure, and clean tree",
     "workflow_dispatch": "not run",

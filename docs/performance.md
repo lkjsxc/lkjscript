@@ -7,16 +7,16 @@ Measurements are observations, not promises.
 Campaign `202609032212` exercised the maintained `lkjournal-live-1` target through the exact
 18,295,008-byte static-musl candidate with SHA-256
 `3aa72ed8fc241bc0995fcf742202e35413dfa4319a8769178e025b641cd5d63f`. The copied-binary service
-oracle completed in 17.084 seconds. Its first interactive process admitted 26 sessions, rejected
+oracle completed in 15.959 seconds. Its first interactive process admitted 26 sessions, rejected
 one overloaded handshake before upgrade, and reached 16 simultaneous sessions with a maximum
-208 MiB of process session-buffer reservations. The runner's sampled peak RSS was 11,080 KiB.
+208 MiB of process session-buffer reservations. The runner's sampled peak RSS was 11,336 KiB.
 
 That process received 9 application messages / 163 bytes and emitted 13 messages / 1,158 bytes.
 Thirteen capacity clients disconnected abruptly; the remaining admitted client still completed
 an exact ping/pong while an unread subscribed client and the rejected seventeenth handshake were
 present. Shutdown left zero active sessions and pending handshakes. A fresh restart admitted one
 session, reconstructed revision 1 from durable data after resubscription, reserved 13 MiB at its
-one-session peak, emitted 2 messages / 201 bytes, and reached 9,296 KiB sampled peak RSS before
+one-session peak, emitted 2 messages / 201 bytes, and reached 9,304 KiB sampled peak RSS before
 again returning both live counters to zero.
 
 These are one Linux x86-64 loopback observation with 100 ms application ticks, not a latency
