@@ -16,7 +16,8 @@ definition projection with stateless paging and disjoint maintained proof, and o
 bound consume-only private task-function handoff with the maintained worker split, plus one bounded
 identity-preserving graph-native function extraction and the maintained `update-resource` split are
 current architecture. One crash-safe rebuildable incremental object-location catalog now keeps
-healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path.
+healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
+and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
 `v0.1.16` are distinct: source is unreleased product 0.1.19, while v0.1.16 remains the supported
 public `x86_64-unknown-linux-musl` distribution. Its exact and latest
@@ -44,13 +45,12 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    workload fixes the complete lifetime/failure protocol and an independent oracle, migration, and
    predecessor deletion prove it.
 4. **Million-owner compiler admission and separately selected data/history scale.** The current
-   harness admits a 100,100-owner module/function lifecycle. Its first bounded one-million-module
-   capacity attempt reached 275,000 accepted modules before its one-hour allocation and is
-   `environment_limit`, so complete the lightweight million-owner capacity boundary before
-   selecting a million-owner full check/build admission. Design operational-data scale and
-   long-history retention as a separate campaign with reader leases, registered backup roots, an
-   independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O observations
-   before any deletion, packing, or compaction mechanism.
+   harness admits both a 100,100-owner module/function full lifecycle and a one-million independent-
+   module capacity lifecycle. Select a million-owner check/compiler/build admission only from a
+   measured compiler workload with exact clean/current artifact equality. Design operational-data
+   scale and long-history retention as a separate campaign with reader leases, registered backup
+   roots, an independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O
+   observations before any deletion, packing, or compaction mechanism.
 5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
    and member/case edits, inline, and repair only from maintained workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,

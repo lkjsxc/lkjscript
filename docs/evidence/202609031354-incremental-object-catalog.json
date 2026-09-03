@@ -1,0 +1,430 @@
+{
+  "schema": {
+    "identity": "lkjscript-incremental-object-catalog-evidence",
+    "version": 1
+  },
+  "campaign": "202609031354-incremental-object-catalog",
+  "status": "verification_pending",
+  "assembled_at_utc": "2026-09-03T11:24:45Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "entry_head": "f794278cc4436802e96c6b50909114cc3d5e031c",
+    "entry_tree": "dda0f581b4146a4dd69fccad89c4366bb2a11a3b",
+    "entry_origin_main": "f794278cc4436802e96c6b50909114cc3d5e031c",
+    "entry_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "74c10aa0faf88c09cdab0fdc074de20abf521731",
+        "tree": "10520c0a07f2abe79ae933e465c3268d13bdb69c",
+        "summary": "Archive incremental catalog campaign mandate"
+      },
+      {
+        "sha": "88f4c353b6829967508954c7d5fb5d710534e896",
+        "tree": "99904aa620c7b24ecae8384aa818845eef031703",
+        "summary": "Add incremental rebuildable object catalog"
+      },
+      {
+        "sha": "4fc361aadecbe5ccc27f02dbca8d59d106e71b62",
+        "tree": "b4cd59ba617e7f0b53e7502801bde7b56cf3f0e7",
+        "summary": "Enforce terminal scale resource limits"
+      },
+      {
+        "sha": "5ec613a2f0a4ec310570314280aedc2a85aa753a",
+        "tree": "9e02d6685bb6a3820f4a4574e70cae9084fa6d49",
+        "summary": "Satisfy catalog product surface policy"
+      }
+    ],
+    "capacity_verified_head": "5ec613a2f0a4ec310570314280aedc2a85aa753a",
+    "capacity_verified_tree": "9e02d6685bb6a3820f4a4574e70cae9084fa6d49",
+    "origin_main_at_capacity": "f794278cc4436802e96c6b50909114cc3d5e031c",
+    "capacity_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 4
+    },
+    "capacity_worktree": "clean",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      }
+    ],
+    "closure_note": "The containing evidence/lifecycle commit, exact final full-profile receipt, and any normal push postdate this bounded record and are reported in the terminal handoff."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true,
+    "capacity_host": {
+      "operating_system": "linux",
+      "architecture": "x86_64",
+      "kernel": "Linux 7.0.0-29-generic #29-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 17 20:52:35 UTC 2026 GNU/Linux",
+      "logical_cpus": 16,
+      "memory_total_bytes": 12884901888,
+      "filesystem": "zfs"
+    }
+  },
+  "identity_cutover": {
+    "advanced": {
+      "source_product": { "from": "0.1.18", "to": "0.1.19", "state": "unreleased source-only" },
+      "object_catalog": { "from": "lkjscript-object-catalog-1", "to": "lkjscript-object-catalog-2" },
+      "semantic_scale_receipt": { "from": 2, "to": 3 }
+    },
+    "capabilities_digest": {
+      "from": "553f004534cfd61ea0db89e9eeaaeb5186b60053a234a24a2b697e0ced9daca6",
+      "to": "aa332bfb075c5bf53920e68e77bb5f99a75b7065f35f2d414b303593164e076f"
+    },
+    "unchanged": {
+      "meaning_graph": 7,
+      "object_store": "lkjscript-immutable-object-store-1",
+      "pack": "lkjscript-immutable-object-pack-1",
+      "accepted_history_revision": "lkjscript-revision-7",
+      "accepted_history_receipt": "lkjscript-receipt-5",
+      "transaction": "lkjscript-transaction-5",
+      "semantic_diff": "lkjscript-semantic-diff-3",
+      "compact_change": 11,
+      "authored_change": 9,
+      "logical_change_plan": 3,
+      "compiler_unit": 3,
+      "bytecode": 3,
+      "artifact": 12,
+      "package_interface": 5,
+      "deployment": 3,
+      "data_store": 1,
+      "resident_runtime": 3,
+      "public_change_operation_budget": 1000
+    },
+    "public_latest": {
+      "tag": "v0.1.16",
+      "release_id": 381033538,
+      "immutable": true,
+      "mutated": false
+    }
+  },
+  "catalog_contract": {
+    "classification": "fresh passed",
+    "identity": "lkjscript-object-catalog-2",
+    "authority": "derived disposable physical locator; accepted HEAD and immutable object closure remain canonical",
+    "layout": {
+      "manifest": "catalog/current.lkjc",
+      "segments": "catalog/segments/content-addressed sorted immutable files",
+      "manifest_visibility": "durable segments, then atomically replaced durable manifest, then any HEAD that requires the new objects",
+      "merge": "one delta per sealed pack set and deterministic streaming equal-level merges",
+      "lookup": "bounded segment metadata and candidate blocks followed by exact typed pack-entry verification"
+    },
+    "bounds": {
+      "entries": 8000000,
+      "packs": 100000,
+      "live_segments": 32,
+      "levels": 32,
+      "block_entries": 64,
+      "block_filter_bytes": 128,
+      "manifest_bytes": 65536,
+      "segment_metadata_bytes": 67108864,
+      "segment_bytes": 1073741824,
+      "named_leftovers": 128
+    },
+    "strictness": [
+      "unknown version, duplicate level or identity, noncanonical order, range inconsistency, bad checksum, truncation, trailing bytes, overflow, and bound exhaustion reject",
+      "traversing, symlinked, non-regular, or foreign manifest, segment, pack, staging, and lock paths reject at the owning boundary",
+      "a catalog hit is accepted only after the targeted pack entry reproduces the exact domain, key, length, and checksum"
+    ],
+    "healthy_path": {
+      "old_pack_footer_enumeration": false,
+      "whole_catalog_materialization": false,
+      "whole_catalog_rewrite_per_seal": false,
+      "predecessor_healthy_reader": false,
+      "predecessor_writer": false
+    }
+  },
+  "recovery_and_interruption": {
+    "classification": "fresh passed",
+    "owner": "exclusive GraphRepository publication lock and implementation-disjoint immutable-pack footer reconstruction",
+    "triggers": [
+      "missing manifest",
+      "bounded predecessor fixture",
+      "malformed manifest or segment",
+      "catalog incomplete for the selected HEAD closure",
+      "lookup inconsistency"
+    ],
+    "properties": [
+      "one bounded full footer reconstruction atomically publishes the current catalog and retries",
+      "canonical pack or accepted-closure corruption rejects with actionable diagnostics and leaves HEAD unchanged",
+      "an absent operational lock is recreated once and concurrent openers serialize recovery",
+      "obsolete derived segments are removed only by exact owned path after durable manifest visibility"
+    ],
+    "fresh_tests": {
+      "seal_checkpoints": 21,
+      "catalog_recovery_checkpoints": 13,
+      "additional": [
+        "strict hostile segment and manifest decoding",
+        "deterministic alternate insertion order and merge commitment",
+        "missing, malformed, stale, and predecessor catalog repair",
+        "symlink and non-regular rejection",
+        "missing-lock concurrency",
+        "canonical pack corruption rejection"
+      ]
+    },
+    "oracle": "full footer enumeration and logical commitment do not call the current manifest reader, lookup, merge, or commitment implementation"
+  },
+  "predecessor_deletion": {
+    "classification": "fresh passed",
+    "production_predecessor_magic_or_digest_matches": 0,
+    "retained_fixture_matches": 3,
+    "retained_fixture": "one bounded repository-open test constructs disposable predecessor catalog bytes and proves first-open recovery without changing HEAD or packs",
+    "healthy_whole_catalog_rebuild_or_rewrite": false,
+    "dual_reader": false,
+    "public_accelerator_or_alias": false,
+    "recovery_rebuild_call_sites": [
+      "GraphRepository exclusive recovery",
+      "PackDirectoryStore immutable-footer recovery"
+    ]
+  },
+  "maintained_consumers": {
+    "classification": "fresh passed",
+    "standard": {
+      "revision": "rev_8d704ae6248deb75f1a810f20a965d6aea33dddab86d33268bed2d729618cc69",
+      "semantic_state": "semantic_state_b604e13343bd58ec20057575e1c874b82e845530a21d8b073245d3ad7a9f2f2d",
+      "head_sha256": "e422fb92f99e0d08c46b55c2d168b14eea7a34a3b439bcdac4d46da1e417eeb7",
+      "pack_manifest_sha256": "511b364472c96853cd6b192ce0c6c87efa9e8aa707e2df890151dee2c7d8f9df",
+      "pack_files": 3,
+      "pack_bytes": 556098,
+      "disposition": "HEAD and canonical pack bytes unchanged; ignored derived catalog regenerated to current layout"
+    },
+    "lkjournal": {
+      "revision": "rev_8a40a1eadb7db23e755306dbee5f11f372ca834af24fcaac39ddac4d02d60aaf",
+      "semantic_state": "semantic_state_592e1b154a4382a7c8eec6ce159d44582c7bb76189fbd09f46867d7ec9ea870b",
+      "head_sha256": "92e1d6de0231c61ddf6384b447aa6dcfec80b2a2d3cc1a927da375f7bcfd77dc",
+      "pack_manifest_sha256": "a3f1a1a2f13260e325c67119c2e1a6c8c4d8fa0cbf441d60826661b8f0a9efe5",
+      "pack_files": 18,
+      "pack_bytes": 3528957,
+      "disposition": "HEAD and canonical pack bytes unchanged; ignored derived catalog regenerated to current layout"
+    },
+    "generated_guides": {
+      "owner": "lkjscript capabilities --generate-docs",
+      "product_version": "0.1.19",
+      "capabilities_digest": "aa332bfb075c5bf53920e68e77bb5f99a75b7065f35f2d414b303593164e076f"
+    }
+  },
+  "million_owner_capacity": {
+    "classification": "fresh passed",
+    "receipt": ".artifacts/campaign/202609031354/million-owner-final/receipt.json",
+    "receipt_bytes": 4858809,
+    "receipt_sha256": "4d6638c5ccdacc2bcbc4b30aff37f4703deac778508a364627c5076779d7b9f7",
+    "receipt_digest": "verification_32dcf9c40121f5c9996a8030c07652828aeea54f27d956119c750686d9858af1",
+    "candidate": {
+      "configured": "target/release/lkjscript",
+      "executed": ".artifacts/campaign/202609031354/million-owner-final/candidate/lkjscript",
+      "bytes": 17325056,
+      "sha256": "f6216cca0de0ded9569b9c990b00b9665148b45a35cb24ee7e0f866763ee28dc",
+      "capabilities_digest": "aa332bfb075c5bf53920e68e77bb5f99a75b7065f35f2d414b303593164e076f"
+    },
+    "scenario": {
+      "topology": "independent-modules",
+      "lifecycle": "capacity",
+      "items": 1000000,
+      "batch": 1000,
+      "maximum_wall_seconds": 7200,
+      "maximum_run_bytes": 68719476736,
+      "minimum_available_memory_bytes": 8589934592,
+      "minimum_available_filesystem_bytes": 68719476736
+    },
+    "construction": {
+      "batches": 1000,
+      "plans": 1000,
+      "applies": 1000,
+      "accepted_revisions": 1000,
+      "commands": 2008,
+      "commands_passed": 2008
+    },
+    "authority": {
+      "starting_revision": "rev_e8376de8d4f51211bd0579287ec46a206106f4eb2ddc708a21b9a8979dcc391b",
+      "final_revision": "rev_04ab652c6863a1d6b92226e2d95975931ff791f335e884732e3fe4bd77b9f5d5",
+      "repository": "repo_7b99521eb24a398142ccdfce9bdc2e07",
+      "package": "pkg_5f336565134d5780250697acd41d07d7",
+      "semantic_state": "semantic_state_e9ef98d0c406983d657fd946eeef6a9c5252c88b56b71f33e82bfcb0726e1210"
+    },
+    "public_and_semantic_oracle": {
+      "owners": 1000000,
+      "modules": 1000000,
+      "functions": 0,
+      "relations": 0,
+      "types": 0,
+      "dependencies": 0,
+      "retirements": 0,
+      "status_equal": true,
+      "exact_inspection": true,
+      "bounded_owner_query_returned": 16,
+      "bounded_owner_query_truncated": true,
+      "exact_name_query": true,
+      "bounded_context_owners": 1,
+      "bounded_context_relations": 0,
+      "typed_validation_work": 5000000,
+      "map_pages_read": 65795,
+      "map_bytes_read": 65631873,
+      "store_objects_read": 1065795,
+      "store_bytes_read": 145631873,
+      "equal": true,
+      "shape_digest": "verification_5e42b33bd8c8cde2ab79b01dbd4b4f73d8447d99ab521466fcc77afea360bb92"
+    },
+    "catalog": {
+      "identity": "lkjscript-object-catalog-2",
+      "state": "loaded",
+      "generation": 1001,
+      "commitment": "catalog_fa4382235e8d23b8e3c9cd1603b2c2618222d3a079d991bcfaf5ed4967d52622",
+      "entries": 5937309,
+      "packs": 73808,
+      "segments": 7,
+      "segment_bytes": 703406369,
+      "segment_metadata_bytes": 32489976,
+      "maximum_level": 9,
+      "maximum_lookup_segments": 7,
+      "history": {
+        "delta_segments": 1001,
+        "merge_operations": 994,
+        "merge_entries_read": 48093335,
+        "merge_bytes_read": 5434546855,
+        "segments_written": 1995,
+        "segment_entries_written": 54030644,
+        "full_rebuilds": 0,
+        "full_footer_scan_runs": 0,
+        "pack_footers_scanned": 0
+      },
+      "final_healthy_work": {
+        "healthy_opens": 1,
+        "manifests_read": 1,
+        "manifest_bytes_read": 1438,
+        "segment_metadata_read": 7,
+        "segment_metadata_bytes_read": 32489976,
+        "segment_lookups": 189,
+        "segment_blocks_read": 27,
+        "segment_block_bytes_read": 194360,
+        "segment_entries_examined": 1720,
+        "targeted_pack_footers_read": 12,
+        "targeted_pack_footer_bytes_read": 170383,
+        "full_rebuilds": 0,
+        "full_footer_scan_runs": 0,
+        "pack_footers_scanned": 0
+      },
+      "footer_oracle": {
+        "packs": 73808,
+        "entries": 5937309,
+        "bytes_read": 539048853,
+        "duplicate_objects": 0,
+        "commitment": "catalog_fa4382235e8d23b8e3c9cd1603b2c2618222d3a079d991bcfaf5ed4967d52622",
+        "equal": true
+      },
+      "leftovers": []
+    },
+    "resources": {
+      "wall_nanoseconds": 6189685535247,
+      "child_cpu_nanoseconds": 3885460000000,
+      "maximum_child_peak_rss_kib": 295772,
+      "harness_peak_rss_kib": 1663456,
+      "repository_files": 73818,
+      "repository_bytes": 19303437385,
+      "total_run_bytes": 19497158083,
+      "preflight_available_memory_bytes": 11086428160,
+      "preflight_available_filesystem_bytes": 223455084544
+    },
+    "cleanup": {
+      "status": "removed",
+      "project": ".artifacts/campaign/202609031354/million-owner-final/project",
+      "project_absent_after_run": true
+    }
+  },
+  "verification": {
+    "focused": {
+      "classification": "fresh passed",
+      "passed": 6,
+      "selected": 6,
+      "reused": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788428080399452554-2500417-0/receipt.json",
+      "receipt_sha256": "fd7fe5efc0f16871b48e1d402c9b6fe6fe505cdc2bbc474d65d3e969b08d22ae",
+      "receipt_digest": "verification_406c73f2858ec7c6694bf683613657d1112fc7667ab95d485d3db8c5e1e88f14"
+    },
+    "product": {
+      "classification": "fresh passed",
+      "passed": 19,
+      "selected": 19,
+      "reused": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788428061247957279-2499351-0/receipt.json",
+      "receipt_sha256": "371708c79c124a8eca347d168c9c92595824be0da105dc44671ec8a49ff88084",
+      "receipt_digest": "verification_4fbfedc767d6828651ccadc2fb3f124b1114b66e529f316b0d99c29fa046d13c"
+    },
+    "service": {
+      "classification": "fresh passed",
+      "passed": 9,
+      "selected": 9,
+      "reused": 0,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1788428255569504794-2502970-0/receipt.json",
+      "receipt_sha256": "981d4769dd90a3ae9bf4e4d8b3b564a4ce7417d11ace6b8c6e19357a2aece95f",
+      "receipt_digest": "verification_c69582aa3919f218d460259a888cd4aaf5c90347dc37d559aa7ed64cb4d9bcea"
+    },
+    "final_full": {
+      "classification": "not run",
+      "reason": "runs fresh after current owners and this bounded evidence are assembled"
+    },
+    "invalidated_or_failed_observations": [
+      {
+        "classification": "fresh passed",
+        "observation": "an earlier million-owner receipt passed on commit 4fc361aa",
+        "receipt": ".artifacts/campaign/202609031354/million-owner/receipt.json",
+        "receipt_sha256": "cd726758de2dbbc2c7c35d9011e5bde30549553d1257e052b9a0e7ba3321e4a7",
+        "receipt_digest": "verification_0af7ee682678234fbeb2cf93f8415cc19c47de65b8cee93259cb28b19b0f2378",
+        "disposition": "invalidated by the later normative product-surface correction and not used as final capacity proof"
+      },
+      {
+        "classification": "failed",
+        "observation": "the first product profile passed 18 of 19 gates and failed only product_surface_audit on two stale contract spellings",
+        "receipt": ".artifacts/lkjscript-dev/check/1788427611172880410-2495323-0/receipt.json",
+        "receipt_sha256": "640795d2bbf95b14631941b68112c521dcef62d8577fd469a8ae7cef6492cff4",
+        "receipt_digest": "verification_d8c939a40962208b361de77c63bea28dfc6416bec2d5f91501ae72a4a467b80d",
+        "correction": "5ec613a2 removed the rejected spellings; the exact audit and fresh product profile then passed"
+      },
+      {
+        "classification": "not run",
+        "observation": "the first long construction observation exposed that the scale runner did not recheck its wall ceiling after in-process oracle and cleanup work",
+        "raw": ".artifacts/campaign/202609031354/invalidated-pre-terminal-wall-check/",
+        "disposition": "no receipt was accepted; 4fc361aa added terminal resource admission and an exact boundary test before either retained passing receipt"
+      }
+    ]
+  },
+  "cat_dispositions": {
+    "CAT-1": { "classification": "fresh passed", "claim": "current strict manifest and immutable segments are the sole healthy catalog" },
+    "CAT-2": { "classification": "fresh passed", "claim": "healthy open, lookup, plan, apply, and sealing are incremental with zero complete footer scans or full rebuilds" },
+    "CAT-3": { "classification": "fresh passed", "claim": "disjoint footer recovery, disposable predecessor migration, hostile inputs, corruption, and every fault point are exact" },
+    "CAT-4": { "classification": "fresh passed", "claim": "public behavior and maintained standard/lkjournal meaning and canonical packs remain exact" },
+    "CAT-5": { "classification": "fresh passed", "claim": "the exact copied-binary million-module capacity lifecycle passed all ceilings, oracles, queries, and cleanup" },
+    "CAT-6": { "classification": "fresh passed", "claim": "only product, catalog, scale receipt, and derived capabilities identity advanced; predecessor healthy paths are deleted" },
+    "CAT-7": { "classification": "not run", "claim": "final fresh full profile and terminal repository closure remain" }
+  },
+  "external_actions": {
+    "fetch": "fresh passed; origin/main remained f794278cc4436802e96c6b50909114cc3d5e031c through the capacity source freeze",
+    "push": "conditionally authorized normal fast-forward push pending final proof and closure",
+    "workflow_dispatch": "not run",
+    "tag_or_release": "not run",
+    "package_publication": "not run",
+    "deployment": "not run",
+    "hosted_data_mutation": "not run",
+    "published_object_mutation": "not run"
+  },
+  "limitations": [
+    "the million-owner observation is capacity-only and omits check, compilation, build, release, deployment, service, and production admission",
+    "wall, CPU, RSS, filesystem, and byte totals are one exact Linux x86-64/ZFS host observation and not service objectives",
+    "immutable packs and accepted history are retained; no compaction, garbage collection, or history deletion was added",
+    "catalog bytes remain disposable and provide no encryption, signing, sandboxing, multi-tenant isolation, consensus, arbitrary-tamper detection, reproducible-build, or cross-platform durability claim",
+    "source 0.1.19 remains unreleased and immutable v0.1.16 remains the supported public release"
+  ]
+}

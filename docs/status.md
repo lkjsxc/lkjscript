@@ -328,12 +328,17 @@ bounded reads observed the final revision; `check` compiled 50,000 units with di
 and the forced-clean and exact-current builds produced equal 59,377,334-byte artifacts. The typed
 oracle agreed with public counts and the campaign removed the temporary project.
 
-The separately bounded one-million-module capacity attempt is classified `environment_limit`, not
-admission. Its one-hour allocation completed 275 reviewed 1,000-module batches. The partial typed
-oracle found exactly 275,000 live modules at the last accepted revision, after which the next apply
-timed out without a reported accepted update; the temporary project was removed. Exact inputs,
-receipts, classifications, observations, and limitations are retained in
-[`202608311331-current-semantic-scale.json`](evidence/202608311331-current-semantic-scale.json).
+One fresh `independent-modules` capacity lifecycle admitted exactly 1,000,000 live modules and no
+relations through 1,000 separate 1,000-operation plan/apply batches and 1,000 accepted revisions.
+All 2,008 copied-binary commands passed. Final status, exact inspection, bounded owner query, exact
+name query, and bounded context query agreed with the typed semantic oracle. The healthy catalog
+ended at seven segments and reported zero complete footer scans or full reconstructions across
+construction and final reads; the implementation-disjoint footer oracle agreed on all 5,937,309
+locations and the logical catalog commitment. The 6,189.686-second run used 19,497,158,083 bytes,
+stayed within its declared host envelope, and removed the temporary project. This capacity-only
+admission does not run or prove million-owner check, compilation, or build. Exact inputs, receipts,
+classifications, observations, and limitations are retained in
+[`202609031354-incremental-object-catalog.json`](evidence/202609031354-incremental-object-catalog.json).
 
 ## Runtime boundary
 
@@ -427,9 +432,9 @@ sandbox or multi-tenant isolation boundary.
 - The first-party data format retains all reachable history and has no compaction, garbage
   collection, destructive repair, replication, consensus, encryption, remote service, or
   million-key admission. Its current support boundary is one local trusted Linux host.
-- No million-owner admission or complete application lifecycle, long-history retention policy, graph-store
-  garbage collection, live-store packing, artifact signing, encrypted graph storage, or distributed
-  publication protocol has been proved.
+- No million-owner check/compiler/build admission or complete application lifecycle, long-history
+  retention policy, graph-store garbage collection, live-store packing, artifact signing,
+  encrypted graph storage, or distributed publication protocol has been proved.
 - The supported public binary is exactly `x86_64-unknown-linux-musl` with the static linkage and
   pinned Alpine 3.22.5 and Debian 11 userland observations above. A minimum kernel, macOS, Windows,
   arm64, generic Unix, additional Linux targets, and universal portability remain unproved.

@@ -167,6 +167,39 @@ complete cleanup. These working-tree probes establish the expected work curve on
 required million-owner admission or final-source proof. Raw receipts are under
 `.artifacts/campaign/202609031354/probe-{20000,100000}/`.
 
+The exact final-source capacity admission used clean commit
+`5ec613a2f0a4ec310570314280aedc2a85aa753a`, tree
+`9e02d6685bb6a3820f4a4574e70cae9084fa6d49`, and copied release-mode candidate SHA-256
+`f6216cca0de0ded9569b9c990b00b9665148b45a35cb24ee7e0f866763ee28dc`. It completed all
+1,000 plan/apply batches and all 2,008 public commands, then independently reconstructed both the
+accepted semantic graph and the object locations before removing the temporary project.
+
+| 1,000,000-module capacity observation | Value |
+|---|---:|
+| complete wall / sampled child CPU | 6,189.686 s / 3,885.460 s |
+| maximum child / harness peak RSS | 295,772 KiB / 1,663,456 KiB |
+| repository files / bytes | 73,818 / 19,303,437,385 |
+| complete run bytes | 19,497,158,083 |
+| accepted revisions / public commands | 1,000 / 2,008 |
+| catalog entries / packs / live segments | 5,937,309 / 73,808 / 7 |
+| segment / selected-metadata bytes | 703,406,369 / 32,489,976 |
+| delta segments / deterministic merges | 1,001 / 994 |
+| merge entries / bytes read | 48,093,335 / 5,434,546,855 |
+| healthy full reconstructions / complete footer scans / scanned footers | 0 / 0 / 0 |
+| final-read segment blocks / examined entries | 27 / 1,720 |
+| final-read targeted pack footers / bytes | 12 / 170,383 |
+| independent footer-oracle packs / entries / bytes | 73,808 / 5,937,309 / 539,048,853 |
+| cleanup | temporary project removed |
+
+The selected and footer-oracle commitments were both
+`catalog_fa4382235e8d23b8e3c9cd1603b2c2618222d3a079d991bcfaf5ed4967d52622`.
+The exact 7,200-second, 68,719,476,736-byte, 8,589,934,592-byte available-memory, and
+68,719,476,736-byte available-filesystem gates all passed. This is one Linux x86-64/ZFS host
+observation, not a latency distribution or service objective, and the capacity lifecycle omits
+check, compilation, and build. The receipt is
+`.artifacts/campaign/202609031354/million-owner-final/receipt.json` with SHA-256
+`4d6638c5ccdacc2bcbc4b30aff37f4703deac778508a364627c5076779d7b9f7`.
+
 ## Predecessor semantic-scale lifecycle
 
 At implementation commit `bcbcbd684ac5c1591e9b5b8c0fa755440ee0a608`, receipt contract 2 copied
@@ -227,8 +260,8 @@ numbers predate meaning graph contracts 2, 3, and 4, persistent root pages, dire
 imports/targets, normalized query, or explicit generics. Those rows are historical baselines and
 must not be presented as current-contract performance. Two graph-4 release workflows at 10,000
 empty background modules are retained below on opposite sides of the semantic-fact cutover. The
-predecessor contract-2 semantic-scale observations above supersede their earlier scale gap; no
-million-owner admission exists.
+current capacity admission above supersedes the earlier million-owner gap; the predecessor
+semantic-scale observations remain historical full-lifecycle and failure baselines.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
