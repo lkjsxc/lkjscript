@@ -1,0 +1,377 @@
+{
+  "schema": {
+    "identity": "lkjscript-http-route-topology-evidence",
+    "version": 1
+  },
+  "campaign": "202609040425-graph-owned-exact-http-route-topology",
+  "status": "incomplete",
+  "assembled_at_utc": "2026-09-03T22:25:44Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "orientation_head": "fe06f83532a14dbf27493ca8fabfe057b3095c63",
+    "orientation_tree": "b5285cd972e621506d508ba0c90010ca392fb921",
+    "orientation_origin_main": "fe06f83532a14dbf27493ca8fabfe057b3095c63",
+    "orientation_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "e5ef1e9583ef9c5d1bd70c880b104266e039cedb",
+        "tree": "c9f91365c17ce73e8b059353fac3ff1da9e86b70",
+        "summary": "Archive exact HTTP route topology campaign mandate"
+      },
+      {
+        "sha": "66faffec22d2913e19b5c0741ed364de40d2951e",
+        "tree": "6d1204064ffc689de5e435f13b277866ff97fb46",
+        "summary": "Specify graph-owned exact HTTP routes"
+      },
+      {
+        "sha": "5cfdd919cf3df3bbc0011188d7a280b57edb4295",
+        "tree": "4449605c8458208b6ddc7c40e7527daab766677a",
+        "summary": "Implement graph-owned exact HTTP routes"
+      }
+    ],
+    "implementation_head": "5cfdd919cf3df3bbc0011188d7a280b57edb4295",
+    "implementation_tree": "4449605c8458208b6ddc7c40e7527daab766677a",
+    "implementation_worktree": "clean",
+    "implementation_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 3
+    },
+    "agent_policy_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      }
+    ],
+    "closure_note": "The fresh full profile and exact-target admission will bind the clean commit containing this assembled evidence. The later lifecycle-only containing commit and any normal push are self-excluding and belong in the terminal handoff."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true,
+    "new_dependencies": [],
+    "host": "Linux 7.0.0-29-generic x86_64",
+    "filesystem": "zfs",
+    "installed_targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
+  },
+  "identity_cutover": {
+    "advanced": {
+      "source_product": { "from": "0.1.20", "to": "0.1.21", "state": "unreleased source-only" },
+      "meaning_graph": { "from": 8, "to": 9 },
+      "validation_witness": { "from": 4, "to": 5 },
+      "owner_summary": { "from": 3, "to": 4 },
+      "semantic_validator": { "from": 8, "to": 9 },
+      "package": { "from": 1, "to": 2 },
+      "compiler_unit": { "from": 3, "to": 4 },
+      "artifact": { "from": 13, "to": 14 },
+      "compact_change": { "from": 12, "to": 13 },
+      "authored_change": { "from": 9, "to": 10 },
+      "query": { "from": 4, "to": 5 },
+      "project_creation": { "from": 3, "to": 4 },
+      "contract_registry": { "from": 9, "to": 10 },
+      "cli": { "from": 21, "to": 22 },
+      "http_adapter": { "from": 1, "to": 2 },
+      "service_receipt": { "from": 8, "to": 9 },
+      "distributed_http_receipt": { "from": 3, "to": 4 },
+      "outbound_http_receipt": { "from": 1, "to": 2 },
+      "stateful_http_receipt": { "from": 4, "to": 5 }
+    },
+    "capabilities_digest": {
+      "from": "599f421f6d957a76d62be3d841380122c2a23bfa53f13f02cd542149f387ed75",
+      "to": "6baea8b872fe3c5df77a2178f55f8804d9e9e8de91ea6c71cfb1c0a5401c884d",
+      "operations": 13,
+      "operation_names_changed": false
+    },
+    "unchanged": {
+      "package_interface": 6,
+      "logical_change_plan": 3,
+      "bytecode": 3,
+      "compilation_manifest": 3,
+      "package_revision": 1,
+      "package_transport": 1,
+      "package_transport_selection": 1,
+      "resident_runtime": 3,
+      "function_definition_projection": 2,
+      "deployment": 4,
+      "structured_session": 1,
+      "byte_stream": 1,
+      "http_client_adapter": 1,
+      "data_store": 1,
+      "durable_queue": 2,
+      "object_store": "lkjscript-immutable-object-store-1",
+      "object_pack": "lkjscript-immutable-object-pack-1",
+      "object_catalog": 2,
+      "accepted_revision": 7,
+      "accepted_receipt": 5,
+      "transaction": 5,
+      "semantic_diff": 3
+    },
+    "public_latest": {
+      "tag": "v0.1.16",
+      "release_id": 381033538,
+      "immutable": true,
+      "mutated": false
+    }
+  },
+  "route_contract": {
+    "classification": "fresh passed",
+    "authority": "one stable HttpRoute owner belongs to one exact root-package HTTP target and stores method, path, and port; deployment cannot override membership or keys",
+    "relations": [
+      "http_route_target",
+      "http_route_port",
+      "target_component",
+      "member_declaration",
+      "function_value"
+    ],
+    "target_contract": {
+      "http": "one component, no universal port, and one nonempty finite route set",
+      "non_http": "one component, one exact port, and no HTTP routes"
+    },
+    "bounds": {
+      "method_bytes": 32,
+      "method_form": "nonempty ASCII HTTP token",
+      "path_bytes": 16384,
+      "path_form": "begins with slash and contains no query, fragment, or control byte",
+      "routes_per_target": 4096,
+      "aggregate_method_path_bytes": 4194304,
+      "arithmetic": "checked before accepted publication and rechecked at compiler, artifact, preparation, and runtime boundaries"
+    },
+    "canonical_order": "unsigned method bytes, then unsigned path bytes",
+    "route_set_digest": "BLAKE3 derived-key domain lkjscript.kernel.http-route-set.v1 over stable route identity, method, path, and exact port identity",
+    "matching": "one case-sensitive byte-exact lookup after transport validation; query, percent spelling, Unicode normalization, slash folding, dot segments, trailing slash, and implicit methods do not select a route",
+    "unknown": "status 404, no application headers, empty body, no graph task, function, or capability; transport closes or drains the body under existing bounds",
+    "head": "only an explicit HEAD route matches and its selected handler response body is suppressed",
+    "selected_handler": "admitted and invoked at most once; live effects are never replayed"
+  },
+  "public_path": {
+    "classification": "fresh passed",
+    "operations": [
+      "add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT",
+      "set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT",
+      "delete.owner owner=HTTP_ROUTE policy=reject"
+    ],
+    "target_rule": "create.target forbids port for runner=http and requires port for every other runner",
+    "request_local_references": ["target", "port"],
+    "route_inspection": ["id", "target", "method", "path", "component", "port"],
+    "target_inspection": ["component", "route-count", "route-set"],
+    "context": "bounded ordinary owner/relation traversal exposes route, target, component, port, function, and effect dependencies",
+    "copied_binary_test": "tests/public_cli.rs::copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes",
+    "predecessor_compatibility": false
+  },
+  "maintained_consumers": {
+    "classification": "fresh passed",
+    "http_template": {
+      "routes": [["GET", "/"]],
+      "manual_dispatch": false
+    },
+    "nostr_relay_info": {
+      "routes": [["GET", "/relay-info"]],
+      "removed": ["is-relay-info-request", "handler-owned route tests", "handler-owned generic 404"],
+      "outbound_policy_preserved": true
+    },
+    "stateful_bbs": {
+      "routes": [
+        ["DELETE", "/api/posts"],
+        ["GET", "/"],
+        ["GET", "/api/posts"],
+        ["POST", "/api/posts"],
+        ["PUT", "/api/posts"]
+      ],
+      "authored_from_minimal": true,
+      "manual_dispatch": false
+    },
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_95ac9237bc2d13a04f64f034dfad2f19350514c332d9c44450898202d9418968",
+      "semantic_state": "semantic_state_3ad6b17958f658838de09ad1f3de8201d5c344b11a8d094840c169f41d9ebfca",
+      "semantic_root": "semantic_root_a36e1301486933d47f6ee99aefa031b9d535586eb17a2a23be8d615531f4dcf5",
+      "package_revision": "package_revision_8630f8830e1233b7f99e177fa86dafad01546dc21138418de5250078a4e039b2",
+      "package_transport": "package_transport_fbd76bbd6638c36d434a697a8243c87fef6346f72c4f5de16a60579649cf09bf",
+      "artifact_manifest": "artifact_manifest_ada0f37322364b65d0adc719b69ed65550a873991be34764145d796518b3be5b",
+      "artifact_bundle": "artifact_bundle_8dc5e6b6f27f497945bba6ad57a760053be1839a65708f4b9132d61a81370945",
+      "owners": 550,
+      "compiler_units": 106,
+      "tests": 20,
+      "closure_objects": 1057,
+      "artifact_bytes": 327518,
+      "artifact_sha256": "7f93e15a573129d9cacd3929d285b6d7f9ce075db57127cf099bc1501720a58e",
+      "transport_bytes": 114656,
+      "transport_sha256": "d2c1b49df32eebe3ebb8dbf82931e0634c41659de0cc92fd3bfa349c52a2d5c2"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_fb1407157c4fec5cba07a9c89d0145b1282becd70fc49147f54fb52131c34a89",
+      "semantic_state": "semantic_state_5e40e43902cb2614c934a2c3dbc596145819aaa009f7c8fc83acab41dadaeed3",
+      "semantic_root": "semantic_root_3482ee2f14c6c7981cd205edc8fa2e0ce0df3b39bcd4d1b4776de5d2ddb38620",
+      "target": "target_e6f0a45c5f938ba39a19de585e8fc0d7",
+      "component": "pkg_20000000000000000000000000000001/decl_1cd2427798155aab924e8a7902505f02",
+      "route_count": 11,
+      "route_set": "http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0",
+      "distinct_ports": 11,
+      "distinct_functions": 11,
+      "owners": 2046,
+      "compiler_units": 196,
+      "tests": 27,
+      "closure_objects": 3543,
+      "artifact_manifest": "artifact_manifest_eff8c201d1f415400b407ed14294bd1762552ea4cbe736624b351dc417cc9295",
+      "artifact_bundle": "artifact_bundle_b9f422fa042fd3f12758fc936b5f47ed2ec522ed1eb72997dab37e2cdd15a9d7",
+      "artifact_bytes": 1061717,
+      "artifact_sha256": "1dc6c9f93a72bfe848c59389c1922604dedd22f2fef3250dd523fc4186fcc11e",
+      "routes": [
+        { "id": "route_5648e1d560d40fcf0661eb0ba8100ab4", "method": "GET", "path": "/", "port": "home", "function": "home" },
+        { "id": "route_4b3b36e0db342418776892a2648e4e9d", "method": "GET", "path": "/health", "port": "health", "function": "health-route" },
+        { "id": "route_79ebd79a701800e82e13dbe560944d55", "method": "GET", "path": "/resource", "port": "read-resource", "function": "read-resource" },
+        { "id": "route_8f26a5cc2dcb7f777ad6d2bbe426ee93", "method": "GET", "path": "/resource/history", "port": "resource-history", "function": "resource-history" },
+        { "id": "route_c278b0ea6b3c9b7b9ffa0aaa94aef6fc", "method": "GET", "path": "/resources", "port": "list-resources", "function": "list-resources" },
+        { "id": "route_68b86fe2e2b7de00b8465389107f1433", "method": "POST", "path": "/initialize", "port": "initialize", "function": "initialize" },
+        { "id": "route_759d0048c66447c8f5950d494a160592", "method": "POST", "path": "/login", "port": "login", "function": "login" },
+        { "id": "route_bb1e1b02181572cc2429818916de8319", "method": "POST", "path": "/objects", "port": "publish-object", "function": "publish-object" },
+        { "id": "route_773f2c94e3bed4dc39267c45698c2f7c", "method": "POST", "path": "/objects/reconcile", "port": "reconcile-object", "function": "reconcile-object" },
+        { "id": "route_a92b27a1757c26506bb0bbac601e9f42", "method": "POST", "path": "/resource/update", "port": "update-resource", "function": "update-resource" },
+        { "id": "route_9e365924b0f9db7f0ec1d4a264e559d8", "method": "POST", "path": "/resources", "port": "create-resource", "function": "create-resource" }
+      ],
+      "manual_route_switch": false,
+      "generic_application_404": false,
+      "worker_and_interactive_targets_preserved": true
+    }
+  },
+  "oracles": {
+    "graph": {
+      "classification": "fresh passed",
+      "implementation": "the contributor service reads every route through bounded public owner and context operations, reconstructs the canonical route-set digest with an independent textual identity decoder and BLAKE3 procedure, and imports no production route validation, lowering, artifact decoding, preparation, lookup, or server helper",
+      "lkjournal_route_set": "http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0",
+      "route_count": 11,
+      "contexts": 11,
+      "relations_per_context": 5
+    },
+    "raw_http": {
+      "classification": "fresh passed",
+      "implementation": "first-party raw TCP HTTP/1.1 clients share only bounded process, byte-I/O, digest, and receipt utilities with production",
+      "coverage": [
+        "exact selection",
+        "query does not select",
+        "case mismatch",
+        "trailing slash mismatch",
+        "percent spelling mismatch",
+        "unmatched HEAD",
+        "matched HEAD suppression",
+        "fixed empty header-free 404",
+        "zero effect on miss",
+        "bounded body close",
+        "body fault",
+        "overload",
+        "cancellation",
+        "restart",
+        "shutdown cleanup"
+      ]
+    }
+  },
+  "deletion": {
+    "classification": "fresh passed",
+    "removed": [
+      "universal HTTP target port and target_port relation",
+      "runtime fallback handler selection",
+      "lkjournal top-level method/path switch and generic route 404",
+      "nostr-relay-info is-relay-info-request predicate, predicate tests, and handler route 404",
+      "stateful BBS manual dispatch",
+      "graph-8, package-1, compiler-unit-3, artifact-13, compact-change-12, authored-change-9, query-4, registry-9, CLI-21, and HTTP-adapter-1 predecessor inputs"
+    ],
+    "absent": [
+      "compatibility reader",
+      "synthetic route",
+      "fallback writer",
+      "route alias",
+      "feature flag",
+      "deployment route override",
+      "application-private Rust routing policy",
+      "tracked raw logs"
+    ]
+  },
+  "verification": {
+    "generated_documents": {
+      "classification": "fresh passed",
+      "command": "cargo run --locked -- capabilities --verify-generated docs/generated",
+      "capabilities_digest": "6baea8b872fe3c5df77a2178f55f8804d9e9e8de91ea6c71cfb1c0a5401c884d",
+      "files": 8
+    },
+    "focused_current_commit": [
+      {
+        "classification": "fresh passed",
+        "command": "cargo test --locked -p lkjscript-dev independent_http_route_set_is_order_invariant_and_strict",
+        "passed": 1
+      },
+      {
+        "classification": "fresh passed",
+        "command": "cargo test --locked -p lkjscript normalized_http_dispatch_uses_exact_body_resources_and_resident_admission",
+        "passed": 1
+      }
+    ],
+    "assembled_source_full": {
+      "classification": "not run",
+      "reason": "runs after this evidence source is committed cleanly"
+    },
+    "exact_static_target": {
+      "classification": "not run",
+      "target": "x86_64-unknown-linux-musl",
+      "reason": "runs after the fresh assembled-source full profile"
+    },
+    "invalidated_observations": [
+      {
+        "classification": "failed",
+        "observation": "early workspace runs exposed stale zero-route, artifact-13, capability-count, and contributor receipt-version test expectations",
+        "disposition": "expectations and fixtures were migrated; later workspace execution passed before final oracle hardening and is not final proof"
+      },
+      {
+        "classification": "reused passed",
+        "observation": "intermediate distributed HTTP, stateful HTTP, outbound HTTP, and service receipts passed their then-current copied-binary checks",
+        "disposition": "their verifier and capability inputs later changed, so final classification requires new full and target receipts"
+      }
+    ]
+  },
+  "rte_dispositions": {
+    "RTE-1": { "classification": "not run", "claim": "final graph and package contract proof pending assembled-source full" },
+    "RTE-2": { "classification": "not run", "claim": "final copied public authoring proof pending assembled-source full" },
+    "RTE-3": { "classification": "not run", "claim": "final clean/incremental, artifact, and preparation proof pending assembled-source full" },
+    "RTE-4": { "classification": "not run", "claim": "final in-memory and raw live HTTP proof pending assembled-source full" },
+    "RTE-5": { "classification": "not run", "claim": "final maintained recipe, BBS, and lkjournal proof pending assembled-source full" },
+    "RTE-6": { "classification": "not run", "claim": "final disjoint graph and raw HTTP oracle proof pending assembled-source full" },
+    "RTE-7": { "classification": "not run", "claim": "fresh full and exact static-musl target admission pending" }
+  },
+  "external_actions": {
+    "fetch": "fresh passed at reconciliation; origin/main remained fe06f83532a14dbf27493ca8fabfe057b3095c63",
+    "push": "not run",
+    "workflow_dispatch": "not run",
+    "tag_or_release": "not run",
+    "package_publication": "not run",
+    "deployment": "not run",
+    "public_network_service": "not run",
+    "hosted_data_or_schema_mutation": "not run",
+    "credential_or_setting_mutation": "not run"
+  },
+  "limitations": [
+    "exact finite routes only; no wildcard, parameter, precedence, host, middleware, alias, normalization, static-file, template, multipart, or response-streaming semantics",
+    "plaintext HTTP/1.1 only; no HTTP/2, HTTP/3, inbound TLS, browser, origin, or proxy policy claim",
+    "no hostile-code sandbox, multi-tenant isolation, encrypted graph storage, signing, reproducibility, general provenance, SLO, deployment, production, or arbitrary-Linux claim",
+    "outbound Nostr event and key semantics remain outside this campaign"
+  ],
+  "raw_evidence": {
+    "campaign_root": ".artifacts/campaign/202609040425/",
+    "check_root": ".artifacts/lkjscript-dev/check/",
+    "tracked_raw_material": false,
+    "temporary_application_and_process_cleanup": "final verification pending"
+  }
+}
