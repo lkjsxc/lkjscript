@@ -4,8 +4,9 @@
     "version": 1
   },
   "campaign": "202609040425-graph-owned-exact-http-route-topology",
-  "status": "incomplete",
+  "status": "complete",
   "assembled_at_utc": "2026-09-03T22:35:42Z",
+  "completed_at_utc": "2026-09-03T22:49:20Z",
   "repository": {
     "name": "lkjsxc/lkjscript",
     "branch": "main",
@@ -41,6 +42,9 @@
     ],
     "implementation_head": "680465a9f998da4d8c5441d70fdb9c6183a2ebe6",
     "implementation_tree": "45970570764eda6e0a60775c5c44ea1d7c8ac170",
+    "verification_source_head": "050c4c04dd8817e0b285cd9b67c9969eb4c824a8",
+    "verification_source_tree": "5decee7be3fcf64256f9be9d5da5cd7cbc5ca208",
+    "verification_source_worktree": "clean and input-stable",
     "implementation_worktree": "clean",
     "implementation_divergence": {
       "behind_origin_main": 0,
@@ -56,7 +60,7 @@
         "disposition": "preserved without apply, drop, or rewrite"
       }
     ],
-    "closure_note": "The fresh full profile and exact-target admission will bind the clean commit containing this assembled evidence. The later lifecycle-only containing commit and any normal push are self-excluding and belong in the terminal handoff."
+    "closure_note": "The fresh full profile and exact-target admission bind clean assembled-evidence source 050c4c04dd8817e0b285cd9b67c9969eb4c824a8. The later lifecycle-only containing commit and any normal push are self-excluding and belong in the terminal handoff."
   },
   "toolchain": {
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
@@ -179,10 +183,12 @@
     "classification": "fresh passed",
     "http_template": {
       "routes": [["GET", "/"]],
+      "route_key_bytes": 4,
       "manual_dispatch": false
     },
     "nostr_relay_info": {
       "routes": [["GET", "/relay-info"]],
+      "route_key_bytes": 14,
       "removed": ["is-relay-info-request", "handler-owned route tests", "handler-owned generic 404"],
       "outbound_policy_preserved": true
     },
@@ -194,6 +200,7 @@
         ["POST", "/api/posts"],
         ["PUT", "/api/posts"]
       ],
+      "route_key_bytes": 60,
       "authored_from_minimal": true,
       "manual_dispatch": false
     },
@@ -225,6 +232,7 @@
       "target": "target_e6f0a45c5f938ba39a19de585e8fc0d7",
       "component": "pkg_20000000000000000000000000000001/decl_1cd2427798155aab924e8a7902505f02",
       "route_count": 11,
+      "route_key_bytes": 152,
       "route_set": "http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0",
       "distinct_ports": 11,
       "distinct_functions": 11,
@@ -259,13 +267,37 @@
       "classification": "fresh passed",
       "implementation": "the contributor service reads every route through bounded public owner and context operations, reconstructs the canonical route-set digest with an independent textual identity decoder and BLAKE3 procedure, and imports no production route validation, lowering, artifact decoding, preparation, lookup, or server helper",
       "lkjournal_route_set": "http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0",
+      "independent_route_set": "http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0",
+      "oracle_digest": "route_oracle_569d2a8eb0bac38f0a276185eaa08611a00999a93c48d8b7e0c281949317dbd7",
       "route_count": 11,
       "contexts": 11,
-      "relations_per_context": 5
+      "relations_per_context": 5,
+      "source_receipt": {
+        "path": ".artifacts/lkjscript-dev/service/1788475301216596765-2962223-0/receipt.json",
+        "sha256": "802404be69fe285e22ee71b670b5b8e8d90bc731d0742c797f6d0c93a4392fad",
+        "digest": "verification_3e6431dcc121d045edb4b22a5b942bf511105ddc5e9e183989651ab851aa26b3"
+      },
+      "target_receipt": {
+        "path": ".artifacts/lkjscript-dev/service/1788475657649498431-2965725-0/receipt.json",
+        "sha256": "6ae1bca38872dbc6f17ebad530c663f0d786ca243488f0a1a94a15f0924a7250"
+      }
     },
     "raw_http": {
       "classification": "fresh passed",
       "implementation": "first-party raw TCP HTTP/1.1 clients share only bounded process, byte-I/O, digest, and receipt utilities with production",
+      "source_distributed_receipt": {
+        "path": ".artifacts/lkjscript-dev/distributed-http/1788475126775947398-2957470-0/receipt.json",
+        "sha256": "adade775dc3be722b152965469e0bcc5d01244cca8c566922b3130ac922f8de0",
+        "digest": "verification_84dc2050e75bbfec2ccb2a1a9349ef44c719b66c301c3adb23d1d74a77716448"
+      },
+      "target_distributed_receipt": {
+        "path": ".artifacts/campaign/202609040425/target-final/target-admission/distributed-http/receipt.json",
+        "sha256": "94376e38e0cfe4c25cbcd3028dd769e46ccf22698b3002f55cc6cbf8c94da188",
+        "requests": 14,
+        "runners": 2
+      },
+      "target_lkjournal_requests": 25,
+      "target_stateful_requests": 25,
       "coverage": [
         "exact selection",
         "query does not select",
@@ -331,13 +363,68 @@
       }
     ],
     "assembled_source_full": {
-      "classification": "not run",
-      "reason": "runs after this evidence source is committed cleanly"
+      "classification": "fresh passed",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine",
+      "source_commit": "050c4c04dd8817e0b285cd9b67c9969eb4c824a8",
+      "source_tree": "5decee7be3fcf64256f9be9d5da5cd7cbc5ca208",
+      "selected": 24,
+      "passed": 24,
+      "fresh": 24,
+      "reused": 0,
+      "skipped": 0,
+      "unrun": 0,
+      "elapsed_nanoseconds": 407665744996,
+      "input_stable": true,
+      "input_digest": "verification_be2eb4ac968a50f44eef90bf0b5bd0be76bb9b817893eaef86d22a327c7f8d27",
+      "receipt": {
+        "path": ".artifacts/lkjscript-dev/check/1788474970061016623-2956471-0/receipt.json",
+        "bytes": 56473,
+        "sha256": "b3d1b69c20931a4ca637cf468abcad82b6b899f8c60bfc522a3731bc424d270f",
+        "digest": "verification_fc16c7e0e89c2a6f87096f8497a3a729c3527e8c086a59869025584035557ffe"
+      },
+      "workspace_tests": {
+        "passed": 599,
+        "ignored": 3,
+        "failed": 0,
+        "note": "the three ignored cases are repository-owned intentional environment/manual exclusions, not selected-gate skips"
+      }
     },
     "exact_static_target": {
-      "classification": "not run",
+      "classification": "fresh passed",
       "target": "x86_64-unknown-linux-musl",
-      "reason": "runs after the fresh assembled-source full profile"
+      "source_commit": "050c4c04dd8817e0b285cd9b67c9969eb4c824a8",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "build": {
+        "receipt": ".artifacts/campaign/202609040425/target-final/build-receipt.json",
+        "receipt_bytes": 2773,
+        "receipt_sha256": "9851a6f37d673f363dfba254e0dd0c7afde0b892d24b8eda8f1a830e2638546f",
+        "elapsed_nanoseconds": 143826837805,
+        "peak_rss_kib": 67040
+      },
+      "candidate": {
+        "path": ".artifacts/campaign/202609040425/target-final/lkjscript",
+        "bytes": 18454752,
+        "sha256": "ff066fd10aed1ca67be155796e4645dbc79e78a4499af6bfb4fac1b6d4bab592",
+        "elf": "ELF64 little-endian x86-64 position-independent executable",
+        "runtime_linkage": "static-musl",
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0
+      },
+      "admission": {
+        "receipt": ".artifacts/campaign/202609040425/target-final/target-admission/receipt.json",
+        "receipt_bytes": 70424,
+        "receipt_sha256": "4ed502ab6cbc3de600049a7f0ad55354dada51477ed735750d78af2df7681d0b",
+        "receipt_digest": "verification_3506181c7086996320531e3762df73339fd9360d9d5960e7fd8da68f5d92e06e",
+        "elapsed_nanoseconds": 113091527684,
+        "classifications": 7,
+        "userlands": [
+          "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+          "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+        ],
+        "oracles": ["distributed_http", "outbound_http", "stateful_http", "service_acceptance"],
+        "cleanup_complete": true
+      }
     },
     "invalidated_observations": [
       {
@@ -360,17 +447,46 @@
     ]
   },
   "rte_dispositions": {
-    "RTE-1": { "classification": "not run", "claim": "final graph and package contract proof pending assembled-source full" },
-    "RTE-2": { "classification": "not run", "claim": "final copied public authoring proof pending assembled-source full" },
-    "RTE-3": { "classification": "not run", "claim": "final clean/incremental, artifact, and preparation proof pending assembled-source full" },
-    "RTE-4": { "classification": "not run", "claim": "final in-memory and raw live HTTP proof pending assembled-source full" },
-    "RTE-5": { "classification": "not run", "claim": "final maintained recipe, BBS, and lkjournal proof pending assembled-source full" },
-    "RTE-6": { "classification": "not run", "claim": "final disjoint graph and raw HTTP oracle proof pending assembled-source full" },
-    "RTE-7": { "classification": "not run", "claim": "fresh full and exact static-musl target admission pending" }
+    "RTE-1": { "classification": "fresh passed", "claim": "stable route owners, exact target/port relations, deterministic digests, graph/package bounds, and malformed, duplicate, foreign, zero-route, wrong-shape, and predecessor negatives passed" },
+    "RTE-2": { "classification": "fresh passed", "claim": "the copied CLI discovered, created, reviewed, applied, inspected, set, and deleted routes from minimal while stale bases and altered plans published nothing" },
+    "RTE-3": { "classification": "fresh passed", "claim": "clean and incremental compilation agreed, canonical artifact tables strictly loaded, corrupt and predecessor artifacts rejected, and preparation rejected drift before readiness" },
+    "RTE-4": { "classification": "fresh passed", "claim": "in-memory and loopback raw HTTP proved exact dispatch, query preservation, explicit HEAD behavior, fixed no-effect 404, bounded body handling, at-most-once selection, restart, cancellation, overload, and cleanup" },
+    "RTE-5": { "classification": "fresh passed", "claim": "the HTTP template, relay-info recipe, five-route copied BBS, and all eleven lkjournal routes use graph route owners with domain behavior preserved and manual route dispatch absent" },
+    "RTE-6": { "classification": "fresh passed", "claim": "the implementation-disjoint full-read graph oracle reproduced the lkjournal route-set digest and raw TCP clients proved selection and failure behavior without production canonicalization or matching helpers" },
+    "RTE-7": { "classification": "fresh passed", "claim": "24/24 full-profile gates passed fresh and the exact static-musl copied candidate passed two pinned userlands plus four transferred oracles" }
+  },
+  "resource_observations": {
+    "classification": "fresh passed",
+    "route_key_bytes": {
+      "http_template": 4,
+      "nostr_relay_info": 14,
+      "stateful_bbs": 60,
+      "lkjournal": 152,
+      "contract_limit_per_target": 4194304
+    },
+    "sampled_peak_rss_kib": {
+      "full_profile_max_child": 72256,
+      "target_build": 67040,
+      "target_admission_max_command": 53368,
+      "http_template_runner": 5616,
+      "nostr_relay_info_runner": 6848,
+      "stateful_bbs_runner": 12460,
+      "lkjournal_runner": 27196
+    },
+    "runtime_cleanup": {
+      "distributed_remaining_tasks": 0,
+      "lkjournal_remaining_tasks": 0,
+      "lkjournal_shutdown_cleanup_failures": 0,
+      "all_target_oracles": true,
+      "all_target_userlands": true
+    },
+    "inference": "bounded observations only; no latency, SLO, cost, or generalized resource claim"
   },
   "external_actions": {
     "fetch": "fresh passed at reconciliation; origin/main remained fe06f83532a14dbf27493ca8fabfe057b3095c63",
     "push": "not run",
+    "target_input_reads": "the first-party target owner retrieved or refreshed exact-digest musl packages and pinned Alpine/Debian images; candidate execution used network-isolated extracted userlands",
+    "ephemeral_containers": "two exact-digest image containers were created only for rootfs export and removed; target receipt reports complete cleanup",
     "workflow_dispatch": "not run",
     "tag_or_release": "not run",
     "package_publication": "not run",
@@ -389,6 +505,13 @@
     "campaign_root": ".artifacts/campaign/202609040425/",
     "check_root": ".artifacts/lkjscript-dev/check/",
     "tracked_raw_material": false,
-    "temporary_application_and_process_cleanup": "final verification pending"
+    "temporary_application_and_process_cleanup": "complete in all final source and target receipts",
+    "one_time_graph_eight_exporter_worktree": "temporary ignored-test change was reversed exactly and /tmp/lkjscript-route-old was removed cleanly",
+    "one_time_lkjournal_probe": ".artifacts/campaign/202609040425/evidence-probe-lkjournal.lkja was removed after identity capture",
+    "retained_final_receipts": [
+      ".artifacts/lkjscript-dev/check/1788474970061016623-2956471-0/receipt.json",
+      ".artifacts/campaign/202609040425/target-final/build-receipt.json",
+      ".artifacts/campaign/202609040425/target-final/target-admission/receipt.json"
+    ]
   }
 }
