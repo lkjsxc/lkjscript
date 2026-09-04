@@ -8,7 +8,7 @@ use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
 use crate::platform::runtime::{
-    ResidentKernel, ResidentLimits, ResidentObservation, ShutdownReceipt,
+    ResidentKernel, ResidentLimits, ResidentObservation, ResidentPermitObservation, ShutdownReceipt,
 };
 use std::sync::Arc;
 
@@ -91,6 +91,10 @@ impl NormalizedResidentDeployment {
 
     pub(crate) fn observe(&self) -> ResidentObservation {
         self.kernel.observe()
+    }
+
+    pub(crate) fn observe_permits(&self) -> ResidentPermitObservation {
+        self.kernel.observe_permits()
     }
 
     pub(crate) async fn invoke(

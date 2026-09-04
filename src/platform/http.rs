@@ -3,7 +3,7 @@
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{ExecutionError, ExecutionFailureClass};
 use super::kernel::{Name, StructuralTypeField, TypeForm, TypeObjectDigest, TypeObjectInterner};
-use super::runtime::ShutdownReceipt;
+use super::runtime::{ResidentObservation, ShutdownReceipt};
 use super::semantic_id::HttpRouteId;
 use super::stream::ByteStreamProducer;
 use axum::body::Body;
@@ -220,12 +220,23 @@ pub struct HttpDispatchObservation {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct HttpRuntimeObservation {
+    pub resident: ResidentObservation,
+    pub admission_permits: usize,
+    pub maximum_admission_permits: usize,
+    pub worker_permits: usize,
+    pub maximum_worker_permits: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HttpServerReceipt {
     #[serde(skip_serializing)]
     pub contract_version: u16,
     pub local_address: String,
     pub accepted_at_transport: bool,
     pub matcher_nodes: u64,
+    pub runtime: HttpRuntimeObservation,
     pub shutdown: ShutdownReceipt,
 }
 

@@ -176,6 +176,9 @@ not scan or allocate the complete route set for an ordinary match. Captures pres
 segment spelling; matching performs no percent or Unicode decoding, normalization, slash collapse,
 case folding, implicit method handling, or query selection. Valid unmatched pairs return a fixed
 empty 404 without application headers, graph invocation, capability use, or a resident task.
+HTTP stop receipts expose the prepared matcher size, resident task totals and peaks, exact
+admission/worker permit peaks, zero post-shutdown tasks and permits, and bounded cleanup results;
+these remain operational observations rather than program authority.
 
 `lkjournal` preserves route identities `route_79ebd79a701800e82e13dbe560944d55`,
 `route_8f26a5cc2dcb7f777ad6d2bbe426ee93`, and `route_a92b27a1757c26506bb0bbac601e9f42` while

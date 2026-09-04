@@ -10,9 +10,10 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use crate::platform::http::{
     HTTP_ADAPTER_CONTRACT_VERSION, HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest,
-    HttpResponse, HttpServerReceipt, decode_live_request, decode_query_parameters,
-    encode_live_response, execution_error_status, finish_request_body_pump, pump_request_body,
-    safe_error_response, semantic_http_types, static_response, validate_request,
+    HttpResponse, HttpRuntimeObservation, HttpServerReceipt, decode_live_request,
+    decode_query_parameters, encode_live_response, execution_error_status,
+    finish_request_body_pump, pump_request_body, safe_error_response, semantic_http_types,
+    static_response, validate_request,
 };
 use crate::platform::kernel::{
     HttpRoutePatternSegment, HttpRouteSelector, Name, ParameterUse, RequirementReference,
@@ -602,6 +603,15 @@ impl NormalizedHttpApplication {
                 )
             });
         let shutdown = resident.shutdown().await;
+        let resident_observation = resident.observe();
+        let permit_observation = resident.observe_permits();
+        let runtime = HttpRuntimeObservation {
+            resident: resident_observation,
+            admission_permits: permit_observation.admission_permits,
+            maximum_admission_permits: permit_observation.maximum_admission_permits,
+            worker_permits: permit_observation.worker_permits,
+            maximum_worker_permits: permit_observation.maximum_worker_permits,
+        };
         if let Err(mut error) = serving {
             if shutdown.remaining_tasks != 0 {
                 error.notes.push(format!(
@@ -614,14 +624,28 @@ impl NormalizedHttpApplication {
                 .extend(shutdown.cleanup_failures.iter().map(|failure| {
                     format!("adapter cleanup failed with safe code '{}'", failure.code)
                 }));
+            if runtime.admission_permits != 0 || runtime.worker_permits != 0 {
+                error.notes.push(format!(
+                    "{} admission permits and {} worker permits remained after server failure cleanup",
+                    runtime.admission_permits, runtime.worker_permits
+                ));
+            }
             return Err(error);
         }
-        if shutdown.remaining_tasks != 0 || !shutdown.cleanup_failures.is_empty() {
+        if shutdown.remaining_tasks != 0
+            || !shutdown.cleanup_failures.is_empty()
+            || runtime.resident.queued != 0
+            || runtime.resident.active != 0
+            || runtime.admission_permits != 0
+            || runtime.worker_permits != 0
+        {
             return Err(http_io(
                 "normalized_http_shutdown_incomplete",
                 format!(
-                    "{} resident tasks and {} cleanup failures remained after normalized HTTP shutdown",
+                    "{} resident tasks, {} admission permits, {} worker permits, and {} cleanup failures remained after normalized HTTP shutdown",
                     shutdown.remaining_tasks,
+                    runtime.admission_permits,
+                    runtime.worker_permits,
                     shutdown.cleanup_failures.len()
                 ),
             ));
@@ -631,6 +655,7 @@ impl NormalizedHttpApplication {
             local_address: local_address.to_string(),
             accepted_at_transport: true,
             matcher_nodes,
+            runtime,
             shutdown,
         })
     }

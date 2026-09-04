@@ -1800,6 +1800,10 @@ mod tests {
             ".result.live.ordered_two_captures == true",
             ".result.live.capture_query_ignored == true",
             ".result.live.matcher_step_bound == (.result.live.matcher_nodes + 1)",
+            ".result.live.runtime.runs == 3",
+            ".result.live.runtime.admitted_tasks == .result.live.runtime.completed_tasks",
+            ".result.live.runtime.maximum_admission_permits <= 40",
+            ".result.live.runtime.maximum_worker_permits <= 8",
         ] {
             assert!(
                 job.contains(predicate),

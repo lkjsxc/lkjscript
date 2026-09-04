@@ -29,6 +29,8 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const SERVICE_CONTRACT_VERSION: u32 = 10;
+const HTTP_MAXIMUM_CONCURRENT_TASKS: u64 = 16;
+const HTTP_MAXIMUM_QUEUED_TASKS: u64 = 64;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -237,6 +239,8 @@ struct RunnerStopped {
     #[serde(skip_serializing_if = "Option::is_none")]
     matcher_nodes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    runtime: Option<ResidentRuntimeObservation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     productive_iterations: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions: Option<SessionRuntimeObservation>,
@@ -247,9 +251,59 @@ impl RunnerStopped {
         self.admission_stopped
             && self.remaining_tasks == 0
             && self.cleanup_failures == 0
+            && self
+                .runtime
+                .as_ref()
+                .is_none_or(ResidentRuntimeObservation::closed)
             && self.sessions.as_ref().is_none_or(|sessions| {
                 sessions.pending_handshakes == 0 && sessions.active_sessions == 0
             })
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ResidentRuntimeObservation {
+    accepting: bool,
+    queued_tasks: u64,
+    active_tasks: u64,
+    admitted_tasks: u64,
+    completed_tasks: u64,
+    failed_tasks: u64,
+    cancelled_tasks: u64,
+    overloaded_tasks: u64,
+    rejected_after_shutdown_tasks: u64,
+    maximum_queued_tasks: u64,
+    maximum_active_tasks: u64,
+    admission_permits: u64,
+    maximum_admission_permits: u64,
+    worker_permits: u64,
+    maximum_worker_permits: u64,
+}
+
+impl ResidentRuntimeObservation {
+    fn closed(&self) -> bool {
+        !self.accepting
+            && self.queued_tasks == 0
+            && self.active_tasks == 0
+            && self.admission_permits == 0
+            && self.worker_permits == 0
+    }
+
+    fn bounded_http_run(&self) -> bool {
+        self.closed()
+            && self.admitted_tasks > 0
+            && self.admitted_tasks == self.completed_tasks
+            && self.failed_tasks <= self.completed_tasks
+            && self.cancelled_tasks <= self.failed_tasks
+            && (1..=HTTP_MAXIMUM_QUEUED_TASKS).contains(&self.maximum_queued_tasks)
+            && (1..=HTTP_MAXIMUM_CONCURRENT_TASKS).contains(&self.maximum_active_tasks)
+            && self.maximum_admission_permits >= self.maximum_queued_tasks
+            && self.maximum_admission_permits >= self.maximum_worker_permits
+            && self.maximum_admission_permits
+                <= HTTP_MAXIMUM_CONCURRENT_TASKS + HTTP_MAXIMUM_QUEUED_TASKS
+            && self.maximum_worker_permits >= self.maximum_active_tasks
+            && self.maximum_worker_permits <= HTTP_MAXIMUM_CONCURRENT_TASKS
     }
 }
 
@@ -389,6 +443,7 @@ struct HttpRouteParameterObservation {
 struct HttpRouteRuntimeObservation {
     matcher_nodes: u64,
     matcher_step_bound: u64,
+    runtime: ResidentRuntimeObservation,
     query_did_not_select_route: bool,
     capture_query_ignored: bool,
     capture_raw_spelling_preserved: bool,
@@ -957,6 +1012,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || result.http_route_runtime.matcher_nodes == 0
         || result.http_route_runtime.matcher_step_bound
             != result.http_route_runtime.matcher_nodes.saturating_add(1)
+        || !result.http_route_runtime.runtime.bounded_http_run()
         || !result.http_route_runtime.capture_query_ignored
         || !result.http_route_runtime.capture_raw_spelling_preserved
         || result.http_route_runtime.mismatch_cases != 6
@@ -1774,6 +1830,7 @@ fn run_acceptance(
     let mut http_route_runtime = HttpRouteRuntimeObservation {
         matcher_nodes: 0,
         matcher_step_bound: 0,
+        runtime: ResidentRuntimeObservation::default(),
         query_did_not_select_route,
         capture_query_ignored: false,
         capture_raw_spelling_preserved: false,
@@ -2603,10 +2660,16 @@ fn run_acceptance(
             "HTTP service stop receipt omitted its prepared matcher node count",
         )
     })?;
+    let runtime = service_stopped.runtime.ok_or_else(|| {
+        ServiceFailure::failed(
+            "http_runtime_observation",
+            "HTTP service stop receipt omitted task and permit metrics",
+        )
+    })?;
     require(
-        matcher_nodes != 0,
+        matcher_nodes != 0 && runtime.bounded_http_run(),
         "http_matcher_observation",
-        "HTTP service prepared an empty matcher",
+        "HTTP service matcher or task/permit metrics were not bounded and closed",
     )?;
     http_route_runtime.matcher_nodes = matcher_nodes;
     http_route_runtime.matcher_step_bound = matcher_nodes.checked_add(1).ok_or_else(|| {
@@ -2615,6 +2678,7 @@ fn run_acceptance(
             "HTTP service matcher step bound overflowed",
         )
     })?;
+    http_route_runtime.runtime = runtime;
 
     let restart_index = context.start_runner(
         "service-restart",
@@ -3654,6 +3718,10 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
                         })
                     })
                     .transpose()?,
+                runtime: receipt
+                    .get("runtime")
+                    .map(parse_resident_runtime_observation)
+                    .transpose()?,
                 productive_iterations: receipt
                     .get("productive_iterations")
                     .map(|value| {
@@ -3677,6 +3745,34 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
             "runner_stop_missing",
             "runner omitted a successful stop receipt",
         )
+    })
+}
+
+fn parse_resident_runtime_observation(
+    value: &Value,
+) -> Result<ResidentRuntimeObservation, ServiceFailure> {
+    let resident = value.get("resident").ok_or_else(|| {
+        ServiceFailure::failed(
+            "runner_resident_runtime",
+            "HTTP runner runtime omitted resident task metrics",
+        )
+    })?;
+    Ok(ResidentRuntimeObservation {
+        accepting: boolean_at(resident, "accepting")?,
+        queued_tasks: u64_at(resident, "queued")?,
+        active_tasks: u64_at(resident, "active")?,
+        admitted_tasks: u64_at(resident, "admitted")?,
+        completed_tasks: u64_at(resident, "completed")?,
+        failed_tasks: u64_at(resident, "failed")?,
+        cancelled_tasks: u64_at(resident, "cancelled")?,
+        overloaded_tasks: u64_at(resident, "overloaded")?,
+        rejected_after_shutdown_tasks: u64_at(resident, "rejected_after_shutdown")?,
+        maximum_queued_tasks: u64_at(resident, "maximum_queued")?,
+        maximum_active_tasks: u64_at(resident, "maximum_active")?,
+        admission_permits: u64_at(value, "admission_permits")?,
+        maximum_admission_permits: u64_at(value, "maximum_admission_permits")?,
+        worker_permits: u64_at(value, "worker_permits")?,
+        maximum_worker_permits: u64_at(value, "maximum_worker_permits")?,
     })
 }
 
@@ -6996,12 +7092,18 @@ mod tests {
         assert_eq!(ready.secret_names, ["bootstrap-token"]);
         let stopped = parse_stopped_event(
             br#"{"ok":true,"event":"ready"}
-{"ok":true,"event":"stopped","receipt":{"matcher_nodes":7,"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
+{"ok":true,"event":"stopped","receipt":{"matcher_nodes":7,"runtime":{"resident":{"accepting":false,"queued":0,"active":0,"admitted":3,"completed":3,"failed":0,"cancelled":0,"overloaded":0,"rejected_after_shutdown":0,"maximum_queued":1,"maximum_active":1},"admission_permits":0,"maximum_admission_permits":1,"worker_permits":0,"maximum_worker_permits":1},"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
 "#,
         )
         .expect("parse stopped event");
         assert!(stopped.clean());
         assert_eq!(stopped.matcher_nodes, Some(7));
+        assert!(
+            stopped
+                .runtime
+                .as_ref()
+                .is_some_and(ResidentRuntimeObservation::bounded_http_run)
+        );
         assert_eq!(stopped.productive_iterations, Some(3));
         assert_eq!(
             parse_ready_event(

@@ -114,6 +114,14 @@ pub struct ResidentObservation {
     pub maximum_active: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ResidentPermitObservation {
+    pub admission_permits: usize,
+    pub maximum_admission_permits: usize,
+    pub worker_permits: usize,
+    pub maximum_worker_permits: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShutdownReceipt {
@@ -164,6 +172,10 @@ struct RuntimeCounters {
     rejected_after_shutdown: AtomicU64,
     maximum_queued: AtomicUsize,
     maximum_active: AtomicUsize,
+    admission_permits: AtomicUsize,
+    maximum_admission_permits: AtomicUsize,
+    worker_permits: AtomicUsize,
+    maximum_worker_permits: AtomicUsize,
 }
 
 impl ResidentKernel {
@@ -222,6 +234,27 @@ impl ResidentKernel {
         }
     }
 
+    pub(crate) fn observe_permits(&self) -> ResidentPermitObservation {
+        ResidentPermitObservation {
+            admission_permits: self
+                .inner
+                .counters
+                .admission_permits
+                .load(Ordering::Acquire),
+            maximum_admission_permits: self
+                .inner
+                .counters
+                .maximum_admission_permits
+                .load(Ordering::Acquire),
+            worker_permits: self.inner.counters.worker_permits.load(Ordering::Acquire),
+            maximum_worker_permits: self
+                .inner
+                .counters
+                .maximum_worker_permits
+                .load(Ordering::Acquire),
+        }
+    }
+
     pub(crate) async fn invoke<T, F>(
         &self,
         operation: F,
@@ -265,6 +298,7 @@ impl ResidentKernel {
                 .fetch_add(1, Ordering::AcqRel);
             return Err(shutdown_error());
         }
+        let admission = AdmissionPermitGuard::new(self.inner.clone(), admission);
 
         self.inner.counters.admitted.fetch_add(1, Ordering::AcqRel);
         let queued = self.inner.queued.fetch_add(1, Ordering::AcqRel) + 1;
@@ -290,6 +324,7 @@ impl ResidentKernel {
                 .fetch_add(1, Ordering::AcqRel);
             return Err(shutdown_error());
         };
+        let worker = WorkerPermitGuard::new(self.inner.clone(), worker);
         if !self.inner.accepting.load(Ordering::Acquire) {
             drop(worker);
             drop(admission);
@@ -443,8 +478,8 @@ impl ResidentKernelInner {
 struct ActiveGuard {
     inner: Arc<ResidentKernelInner>,
     task_id: u64,
-    _worker: OwnedSemaphorePermit,
-    _admission: OwnedSemaphorePermit,
+    _worker: WorkerPermitGuard,
+    _admission: AdmissionPermitGuard,
 }
 
 impl Drop for ActiveGuard {
@@ -452,6 +487,60 @@ impl Drop for ActiveGuard {
         lock_unpoisoned(&self.inner.controls).remove(&self.task_id);
         self.inner.active.fetch_sub(1, Ordering::AcqRel);
         self.inner.idle.notify_waiters();
+    }
+}
+
+struct AdmissionPermitGuard {
+    inner: Arc<ResidentKernelInner>,
+    _permit: OwnedSemaphorePermit,
+}
+
+impl AdmissionPermitGuard {
+    fn new(inner: Arc<ResidentKernelInner>, permit: OwnedSemaphorePermit) -> Self {
+        let permits = inner
+            .counters
+            .admission_permits
+            .fetch_add(1, Ordering::AcqRel)
+            + 1;
+        update_maximum(&inner.counters.maximum_admission_permits, permits);
+        Self {
+            inner,
+            _permit: permit,
+        }
+    }
+}
+
+impl Drop for AdmissionPermitGuard {
+    fn drop(&mut self) {
+        self.inner
+            .counters
+            .admission_permits
+            .fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+struct WorkerPermitGuard {
+    inner: Arc<ResidentKernelInner>,
+    _permit: OwnedSemaphorePermit,
+}
+
+impl WorkerPermitGuard {
+    fn new(inner: Arc<ResidentKernelInner>, permit: OwnedSemaphorePermit) -> Self {
+        let permits = inner.counters.worker_permits.fetch_add(1, Ordering::AcqRel) + 1;
+        update_maximum(&inner.counters.maximum_worker_permits, permits);
+        Self {
+            inner,
+            _permit: permit,
+        }
+    }
+}
+
+impl Drop for WorkerPermitGuard {
+    fn drop(&mut self) {
+        self.inner
+            .counters
+            .worker_permits
+            .fetch_sub(1, Ordering::AcqRel);
     }
 }
 
@@ -540,6 +629,48 @@ mod tests {
         assert_eq!(receipt.value, "normalized");
         assert_eq!(receipt.task_id, 1);
         assert_eq!(kernel.observe().completed, 1);
+        assert_eq!(
+            kernel.observe_permits(),
+            ResidentPermitObservation {
+                admission_permits: 0,
+                maximum_admission_permits: 1,
+                worker_permits: 0,
+                maximum_worker_permits: 1,
+            }
+        );
+        assert_eq!(kernel.shutdown(Vec::new).await.remaining_tasks, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn resident_kernel_tracks_task_and_permit_peaks() {
+        let kernel = ResidentKernel::new(ResidentLimits::default()).expect("kernel");
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let first_barrier = barrier.clone();
+        let second_barrier = barrier.clone();
+        let coordinator = tokio::task::spawn_blocking(move || barrier.wait());
+        let (first, second, coordinator) = tokio::join!(
+            kernel.invoke(move |_| {
+                first_barrier.wait();
+                Ok(())
+            }),
+            kernel.invoke(move |_| {
+                second_barrier.wait();
+                Ok(())
+            }),
+            coordinator,
+        );
+        first.expect("first concurrent task");
+        second.expect("second concurrent task");
+        coordinator.expect("peak coordinator");
+
+        let tasks = kernel.observe();
+        let permits = kernel.observe_permits();
+        assert_eq!(tasks.maximum_active, 2);
+        assert!((1..=2).contains(&tasks.maximum_queued));
+        assert_eq!(permits.maximum_admission_permits, 2);
+        assert_eq!(permits.maximum_worker_permits, 2);
+        assert_eq!(permits.admission_permits, 0);
+        assert_eq!(permits.worker_permits, 0);
         assert_eq!(kernel.shutdown(Vec::new).await.remaining_tasks, 0);
     }
 

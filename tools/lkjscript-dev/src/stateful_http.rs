@@ -31,6 +31,8 @@ const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+const MAXIMUM_CONCURRENT_TASKS: u64 = 8;
+const MAXIMUM_QUEUED_TASKS: u64 = 32;
 pub(crate) const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
 pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 6;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
@@ -140,6 +142,45 @@ struct HttpObservation {
     elapsed_nanoseconds: u64,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ResidentRuntimeObservation {
+    runs: u64,
+    admitted_tasks: u64,
+    completed_tasks: u64,
+    failed_tasks: u64,
+    cancelled_tasks: u64,
+    overloaded_tasks: u64,
+    rejected_after_shutdown_tasks: u64,
+    maximum_queued_tasks: u64,
+    maximum_active_tasks: u64,
+    maximum_admission_permits: u64,
+    maximum_worker_permits: u64,
+}
+
+impl ResidentRuntimeObservation {
+    fn bounded_and_closed(&self, expected_runs: u64) -> bool {
+        self.runs == expected_runs
+            && self.admitted_tasks > 0
+            && self.admitted_tasks == self.completed_tasks
+            && self.failed_tasks <= self.completed_tasks
+            && self.cancelled_tasks <= self.failed_tasks
+            && (1..=MAXIMUM_QUEUED_TASKS).contains(&self.maximum_queued_tasks)
+            && (1..=MAXIMUM_CONCURRENT_TASKS).contains(&self.maximum_active_tasks)
+            && self.maximum_admission_permits >= self.maximum_queued_tasks
+            && self.maximum_admission_permits >= self.maximum_worker_permits
+            && self.maximum_admission_permits <= MAXIMUM_CONCURRENT_TASKS + MAXIMUM_QUEUED_TASKS
+            && self.maximum_worker_permits >= self.maximum_active_tasks
+            && self.maximum_worker_permits <= MAXIMUM_CONCURRENT_TASKS
+    }
+}
+
+#[derive(Clone, Debug)]
+struct HttpStopObservation {
+    matcher_nodes: u64,
+    runtime: ResidentRuntimeObservation,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct LiveObservation {
@@ -147,6 +188,7 @@ struct LiveObservation {
     data_root: String,
     matcher_nodes: u64,
     matcher_step_bound: u64,
+    runtime: ResidentRuntimeObservation,
     routes_checked: u64,
     created_identity: String,
     persistence_after_restart: bool,
@@ -624,6 +666,7 @@ pub(crate) fn read_transferred_receipt(
         || result.live.data_contract != "lkjscript-data-store-1"
         || result.live.matcher_nodes == 0
         || result.live.matcher_step_bound != result.live.matcher_nodes.saturating_add(1)
+        || !result.live.runtime.bounded_and_closed(3)
         || !result.live.persistence_after_restart
         || result.live.startup_failures_without_ready != 2
         || !result.live.backup_restore_equivalent
@@ -1435,7 +1478,8 @@ fn run_live(
     let first_result = exercise_before_restart(address, &mut requests);
     let first_stop = runner.stop();
     let created_identity = first_result?;
-    let matcher_nodes = first_stop?;
+    let first_stop = first_stop?;
+    let matcher_nodes = first_stop.matcher_nodes;
 
     context.success(
         "data-verify-after-first-service",
@@ -1494,7 +1538,7 @@ fn run_live(
         runner_environment.clone(),
     )?;
     exercise_persisted(restarted_address, &created_identity, &mut requests)?;
-    let restarted_matcher_nodes = restarted.stop()?;
+    let restarted_stop = restarted.stop()?;
 
     let restored_root = project.join("state/restored-data");
     context.success(
@@ -1524,11 +1568,11 @@ fn run_live(
         runner_environment,
     )?;
     exercise_after_restart(restored_address, &created_identity, &mut requests)?;
-    let restored_matcher_nodes = restored_runner.stop()?;
+    let restored_stop = restored_runner.stop()?;
 
     if matcher_nodes == 0
-        || matcher_nodes != restarted_matcher_nodes
-        || matcher_nodes != restored_matcher_nodes
+        || matcher_nodes != restarted_stop.matcher_nodes
+        || matcher_nodes != restored_stop.matcher_nodes
     {
         return Err(DevError::corrupt(
             "stateful HTTP matcher node count was empty or changed across restart and restore",
@@ -1537,6 +1581,7 @@ fn run_live(
     let matcher_step_bound = matcher_nodes
         .checked_add(1)
         .ok_or_else(|| DevError::corrupt("stateful HTTP matcher step bound overflowed"))?;
+    let runtime = aggregate_runtime(&[&first_stop, &restarted_stop, &restored_stop])?;
 
     let authority_after = authority::observe_graph_authority(project)?;
     let authority_unchanged = authority_before == authority_after;
@@ -1550,6 +1595,7 @@ fn run_live(
         data_root: data_root.display().to_string(),
         matcher_nodes,
         matcher_step_bound,
+        runtime,
         routes_checked: requests.len() as u64,
         created_identity,
         persistence_after_restart: true,
@@ -1572,6 +1618,68 @@ fn run_live(
     })
 }
 
+fn aggregate_runtime(
+    observations: &[&HttpStopObservation],
+) -> Result<ResidentRuntimeObservation, DevError> {
+    let mut aggregate = ResidentRuntimeObservation::default();
+    for observation in observations {
+        let runtime = &observation.runtime;
+        aggregate.runs = checked_runtime_sum(aggregate.runs, runtime.runs, "runs")?;
+        aggregate.admitted_tasks = checked_runtime_sum(
+            aggregate.admitted_tasks,
+            runtime.admitted_tasks,
+            "admitted tasks",
+        )?;
+        aggregate.completed_tasks = checked_runtime_sum(
+            aggregate.completed_tasks,
+            runtime.completed_tasks,
+            "completed tasks",
+        )?;
+        aggregate.failed_tasks =
+            checked_runtime_sum(aggregate.failed_tasks, runtime.failed_tasks, "failed tasks")?;
+        aggregate.cancelled_tasks = checked_runtime_sum(
+            aggregate.cancelled_tasks,
+            runtime.cancelled_tasks,
+            "cancelled tasks",
+        )?;
+        aggregate.overloaded_tasks = checked_runtime_sum(
+            aggregate.overloaded_tasks,
+            runtime.overloaded_tasks,
+            "overloaded tasks",
+        )?;
+        aggregate.rejected_after_shutdown_tasks = checked_runtime_sum(
+            aggregate.rejected_after_shutdown_tasks,
+            runtime.rejected_after_shutdown_tasks,
+            "tasks rejected after shutdown",
+        )?;
+        aggregate.maximum_queued_tasks = aggregate
+            .maximum_queued_tasks
+            .max(runtime.maximum_queued_tasks);
+        aggregate.maximum_active_tasks = aggregate
+            .maximum_active_tasks
+            .max(runtime.maximum_active_tasks);
+        aggregate.maximum_admission_permits = aggregate
+            .maximum_admission_permits
+            .max(runtime.maximum_admission_permits);
+        aggregate.maximum_worker_permits = aggregate
+            .maximum_worker_permits
+            .max(runtime.maximum_worker_permits);
+    }
+    let runs = u64::try_from(observations.len())
+        .map_err(|_| DevError::corrupt("stateful HTTP runner count is not representable"))?;
+    if !aggregate.bounded_and_closed(runs) {
+        return Err(DevError::corrupt(
+            "stateful HTTP aggregate task or permit metrics are inconsistent",
+        ));
+    }
+    Ok(aggregate)
+}
+
+fn checked_runtime_sum(left: u64, right: u64, label: &str) -> Result<u64, DevError> {
+    left.checked_add(right)
+        .ok_or_else(|| DevError::corrupt(format!("stateful HTTP {label} accounting overflowed")))
+}
+
 fn write_descriptor(path: &Path, artifact: &Path, data_root: &str) -> Result<(), DevError> {
     let artifact = artifact
         .strip_prefix(path.parent().ok_or_else(|| {
@@ -1583,8 +1691,8 @@ fn write_descriptor(path: &Path, artifact: &Path, data_root: &str) -> Result<(),
         "target": "serve",
         "listen": "127.0.0.1:0",
         "runtime": {
-            "maximum_concurrent_tasks": 8,
-            "maximum_queued_tasks": 32,
+            "maximum_concurrent_tasks": MAXIMUM_CONCURRENT_TASKS,
+            "maximum_queued_tasks": MAXIMUM_QUEUED_TASKS,
             "request_deadline_milliseconds": 30000,
             "shutdown_grace_milliseconds": 30000,
             "cancellation_grace_milliseconds": 5000
@@ -2572,7 +2680,7 @@ impl ActiveRunner {
         }
     }
 
-    fn stop(&mut self) -> Result<u64, DevError> {
+    fn stop(&mut self) -> Result<HttpStopObservation, DevError> {
         self.control.interrupt();
         let observation = match self.receiver.recv_timeout(STOP_TIMEOUT) {
             Ok(observation) => observation,
@@ -2614,6 +2722,51 @@ impl ActiveRunner {
             .get("matcher_nodes")
             .and_then(Value::as_u64)
             .ok_or_else(|| DevError::corrupt("stateful stopped receipt omitted matcher nodes"))?;
+        let runtime = receipt
+            .get("runtime")
+            .ok_or_else(|| DevError::corrupt("stateful stopped receipt omitted runtime metrics"))?;
+        let resident = runtime.get("resident").ok_or_else(|| {
+            DevError::corrupt("stateful stopped receipt omitted resident metrics")
+        })?;
+        let runtime_observation = ResidentRuntimeObservation {
+            runs: 1,
+            admitted_tasks: runtime_u64(resident, "admitted")?,
+            completed_tasks: runtime_u64(resident, "completed")?,
+            failed_tasks: runtime_u64(resident, "failed")?,
+            cancelled_tasks: runtime_u64(resident, "cancelled")?,
+            overloaded_tasks: runtime_u64(resident, "overloaded")?,
+            rejected_after_shutdown_tasks: runtime_u64(resident, "rejected_after_shutdown")?,
+            maximum_queued_tasks: runtime_u64(resident, "maximum_queued")?,
+            maximum_active_tasks: runtime_u64(resident, "maximum_active")?,
+            maximum_admission_permits: runtime_u64(runtime, "maximum_admission_permits")?,
+            maximum_worker_permits: runtime_u64(runtime, "maximum_worker_permits")?,
+        };
+        if resident.get("accepting").and_then(Value::as_bool) != Some(false)
+            || runtime_u64(resident, "queued")? != 0
+            || runtime_u64(resident, "active")? != 0
+            || runtime_u64(runtime, "admission_permits")? != 0
+            || runtime_u64(runtime, "worker_permits")? != 0
+            || runtime_observation.admitted_tasks == 0
+            || runtime_observation.admitted_tasks != runtime_observation.completed_tasks
+            || runtime_observation.cancelled_tasks > runtime_observation.failed_tasks
+            || runtime_observation.maximum_queued_tasks == 0
+            || runtime_observation.maximum_queued_tasks > MAXIMUM_QUEUED_TASKS
+            || runtime_observation.maximum_active_tasks == 0
+            || runtime_observation.maximum_active_tasks > MAXIMUM_CONCURRENT_TASKS
+            || runtime_observation.maximum_admission_permits
+                < runtime_observation.maximum_queued_tasks
+            || runtime_observation.maximum_admission_permits
+                < runtime_observation.maximum_worker_permits
+            || runtime_observation.maximum_admission_permits
+                > MAXIMUM_CONCURRENT_TASKS + MAXIMUM_QUEUED_TASKS
+            || runtime_observation.maximum_worker_permits < runtime_observation.maximum_active_tasks
+            || runtime_observation.maximum_worker_permits > MAXIMUM_CONCURRENT_TASKS
+        {
+            return Err(DevError::corrupt(format!(
+                "stateful runner '{}' emitted inconsistent task or permit metrics",
+                self.name
+            )));
+        }
         let shutdown = receipt
             .get("shutdown")
             .ok_or_else(|| DevError::corrupt("stateful stopped receipt omitted shutdown"))?;
@@ -2636,7 +2789,10 @@ impl ActiveRunner {
                 self.name
             )));
         }
-        Ok(matcher_nodes)
+        Ok(HttpStopObservation {
+            matcher_nodes,
+            runtime: runtime_observation,
+        })
     }
 
     fn kill(&mut self) -> Result<(), DevError> {
@@ -2653,6 +2809,13 @@ impl ActiveRunner {
         }
         Ok(())
     }
+}
+
+fn runtime_u64(value: &Value, field: &str) -> Result<u64, DevError> {
+    value
+        .get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| DevError::corrupt(format!("stateful runtime metric '{field}' is absent")))
 }
 
 impl Drop for ActiveRunner {

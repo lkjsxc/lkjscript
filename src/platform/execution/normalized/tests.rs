@@ -2569,6 +2569,15 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
         .await
         .expect("normalized HTTP graceful shutdown");
     assert!(server.accepted_at_transport);
+    assert!(!server.runtime.resident.accepting);
+    assert_eq!(server.runtime.resident.queued, 0);
+    assert_eq!(server.runtime.resident.active, 0);
+    assert_eq!(server.runtime.resident.maximum_queued, 1);
+    assert_eq!(server.runtime.resident.maximum_active, 1);
+    assert_eq!(server.runtime.admission_permits, 0);
+    assert_eq!(server.runtime.maximum_admission_permits, 1);
+    assert_eq!(server.runtime.worker_permits, 0);
+    assert_eq!(server.runtime.maximum_worker_permits, 1);
     assert!(server.shutdown.admission_stopped);
     assert!(server.shutdown.drained_before_cancellation);
     assert_eq!(server.shutdown.remaining_tasks, 0);
