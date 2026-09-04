@@ -1,0 +1,348 @@
+{
+  "schema": {
+    "identity": "lkjscript-http-path-capture-evidence",
+    "version": 1
+  },
+  "campaign": "202609050018-http-path-captures",
+  "status": "incomplete",
+  "assembled_at_utc": "2026-09-04T19:01:18Z",
+  "repository": {
+    "name": "lkjsxc/lkjscript",
+    "branch": "main",
+    "remote": "https://github.com/lkjsxc/lkjscript",
+    "orientation_head": "5e0197d40ec459162f5092c06e5e077e25c14ab4",
+    "orientation_tree": "3d8e90ff95a0a9f13a6fb717cf45e31ed891e3ce",
+    "orientation_origin_main": "5e0197d40ec459162f5092c06e5e077e25c14ab4",
+    "orientation_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 0
+    },
+    "implementation_commits": [
+      {
+        "sha": "212e1420bd139321ab39dad34ea3050aa626f76f",
+        "tree": "d3b19f37aaed7c82fdd48a99fb40283b1c9909c8",
+        "summary": "Archive HTTP path capture campaign mandate"
+      },
+      {
+        "sha": "7de502f5356d5a5fbc2c63dddd2f68b38acbc036",
+        "tree": "d06f7d5a6f9df643205d5c7f1d43ccfb68a1e93d",
+        "summary": "Specify signature-indexed HTTP path captures"
+      },
+      {
+        "sha": "1baab99387e4ca5fcb5445f8a42694499c5663e6",
+        "tree": "e945dd8de36d45d9d8d709e70ef898767a51651b",
+        "summary": "Implement signature-indexed HTTP path captures"
+      }
+    ],
+    "implementation_head": "1baab99387e4ca5fcb5445f8a42694499c5663e6",
+    "implementation_tree": "e945dd8de36d45d9d8d709e70ef898767a51651b",
+    "implementation_worktree": "clean",
+    "implementation_divergence": {
+      "behind_origin_main": 0,
+      "ahead_of_origin_main": 3
+    },
+    "verification_source": {
+      "classification": "not run",
+      "head": null,
+      "tree": null,
+      "worktree": "tracked evidence assembly is not committed"
+    },
+    "agent_policy_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
+    "preserved_work": [
+      {
+        "stash": "stash@{0}",
+        "object": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+        "tree": "40dd100e539eb9f7de21a35a31570fa9b1ae6a06",
+        "subject": "On main: preserve incomplete campaign 202608310137 before 202608311331 cutover",
+        "disposition": "preserved without apply, drop, or rewrite"
+      },
+      {
+        "path": ".artifacts/campaign/202609050018/pre-graph10-local-state/",
+        "disposition": "predecessor ignored standard and lkjournal catalog/derived state moved recoverably outside maintained authorities"
+      }
+    ]
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "edition": 2024,
+    "locked_dependencies": true,
+    "new_dependencies": [],
+    "host": "Linux 7.0.0-29-generic x86_64",
+    "filesystem": "zfs",
+    "installed_targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ],
+    "cargo_lock_sha256": "6900f8a1fcac92a0857dec9332faeccb814e1b9eeac6d41a1be33d05a34e1349"
+  },
+  "identity_cutover": {
+    "advanced": {
+      "source_product": { "from": "0.1.21", "to": "0.1.22", "state": "unreleased source-only" },
+      "meaning_graph": { "from": 9, "to": 10 },
+      "validation_witness": { "from": 5, "to": 6 },
+      "owner_summary": { "from": 4, "to": 5 },
+      "semantic_validator": { "from": 9, "to": 10 },
+      "package": { "from": 2, "to": 3 },
+      "compiler_unit": { "from": 4, "to": 5 },
+      "artifact": { "from": 14, "to": 15 },
+      "compact_change": { "from": 13, "to": 14 },
+      "authored_change": { "from": 10, "to": 11 },
+      "logical_change_plan": { "from": 3, "to": 4 },
+      "query": { "from": 5, "to": 6 },
+      "project_creation": { "from": 4, "to": 5 },
+      "contract_registry": { "from": 10, "to": 11 },
+      "cli": { "from": 22, "to": 23 },
+      "http_adapter": { "from": 2, "to": 3 },
+      "service_receipt": { "from": 9, "to": 10 },
+      "stateful_http_receipt": { "from": 5, "to": 6 }
+    },
+    "capabilities_digest": {
+      "from": "6baea8b872fe3c5df77a2178f55f8804d9e9e8de91ea6c71cfb1c0a5401c884d",
+      "to": "e1eb51f0a9b0e7dca8e6aae7a086766b7396f44c7c02cb9e6fd37eca49ec1ee3",
+      "operation_names_changed": false
+    },
+    "unchanged": {
+      "package_interface": 6,
+      "bytecode": 3,
+      "compilation_manifest": 3,
+      "package_revision": 1,
+      "package_transport": 1,
+      "package_transport_selection": 1,
+      "resident_runtime": 3,
+      "function_definition_projection": 2,
+      "deployment": 4,
+      "distributed_http_receipt": 4,
+      "outbound_http_receipt": 2,
+      "structured_session": 1,
+      "object_catalog": 2,
+      "object_store": 1,
+      "object_pack": 1,
+      "byte_stream": 1,
+      "http_client_adapter": 1,
+      "data_store": 1,
+      "durable_queue": 2
+    },
+    "public_latest": {
+      "tag": "v0.1.21",
+      "tag_object": "fd6e87acf987d1d4722845e69d2108de4705ed49",
+      "source": "6380117363ca2c69d4bf84e512a57d03ce9ea74e",
+      "release_id": 382657212,
+      "immutable": true,
+      "mutated": false
+    }
+  },
+  "route_contract": {
+    "classification": "not run",
+    "authority": "one stable HTTP route owner stores an exact method, exact function-backed port, and one typed exact or canonical whole-segment pattern selector",
+    "bounds": {
+      "method_bytes": 32,
+      "path_bytes": 16384,
+      "segments_per_pattern": 64,
+      "captures_per_pattern": 32,
+      "routes_per_target": 4096,
+      "aggregate_key_bytes_per_target": 4194304,
+      "pattern_segments_per_target": 65536
+    },
+    "matching": "exact first, then unique strictly most-specific literal-before-capture trie path; raw validated spelling, no decode, normalization, query selection, authored priority, or route-list scan",
+    "signature": "exact routes require (HttpRequest)->HttpResponse; pattern captures index same-named ordered unrestricted Text parameters after HttpRequest",
+    "unknown": "fixed empty 404 with no function, capability, resident task, or semantic-authority change",
+    "digest_domain": "lkjscript.kernel.http-route-set.v2"
+  },
+  "public_path": {
+    "classification": "not run",
+    "operations": [
+      "add.http-route as=$ROUTE target=TARGET method=METHOD path=EXACT_PATH port=PORT",
+      "add.http-route as=$ROUTE target=TARGET method=METHOD pattern=PATH_PATTERN port=PORT",
+      "set.http-route route=HTTP_ROUTE method=METHOD path=EXACT_PATH port=PORT",
+      "set.http-route route=HTTP_ROUTE method=METHOD pattern=PATH_PATTERN port=PORT",
+      "delete.owner owner=HTTP_ROUTE policy=reject"
+    ],
+    "selector_rule": "exactly one of path or pattern",
+    "inspection": "route kind/path/segment-count/captures/specificity/target/component/port/handler/signature and target exact/pattern counts/segments/digest/maximum chain",
+    "predecessor_compatibility": false
+  },
+  "maintained_consumers": {
+    "classification": "not run",
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
+      "semantic_state": "semantic_state_8c6bc5e8a1b83e0018d60223c63bf6b1d9b8999d0ca247b1d8bbaaf600ac9e15",
+      "package_revision": "package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9",
+      "package_transport": "package_transport_52a7f2a867563eb5367443df9f21518051a4fa0ed527317026651207a1d78124",
+      "artifact_manifest": "artifact_manifest_4a45508f7083e9e1d913596eb3c7a37e624df08b2bbe2a38db61ee150148b691",
+      "artifact_bundle": "artifact_bundle_4038c46d05abfdc943d9ca3d542e3877e0f3abd58162cdc2a60c3d39e8a0fef5",
+      "owners": 550,
+      "compiler_units": 106,
+      "tests": 20,
+      "closure_objects": 1057,
+      "transport_bytes": 114656,
+      "transport_sha256": "12ba58397c04c5479ae3eae92d68d413826c30dbe14769be9f0748598453d485",
+      "artifact_bytes": 328738,
+      "artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9",
+      "semantic_state": "semantic_state_11cccd6ab1f48dbcc637737aab3e4740a29a1b3678e94b9e0899b4cc755d4c0c",
+      "artifact_manifest": "artifact_manifest_561a57c404ee1429bbc6f4bf326b8089c4acf86b033c98ac5cf5535f7abbd463",
+      "artifact_bundle": "artifact_bundle_fedd83ac62aeeed15a772c40cc075d85b76dfda95e37cf66f6892f0d4edd356a",
+      "route_set": "http_routes_5343767ca1ac4bfc0c59fa610ddbd011f135ad87043921426a20ad3191e0aea2",
+      "routes": 11,
+      "exact_routes": 8,
+      "pattern_routes": 3,
+      "pattern_segments": 8,
+      "maximum_specificity_chain": 1,
+      "owners": 2040,
+      "compiler_units": 196,
+      "tests": 27,
+      "closure_objects": 3538,
+      "artifact_bytes": 1062638,
+      "artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
+      "migrated_routes": [
+        {
+          "route": "route_79ebd79a701800e82e13dbe560944d55",
+          "method": "GET",
+          "pattern": "/resource/{id}",
+          "port": "port_bca08a54b24e8515140cf35f58b0c7a6",
+          "function": "decl_f9a2daebe576480106146ba4636607ee",
+          "capture_parameter": "param_ec41b6e339d68388c9df7bbf7c6eac16"
+        },
+        {
+          "route": "route_8f26a5cc2dcb7f777ad6d2bbe426ee93",
+          "method": "GET",
+          "pattern": "/resource/{id}/history",
+          "port": "port_ee46cb9f5f1de7a37764b6368396531e",
+          "function": "decl_4e20501876f892277e6e71b5f96cc0e0",
+          "capture_parameter": "param_8959bcba1113d7e685ae2dd85802f819"
+        },
+        {
+          "route": "route_a92b27a1757c26506bb0bbac601e9f42",
+          "method": "POST",
+          "pattern": "/resource/{id}/update",
+          "port": "port_2ab777a831aa1f84de63109012a1e3a9",
+          "function": "decl_0693166bd7c29bee83d2ead289148f65",
+          "capture_parameter": "param_ece943fd633a7a6c2976e6f50609eb21"
+        }
+      ],
+      "removed_selection": [
+        "GET /resource plus id query",
+        "GET /resource/history plus id query",
+        "POST /resource/update plus id query"
+      ],
+      "domain_behavior_changed": false
+    }
+  },
+  "hpc_dispositions": {
+    "HPC-1": { "classification": "not run", "claim": "final graph/package/review proof awaits the fresh full profile" },
+    "HPC-2": { "classification": "not run", "claim": "final copied public pattern lifecycle proof awaits the fresh full profile" },
+    "HPC-3": { "classification": "not run", "claim": "final compiler/artifact/preparation/VM/reference proof awaits the fresh full profile" },
+    "HPC-4": { "classification": "not run", "claim": "final in-memory and raw HTTP runtime proof awaits the fresh full profile" },
+    "HPC-5": { "classification": "not run", "claim": "final maintained migration and copied precedence/two-capture proof awaits the fresh full profile" },
+    "HPC-6": { "classification": "not run", "claim": "final disjoint route-language and raw-client proof awaits the fresh full profile" },
+    "HPC-7": { "classification": "not run", "claim": "fresh full and exact x86_64-unknown-linux-musl admission have not run" }
+  },
+  "verification": {
+    "generated_documents": {
+      "classification": "fresh passed",
+      "command": "cargo run --locked -- capabilities --verify-generated docs/generated",
+      "capabilities_digest": "e1eb51f0a9b0e7dca8e6aae7a086766b7396f44c7c02cb9e6fd37eca49ec1ee3",
+      "files": 8
+    },
+    "strict_lint": {
+      "classification": "fresh passed",
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+    },
+    "assembled_source_full": {
+      "classification": "not run",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine",
+      "receipt": null
+    },
+    "exact_static_target": {
+      "classification": "not run",
+      "target": "x86_64-unknown-linux-musl",
+      "build_receipt": null,
+      "candidate": null,
+      "admission_receipt": null
+    },
+    "invalidated_observations": [
+      {
+        "classification": "reused passed",
+        "observation": "focused service receipt .artifacts/lkjscript-dev/service/1788547914922319163-3301621-0/receipt.json passed the then-current graph oracle, maintained raw HTTP workflow, and cleanup",
+        "receipt_sha256": "2a66fd41d724a9374dbccaf989f2ebe6e746cc92d28e9cf2a5bf37b147efcce4",
+        "receipt_digest": "verification_2718dbfc85936298db9dc53d625368e4f8c01259023f6e4a999fd40ea87bf3cf",
+        "disposition": "later lint-only source and verifier factoring require replacement by fresh aggregate proof"
+      },
+      {
+        "classification": "reused passed",
+        "observation": "focused transferred stateful receipt .artifacts/campaign/202609050018/stateful-final-focused/receipt.json passed pattern add/set/delete, altered/stale rejection, exact precedence, two captures, runtime, restart, restore, and cleanup",
+        "receipt_sha256": "7d065f03b65da4806d04bbcfb97b91003f294b2d178b6a13e2c933084ede7ef6",
+        "receipt_digest": "verification_2e76d536e371dd72a50b87e7648fe3af070b79377bcb3b1952754cdaf382cda3",
+        "disposition": "later verifier factoring requires replacement by fresh aggregate proof"
+      },
+      {
+        "classification": "failed",
+        "observation": "the first strict lint run found seven mechanical style findings",
+        "disposition": "all findings were corrected without contract or behavior change and the exact strict lint command then passed"
+      }
+    ]
+  },
+  "deletion": {
+    "classification": "not run",
+    "removed": [
+      "Graph 9 exact-only route owner codec and digest",
+      "package 2, compiler-unit 4, Artifact 14, compact-change 13, authored-change 10, logical-plan 3, query 5, project-creation 4, registry 10, CLI 22, and HTTP-adapter 2 predecessor inputs",
+      "lkjournal resource-handler id query lookup and validation",
+      "maintained predecessor resource selection paths"
+    ],
+    "absent_by_construction": [
+      "template-string semantic authority",
+      "authoritative capture map or ambient context",
+      "authored route priority",
+      "compatibility reader, converter, hidden migration, fallback, or alias",
+      "application-private Rust route policy"
+    ]
+  },
+  "resource_observations": {
+    "classification": "not run",
+    "semantic_counts": {
+      "standard_owners": 550,
+      "standard_artifact_bytes": 328738,
+      "lkjournal_owners": 2040,
+      "lkjournal_artifact_bytes": 1062638,
+      "lkjournal_routes": 11,
+      "lkjournal_pattern_segments": 8
+    },
+    "runtime_matcher_nodes": null,
+    "runtime_match_step_bound": null,
+    "runtime_cleanup": null,
+    "inference": "final bounded runtime, process, CPU, wall, RSS, and cleanup observations await aggregate proof"
+  },
+  "raw_evidence": {
+    "campaign_root": ".artifacts/campaign/202609050018/",
+    "check_root": ".artifacts/lkjscript-dev/check/",
+    "tracked_raw_material": false,
+    "final_receipts": []
+  },
+  "external_actions": {
+    "fetch": "fresh passed at reconciliation; origin/main was 5e0197d40ec459162f5092c06e5e077e25c14ab4",
+    "push": "not run",
+    "target_input_reads": "not run",
+    "ephemeral_containers": "not run",
+    "workflow_dispatch": "not run",
+    "tag_or_release": "not run",
+    "package_publication": "not run",
+    "deployment": "not run",
+    "public_network_service": "not run",
+    "hosted_data_or_schema_mutation": "not run",
+    "credential_or_setting_mutation": "not run"
+  },
+  "limitations": [
+    "whole nonempty path segments only; no wildcard, tail, optional, regex, scalar decode, host, scheme, query, middleware, implicit method, reverse routing, alias, static-file, MIME/range/media, multipart, or template semantics",
+    "plaintext HTTP/1.1 only; no inbound TLS, HTTP/2, HTTP/3, browser, origin, or proxy claim",
+    "no hostile-code sandbox, multi-tenant isolation, encrypted graph storage, signing, reproducibility, general provenance, SLO, deployment, production, or arbitrary-Linux claim",
+    "identifier, alias, filesystem, media, authentication, and domain meaning remain application policy"
+  ]
+}

@@ -496,6 +496,10 @@ sandbox or multi-tenant isolation boundary.
 
 ## Verification
 
+Exact identities, oracle boundaries, gate classifications, resource observations, deletion, and
+raw-evidence pointers for the current signature-indexed HTTP path-capture slice are owned by
+[`202609050018-http-path-captures.json`](evidence/202609050018-http-path-captures.json).
+
 The contributor-only `lkjscript-dev check` harness owns gate dependencies, exact input
 fingerprints, fresh/reused classification, bounded child logs, required outputs, and receipts.
 The identity-preserving extraction closure uses a public copied-binary plan/apply/reinspect path,
