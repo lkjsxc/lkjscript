@@ -47,51 +47,43 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.16`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.16) is the current public and
+[`v0.1.21`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.21) is the current public and
 supported release. Its annotated tag object
-`fd9879e967512e9269faf111d462140572fec137` selects source commit
-`b49d78e862b7cbba02c639f06ca4bd2e11db1f2d`; GitHub reports release `381033538` as immutable,
+`fd6e87acf987d1d4722845e69d2108de4705ed49` selects exact release-source commit
+`6380117363ca2c69d4bf84e512a57d03ce9ea74e`; GitHub reports release `382657212` as immutable,
 latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 16,722,144-byte executable is ELF64 x86-64 and has no ELF
+`x86_64-unknown-linux-musl`. The 18,462,944-byte executable is ELF64 x86-64 and has no ELF
 interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 7,532,929 | `2d9c4b2e9cc54cf77c52bbc1272cbad993f5ad9da44edeacc27c4a8ec19967b5` |
-| `SHA256SUMS` | 109 | `d48b562bf620793c82706183620ee480ac45d0e79db89a77c2946d011e7f2ef4` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 8,293,246 | `a2b36ab0f856b75b5686ddbc42433a2bbd8ae98e8b5d52675825bd33721fea32` |
+| `SHA256SUMS` | 109 | `aee7da6f5e7beb79632aea8947413c9e53ceeb0a654bf407cbeebe0ef308755e` |
 
 Release workflow
-[`33599176438`](https://github.com/lkjsxc/lkjscript/actions/runs/33599176438) passed all four jobs on
+[`33862293249`](https://github.com/lkjsxc/lkjscript/actions/runs/33862293249) passed all four jobs on
 attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
 directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
 and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
 distributed HTTP, outbound HTTPS/TLS/DNS, stateful HTTP, and maintained `lkjournal` service
-oracles. The service oracle used the exact candidate and service-receipt contract 6 to project the
-maintained worker definition through six bounded pages with its independent oracle, then prove the
-resource-owned queue claim/info/renew/complete/fail lifecycle, stale replacement, retry,
-restart, backup/restore, unchanged semantic authority, and cleanup. A no-checkout job then verified
-the handoffs and passed distributed-receipt contract 3 with its complete function-definition result
-plus the other two transferred
-application oracles before the write-isolated publication job ran. Anonymous exact-tag and
-`releases/latest` downloads independently passed
-checksum, attestation, strict extraction, static inspection, distributed HTTP, outbound
-HTTPS/TLS/DNS, and stateful HTTP. Each stateful path started at empty `minimal`, staged only the
-exact built-in transport, and publicly authored its dependency and complete component/requirement/
-function-backed-port/HTTP-target topology before the BBS. Exact and latest candidate and manifest
-bytes agree; each fresh application independently proved its clean/incremental equality, restart,
-failure/cancellation, authority equality, redaction, and cleanup behavior without contacting a live
-relay.
+oracles. The service oracle binds service-receipt contract 9 and proves maintained exact route
+ownership, structured interactive sessions, identity-preserving extraction, exact-requirement-bound
+affine handoff, the resource-owned queue lifecycle, restart, unchanged semantic authority, and
+cleanup. Bounded catalog health and missing/predecessor/incomplete recovery also pass without
+promoting derived catalog state to authority.
 
-The public binary contains exact-interface affine resources and unrestricted/borrow/consume
-parameter use, compiler/runtime move enforcement, the nine-operation resource-owned durable queue,
-and deletion of raw attempt-token program authority. It also contains exact built-in dependency and
-topology authoring, unified recipe
-lowering, the deployment-bound `HttpClient.get` and closed `nostr-relay-info` recipe, explicit
-higher-order generic authoring, bounded context traversal, and complete first-party ordered-data and
-durable-queue cutovers. It now also publishes the revision-pinned complete local-function definition
-projection and copied-binary inspect → plan → apply → reinspect proof. Exact identities,
-classifications, resource observations, and raw-evidence pointers are retained in
-[`202609021420-function-definition-release.json`](evidence/202609021420-function-definition-release.json).
+A no-checkout job verified both handoffs and ran current distributed-receipt contract 4 plus
+stateful and outbound application oracles before the write-isolated publication job. Anonymous
+exact-tag and `releases/latest` downloads independently passed checksums, GitHub asset digests and
+attestations, strict extraction, static inspection, and all three transferred application oracles.
+Each independently proved clean/incremental equality, failure and cancellation behavior, unchanged
+authority, redaction, and cleanup; exact and latest archive, checksum, candidate, and manifest bytes
+were compared only after both behavioral runs. The release consolidates the completed 0.1.17
+exact-requirement affine handoff, 0.1.18 identity-preserving `extract.function`, 0.1.19 incremental
+catalog, 0.1.20 structured sessions, and 0.1.21 exact HTTP routes without adding graph meaning or
+touching deployment state. Exact identities, classifications, resources, negatives, and raw-evidence
+pointers are retained in
+[`202609041625-v0.1.21-consolidated-release.json`](evidence/202609041625-v0.1.21-consolidated-release.json).
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -112,10 +104,10 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current source is unreleased product snapshot `0.1.21`; immutable public latest and the supported
-download remain `v0.1.16`. Source retains the exact-requirement-bound affine handoff,
-identity-preserving extraction, incremental catalog, and graph-owned structured sessions, and adds
-graph-owned exact inbound HTTP route topology. Graph 9, validation witness 5, owner summary 4,
+Current product source and immutable public latest are consolidated at `0.1.21`; `v0.1.21` selects
+the exact release-input source commit named above. The product retains the exact-requirement-bound
+affine handoff, identity-preserving extraction, incremental catalog, graph-owned structured
+sessions, and exact inbound HTTP route topology. Graph 9, validation witness 5, owner summary 4,
 validator 9, package 2, package interface 6, compiler-unit 4, bytecode 3, Artifact 14, resident
 runtime 3, function-definition projection 2, service receipt 9, distributed-HTTP receipt 4,
 outbound-HTTP receipt 2, stateful-HTTP receipt 5, compact change 13, authored change 10,
@@ -124,13 +116,12 @@ project creation 4, registry 10, CLI 22, deployment 4, HTTP adapter 2, and struc
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
-The standard package advances meaning and derived identities so its maintained HTTP and Nostr
-consumers own exact route sets. `lkjournal` advances meaning and artifacts with eleven exact HTTP
+The standard package meaning and derived identities let its maintained HTTP and Nostr consumers own
+exact route sets. `lkjournal` owns eleven exact HTTP
 routes while preserving its `serve`, worker `work`, interactive `lkjournal-live-1`, shared
 first-party data authority, and stable worker split. Existing deployment, data, queue, object,
-outbound HTTP, structured-session, and immutable release formats remain unchanged. This source
-campaign performs no deployment, hosted-data
-mutation, workflow dispatch, tag/release action, or live-relay contact.
+outbound HTTP, structured-session, and predecessor immutable release formats remain unchanged. The
+consolidated release performed no deployment, hosted-data mutation, or live-relay contact.
 Graph, package, artifact, deployment, distribution, and operational-data identities remain
 separate. The source product retains the same closed
 operation names:
@@ -216,7 +207,7 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public behavior. Public `v0.1.16` rejects predecessor PostgreSQL
+The closed HTTP recipe remains public behavior. Public `v0.1.21` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function

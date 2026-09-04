@@ -5,23 +5,22 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.16`, release `381033538`, is the current supported release. Release run
-`33599176438` completed fresh source and four-oracle target verification, all three no-checkout
+Immutable `v0.1.21`, release `382657212`, is the current supported release. Release run
+`33862293249` completed 24 fresh source gates, four-oracle target verification, all three no-checkout
 pre-publication application oracles, isolated publication, and independent anonymous exact/latest
 distributed, stateful-from-`minimal`, and outbound application oracles on attempt 1. Its exact
-candidate was also used by service-receipt contract 6 for affine resource-owned queue/worker and
-worker-definition proof. Distributed-receipt contract 3 proves complete definition paging and the
-inspect → plan → apply → reinspect body change through the package and both public extraction paths.
+candidate is bound by service-receipt contract 9 and distributed-receipt contract 4 to exact HTTP
+routes, structured sessions, identity-preserving extraction, exact-requirement affine handoff,
+catalog recovery, complete definition paging, and the maintained application/service boundaries.
 Exact identities and receipts are in
-[`202609021420-function-definition-release.json`](evidence/202609021420-function-definition-release.json).
+[`202609041625-v0.1.21-consolidated-release.json`](evidence/202609041625-v0.1.21-consolidated-release.json).
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 
-Current checkout source is unreleased product 0.1.21. Immutable public latest remains v0.1.16;
-v0.1.15 and every older tag, release, asset, and attestation remain unchanged. The exact HTTP
-route-topology source campaign authorizes implementation, verification, commits, and at most one
-safe fast-forward source push; it does not authorize a tag, release, asset, attestation, installer,
-or package publication.
+Current product source remains 0.1.21 and immutable public latest is v0.1.21. Its annotated tag
+selects release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`; v0.1.16 and every older
+tag, release, asset, and attestation remain unchanged. No installer, registry package, second target,
+deployment, or hosted application state was created by this release.
 
 ## Identity and authority
 

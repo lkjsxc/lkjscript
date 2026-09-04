@@ -22,12 +22,13 @@ authenticated multi-subscription push with an implementation-disjoint raw client
 rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Current source and immutable
-`v0.1.16` are distinct: source is unreleased product 0.1.21, while v0.1.16 remains the supported
-public `x86_64-unknown-linux-musl` distribution. Its exact and latest
-downloads independently passed static inspection, distributed HTTP with complete function-definition
-projection, deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, and affine service/worker
-acceptance with one exact candidate identity through publication.
+PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source and
+immutable `v0.1.21` are consolidated: v0.1.21 is the supported public
+`x86_64-unknown-linux-musl` distribution. Its exact and latest downloads independently passed static
+inspection, distributed HTTP with complete function-definition projection and exact routes,
+deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, structured sessions, identity-preserving
+extraction, catalog recovery, and affine service/worker acceptance with one exact candidate identity
+through publication.
 Immutable v0.1.8 remains an unclosed historical recovery point.
 
 Each future item requires a named maintained consumer, exact contract, independent oracle,

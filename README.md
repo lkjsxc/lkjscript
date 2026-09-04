@@ -6,35 +6,35 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.16 executable provides offline command, editable inbound HTTP,
-deployment-bound outbound HTTPS, and reviewed stateful HTTP application lifecycles through one
-copied binary. They create typed meaning graph projects, inspect and change accepted meaning, run
-graph-owned tests, build deterministic artifact bundles, and execute through the standalone
-deployment boundary without Cargo, a checkout, or an application helper. Its stateful workflow
-uses a deployment-selected first-party local data root and durable queue; no product or public
-verification path provisions PostgreSQL.
+The supported v0.1.21 executable provides offline command, exact-route inbound HTTP, structured
+interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
+lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
+accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
+the standalone deployment boundary without Cargo, a checkout, or an application helper. Its
+stateful workflow uses a deployment-selected first-party local data root and durable queue; no
+product or public verification path provisions PostgreSQL.
 
-Current source is unreleased product snapshot `0.1.21`; the immutable supported release remains
-`v0.1.16`. Both include public exact built-in dependency, component, requirement, function-backed
-port, and command/HTTP target authoring. Source 0.1.21 replaces a universal HTTP target port with
-stable graph-owned exact method/path route owners and retains the exact relational `interactive`
-target whose graph-owned ordinary state crosses finite callbacks while a structured resident parent
-owns the connection, bounded mailboxes, timers, cancellation, and joined children. All four
-built-in recipes lower through the same typed authored-operation engine and preserve their
-application behavior and atomic project-creation boundary. The release also includes one
+Current product source remains `0.1.21`; immutable supported release `v0.1.21` selects exact
+release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. It includes public exact
+built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
+target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
+method/path route owners and retains the exact relational `interactive` target whose graph-owned
+ordinary state crosses finite callbacks while a structured resident parent owns the connection,
+bounded mailboxes, timers, cancellation, and joined children. All four built-in recipes lower
+through the same typed authored-operation engine and preserve their application behavior and atomic
+project-creation boundary. The release also includes one
 deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-The maintained source `lkjournal-live-1` consumer proves authenticated multi-subscription server
-push over plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound
-WebSocket, TLS, a deployment, a live-relay observation, or released behavior.
+The maintained `lkjournal-live-1` consumer proves authenticated multi-subscription server push over
+plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound WebSocket,
+TLS, a deployment, or a live-relay observation.
 
-Unreleased product 0.1.19 replaces the disposable monolithic object locator with one atomic
+Product 0.1.19 replaced the disposable monolithic object locator with one atomic
 manifest over bounded immutable sorted segments. Healthy repository open and accepted sealing no
 longer scan every old pack footer or rebuild and rewrite the complete catalog; exact pack entries
 and accepted `HEAD` remain canonical, and missing, predecessor, or inconsistent catalog state is
 reconstructed under the publication lock. This adds no public operation or authoring path and does
-not change graph meaning, pack/object bytes, maintained semantic revisions, deployment, or the
-immutable release.
+not change graph meaning, pack/object bytes, maintained semantic revisions, or deployment.
 
 Product 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
 live local function. They expose its complete accepted contract, structural body, exact reference
@@ -47,17 +47,17 @@ resource after ordinary arguments finish; compiler, Artifact 12, preparation, VM
 independent reference path recheck the exact requirement/interface and prevent restoration after
 failure. Public compact `add.parameter requirement=...`, plan/apply, and definition inspection
 expose the complete workflow. The maintained `lkjournal` worker now keeps claim/dispatch in its
-stable entry and transfers a live lease once into a graph-authored lifecycle helper. This source
-change has not been tagged or released and changes no deployment or durable queue data.
+stable entry and transfers a live lease once into a graph-authored lifecycle helper. This slice is
+published by immutable `v0.1.21` and changes no deployment or durable queue data.
 
-Unreleased product 0.1.18 adds the sole new compact operation `extract.function`. It derives one
+Product 0.1.18 added the sole compact operation `extract.function`. It derives one
 private same-module helper from an exact proper expression subtree, preserves every movable owner
 identity, infers ordered captures and the least task-requirement closure, and replaces the selected
 occurrence with one direct call through ordinary reviewed plan/apply. The maintained `lkjournal`
 `update-resource` definition retains its identity while its data-only commit subtree is now owned by
 private helper `commit-resource-update`; both resulting definitions are independently inspectable.
 The extraction changes no Graph 7, compiler, Artifact 12, runtime, deployment, or operational-data
-contract and remains unreleased.
+contract and is published by immutable `v0.1.21`.
 
 Product 0.1.15 introduced exact-interface affine capability resources. Public compact records expose
 `type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
@@ -68,7 +68,7 @@ failure. Raw attempt/worker transition tokens are no longer graph or adapter inp
 and backup formats remain unchanged. Immutable `v0.1.15` publishes these semantics through the
 same copied-binary authoring, build, service, and worker boundaries.
 
-The current source and immutable v0.1.16 binary include public explicit type-parameter,
+The current source and immutable v0.1.21 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -102,10 +102,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.16` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.16) owns the immutable
+[`v0.1.21` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.21) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.16/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.16/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.21/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.21/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -142,7 +142,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.16 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.21 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -181,7 +181,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.16 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.21 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -210,7 +210,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.16 download exposes the complete first-party boundary and topology authoring
+The immutable v0.1.21 download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -222,14 +222,13 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.16`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.21`.
 
-In current source, public compact change records can add an exact staged built-in dependency,
+Public compact change records can add an exact staged built-in dependency,
 components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
 operations and externals, create task functions, rebind requirements/dependencies, and compose structural records, lexical
 bindings, fields, lists, variants, matches, exact built-in calls, requirement-scoped capability
-calls, and lexical transactions. The immutable v0.1.16 executable has the same topology grammar
-without the `interactive` runner. The current-source topology records are:
+calls, and lexical transactions. The topology records are:
 
 ```text
 add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
@@ -329,7 +328,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.16 executable can obtain one complete admitted local neighborhood
+The public v0.1.21 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -344,7 +343,7 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-The public v0.1.16 executable can project one complete accepted local function definition through
+The public v0.1.21 executable can project one complete accepted local function definition through
 stateless pages:
 
 ```sh
@@ -470,7 +469,7 @@ Service and worker use separately validated `data` and `durable_queue_data` gran
 data root is unencrypted local trusted-host storage. Encrypted transport or storage requires an
 external trusted boundary.
 
-Since v0.1.15 the worker has used affine `QueueLeaseState`. In current 0.1.21 source its stable
+Since v0.1.15 the worker has used affine `QueueLeaseState`. In v0.1.21 its stable
 entry claims and matches the live resource, then transfers that lease once into a private
 requirement-bound task helper. The helper borrows `QueueLeaseInfo`, consumes through heartbeat,
 matches the renewed lease, and consumes through complete or fail. A handle is bound to the exact

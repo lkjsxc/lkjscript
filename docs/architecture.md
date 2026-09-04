@@ -135,35 +135,29 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.16` closes this path at source commit
-`b49d78e862b7cbba02c639f06ca4bd2e11db1f2d`. Its exact and latest downloads independently passed
+Immutable `v0.1.21` closes this path at release-source commit
+`6380117363ca2c69d4bf84e512a57d03ce9ea74e`. Its exact and latest downloads independently passed
 strict package and static inspection plus transferred distributed HTTP, deployment-bound outbound
-HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Distributed-receipt contract 3 pages
-one complete revision-pinned function definition before and after a reviewed body change, agrees
-with direct-file planning and digest reconstruction, and proves malformed/stale continuation and
-projection-input rejection without a pre-apply authority change. Each stateful path began with empty
-`minimal`, staged the exact built-in transport, and authored the complete dependency/topology/BBS
-through the ordinary public writer. The release contains unified graph-native recipe lowering,
-the closed NIP-11 relay-information recipe, bounded context traversal, and the complete ordered-data
-and durable-queue cutover without contacting a live relay or deploying an application. It also
-publishes exact-interface affine resources, unrestricted/borrow/consume parameter use,
-compiler/runtime movement checks, the resource-owned queue interface, and complete local-function
-definition inspection. Target admission binds the exact service/worker candidate digest and its
-independently reconstructed worker definition through the release manifest and accepted exact/latest
-public extractions.
+HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Distributed-receipt contract 4 proves
+exact route owners and complete function-definition projection; service-receipt contract 9 proves
+the maintained structured session, exact routes, identity-preserving extraction, and
+exact-requirement affine worker handoff. Each public application path proves clean/incremental
+equality, failure and cancellation behavior, unchanged semantic authority, and cleanup before exact
+and latest bytes are compared.
+
+The release consolidates the completed 0.1.17 affine handoff, 0.1.18 graph-native function
+extraction, 0.1.19 catalog contract 2, 0.1.20 structured-session contract 1, and 0.1.21 exact HTTP
+routes. It carries canonical standard session types, one exact relational `interactive` target, a
+bounded RFC 6455 server adapter, and maintained `lkjournal-live-1` through the existing distribution
+path without adding graph meaning or selecting deployment or operational data. Target admission
+binds the exact candidate, service/worker behavior, catalog recovery, and maintained application
+proof through the manifest, receipts, transferred verifier, and accepted exact/latest extractions.
+
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively through v0.1.9; the v0.1.10, v0.1.12, v0.1.13, and v0.1.14 publications moved
-no predecessor tag, release, or asset; v0.1.15 and v0.1.16 likewise leave every predecessor
-unchanged. Current source is unreleased product snapshot 0.1.21; immutable public latest remains
-v0.1.16. The source retains requirement-bound affine task handoff, the maintained worker split,
-identity-preserving private same-module function extraction, and catalog contract 2. It adds
-structured-session contract 1, canonical standard session types, one exact relational
-`interactive` target, a bounded RFC 6455 server adapter, and maintained `lkjournal-live-1`. It does
-not enter
-the distribution path above, alter the
-immutable release, or select deployment or operational data.
-Deployment 4 owns the strict interactive limits and topology. Project creation 4,
+advanced additively through v0.1.9. Immutable `v0.1.16` and every other predecessor tag, release,
+asset, and attestation remain unchanged. Deployment 4 owns the strict interactive limits and
+topology. Project creation 4,
 HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
 1, and all other unchanged identities remain independently owned. Distribution advanced without
 advancing semantic `HEAD`, deployment authority, or operational data.
