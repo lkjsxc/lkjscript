@@ -1784,10 +1784,22 @@ mod tests {
         );
         assert!(job.contains(&schema), "release job omitted {schema}");
         for predicate in [
-            "(.result.topology.routes | length) == 5",
+            "(.result.topology.routes | length) == 6",
             ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
-            ".result.live.routes_checked == 25",
-            "(.result.live.requests | length) == 25",
+            ".result.topology.exact_routes == 4",
+            ".result.topology.pattern_routes == 2",
+            ".result.topology.pattern_segments == 6",
+            ".result.topology.maximum_specificity_chain == 2",
+            ".result.pattern_lifecycle.set_preserved_identity == true",
+            ".result.pattern_lifecycle.altered_plan_rejected == true",
+            ".result.pattern_lifecycle.stale_plan_rejected == true",
+            ".result.pattern_lifecycle.temporary_pattern_deleted == true",
+            ".result.live.routes_checked == 26",
+            "(.result.live.requests | length) == 26",
+            ".result.live.exact_over_pattern_precedence == true",
+            ".result.live.ordered_two_captures == true",
+            ".result.live.capture_query_ignored == true",
+            ".result.live.matcher_step_bound == (.result.live.matcher_nodes + 1)",
         ] {
             assert!(
                 job.contains(predicate),
@@ -2214,6 +2226,10 @@ mod tests {
         assert!(
             !workflow
                 .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
+        );
+        assert!(
+            !workflow
+                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:5}")
         );
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));

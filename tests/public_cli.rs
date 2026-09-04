@@ -729,7 +729,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "change.plan-record")
             .count(),
-        34
+        36
     );
     assert!(change_section.iter().any(|record| {
         record.operation == "change.plan-record-field"
@@ -778,7 +778,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 115);
+    assert_eq!(operation_fields.len(), 117);
     assert_eq!(
         operation_fields
             .iter()
@@ -797,6 +797,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
             ("add.parameter", "requirement"),
+            ("add.http-route", "path"),
+            ("add.http-route", "pattern"),
+            ("set.http-route", "path"),
+            ("set.http-route", "pattern"),
         ]
     );
     let field_forms = change_section
@@ -804,11 +808,12 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 29);
+    assert_eq!(field_forms.len(), 30);
     for (name, syntax) in [
         ("exact_expression", "expr_HEX"),
         ("http_method", "ASCII_HTTP_TOKEN_1_TO_32_BYTES"),
         ("http_path", "/EXACT_PATH_1_TO_16384_BYTES"),
+        ("http_pattern", "/LITERAL/{capture}/..._1_TO_64_SEGMENTS"),
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
         ("runner_kind", "command|http|interactive"),
