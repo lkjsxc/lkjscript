@@ -50,6 +50,9 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const KILL_TIMEOUT: Duration = Duration::from_secs(5);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(15);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
+const ACCEPTANCE_CONNECTION_TIMEOUT_MILLISECONDS: u64 = 2_000;
+const ACCEPTANCE_TOTAL_TIMEOUT_MILLISECONDS: u64 = 5_000;
+const ACCEPTANCE_TIMEOUT_RESPONSE_DELAY: Duration = Duration::from_secs(6);
 const NIP11_DOCUMENT: &[u8] =
     b"{\"name\":\"local relay\",\"supported_nips\":[1,11],\"unknown\":{\"kept\":true}}\n";
 const BAD_GATEWAY_BODY: &[u8] = b"bad gateway";
@@ -1697,18 +1700,7 @@ fn run_workflow(
 
     update_descriptor(
         &descriptor,
-        DescriptorPolicy {
-            endpoint: tls_endpoint.clone(),
-            address_policy: "loopback_only",
-            trust: "named_pem_root",
-            maximum_response_headers: 8,
-            maximum_response_header_bytes: 1024,
-            maximum_response_body_bytes: 1024,
-            maximum_concurrent_requests: 1,
-            connection_timeout_milliseconds: 200,
-            total_timeout_milliseconds: 300,
-            cleanup_timeout_milliseconds: 1000,
-        },
+        DescriptorPolicy::trusted_tls(tls_endpoint.clone()),
     )?;
     let checked = context.invoke(
         "check",
@@ -2089,8 +2081,8 @@ impl DescriptorPolicy {
             maximum_response_header_bytes: 1024,
             maximum_response_body_bytes: 1024,
             maximum_concurrent_requests: 1,
-            connection_timeout_milliseconds: 200,
-            total_timeout_milliseconds: 300,
+            connection_timeout_milliseconds: ACCEPTANCE_CONNECTION_TIMEOUT_MILLISECONDS,
+            total_timeout_milliseconds: ACCEPTANCE_TOTAL_TIMEOUT_MILLISECONDS,
             cleanup_timeout_milliseconds: 1000,
         }
     }
@@ -2410,7 +2402,7 @@ fn exercise_primary_tls(
         endpoint,
         oracle,
         "delayed-response-timeout",
-        OracleScenario::delayed(valid_response.clone(), Duration::from_millis(700)),
+        OracleScenario::delayed(valid_response.clone(), ACCEPTANCE_TIMEOUT_RESPONSE_DELAY),
         ResponseExpectation::CapabilityGateway(NIP11_DOCUMENT),
     )?);
     negative_cases.push("total_deadline_timeout".to_owned());
