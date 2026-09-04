@@ -172,9 +172,10 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
 }
 
 #[test]
-fn checked_in_service_artifact_uses_only_bundle_contract_14() {
+fn checked_in_service_artifact_uses_only_bundle_contract_15() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART14".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJART15".as_slice()));
+    assert_ne!(bytes.get(..8), Some(b"LKJART14".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART10".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART04".as_slice()));
     assert!(bytes.len() < 128 * 1024 * 1024);
@@ -183,7 +184,7 @@ fn checked_in_service_artifact_uses_only_bundle_contract_14() {
 #[test]
 fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness() {
     let temporary = tempfile::tempdir().expect("isolated predecessor deployment");
-    for magic in [b"LKJART13", b"LKJART12", b"LKJART04"] {
+    for magic in [b"LKJART14", b"LKJART13", b"LKJART12", b"LKJART04"] {
         let artifact = temporary.path().join(format!(
             "predecessor-{}.lkja",
             String::from_utf8_lossy(magic)
