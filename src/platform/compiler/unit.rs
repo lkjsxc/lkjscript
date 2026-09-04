@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-4";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 4;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-5";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 5;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-3";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 3;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN04";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v4";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v4";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN05";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v5";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v5";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -176,8 +176,9 @@ pub enum CompilationPayload {
 pub struct CompiledHttpRoute {
     pub route: HttpRouteId,
     pub method: String,
-    pub path: String,
+    pub selector: crate::platform::kernel::HttpRouteSelector,
     pub port: u32,
+    pub capture_parameters: Vec<ParameterId>,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -188,9 +189,10 @@ pub struct CompiledSignature {
     pub task_requirements: Vec<u32>,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompiledParameter {
     pub parameter: ParameterId,
+    pub name: Name,
     pub ty: u32,
     pub use_mode: ParameterUse,
     pub resource_requirement: Option<u32>,
@@ -441,7 +443,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 9 inline bound",
+                        "compiled inline text exceeds the Graph 10 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -610,7 +612,12 @@ fn validate_compiled_http_routes(
     port_count: usize,
 ) -> Result<(), Diagnostic> {
     use crate::platform::kernel::contract::{
-        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+        MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+        MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+    use crate::platform::kernel::{
+        HttpRouteSelector, http_route_pattern_strictly_more_specific, http_route_patterns_overlap,
+        http_route_same_pattern_language, http_route_selector_cmp, validate_http_route_method,
     };
     if routes.is_empty() || routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
         return Err(unit_corrupt(
@@ -619,16 +626,21 @@ fn validate_compiled_http_routes(
         ));
     }
     let mut bytes = 0_usize;
+    let mut pattern_segments = 0usize;
     let mut identities = BTreeSet::new();
     for (index, route) in routes.iter().enumerate() {
-        crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
-            |_| {
-                unit_corrupt(
-                    "compiler_unit_http_route_key",
-                    "compiled HTTP route contains an invalid method or path",
-                )
-            },
-        )?;
+        validate_http_route_method(&route.method).map_err(|_| {
+            unit_corrupt(
+                "compiler_unit_http_route_key",
+                "compiled HTTP route contains an invalid method",
+            )
+        })?;
+        route.selector.validate_local().map_err(|_| {
+            unit_corrupt(
+                "compiler_unit_http_route_selector",
+                "compiled HTTP route contains an invalid selector",
+            )
+        })?;
         require_index("HTTP route port", route.port, port_count)?;
         if !identities.insert(route.route) {
             return Err(unit_corrupt(
@@ -638,7 +650,7 @@ fn validate_compiled_http_routes(
         }
         bytes = bytes
             .checked_add(route.method.len())
-            .and_then(|value| value.checked_add(route.path.len()))
+            .and_then(|value| value.checked_add(route.selector.key_bytes()))
             .ok_or_else(|| {
                 unit_corrupt(
                     "compiler_unit_http_route_bytes",
@@ -647,12 +659,45 @@ fn validate_compiled_http_routes(
             })?;
         if index > 0 {
             let previous = &routes[index - 1];
-            if (previous.method.as_bytes(), previous.path.as_bytes())
-                >= (route.method.as_bytes(), route.path.as_bytes())
+            if previous
+                .method
+                .as_bytes()
+                .cmp(route.method.as_bytes())
+                .then_with(|| http_route_selector_cmp(&previous.selector, &route.selector))
+                != std::cmp::Ordering::Less
             {
                 return Err(unit_corrupt(
                     "compiler_unit_http_route_order",
                     "compiled HTTP routes are not in unique canonical key order",
+                ));
+            }
+        }
+        if route.capture_parameters.len() != route.selector.capture_count()
+            || route
+                .capture_parameters
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != route.capture_parameters.len()
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_http_route_capture_parameters",
+                "compiled HTTP route capture-parameter identities disagree with its selector",
+            ));
+        }
+        if let HttpRouteSelector::Pattern { segments } = &route.selector {
+            pattern_segments = pattern_segments
+                .checked_add(segments.len())
+                .ok_or_else(|| {
+                    unit_corrupt(
+                        "compiler_unit_http_route_pattern_segments",
+                        "compiled HTTP pattern-segment count overflowed",
+                    )
+                })?;
+            if pattern_segments > MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET {
+                return Err(unit_corrupt(
+                    "compiler_unit_http_route_pattern_segments",
+                    "compiled HTTP routes exceed the target pattern-segment bound",
                 ));
             }
         }
@@ -662,6 +707,58 @@ fn validate_compiled_http_routes(
             "compiler_unit_http_route_bytes",
             "compiled HTTP route-key bytes exceed the supported bound",
         ));
+    }
+    for (index, left) in routes.iter().enumerate() {
+        for right in routes.iter().skip(index + 1) {
+            if left.port == right.port
+                && left.selector.capture_names() != right.selector.capture_names()
+            {
+                return Err(unit_corrupt(
+                    "compiler_unit_http_route_shared_port_signature",
+                    "compiled HTTP routes sharing a port disagree on capture names",
+                ));
+            }
+            if left.method != right.method {
+                continue;
+            }
+            match (&left.selector, &right.selector) {
+                (
+                    HttpRouteSelector::Exact { path: left },
+                    HttpRouteSelector::Exact { path: right },
+                ) if left == right => {
+                    return Err(unit_corrupt(
+                        "compiler_unit_http_route_duplicate_language",
+                        "compiled HTTP exact routes repeat one match language",
+                    ));
+                }
+                (
+                    HttpRouteSelector::Pattern {
+                        segments: left_segments,
+                    },
+                    HttpRouteSelector::Pattern {
+                        segments: right_segments,
+                    },
+                ) if http_route_patterns_overlap(left_segments, right_segments)
+                    && !http_route_pattern_strictly_more_specific(
+                        left_segments,
+                        right_segments,
+                    )
+                    && !http_route_pattern_strictly_more_specific(
+                        right_segments,
+                        left_segments,
+                    ) =>
+                {
+                    let message = if http_route_same_pattern_language(left_segments, right_segments)
+                    {
+                        "compiled HTTP patterns repeat one match language"
+                    } else {
+                        "compiled HTTP patterns overlap without strict specificity"
+                    };
+                    return Err(unit_corrupt("compiler_unit_http_route_overlap", message));
+                }
+                _ => {}
+            }
+        }
     }
     Ok(())
 }

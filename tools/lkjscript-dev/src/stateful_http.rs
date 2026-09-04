@@ -32,7 +32,7 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(35);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 pub(crate) const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
-pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 5;
+pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 6;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
@@ -145,6 +145,8 @@ struct HttpObservation {
 struct LiveObservation {
     data_contract: String,
     data_root: String,
+    matcher_nodes: u64,
+    matcher_step_bound: u64,
     routes_checked: u64,
     created_identity: String,
     persistence_after_restart: bool,
@@ -154,6 +156,9 @@ struct LiveObservation {
     absent_root_no_ready: bool,
     corrupt_root_no_ready: bool,
     malformed_request_contained: bool,
+    exact_over_pattern_precedence: bool,
+    ordered_two_captures: bool,
+    capture_query_ignored: bool,
     runner_starts: u64,
     shutdown_cleanup_failures: u64,
     temporary_data_cleanup_complete: bool,
@@ -185,6 +190,7 @@ struct AuthoringResult {
     builtin_package_revision: String,
     builtin_transport: String,
     dependency_staged: bool,
+    pattern_lifecycle: PatternLifecycleObservation,
     topology: TopologyObservation,
     artifact: String,
     artifact_bytes: u64,
@@ -197,6 +203,20 @@ struct AuthoringResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+struct PatternLifecycleObservation {
+    route: String,
+    temporary_route: String,
+    set_preserved_identity: bool,
+    altered_plan_rejected: bool,
+    stale_plan_rejected: bool,
+    reviewed_selector_evidence: bool,
+    temporary_pattern_inspected: bool,
+    temporary_pattern_deleted: bool,
+    intermediate_revisions: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct TopologyObservation {
     module: String,
     component: String,
@@ -205,6 +225,10 @@ struct TopologyObservation {
     target: String,
     target_name: String,
     runner: String,
+    exact_routes: u64,
+    pattern_routes: u64,
+    pattern_segments: u64,
+    maximum_specificity_chain: u64,
     route_set: String,
 }
 
@@ -213,10 +237,24 @@ struct TopologyObservation {
 struct HttpRouteObservation {
     route: String,
     method: String,
+    selector: String,
     path: String,
+    captures: Vec<String>,
     port: String,
     handler: String,
-    request_parameter: String,
+    signature: String,
+    parameters: Vec<HttpRouteParameterObservation>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteParameterObservation {
+    id: String,
+    index: u64,
+    name: String,
+    ty: String,
+    use_mode: String,
+    requirement: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -546,10 +584,21 @@ pub(crate) fn read_transferred_receipt(
         || result.initial_owners != 0
         || result.initial_dependencies != 0
         || !result.dependency_staged
+        || !result.pattern_lifecycle.set_preserved_identity
+        || !result.pattern_lifecycle.altered_plan_rejected
+        || !result.pattern_lifecycle.stale_plan_rejected
+        || !result.pattern_lifecycle.reviewed_selector_evidence
+        || !result.pattern_lifecycle.temporary_pattern_inspected
+        || !result.pattern_lifecycle.temporary_pattern_deleted
+        || result.pattern_lifecycle.intermediate_revisions != 4
         || result.topology.target_name != "serve"
         || result.topology.runner != "http"
         || result.topology.requirements.len() != 4
-        || result.topology.routes.len() != 5
+        || result.topology.routes.len() != 6
+        || result.topology.exact_routes != 4
+        || result.topology.pattern_routes != 2
+        || result.topology.pattern_segments != 6
+        || result.topology.maximum_specificity_chain != 2
         || result.topology.route_set.is_empty()
         || ["streams", "data", "identifiers", "clock"]
             .iter()
@@ -558,8 +607,9 @@ pub(crate) fn read_transferred_receipt(
             ("GET", "/"),
             ("GET", "/api/posts"),
             ("POST", "/api/posts"),
-            ("PUT", "/api/posts"),
-            ("DELETE", "/api/posts"),
+            ("PUT", "/api/posts/{id}"),
+            ("DELETE", "/api/{space}/{id}"),
+            ("DELETE", "/api/posts/featured"),
         ]
         .iter()
         .any(|(method, path)| {
@@ -572,12 +622,17 @@ pub(crate) fn read_transferred_receipt(
         || result.incremental_sha256 != result.clean_sha256
         || result.evidence != evidence_root.display().to_string()
         || result.live.data_contract != "lkjscript-data-store-1"
+        || result.live.matcher_nodes == 0
+        || result.live.matcher_step_bound != result.live.matcher_nodes.saturating_add(1)
         || !result.live.persistence_after_restart
         || result.live.startup_failures_without_ready != 2
         || !result.live.backup_restore_equivalent
         || !result.live.absent_root_no_ready
         || !result.live.corrupt_root_no_ready
         || !result.live.malformed_request_contained
+        || !result.live.exact_over_pattern_precedence
+        || !result.live.ordered_two_captures
+        || !result.live.capture_query_ignored
         || result.live.runner_starts != 3
         || result.live.shutdown_cleanup_failures != 0
         || !result.live.temporary_data_cleanup_complete
@@ -862,7 +917,7 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
             )?
             .bytes,
     )?;
-    let accepted_revision =
+    let initial_accepted_revision =
         required_field(required_record(&applied, "revision")?, "result")?.to_owned();
     let reconciled = records(
         &context
@@ -883,7 +938,20 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
             .bytes,
     )?;
     require_record_field(&reconciled, "result", "status", "already-accepted")?;
-    require_record_field(&reconciled, "revision", "result", &accepted_revision)?;
+    require_record_field(
+        &reconciled,
+        "revision",
+        "result",
+        &initial_accepted_revision,
+    )?;
+    let initial_topology = discover_authored_topology(context, isolated, &project)?;
+    let (accepted_revision, pattern_lifecycle) = exercise_pattern_lifecycle(
+        context,
+        isolated,
+        &project,
+        &initial_accepted_revision,
+        &initial_topology,
+    )?;
     let topology = discover_authored_topology(context, isolated, &project)?;
     context.success(
         "check",
@@ -951,6 +1019,7 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
         builtin_package_revision,
         builtin_transport,
         dependency_staged: true,
+        pattern_lifecycle,
         topology,
         artifact: artifact.display().to_string(),
         artifact_bytes: first.len() as u64,
@@ -960,6 +1029,364 @@ fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResu
         live,
         evidence: context.evidence.display().to_string(),
     })
+}
+
+#[derive(Debug)]
+struct PlannedPatternChange {
+    request_path: PathBuf,
+    token: String,
+    output: Vec<CompactRecord>,
+    plan: Vec<CompactRecord>,
+}
+
+fn plan_pattern_change(
+    context: &mut Context,
+    isolated: &Path,
+    project: &Path,
+    label: &str,
+    request: &str,
+) -> Result<PlannedPatternChange, DevError> {
+    let request_path = isolated.join(format!("{label}.lkjc"));
+    let plan_path = isolated.join(format!("{label}.logical-plan"));
+    evidence::publish(&request_path, request.as_bytes())?;
+    evidence::publish(
+        &context.evidence.join(format!("{label}.lkjc")),
+        request.as_bytes(),
+    )?;
+    let arguments = vec![
+        "--project".to_owned(),
+        path_text(project)?.to_owned(),
+        "change".to_owned(),
+        "plan".to_owned(),
+        "--input-file".to_owned(),
+        path_text(&request_path)?.to_owned(),
+        "--output".to_owned(),
+        path_text(&plan_path)?.to_owned(),
+    ];
+    let output = records(
+        &context
+            .success(&format!("{label}-plan"), &arguments, isolated)?
+            .bytes,
+    )?;
+    let token = required_field(required_record(&output, "plan")?, "token")?.to_owned();
+    let plan_bytes = fs::read(&plan_path)?;
+    evidence::publish(
+        &context.evidence.join(format!("{label}.logical-plan")),
+        &plan_bytes,
+    )?;
+    Ok(PlannedPatternChange {
+        request_path,
+        token,
+        output,
+        plan: records(&plan_bytes)?,
+    })
+}
+
+fn apply_pattern_change(
+    context: &mut Context,
+    isolated: &Path,
+    project: &Path,
+    label: &str,
+    planned: &PlannedPatternChange,
+) -> Result<String, DevError> {
+    let arguments = vec![
+        "--project".to_owned(),
+        path_text(project)?.to_owned(),
+        "change".to_owned(),
+        "apply".to_owned(),
+        "--input-file".to_owned(),
+        path_text(&planned.request_path)?.to_owned(),
+        "--plan".to_owned(),
+        planned.token.clone(),
+    ];
+    let output = records(
+        &context
+            .success(&format!("{label}-apply"), &arguments, isolated)?
+            .bytes,
+    )?;
+    Ok(required_field(required_record(&output, "revision")?, "result")?.to_owned())
+}
+
+fn require_pattern_failure(
+    context: &mut Context,
+    isolated: &Path,
+    project: &Path,
+    label: &str,
+    request_path: &Path,
+    token: &str,
+    expected_code: &str,
+) -> Result<(), DevError> {
+    let arguments = vec![
+        "--project".to_owned(),
+        path_text(project)?.to_owned(),
+        "change".to_owned(),
+        "apply".to_owned(),
+        "--input-file".to_owned(),
+        path_text(request_path)?.to_owned(),
+        "--plan".to_owned(),
+        token.to_owned(),
+    ];
+    let rejected = records(
+        &context
+            .failure(
+                label,
+                &arguments,
+                isolated,
+                BTreeMap::from([("LANG".to_owned(), "C".to_owned())]),
+            )?
+            .bytes,
+    )?;
+    require_record_field(&rejected, "diagnostic", "code", expected_code)
+}
+
+fn exercise_pattern_lifecycle(
+    context: &mut Context,
+    isolated: &Path,
+    project: &Path,
+    initial_revision: &str,
+    topology: &TopologyObservation,
+) -> Result<(String, PatternLifecycleObservation), DevError> {
+    let update = topology
+        .routes
+        .iter()
+        .find(|route| route.method == "PUT" && route.path == "/api/posts/{id}")
+        .ok_or_else(|| DevError::corrupt("stateful topology omitted the update pattern"))?;
+    let changed_request = format!(
+        "request base={initial_revision}\n\
+         set.http-route route={} method=PUT pattern=\"/api/articles/{{id}}\" port={}\n",
+        update.route, update.port
+    );
+    let changed = plan_pattern_change(context, isolated, project, "pattern-set", &changed_request)?;
+    let reviewed_before = changed.plan.iter().any(|record| {
+        record.operation == "logical-plan.http-route-before"
+            && field(record, "route") == Some(update.route.as_str())
+            && field(record, "changed") == Some("true")
+            && field(record, "kind") == Some("pattern")
+            && field(record, "selector") == Some("/api/posts/{id}")
+            && field(record, "captures") == Some("id")
+            && field(record, "signature") == Some("(HttpRequest,id:Text)->HttpResponse")
+    });
+    let reviewed_after = changed.plan.iter().any(|record| {
+        record.operation == "logical-plan.http-route-after"
+            && field(record, "route") == Some(update.route.as_str())
+            && field(record, "changed") == Some("true")
+            && field(record, "kind") == Some("pattern")
+            && field(record, "selector") == Some("/api/articles/{id}")
+            && field(record, "captures") == Some("id")
+            && field(record, "signature") == Some("(HttpRequest,id:Text)->HttpResponse")
+            && field(record, "target-exact-routes") == Some("4")
+            && field(record, "target-pattern-routes") == Some("2")
+            && field(record, "target-pattern-segments") == Some("6")
+            && field(record, "maximum-specificity-chain") == Some("2")
+    });
+    let reviewed_selector_evidence = reviewed_before && reviewed_after;
+    if !reviewed_selector_evidence {
+        return Err(DevError::corrupt(
+            "reviewed pattern set plan omitted selector-indexed before/after evidence",
+        ));
+    }
+
+    let altered_request = format!(
+        "request base={initial_revision}\n\
+         set.http-route route={} method=PUT pattern=\"/api/altered/{{id}}\" port={}\n",
+        update.route, update.port
+    );
+    let altered_path = isolated.join("pattern-set-altered.lkjc");
+    evidence::publish(&altered_path, altered_request.as_bytes())?;
+    let head_before_altered = fs::read(project.join("HEAD"))?;
+    require_pattern_failure(
+        context,
+        isolated,
+        project,
+        "pattern-set-altered-apply",
+        &altered_path,
+        &changed.token,
+        "change_request_commitment_mismatch",
+    )?;
+    if fs::read(project.join("HEAD"))? != head_before_altered {
+        return Err(DevError::corrupt(
+            "altered reviewed pattern request advanced accepted authority",
+        ));
+    }
+
+    let changed_revision =
+        apply_pattern_change(context, isolated, project, "pattern-set", &changed)?;
+    let changed_detail = records(
+        &context
+            .success(
+                "inspect-pattern-set",
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "inspect",
+                    "owner",
+                    "http_route",
+                    &update.route,
+                ],
+                isolated,
+            )?
+            .bytes,
+    )?;
+    let changed_owner = required_record(&changed_detail, "owner")?;
+    let set_preserved_identity = field(changed_owner, "id") == Some(update.route.as_str())
+        && field(changed_owner, "selector") == Some("pattern")
+        && field(changed_owner, "path") == Some("/api/articles/{id}")
+        && field(changed_owner, "captures") == Some("id");
+    if !set_preserved_identity {
+        return Err(DevError::corrupt(
+            "set.http-route did not preserve and expose the pattern route identity",
+        ));
+    }
+
+    let head_before_stale = fs::read(project.join("HEAD"))?;
+    require_pattern_failure(
+        context,
+        isolated,
+        project,
+        "pattern-set-stale-apply",
+        &changed.request_path,
+        &changed.token,
+        "change_authored_stale_base",
+    )?;
+    if fs::read(project.join("HEAD"))? != head_before_stale {
+        return Err(DevError::corrupt(
+            "stale reviewed pattern request advanced accepted authority",
+        ));
+    }
+
+    let restored_request = format!(
+        "request base={changed_revision}\n\
+         set.http-route route={} method=PUT pattern=\"/api/posts/{{id}}\" port={}\n",
+        update.route, update.port
+    );
+    let restored = plan_pattern_change(
+        context,
+        isolated,
+        project,
+        "pattern-restore",
+        &restored_request,
+    )?;
+    let restored_revision =
+        apply_pattern_change(context, isolated, project, "pattern-restore", &restored)?;
+
+    let temporary_request = format!(
+        "request base={restored_revision}\n\
+         add.http-route as=$temporary target={} method=PATCH pattern=\"/temporary/{{id}}\" port={}\n",
+        topology.target, update.port
+    );
+    let temporary = plan_pattern_change(
+        context,
+        isolated,
+        project,
+        "pattern-add-temporary",
+        &temporary_request,
+    )?;
+    let temporary_route = temporary
+        .output
+        .iter()
+        .find(|record| {
+            record.operation == "identity" && field(record, "symbol") == Some("$temporary")
+        })
+        .and_then(|record| field(record, "id"))
+        .ok_or_else(|| DevError::corrupt("temporary pattern plan omitted its allocated identity"))?
+        .to_owned();
+    let temporary_revision = apply_pattern_change(
+        context,
+        isolated,
+        project,
+        "pattern-add-temporary",
+        &temporary,
+    )?;
+    let temporary_detail = records(
+        &context
+            .success(
+                "inspect-temporary-pattern",
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "inspect",
+                    "owner",
+                    "http_route",
+                    &temporary_route,
+                ],
+                isolated,
+            )?
+            .bytes,
+    )?;
+    let temporary_owner = required_record(&temporary_detail, "owner")?;
+    let temporary_pattern_inspected = field(temporary_owner, "selector") == Some("pattern")
+        && field(temporary_owner, "path") == Some("/temporary/{id}")
+        && field(temporary_owner, "captures") == Some("id")
+        && field(temporary_owner, "signature") == Some("(HttpRequest,Text)->HttpResponse");
+    if !temporary_pattern_inspected {
+        return Err(DevError::corrupt(
+            "temporary pattern inspection disagreed with its selector-indexed contract",
+        ));
+    }
+
+    let deletion_request = format!(
+        "request base={temporary_revision}\n\
+         delete.owner owner={temporary_route} policy=reject\n"
+    );
+    let deletion = plan_pattern_change(
+        context,
+        isolated,
+        project,
+        "pattern-delete-temporary",
+        &deletion_request,
+    )?;
+    let final_revision = apply_pattern_change(
+        context,
+        isolated,
+        project,
+        "pattern-delete-temporary",
+        &deletion,
+    )?;
+    let inventory = records(
+        &context
+            .success(
+                "pattern-final-inventory",
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "query",
+                    "owners",
+                    "--kind",
+                    "http_route",
+                    "--limit",
+                    "4096",
+                    "--bytes",
+                    "1048576",
+                ],
+                isolated,
+            )?
+            .bytes,
+    )?;
+    let temporary_pattern_deleted = field(required_record(&inventory, "summary")?, "returned")
+        == Some("6")
+        && !inventory.iter().any(|record| {
+            record.operation == "owner" && field(record, "id") == Some(temporary_route.as_str())
+        });
+    if !temporary_pattern_deleted {
+        return Err(DevError::corrupt(
+            "deleted temporary pattern remained in the final route inventory",
+        ));
+    }
+
+    Ok((
+        final_revision,
+        PatternLifecycleObservation {
+            route: update.route.clone(),
+            temporary_route,
+            set_preserved_identity,
+            altered_plan_rejected: true,
+            stale_plan_rejected: true,
+            reviewed_selector_evidence,
+            temporary_pattern_inspected,
+            temporary_pattern_deleted,
+            intermediate_revisions: 4,
+        },
+    ))
 }
 
 fn run_live(
@@ -1008,7 +1435,7 @@ fn run_live(
     let first_result = exercise_before_restart(address, &mut requests);
     let first_stop = runner.stop();
     let created_identity = first_result?;
-    first_stop?;
+    let matcher_nodes = first_stop?;
 
     context.success(
         "data-verify-after-first-service",
@@ -1067,7 +1494,7 @@ fn run_live(
         runner_environment.clone(),
     )?;
     exercise_persisted(restarted_address, &created_identity, &mut requests)?;
-    restarted.stop()?;
+    let restarted_matcher_nodes = restarted.stop()?;
 
     let restored_root = project.join("state/restored-data");
     context.success(
@@ -1097,7 +1524,19 @@ fn run_live(
         runner_environment,
     )?;
     exercise_after_restart(restored_address, &created_identity, &mut requests)?;
-    restored_runner.stop()?;
+    let restored_matcher_nodes = restored_runner.stop()?;
+
+    if matcher_nodes == 0
+        || matcher_nodes != restarted_matcher_nodes
+        || matcher_nodes != restored_matcher_nodes
+    {
+        return Err(DevError::corrupt(
+            "stateful HTTP matcher node count was empty or changed across restart and restore",
+        ));
+    }
+    let matcher_step_bound = matcher_nodes
+        .checked_add(1)
+        .ok_or_else(|| DevError::corrupt("stateful HTTP matcher step bound overflowed"))?;
 
     let authority_after = authority::observe_graph_authority(project)?;
     let authority_unchanged = authority_before == authority_after;
@@ -1109,6 +1548,8 @@ fn run_live(
     Ok(LiveObservation {
         data_contract: "lkjscript-data-store-1".to_owned(),
         data_root: data_root.display().to_string(),
+        matcher_nodes,
+        matcher_step_bound,
         routes_checked: requests.len() as u64,
         created_identity,
         persistence_after_restart: true,
@@ -1118,6 +1559,9 @@ fn run_live(
         absent_root_no_ready: true,
         corrupt_root_no_ready: true,
         malformed_request_contained: true,
+        exact_over_pattern_precedence: true,
+        ordered_two_captures: true,
+        capture_query_ignored: true,
         runner_starts: 3,
         shutdown_cleanup_failures: 0,
         temporary_data_cleanup_complete: true,
@@ -1401,7 +1845,6 @@ fn discover_standard(
         "list-fold-left",
         "list-get",
         "list-length",
-        "query-get-or",
         "text-empty",
         "text-equal",
         "text-length",
@@ -1583,9 +2026,34 @@ fn discover_authored_topology(
             .bytes,
     )?;
     let target_owner = required_record(&target_detail, "owner")?;
-    if required_field(target_owner, "route-count")? != "5" {
+    if required_field(target_owner, "route-count")? != "6" {
         return Err(DevError::corrupt(
-            "HTTP target inspection did not report five routes",
+            "HTTP target inspection did not report six routes",
+        ));
+    }
+    let exact_routes = parse_u64(
+        required_field(target_owner, "exact-routes")?,
+        "exact route count",
+    )?;
+    let pattern_routes = parse_u64(
+        required_field(target_owner, "pattern-routes")?,
+        "pattern route count",
+    )?;
+    let pattern_segments = parse_u64(
+        required_field(target_owner, "pattern-segments")?,
+        "pattern segment count",
+    )?;
+    let maximum_specificity_chain = parse_u64(
+        required_field(target_owner, "maximum-specificity-chain")?,
+        "maximum specificity chain",
+    )?;
+    if exact_routes != 4
+        || pattern_routes != 2
+        || pattern_segments != 6
+        || maximum_specificity_chain != 2
+    {
+        return Err(DevError::corrupt(
+            "HTTP target selector counts or specificity chain changed",
         ));
     }
     let route_set = required_field(target_owner, "route-set")?.to_owned();
@@ -1616,40 +2084,71 @@ fn discover_authored_topology(
         .filter(|record| record.operation == "owner" && field(record, "kind") == Some("http_route"))
         .map(|record| required_field(record, "id").map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
-    if route_ids.len() != 5 {
+    if route_ids.len() != 6 {
         return Err(DevError::corrupt(format!(
-            "authored project has {} HTTP routes instead of five",
+            "authored project has {} HTTP routes instead of six",
             route_ids.len()
         )));
     }
 
     let expected = [
-        ("GET", "/", "home", "handle-home", "request"),
-        ("GET", "/api/posts", "list", "handle-list-route", "request"),
+        (
+            "GET",
+            "/",
+            "exact",
+            &[][..],
+            "home",
+            "handle-home",
+            &["request"][..],
+        ),
+        (
+            "GET",
+            "/api/posts",
+            "exact",
+            &[][..],
+            "list",
+            "handle-list-route",
+            &["request"][..],
+        ),
         (
             "POST",
             "/api/posts",
+            "exact",
+            &[][..],
             "create",
             "handle-create-route",
-            "request",
+            &["request"][..],
         ),
         (
             "PUT",
-            "/api/posts",
+            "/api/posts/{id}",
+            "pattern",
+            &["id"][..],
             "update",
             "handle-update-route",
-            "request",
+            &["request", "id"][..],
         ),
         (
             "DELETE",
-            "/api/posts",
+            "/api/{space}/{id}",
+            "pattern",
+            &["space", "id"][..],
             "delete",
             "handle-delete-route",
-            "request",
+            &["request", "space", "id"][..],
+        ),
+        (
+            "DELETE",
+            "/api/posts/featured",
+            "exact",
+            &[][..],
+            "featured",
+            "handle-featured-route",
+            &["request"][..],
         ),
     ];
     let mut routes = Vec::with_capacity(expected.len());
-    for (method, path, port_name, handler_name, parameter_name) in expected {
+    for (method, path, selector, captures, port_name, handler_name, parameter_names) in expected {
         let port =
             discover_project_owner(context, cwd, project, "port", port_name, Some(&component))?;
         let handler = discover_project_owner(
@@ -1660,14 +2159,16 @@ fn discover_authored_topology(
             handler_name,
             Some(&module),
         )?;
-        let request_parameter = discover_project_owner(
-            context,
-            cwd,
-            project,
-            "parameter",
-            parameter_name,
-            Some(&handler),
-        )?;
+        let parameters = inspect_http_handler_parameters(context, cwd, project, &handler)?;
+        if parameters
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .ne(parameter_names.iter().copied())
+        {
+            return Err(DevError::corrupt(format!(
+                "HTTP handler {handler_name} parameter order does not match its route captures"
+            )));
+        }
         let port_relations = project_relations(context, cwd, project, &port)?;
         require_relation(&port_relations, "member_declaration", &port, &component)?;
         require_relation(&port_relations, "function_value", &port, &handler)?;
@@ -1695,31 +2196,64 @@ fn discover_authored_topology(
                 if field(owner, "target") != Some(target.as_str())
                     || !required_field(owner, "component")?.ends_with(&format!("/{component}"))
                     || !required_field(owner, "port")?.ends_with(&format!("/{port}"))
+                    || field(owner, "selector") != Some(selector)
+                    || split_http_captures(required_field(owner, "captures")?) != captures
+                    || field(owner, "handler").is_none_or(|value| !value.ends_with(&handler))
                 {
                     return Err(DevError::corrupt(format!(
-                        "HTTP route {method} {path} inspection disagrees with its target, component, or port"
+                        "HTTP route {method} {path} inspection disagrees with its selector, captures, handler, target, component, or port"
                     )));
                 }
-                matching.push(route.clone());
+                let expected_signature = if captures.is_empty() {
+                    "(HttpRequest)->HttpResponse".to_owned()
+                } else {
+                    format!(
+                        "(HttpRequest,{})->HttpResponse",
+                        std::iter::repeat_n("Text", captures.len())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                };
+                if field(owner, "signature") != Some(expected_signature.as_str()) {
+                    return Err(DevError::corrupt(format!(
+                        "HTTP route {method} {path} has signature drift"
+                    )));
+                }
+                matching.push((route.clone(), required_field(owner, "port")?.to_owned()));
             }
         }
         if matching.len() != 1 {
             return Err(DevError::corrupt(format!(
-                "authored project has {} routes for exact key {method} {path}",
+                "authored project has {} routes for selector key {method} {path}",
                 matching.len()
             )));
         }
-        let route = matching.remove(0);
+        let (route, route_port) = matching.remove(0);
         let route_relations = project_relations(context, cwd, project, &route)?;
         require_relation(&route_relations, "http_route_target", &route, &target)?;
         require_relation(&route_relations, "http_route_port", &route, &port)?;
         routes.push(HttpRouteObservation {
             route,
             method: method.to_owned(),
+            selector: selector.to_owned(),
             path: path.to_owned(),
-            port,
+            captures: captures
+                .iter()
+                .map(|capture| (*capture).to_owned())
+                .collect(),
+            port: route_port,
             handler,
-            request_parameter,
+            signature: if captures.is_empty() {
+                "(HttpRequest)->HttpResponse".to_owned()
+            } else {
+                format!(
+                    "(HttpRequest,{})->HttpResponse",
+                    std::iter::repeat_n("Text", captures.len())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            },
+            parameters,
         });
     }
     routes.sort_by(|left, right| (&left.method, &left.path).cmp(&(&right.method, &right.path)));
@@ -1732,8 +2266,99 @@ fn discover_authored_topology(
         target,
         target_name: "serve".to_owned(),
         runner: "http".to_owned(),
+        exact_routes,
+        pattern_routes,
+        pattern_segments,
+        maximum_specificity_chain,
         route_set,
     })
+}
+
+fn split_http_captures(value: &str) -> Vec<&str> {
+    if value.is_empty() {
+        Vec::new()
+    } else {
+        value.split(',').collect()
+    }
+}
+
+fn inspect_http_handler_parameters(
+    context: &mut Context,
+    cwd: &Path,
+    project: &Path,
+    handler: &str,
+) -> Result<Vec<HttpRouteParameterObservation>, DevError> {
+    let output = records(
+        &context
+            .success(
+                &format!("inspect-http-handler-{handler}"),
+                &[
+                    "--project",
+                    path_text(project)?,
+                    "inspect",
+                    "owner",
+                    "task_function",
+                    handler,
+                    "--detail",
+                    "definition",
+                    "--limit",
+                    "64",
+                    "--bytes",
+                    "65536",
+                ],
+                cwd,
+            )?
+            .bytes,
+    )?;
+    require_record_field(&output, "result", "status", "success")?;
+    require_record_field(&output, "page", "start", "0")?;
+    let function = required_record(&output, "definition.function")?;
+    if required_field(function, "id")? != handler
+        || required_field(function, "kind")? != "task_function"
+    {
+        return Err(DevError::corrupt(
+            "HTTP handler definition projection selected another function",
+        ));
+    }
+    let expected = parse_u64(
+        required_field(function, "parameters")?,
+        "HTTP handler parameter count",
+    )?;
+    let mut parameters = output
+        .iter()
+        .filter(|record| record.operation == "definition.parameter")
+        .map(|record| {
+            if required_field(record, "parent")? != handler {
+                return Err(DevError::corrupt(
+                    "HTTP handler definition exposed a foreign parameter",
+                ));
+            }
+            Ok(HttpRouteParameterObservation {
+                id: required_field(record, "id")?.to_owned(),
+                index: parse_u64(
+                    required_field(record, "index")?,
+                    "HTTP handler parameter index",
+                )?,
+                name: required_field(record, "name")?.to_owned(),
+                ty: required_field(record, "type")?.to_owned(),
+                use_mode: required_field(record, "use")?.to_owned(),
+                requirement: required_field(record, "requirement")?.to_owned(),
+            })
+        })
+        .collect::<Result<Vec<_>, DevError>>()?;
+    parameters.sort_by_key(|parameter| parameter.index);
+    if parameters.len() as u64 != expected
+        || parameters.iter().enumerate().any(|(index, parameter)| {
+            parameter.index != index as u64
+                || parameter.use_mode != "unrestricted"
+                || parameter.requirement != "none"
+        })
+    {
+        return Err(DevError::corrupt(
+            "HTTP handler parameters are missing, reordered, resource-bound, or non-unrestricted",
+        ));
+    }
+    Ok(parameters)
 }
 
 fn discover_project_owner(
@@ -1947,7 +2572,7 @@ impl ActiveRunner {
         }
     }
 
-    fn stop(&mut self) -> Result<(), DevError> {
+    fn stop(&mut self) -> Result<u64, DevError> {
         self.control.interrupt();
         let observation = match self.receiver.recv_timeout(STOP_TIMEOUT) {
             Ok(observation) => observation,
@@ -1968,20 +2593,39 @@ impl ActiveRunner {
             )));
         }
         let stdout = process::read_bounded(&self.stdout_path, MAXIMUM_OUTPUT_BYTES)?;
-        if !stdout.split(|byte| *byte == b'\n').any(|line| {
-            serde_json::from_slice::<Value>(line)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("event")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                })
-                .as_deref()
-                == Some("stopped")
-        }) {
+        let stopped = stdout
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .find_map(|line| {
+                serde_json::from_slice::<Value>(line)
+                    .ok()
+                    .filter(|value| value.get("event").and_then(Value::as_str) == Some("stopped"))
+            })
+            .ok_or_else(|| {
+                DevError::corrupt(format!(
+                    "stateful runner '{}' omitted its stopped receipt",
+                    self.name
+                ))
+            })?;
+        let receipt = stopped
+            .get("receipt")
+            .ok_or_else(|| DevError::corrupt("stateful stopped event omitted its receipt"))?;
+        let matcher_nodes = receipt
+            .get("matcher_nodes")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| DevError::corrupt("stateful stopped receipt omitted matcher nodes"))?;
+        let shutdown = receipt
+            .get("shutdown")
+            .ok_or_else(|| DevError::corrupt("stateful stopped receipt omitted shutdown"))?;
+        if shutdown.get("admission_stopped").and_then(Value::as_bool) != Some(true)
+            || shutdown.get("remaining_tasks").and_then(Value::as_u64) != Some(0)
+            || shutdown
+                .get("cleanup_failures")
+                .and_then(Value::as_array)
+                .is_none_or(|failures| !failures.is_empty())
+        {
             return Err(DevError::corrupt(format!(
-                "stateful runner '{}' omitted its stopped receipt",
+                "stateful runner '{}' retained admission, tasks, or cleanup failures",
                 self.name
             )));
         }
@@ -1992,7 +2636,7 @@ impl ActiveRunner {
                 self.name
             )));
         }
-        Ok(())
+        Ok(matcher_nodes)
     }
 
     fn kill(&mut self) -> Result<(), DevError> {
@@ -2034,6 +2678,31 @@ fn exercise_before_restart(
             "BBS root did not return graph-owned HTML",
         ));
     }
+    let featured = request(
+        observations,
+        address,
+        "exact-over-pattern",
+        "DELETE",
+        "/api/posts/featured?query=does-not-select",
+        b"",
+        &[],
+    )?;
+    require_http(&featured, 200, Some("text/plain; charset=utf-8"))?;
+    if featured.body != b"featured-exact" {
+        return Err(DevError::corrupt(
+            "exact HTTP route did not win over its two-capture pattern",
+        ));
+    }
+    let ordered_captures = request(
+        observations,
+        address,
+        "ordered-two-captures",
+        "DELETE",
+        "/api/not-posts/00000000-0000-4000-8000-000000000000",
+        b"",
+        &[],
+    )?;
+    require_http(&ordered_captures, 404, Some("application/json"))?;
     let list = request(
         observations,
         address,
@@ -2128,7 +2797,7 @@ fn exercise_before_restart(
             address,
             &format!("delete-{name}"),
             "DELETE",
-            &format!("/api/posts?id={identity}"),
+            &format!("/api/posts/{identity}"),
             b"",
             &[],
         )?;
@@ -2170,31 +2839,32 @@ fn exercise_before_restart(
     )?;
     require_json_array_len(&list.body, 1)?;
 
-    for (name, path) in [
-        ("update-missing-id", "/api/posts".to_owned()),
-        ("update-malformed-id", "/api/posts?id=bad".to_owned()),
-        (
-            "update-duplicate-id",
-            format!("/api/posts?id={identity}&id={identity}"),
-        ),
-    ] {
-        let response = request(
-            observations,
-            address,
-            name,
-            "PUT",
-            &path,
-            b"{\"author\":\"agent\",\"body\":\"updated\"}",
-            &[("Content-Type", "application/json")],
-        )?;
-        require_http(&response, 400, Some("application/json"))?;
-    }
+    let missing_capture = request(
+        observations,
+        address,
+        "update-missing-capture",
+        "PUT",
+        "/api/posts",
+        b"{\"author\":\"agent\",\"body\":\"updated\"}",
+        &[("Content-Type", "application/json")],
+    )?;
+    require_http(&missing_capture, 404, None)?;
+    let malformed_capture = request(
+        observations,
+        address,
+        "update-malformed-capture",
+        "PUT",
+        "/api/posts/bad",
+        b"{\"author\":\"agent\",\"body\":\"updated\"}",
+        &[("Content-Type", "application/json")],
+    )?;
+    require_http(&malformed_capture, 400, Some("application/json"))?;
     let absent = request(
         observations,
         address,
         "update-absent",
         "PUT",
-        "/api/posts?id=00000000-0000-4000-8000-000000000000",
+        "/api/posts/00000000-0000-4000-8000-000000000000",
         b"{\"author\":\"agent\",\"body\":\"updated\"}",
         &[("Content-Type", "application/json")],
     )?;
@@ -2204,7 +2874,7 @@ fn exercise_before_restart(
         address,
         "update",
         "PUT",
-        &format!("/api/posts?id={identity}"),
+        &format!("/api/posts/{identity}?id=ignored&id=also-ignored"),
         b"{\"author\":\"agent-two\",\"body\":\"updated\"}",
         &[("Content-Type", "application/json")],
     )?;
@@ -2289,7 +2959,7 @@ fn exercise_after_restart(
         address,
         "delete",
         "DELETE",
-        &format!("/api/posts?id={identity}"),
+        &format!("/api/posts/{identity}"),
         b"",
         &[],
     )?;
@@ -2302,7 +2972,7 @@ fn exercise_after_restart(
         address,
         "delete-absent",
         "DELETE",
-        &format!("/api/posts?id={identity}"),
+        &format!("/api/posts/{identity}"),
         b"",
         &[],
     )?;
@@ -2554,6 +3224,12 @@ fn required_field<'a>(record: &'a CompactRecord, name: &str) -> Result<&'a str, 
             record.operation
         ))
     })
+}
+
+fn parse_u64(value: &str, label: &str) -> Result<u64, DevError> {
+    value
+        .parse::<u64>()
+        .map_err(|_| DevError::corrupt(format!("{label} is not an unsigned integer")))
 }
 
 fn require_record_field(
@@ -2910,7 +3586,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode stateful schema"),
-            r#"{"identity":"lkjscript-stateful-http-acceptance","version":5}"#
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":6}"#
         );
         assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
     }

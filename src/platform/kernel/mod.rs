@@ -1,4 +1,4 @@
-//! Current Graph 9 semantic kernel behind the typed process boundary.
+//! Current Graph 10 semantic kernel behind the typed process boundary.
 //!
 //! These normalized records and complete oracles own current program meaning. The module remains
 //! crate-private so Rust representation is not elevated into the public language contract.

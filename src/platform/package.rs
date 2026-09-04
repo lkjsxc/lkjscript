@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::BTreeSet;
 
-pub const PACKAGE_CONTRACT_VERSION: u16 = 2;
+pub const PACKAGE_CONTRACT_VERSION: u16 = 3;
 #[cfg(test)]
 pub const MAXIMUM_PACKAGE_BYTES: usize = 1_048_576;
 #[cfg(test)]
@@ -179,7 +179,7 @@ pub struct Target {
 #[serde(deny_unknown_fields)]
 pub struct HttpRoute {
     pub method: String,
-    pub path: String,
+    pub selector: crate::platform::kernel::HttpRouteSelector,
     pub port: String,
 }
 
@@ -274,7 +274,12 @@ pub fn semantic_dependency_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u
                 left.method
                     .as_bytes()
                     .cmp(right.method.as_bytes())
-                    .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+                    .then_with(|| {
+                        crate::platform::kernel::http_route_selector_cmp(
+                            &left.selector,
+                            &right.selector,
+                        )
+                    })
             });
             SemanticTarget {
                 name: &target.name,
@@ -429,7 +434,12 @@ fn validate_package(descriptor: &PackageDescriptor) -> Result<(), Diagnostic> {
 #[cfg(test)]
 fn validate_package_http_routes(target: &Target) -> Result<(), Diagnostic> {
     use crate::platform::kernel::contract::{
-        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+        MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+        MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    };
+    use crate::platform::kernel::{
+        HttpRouteSelector, http_route_pattern_strictly_more_specific, http_route_patterns_overlap,
+        http_route_same_pattern_language, validate_http_route_method,
     };
 
     if target.routes.is_empty() || target.routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET {
@@ -440,14 +450,15 @@ fn validate_package_http_routes(target: &Target) -> Result<(), Diagnostic> {
             ),
         ));
     }
-    let mut keys = BTreeSet::new();
     let mut bytes = 0usize;
+    let mut pattern_segments = 0usize;
     for route in &target.routes {
-        crate::platform::kernel::validate_http_route_key(&route.method, &route.path)?;
+        validate_http_route_method(&route.method)?;
+        route.selector.validate_local()?;
         validate_name(&route.port, "HTTP route port", false)?;
         bytes = bytes
             .checked_add(route.method.len())
-            .and_then(|value| value.checked_add(route.path.len()))
+            .and_then(|value| value.checked_add(route.selector.key_bytes()))
             .ok_or_else(|| {
                 package_error(
                     "package_http_route_bytes",
@@ -460,11 +471,75 @@ fn validate_package_http_routes(target: &Target) -> Result<(), Diagnostic> {
                 "HTTP package route keys exceed the aggregate byte limit",
             ));
         }
-        if !keys.insert((&route.method, &route.path)) {
-            return Err(package_error(
-                "package_http_route_duplicate",
-                "HTTP package target contains a duplicate exact method/path pair",
-            ));
+        if let HttpRouteSelector::Pattern { segments } = &route.selector {
+            pattern_segments = pattern_segments
+                .checked_add(segments.len())
+                .ok_or_else(|| {
+                    package_error(
+                        "package_http_route_pattern_segments",
+                        "HTTP package pattern-segment count overflowed",
+                    )
+                })?;
+            if pattern_segments > MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET {
+                return Err(package_error(
+                    "package_http_route_pattern_segments",
+                    "HTTP package target exceeds the pattern-segment bound",
+                ));
+            }
+        }
+    }
+    for (index, left) in target.routes.iter().enumerate() {
+        for right in target.routes.iter().skip(index + 1) {
+            if left.port == right.port
+                && left.selector.capture_names() != right.selector.capture_names()
+            {
+                return Err(package_error(
+                    "package_http_route_shared_port_signature",
+                    "HTTP package routes sharing a port disagree on capture names",
+                ));
+            }
+            if left.method != right.method {
+                continue;
+            }
+            match (&left.selector, &right.selector) {
+                (
+                    HttpRouteSelector::Exact { path: left },
+                    HttpRouteSelector::Exact { path: right },
+                ) if left == right => {
+                    return Err(package_error(
+                        "package_http_route_duplicate_language",
+                        "HTTP package exact routes repeat one match language",
+                    ));
+                }
+                (
+                    HttpRouteSelector::Pattern {
+                        segments: left_segments,
+                    },
+                    HttpRouteSelector::Pattern {
+                        segments: right_segments,
+                    },
+                ) if http_route_patterns_overlap(left_segments, right_segments)
+                    && !http_route_pattern_strictly_more_specific(
+                        left_segments,
+                        right_segments,
+                    )
+                    && !http_route_pattern_strictly_more_specific(
+                        right_segments,
+                        left_segments,
+                    ) =>
+                {
+                    let code = if http_route_same_pattern_language(left_segments, right_segments) {
+                        "package_http_route_duplicate_language"
+                    } else {
+                        "package_http_route_incomparable_overlap"
+                    };
+                    return Err(package_error(
+                        code,
+                        "HTTP package patterns overlap without strict specificity",
+                    ));
+                }
+                _ => {}
+            }
         }
     }
     Ok(())
@@ -606,7 +681,7 @@ mod tests {
     use super::*;
 
     const PACKAGE: &[u8] = br#"{
-  "contract_version": 2,
+  "contract_version": 3,
   "package_id": "1234567890abcdef1234567890abcdef",
   "name": "resource-service",
   "modules": [
@@ -620,7 +695,7 @@ mod tests {
     "artifact_digest": "2222222222222222222222222222222222222222222222222222222222222222",
     "artifact": "dependencies/standard.lkpackage"
   }],
-  "targets": [{"name": "serve", "component": "service.http.Web", "routes": [{"method": "GET", "path": "/", "port": "service"}], "runner": "http"}]
+  "targets": [{"name": "serve", "component": "service.http.Web", "routes": [{"method": "GET", "selector": {"kind": "exact", "path": "/"}, "port": "service"}], "runner": "http"}]
 }"#;
 
     #[test]
@@ -666,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    fn package_http_routes_are_finite_exact_and_have_no_predecessor_port() {
+    fn package_http_routes_are_finite_typed_and_have_no_predecessor_port() {
         let fixture =
             || serde_json::from_slice::<serde_json::Value>(PACKAGE).expect("fixture json");
 
@@ -686,11 +761,11 @@ mod tests {
             decode_package(&serde_json::to_vec(&duplicate).unwrap())
                 .expect_err("duplicate exact HTTP routes")
                 .code,
-            "package_http_route_duplicate"
+            "package_http_route_duplicate_language"
         );
 
         let mut malformed = fixture();
-        malformed["targets"][0]["routes"][0]["path"] = serde_json::json!("relative");
+        malformed["targets"][0]["routes"][0]["selector"]["path"] = serde_json::json!("relative");
         assert_eq!(
             decode_package(&serde_json::to_vec(&malformed).unwrap())
                 .expect_err("malformed exact HTTP route")

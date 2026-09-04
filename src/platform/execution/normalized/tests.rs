@@ -36,11 +36,12 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, ExpressionRecord, ExternalVisibility, FieldSelector, FunctionDeclaration,
-    FunctionEffect, HttpRouteRecord, Idempotency, LocalValueReference, Name, OperationRecord,
-    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterParent, ParameterRecord,
-    PortImplementation, PortRecord, PortReference, RecordExpressionField, ResourceLimit,
-    ResourceUnit, StructuralTypeField, TargetRecord, TypeForm, TypeObject, TypeObjectDigest,
+    ExpressionOperation, ExpressionRecord, ExternalDeclaration, ExternalVisibility, FieldSelector,
+    FunctionDeclaration, FunctionEffect, HttpRouteRecord, HttpRouteSelector, Idempotency,
+    ImplementationName, LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey,
+    OwnerKind, OwnerRecord, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
+    PortReference, RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField,
+    TargetRecord, TypeForm, TypeObject, TypeObjectDigest, decode_owner, encode_owner,
     encode_type_object,
 };
 use crate::platform::package::RunnerKind;
@@ -53,6 +54,7 @@ use crate::platform::semantic_id::HttpRouteId;
 use crate::platform::semantic_id::{
     DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
 };
+use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 use crate::platform::stream::{StreamLimits, StreamRegistry};
 use crate::platform::{HttpHeader, HttpLimits, HttpRequest, ResidentLimits, WorkerLimits};
 use axum::body::{Body, to_bytes};
@@ -93,15 +95,15 @@ fn prepare_repository(
 ) -> (tempfile::TempDir, GraphRepository, NormalizedProgram) {
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
     )
     .expect("normalized compilation");
     let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("Graph 9 artifact");
-    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 9 artifact");
+        .expect("Graph 10 artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 10 artifact");
     let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
     (temporary, created.repository, program)
 }
@@ -1143,13 +1145,303 @@ pub(crate) fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnaps
                         header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute,),
                         target,
                         method: method.to_owned(),
-                        path: path.to_owned(),
+                        selector: crate::platform::kernel::HttpRouteSelector::exact(path).unwrap(),
                         port,
                     }),
                 )
                 .is_none()
         );
     }
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    snapshot
+}
+
+fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    const SEED: &[u8] = b"normalized-http-pattern-runner";
+
+    let mut snapshot = normalized_http_snapshot();
+    let package = snapshot.root.package_id;
+    let caller = declaration_named(&snapshot, "caller").declaration;
+    let text_type = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::Text).then_some(*digest))
+        .expect("HTTP fixture Text type");
+    let bytes_type = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::Bytes).then_some(*digest))
+        .expect("HTTP fixture Bytes type");
+    let (module, request_parameter, request_type, response_type, body_expression) = match snapshot
+        .owners
+        .get(&OwnerKey::Declaration(caller))
+        .expect("HTTP pattern handler declaration")
+    {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            DeclarationPayload::Function(function) => {
+                let request = function.parameters[0];
+                let request_type = match &snapshot.owners[&OwnerKey::Parameter(request)] {
+                    OwnerRecord::Parameter(parameter) => parameter.ty,
+                    _ => panic!("HTTP pattern request parameter owner kind"),
+                };
+                (
+                    record.module,
+                    request,
+                    request_type,
+                    function.result,
+                    function.body,
+                )
+            }
+            _ => panic!("HTTP pattern handler declaration kind"),
+        },
+        _ => panic!("HTTP pattern handler owner kind"),
+    };
+
+    let left_parameter = ParameterId::migrate(SEED, 0);
+    let right_parameter = ParameterId::migrate(SEED, 1);
+    let concat = DeclarationId::migrate(SEED, 0);
+    let concat_left = ParameterId::migrate(SEED, 2);
+    let concat_right = ParameterId::migrate(SEED, 3);
+    let from_text = DeclarationId::migrate(SEED, 1);
+    let from_text_value = ParameterId::migrate(SEED, 4);
+    for (parameter, parent, name, ty) in [
+        (left_parameter, caller, "left", text_type),
+        (right_parameter, caller, "right", text_type),
+        (concat_left, concat, "left", text_type),
+        (concat_right, concat, "right", text_type),
+        (from_text_value, from_text, "value", text_type),
+    ] {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Parameter(parameter),
+                    OwnerRecord::Parameter(ParameterRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Parameter(parameter),
+                            OwnerKind::Parameter,
+                        ),
+                        parent: ParameterParent::Function(parent),
+                        name: Name::new(name).unwrap(),
+                        ty,
+                        use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                        resource_requirement: None,
+                    }),
+                )
+                .is_none()
+        );
+    }
+    for (declaration, name, parameters, result, implementation) in [
+        (
+            concat,
+            "capture_concat",
+            vec![concat_left, concat_right],
+            text_type,
+            "core.text.concat",
+        ),
+        (
+            from_text,
+            "capture_bytes",
+            vec![from_text_value],
+            bytes_type,
+            "core.bytes.from-text",
+        ),
+    ] {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Declaration(declaration),
+                    OwnerRecord::Declaration(DeclarationRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Declaration(declaration),
+                            OwnerKind::External,
+                        ),
+                        module,
+                        name: Name::new(name).unwrap(),
+                        visibility: DeclarationVisibility::Private,
+                        payload: DeclarationPayload::External(ExternalDeclaration {
+                            type_parameters: Vec::new(),
+                            parameters,
+                            result,
+                            implementation: ImplementationName::new(implementation).unwrap(),
+                        }),
+                    }),
+                )
+                .is_none()
+        );
+    }
+
+    let left_value = ExpressionId::migrate(SEED, 0);
+    let right_value = ExpressionId::migrate(SEED, 1);
+    let concatenated = ExpressionId::migrate(SEED, 2);
+    let captured_body = ExpressionId::migrate(SEED, 3);
+    let consume_then_respond = ExpressionId::migrate(SEED, 4);
+    for (expression, operation) in [
+        (
+            left_value,
+            ExpressionOperation::Local {
+                value: LocalValueReference::FunctionParameter(left_parameter),
+            },
+        ),
+        (
+            right_value,
+            ExpressionOperation::Local {
+                value: LocalValueReference::FunctionParameter(right_parameter),
+            },
+        ),
+        (
+            concatenated,
+            ExpressionOperation::Call {
+                function: DeclarationReference {
+                    package,
+                    declaration: concat,
+                },
+                type_arguments: Vec::new(),
+                arguments: vec![left_value, right_value],
+            },
+        ),
+        (
+            captured_body,
+            ExpressionOperation::Call {
+                function: DeclarationReference {
+                    package,
+                    declaration: from_text,
+                },
+                type_arguments: Vec::new(),
+                arguments: vec![concatenated],
+            },
+        ),
+    ] {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Expression(expression),
+                    OwnerRecord::Expression(
+                        ExpressionRecord::new(expression, operation)
+                            .expect("HTTP pattern capture expression"),
+                    ),
+                )
+                .is_none()
+        );
+    }
+    let consumed_body = match &snapshot.owners[&OwnerKey::Expression(body_expression)] {
+        OwnerRecord::Expression(ExpressionRecord {
+            operation: ExpressionOperation::Record { fields, .. },
+            ..
+        }) => fields
+            .iter()
+            .find(|field| {
+                matches!(
+                    &field.selector,
+                    FieldSelector::Structural(name) if name.as_str() == "body"
+                )
+            })
+            .map(|field| field.value)
+            .expect("HTTP response body expression"),
+        _ => panic!("HTTP response root expression"),
+    };
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(consume_then_respond),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        consume_then_respond,
+                        ExpressionOperation::Sequence {
+                            items: vec![consumed_body, captured_body],
+                        },
+                    )
+                    .expect("HTTP pattern consume-and-respond expression"),
+                ),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Expression(ExpressionRecord {
+        operation: ExpressionOperation::Record { fields, .. },
+        ..
+    }) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(body_expression))
+        .expect("HTTP response root expression")
+    else {
+        panic!("HTTP response root owner kind")
+    };
+    fields
+        .iter_mut()
+        .find(|field| {
+            matches!(
+                &field.selector,
+                FieldSelector::Structural(name) if name.as_str() == "body"
+            )
+        })
+        .expect("HTTP response body field")
+        .value = consume_then_respond;
+
+    let OwnerRecord::Declaration(DeclarationRecord {
+        payload: DeclarationPayload::Function(function),
+        ..
+    }) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(caller))
+        .expect("HTTP pattern handler declaration")
+    else {
+        panic!("HTTP pattern handler declaration kind")
+    };
+    assert_eq!(function.parameters, vec![request_parameter]);
+    function
+        .parameters
+        .extend([left_parameter, right_parameter]);
+    let port_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: vec![request_type, text_type, text_type],
+            result: response_type,
+        },
+    );
+    snapshot.types.retain(|digest, object| {
+        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+    });
+    for record in snapshot.owners.values_mut() {
+        if let OwnerRecord::Port(port) = record {
+            port.function_type = port_type;
+        }
+    }
+
+    let route = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match (owner, record) {
+            (OwnerKey::HttpRoute(route), OwnerRecord::HttpRoute(record)) => {
+                Some((*route, record.target, record.port))
+            }
+            _ => None,
+        })
+        .expect("HTTP fixture route");
+    snapshot
+        .owners
+        .retain(|owner, _| !matches!(owner, OwnerKey::HttpRoute(_)));
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::HttpRoute(route.0),
+                OwnerRecord::HttpRoute(HttpRouteRecord {
+                    header: OwnerHeader::new(OwnerKey::HttpRoute(route.0), OwnerKind::HttpRoute,),
+                    target: route.1,
+                    method: "POST".to_owned(),
+                    selector: HttpRouteSelector::parse_pattern("/pair/{left}/{right}").unwrap(),
+                    port: route.2,
+                }),
+            )
+            .is_none()
+    );
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
@@ -2280,6 +2572,211 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
     assert!(server.shutdown.admission_stopped);
     assert!(server.shutdown.drained_before_cancellation);
     assert_eq!(server.shutdown.remaining_tasks, 0);
+}
+
+#[test]
+fn normalized_preparation_rejects_http_handler_requirement_closure_drift() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("applications/lkjournal/generated/lkjournal.lkja");
+    let bytes = std::fs::read(path).expect("maintained HTTP route artifact");
+    let mut loaded = load_artifact(&bytes).expect("load maintained HTTP route artifact");
+    let mut records = BTreeMap::new();
+    for package in &loaded.manifest.packages {
+        for binding in &package.runtime_owners {
+            let key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+            let bytes = loaded.objects.get(&key).expect("runtime owner bytes");
+            let record = decode_owner(bytes, binding.owner, binding.kind, binding.object)
+                .expect("runtime owner record");
+            assert!(
+                records
+                    .insert((package.package, binding.owner), record)
+                    .is_none()
+            );
+        }
+    }
+    let target_components = records
+        .values()
+        .filter_map(|record| match record {
+            OwnerRecord::Target(target) => {
+                Some((target.component.package, target.component.declaration))
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let task_requirements = records
+        .iter()
+        .filter_map(|((package, owner), record)| match (owner, record) {
+            (OwnerKey::Requirement(_), OwnerRecord::Requirement(requirement))
+                if !target_components.contains(&(*package, requirement.declaration)) =>
+            {
+                Some((*package, *owner))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(!task_requirements.is_empty());
+    for (package_id, owner) in task_requirements {
+        let package = loaded
+            .manifest
+            .packages
+            .iter_mut()
+            .find(|package| package.package == package_id)
+            .expect("task requirement package");
+        let binding = package
+            .runtime_owners
+            .iter_mut()
+            .find(|binding| binding.owner == owner && binding.kind == OwnerKind::Requirement)
+            .expect("task requirement runtime binding");
+        let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+        let old_bytes = loaded
+            .objects
+            .remove(&old_key)
+            .expect("task requirement bytes");
+        let mut record = decode_owner(&old_bytes, binding.owner, binding.kind, binding.object)
+            .expect("task requirement record");
+        let OwnerRecord::Requirement(requirement) = &mut record else {
+            panic!("task requirement owner kind")
+        };
+        requirement.name = Name::new("incompatible-route-capability").unwrap();
+        let (digest, bytes) = encode_owner(&record).expect("encode incompatible task requirement");
+        binding.object = digest;
+        assert!(
+            loaded
+                .objects
+                .insert(
+                    ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+                    bytes,
+                )
+                .is_none()
+        );
+    }
+    assert_eq!(
+        NormalizedProgram::prepare(loaded)
+            .expect_err("preparation must reconstruct HTTP handler capability closure")
+            .code,
+        "normalized_http_route_requirement_closure"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn normalized_http_patterns_bind_raw_captures_to_vm_parameters() {
+    let snapshot = normalized_http_pattern_snapshot();
+    let (_temporary, _repository, program) = prepare_repository(&snapshot);
+    let program = Arc::new(program);
+    let target_name = Name::new("serve").unwrap();
+    let target = program
+        .root_target(&target_name)
+        .expect("normalized pattern HTTP target");
+    let requirement_index = program.components[target.component.0 as usize].requirements[0];
+    let requirement = &program.requirements[requirement_index.0 as usize];
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name,
+        vec![NormalizedDeploymentGrant {
+            requirement: requirement.reference,
+            sharing_domain: NormalizedSharingDomain::new("http-pattern-test").unwrap(),
+            authority_revision: NormalizedGrantAuthorityRevision::of(
+                b"HTTP pattern stream revision one",
+            ),
+            limits: exact_grant_limits(requirement, 4),
+            adapter: NormalizedAdapterDescriptor::ByteStream,
+        }],
+        NormalizedDeploymentResourcePolicy {
+            streams: StreamLimits {
+                maximum_chunk_bytes: 4,
+                maximum_buffered_chunks: 2,
+                maximum_total_bytes: 64,
+                maximum_live_streams: 4,
+            },
+        },
+        &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
+    )
+    .expect("normalized pattern HTTP deployment");
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::clone(&program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::default(),
+    )
+    .expect("normalized pattern HTTP resident");
+    let application = NormalizedHttpApplication::new(
+        resident,
+        HttpLimits {
+            maximum_request_body_bytes: 64,
+            maximum_response_body_bytes: 64,
+            ..HttpLimits::default()
+        },
+    )
+    .expect("normalized pattern HTTP application");
+
+    let (response, observation) = application
+        .dispatch(HttpRequest {
+            method: "POST".to_owned(),
+            path: "/pair/left/right".to_owned(),
+            query: "ignored=yes".to_owned(),
+            headers: Vec::new(),
+            body: b"drained-body".to_vec(),
+        })
+        .await
+        .expect("in-memory pattern dispatch");
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, b"leftright");
+    assert_eq!(observation.captures, 2);
+    assert_eq!(observation.capture_bytes, 9);
+    assert!((1..=6).contains(&observation.matcher_steps));
+    assert_eq!(observation.task_id, Some(1));
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    let live = application
+        .clone()
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/pair/one%2Ftwo/three?left=foreign")
+                .body(Body::from("raw-body"))
+                .expect("raw-spelling pattern request"),
+        )
+        .await
+        .expect("raw-spelling pattern response");
+    assert_eq!(live.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        to_bytes(live.into_body(), 64)
+            .await
+            .expect("bounded raw-spelling response body"),
+        "one%2Ftwothree"
+    );
+    assert_eq!(application.resident().observe().admitted, 2);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    for path in ["/pair//right", "/pair/left", "/pair/left/right/"] {
+        let response = application
+            .clone()
+            .router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .body(Body::from("unmatched-body"))
+                    .expect("unmatched pattern request"),
+            )
+            .await
+            .expect("unmatched pattern response");
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::NOT_FOUND,
+            "{path}"
+        );
+        assert_eq!(
+            to_bytes(response.into_body(), 64)
+                .await
+                .expect("bounded unmatched pattern body"),
+            "",
+            "{path}"
+        );
+    }
+    assert_eq!(application.resident().observe().admitted, 2);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
 }
 
 #[test]

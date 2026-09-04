@@ -49,15 +49,18 @@ faultable bounded pipes are the test oracles.
 
 The HTTP adapter accepts a validated method, path, raw query, deterministically decoded map
 of query names to ordered values, validated bounded headers, and a `Stream Bytes` body. After
-transport validation it selects one graph-owned exact method/path route and invokes that route's
-component port. The component returns signed status, validated headers, and bounded whole bytes.
+transport validation it selects the unique most-specific graph-owned exact or whole-segment
+pattern route and invokes that route's component port once. Pattern captures preserve the validated
+raw segment spelling and become the handler's ordered `Text` arguments after the request; query
+values never select a route. The component returns signed status, validated headers, and bounded whole bytes.
 Current global maxima are 64 MiB body, 256 KiB headers, and 1,024 headers; deployment chooses
 request/response limits.
 
 Axum/Hyper own socket acceptance, HTTP/1 parsing, connection lifecycle, transport backpressure, and
 disconnect. The adapter owns percent/query decoding, header validation/canonicalization,
-transport-owned header rejection, exact prepared-table lookup, request-body streaming into a
-bounded pipe, response validation, and safe protocol error mapping. Graph route owners select
+transport-owned header rejection, exact-index plus literal-before-capture trie lookup,
+request-body streaming into a bounded pipe, response validation, and safe protocol error mapping.
+The prepared matcher bounds ordinary work by visited nodes rather than scanning the route set. Graph route owners select
 handlers; application functions own authentication, authorization, request decoding, status
 selection, and content.
 

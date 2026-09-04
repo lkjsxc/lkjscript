@@ -1,4 +1,4 @@
-//! Structured worker topology for exact Graph 9 resident deployments.
+//! Structured worker topology for exact Graph 10 resident deployments.
 
 use super::resident::NormalizedResidentDeployment;
 use super::value::NormalizedValue;

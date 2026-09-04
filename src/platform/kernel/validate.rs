@@ -1,24 +1,25 @@
-//! Implementation-disjoint full validator for normalized Graph 9 authority.
+//! Implementation-disjoint full validator for normalized Graph 10 authority.
 
 use super::affine::validate_affine_meaning;
 use super::contract::{
-    MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
-    MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK,
+    MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH,
+    MAXIMUM_VALIDATION_WORK,
 };
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference, TextValue};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
 use super::owner::{
     BindingKind, DeclarationPayload, DeclarationVisibility, FunctionEffect, OwnerRecord,
-    ParameterParent, ParameterUse, PortImplementation,
+    ParameterParent, ParameterRecord, ParameterUse, PortImplementation, PortRecord,
 };
 use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
 use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
 use super::{
-    BlobObjectDigest, PackageInterfaceRecord, PackageRevisionDigest, TypeObjectDigest,
-    encode_type_object,
+    BlobObjectDigest, DeclarationReference, HttpRouteRecord, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, PackageRevisionDigest, RequirementRecord, RequirementReference,
+    TypeObjectDigest, TypeObjectInterner, encode_type_object, requirement_is_covered_by,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, ExpressionId, TargetId};
@@ -581,34 +582,16 @@ impl FullValidator<'_> {
                         ),
                     );
                 }
-                let mut key_bytes = 0_usize;
-                let mut keys = BTreeMap::<(&str, &str), OwnerKey>::new();
-                for (route_owner, route) in owned {
+                let route_set = owned
+                    .iter()
+                    .map(|(_, route)| (*route).clone())
+                    .collect::<Vec<_>>();
+                if let Err(diagnostic) = super::analyze_http_route_set(&route_set) {
+                    self.diagnostics.push(diagnostic);
+                }
+                for (_route_owner, route) in owned {
                     if !self.consume_work() {
                         return;
-                    }
-                    key_bytes = match key_bytes
-                        .checked_add(route.method.len())
-                        .and_then(|value| value.checked_add(route.path.len()))
-                    {
-                        Some(value) => value,
-                        None => {
-                            self.error(
-                                "kernel_http_target_route_bytes",
-                                "HTTP target route-key byte count overflowed",
-                            );
-                            MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET.saturating_add(1)
-                        }
-                    };
-                    if let Some(previous) =
-                        keys.insert((route.method.as_str(), route.path.as_str()), *route_owner)
-                    {
-                        self.error(
-                            "kernel_http_route_duplicate",
-                            format!(
-                                "HTTP routes {previous} and {route_owner} repeat one exact method/path pair"
-                            ),
-                        );
                     }
                     if route.port.package != self.snapshot.root.package_id {
                         self.error(
@@ -625,11 +608,14 @@ impl FullValidator<'_> {
                                     "HTTP route port does not belong to its target component",
                                 );
                             }
-                            if !matches!(port.implementation, PortImplementation::Function(_)) {
-                                self.error(
+                            match port.implementation {
+                                PortImplementation::Function(_) => {
+                                    self.validate_http_route_signature(route, port);
+                                }
+                                PortImplementation::Expression(_) => self.error(
                                     "kernel_http_route_port_implementation",
                                     "HTTP route port must be function-backed",
-                                );
+                                ),
                             }
                         }
                         Some(_) => self.error(
@@ -641,14 +627,6 @@ impl FullValidator<'_> {
                             "HTTP route references a missing port",
                         ),
                     }
-                }
-                if key_bytes > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
-                    self.error(
-                        "kernel_http_target_route_bytes",
-                        format!(
-                            "HTTP target route keys exceed {MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET} bytes"
-                        ),
-                    );
                 }
             } else {
                 if target.port.is_none() {
@@ -665,6 +643,324 @@ impl FullValidator<'_> {
                 }
             }
         }
+    }
+
+    fn validate_http_route_signature(&mut self, route: &HttpRouteRecord, port: &PortRecord) {
+        let mut types = TypeObjectInterner::default();
+        let expected_type = match crate::platform::http::semantic_http_route_function_type(
+            &mut types,
+            route.selector.capture_count(),
+        ) {
+            Ok(expected) => expected,
+            Err(diagnostic) => {
+                self.diagnostics.push(diagnostic);
+                return;
+            }
+        };
+        if port.function_type != expected_type {
+            self.error(
+                "kernel_type_http_route_port",
+                "HTTP route port type disagrees with its selector-indexed function contract",
+            );
+        }
+        let PortImplementation::Function(function) = port.implementation else {
+            return;
+        };
+        let Some((type_parameters, parameter_ids, result, requirements)) =
+            self.http_route_function_contract(function)
+        else {
+            return;
+        };
+        let mut parameters = Vec::with_capacity(parameter_ids.len());
+        for parameter in parameter_ids {
+            if !self.consume_work() {
+                return;
+            }
+            if let Some(parameter) = self.http_route_parameter(function, parameter) {
+                parameters.push(parameter);
+            }
+        }
+        let http = match crate::platform::http::semantic_http_types(&mut types) {
+            Ok(http) => http,
+            Err(diagnostic) => {
+                self.diagnostics.push(diagnostic);
+                return;
+            }
+        };
+        let captures = route.selector.capture_names();
+        if type_parameters != 0
+            || parameters.len() != captures.len().saturating_add(1)
+            || parameters
+                .first()
+                .is_none_or(|parameter| parameter.ty != http.request_type)
+            || result != http.response_type
+        {
+            self.error(
+                "kernel_type_http_route_parameters",
+                "HTTP route function must have exactly request then selector-indexed capture parameters and the HTTP response result",
+            );
+            return;
+        }
+        for (parameter, capture) in parameters.iter().skip(1).zip(captures) {
+            if parameter.name.as_str() != capture.as_str()
+                || parameter.ty != http.text_type
+                || parameter.use_mode != ParameterUse::Unrestricted
+                || parameter.resource_requirement.is_some()
+            {
+                self.error(
+                    "kernel_type_http_route_capture_parameter",
+                    "HTTP route capture must index one same-named unrestricted Text parameter without a resource binding",
+                );
+            }
+        }
+        self.validate_http_route_requirement_closure(route, &requirements);
+    }
+
+    fn http_route_function_contract(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Option<(
+        usize,
+        Vec<crate::platform::semantic_id::ParameterId>,
+        TypeObjectDigest,
+        Vec<RequirementReference>,
+    )> {
+        if function.package == self.snapshot.root.package_id {
+            return match self
+                .snapshot
+                .owners
+                .get(&OwnerKey::Declaration(function.declaration))
+            {
+                Some(OwnerRecord::Declaration(record)) => match &record.payload {
+                    DeclarationPayload::Function(signature) => Some((
+                        signature.type_parameters.len(),
+                        signature.parameters.clone(),
+                        signature.result,
+                        match &signature.effect {
+                            FunctionEffect::Pure => Vec::new(),
+                            FunctionEffect::Task { requirements } => requirements.clone(),
+                        },
+                    )),
+                    _ => {
+                        self.error(
+                            "kernel_type_http_route_function",
+                            "HTTP route port must resolve to a function declaration",
+                        );
+                        None
+                    }
+                },
+                _ => {
+                    self.error(
+                        "kernel_type_http_route_function",
+                        "HTTP route backing function is missing",
+                    );
+                    None
+                }
+            };
+        }
+        let Some(dependency) = self.snapshot.dependencies.get(&function.package) else {
+            self.error(
+                "kernel_type_http_route_function",
+                "HTTP route backing function package is not an exact dependency",
+            );
+            return None;
+        };
+        let Some(owners) = self
+            .snapshot
+            .dependency_interfaces
+            .get(&dependency.package_revision)
+        else {
+            self.error(
+                "kernel_type_http_route_function",
+                "HTTP route backing dependency interface is missing",
+            );
+            return None;
+        };
+        match owners.get(&OwnerKey::Declaration(function.declaration)) {
+            Some(PackageInterfaceRecord::Declaration(record)) => match &record.payload {
+                PackageInterfaceDeclarationPayload::Function(signature) => Some((
+                    signature.type_parameters.len(),
+                    signature.parameters.clone(),
+                    signature.result,
+                    match &signature.effect {
+                        FunctionEffect::Pure => Vec::new(),
+                        FunctionEffect::Task { requirements } => requirements.clone(),
+                    },
+                )),
+                _ => {
+                    self.error(
+                        "kernel_type_http_route_function",
+                        "HTTP route dependency owner is not a function declaration",
+                    );
+                    None
+                }
+            },
+            _ => {
+                self.error(
+                    "kernel_type_http_route_function",
+                    "HTTP route backing dependency function is missing",
+                );
+                None
+            }
+        }
+    }
+
+    fn validate_http_route_requirement_closure(
+        &mut self,
+        route: &HttpRouteRecord,
+        requirements: &[RequirementReference],
+    ) {
+        let component = match self.snapshot.owners.get(&OwnerKey::Target(route.target)) {
+            Some(OwnerRecord::Target(target)) => target.component,
+            _ => return,
+        };
+        if component.package != self.snapshot.root.package_id {
+            self.error(
+                "kernel_http_route_requirement_closure",
+                "HTTP route target component must belong to the root package",
+            );
+            return;
+        }
+        let component_requirements = match self
+            .snapshot
+            .owners
+            .get(&OwnerKey::Declaration(component.declaration))
+        {
+            Some(OwnerRecord::Declaration(record)) => match &record.payload {
+                DeclarationPayload::Component { requirements, .. } => requirements.clone(),
+                _ => return,
+            },
+            _ => return,
+        };
+        let component_requirements = component_requirements
+            .into_iter()
+            .filter_map(|requirement| {
+                let reference = RequirementReference {
+                    package: component.package,
+                    requirement,
+                };
+                self.http_route_requirement(reference)
+                    .map(|record| (reference, record))
+            })
+            .collect::<Vec<_>>();
+        for requirement in requirements {
+            if !self.consume_work() {
+                return;
+            }
+            let Some(candidate) = self.http_route_requirement(*requirement) else {
+                continue;
+            };
+            let matches = component_requirements
+                .iter()
+                .filter(|(reference, component)| {
+                    requirement_is_covered_by(
+                        requirement.package,
+                        &candidate,
+                        reference.package,
+                        component,
+                    )
+                })
+                .count();
+            if matches != 1 {
+                self.error(
+                    "kernel_http_route_requirement_closure",
+                    "each HTTP route handler requirement must have one unambiguous name-, interface-, operation-, and limit-compatible component capability slot",
+                );
+            }
+        }
+    }
+
+    fn http_route_requirement(
+        &mut self,
+        requirement: RequirementReference,
+    ) -> Option<RequirementRecord> {
+        if requirement.package == self.snapshot.root.package_id {
+            return match self
+                .snapshot
+                .owners
+                .get(&OwnerKey::Requirement(requirement.requirement))
+            {
+                Some(OwnerRecord::Requirement(record)) => Some(record.clone()),
+                _ => {
+                    self.error(
+                        "kernel_http_route_requirement_closure",
+                        "HTTP route requirement is missing from local authority",
+                    );
+                    None
+                }
+            };
+        }
+        let Some(dependency) = self.snapshot.dependencies.get(&requirement.package) else {
+            self.error(
+                "kernel_http_route_requirement_closure",
+                "HTTP route requirement belongs to an unbound package",
+            );
+            return None;
+        };
+        let Some(owners) = self
+            .snapshot
+            .dependency_interfaces
+            .get(&dependency.package_revision)
+        else {
+            self.error(
+                "kernel_http_route_requirement_closure",
+                "HTTP route requirement package interface is unavailable",
+            );
+            return None;
+        };
+        match owners.get(&OwnerKey::Requirement(requirement.requirement)) {
+            Some(PackageInterfaceRecord::Requirement(record)) => Some(record.clone()),
+            _ => {
+                self.error(
+                    "kernel_http_route_requirement_closure",
+                    "HTTP route requirement is missing from its exact package interface",
+                );
+                None
+            }
+        }
+    }
+
+    fn http_route_parameter(
+        &mut self,
+        function: DeclarationReference,
+        parameter: crate::platform::semantic_id::ParameterId,
+    ) -> Option<ParameterRecord> {
+        let record = if function.package == self.snapshot.root.package_id {
+            match self.snapshot.owners.get(&OwnerKey::Parameter(parameter)) {
+                Some(OwnerRecord::Parameter(record)) => record.clone(),
+                _ => {
+                    self.error(
+                        "kernel_type_http_route_parameter",
+                        "HTTP route backing function parameter is missing",
+                    );
+                    return None;
+                }
+            }
+        } else {
+            let dependency = self.snapshot.dependencies.get(&function.package)?;
+            let owners = self
+                .snapshot
+                .dependency_interfaces
+                .get(&dependency.package_revision)?;
+            match owners.get(&OwnerKey::Parameter(parameter)) {
+                Some(PackageInterfaceRecord::Parameter(record)) => record.clone(),
+                _ => {
+                    self.error(
+                        "kernel_type_http_route_parameter",
+                        "HTTP route dependency parameter is missing",
+                    );
+                    return None;
+                }
+            }
+        };
+        if record.parent != ParameterParent::Function(function.declaration) {
+            self.error(
+                "kernel_type_http_route_parameter_parent",
+                "HTTP route parameter belongs to another function",
+            );
+            return None;
+        }
+        Some(record)
     }
 
     fn validate_declaration_children(&mut self, owner: OwnerKey, payload: &DeclarationPayload) {

@@ -47,7 +47,7 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
         &logical,
         Some("repository fixture".to_owned()),
     )
-    .expect("Graph 9 repository creation");
+    .expect("Graph 10 repository creation");
 
     assert_eq!(created.repository.root(), destination.as_path());
     assert_eq!(created.current.head, created.initial.publication.head);

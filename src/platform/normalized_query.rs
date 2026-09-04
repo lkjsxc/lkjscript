@@ -25,8 +25,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
-pub const QUERY_CONTRACT_VERSION: u16 = 5;
-pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query-5";
+pub const QUERY_CONTRACT_VERSION: u16 = 6;
+pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query-6";
 pub const DEFAULT_QUERY_ITEMS: u64 = 50;
 pub const MAXIMUM_QUERY_ITEMS: u64 = 10_000;
 pub const DEFAULT_QUERY_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -36,13 +36,13 @@ pub const MAXIMUM_QUERY_CONTINUATION_BYTES: usize = 320;
 const MAXIMUM_QUERY_RESUME_KEY_BYTES: usize = 70;
 const MAXIMUM_QUERY_CONTINUATION_DECODED_BYTES: usize = 224;
 const QUERY_CONTINUATION_PREFIX: &str = "qcont_";
-pub(crate) const QUERY_CONTINUATION_MAGIC_TEXT: &str = "LKJQCT05";
-const QUERY_CONTINUATION_MAGIC: [u8; 8] = *b"LKJQCT05";
+pub(crate) const QUERY_CONTINUATION_MAGIC_TEXT: &str = "LKJQCT06";
+const QUERY_CONTINUATION_MAGIC: [u8; 8] = *b"LKJQCT06";
 const QUERY_CONTINUATION_VERSION: u16 = 1;
 const QUERY_CONTINUATION_ENVELOPE_VERSION: u16 = 1;
 pub(crate) const QUERY_CONTINUATION_INTEGRITY_DOMAIN: &str =
     "lkjscript.normalized-query.continuation-integrity.v1";
-pub(crate) const QUERY_SELECTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-query.selector.v5";
+pub(crate) const QUERY_SELECTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-query.selector.v6";
 const QUERY_ORDERING_CONTRACT: u8 = 1;
 const CONTINUATION_HEADER_BYTES: usize = 18;
 const CONTINUATION_CHECKSUM_BYTES: usize = 32;

@@ -3,8 +3,8 @@
 use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
-    AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, ImpactReason, ImpactReasonKind,
-    LogicalChangePlanEvidence,
+    AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, HttpRoutePlanEvidence,
+    ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
 };
 use crate::platform::contract::{
     MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
@@ -16,10 +16,11 @@ use crate::platform::contract::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, ExactOwnerKey,
-    FunctionEffect, IdentityKind, LocalValueReference, Name, OwnerKey, OwnerKind,
-    OwnerObjectDigest, PackageId, PackageRevisionDigest, ParameterUse, RelationEdge,
-    RelationEndpoint, RelationKind, RetirementObjectDigest, RetirementRecord, SemanticStateDigest,
-    TypeObjectDigest, encode_dependency, encode_retirement,
+    FunctionEffect, HttpRouteRecord, HttpRouteSelector, IdentityKind, LocalValueReference, Name,
+    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageRevisionDigest,
+    ParameterUse, RelationEdge, RelationEndpoint, RelationKind, RetirementObjectDigest,
+    RetirementRecord, SemanticStateDigest, TypeObjectDigest, encode_dependency, encode_owner,
+    encode_retirement,
 };
 use crate::platform::publication::{
     DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, PreparedAuthoredPublication,
@@ -27,17 +28,18 @@ use crate::platform::publication::{
     TransactionDigest,
 };
 use crate::platform::semantic_id::{
-    DeclarationId, ExpressionId, ParameterId, RepositoryId, RequirementId, RevisionId, encode_hex,
+    DeclarationId, ExpressionId, HttpRouteId, ParameterId, PortId, RepositoryId, RequirementId,
+    RevisionId, TargetId, encode_hex,
 };
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-3";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 3;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v3";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-4";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 4;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v4";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -228,6 +230,46 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
             "dimension-validation-dependencies"
         ]
     ),
+    plan_record!(
+        "logical-plan.http-route-before",
+        [
+            "route",
+            "changed",
+            "method",
+            "kind",
+            "selector",
+            "captures",
+            "target",
+            "port-package",
+            "port",
+            "signature"
+        ]
+    ),
+    plan_record!(
+        "logical-plan.http-route-after",
+        [
+            "route",
+            "changed",
+            "method",
+            "kind",
+            "selector",
+            "captures",
+            "target",
+            "port-package",
+            "port",
+            "handler-package",
+            "handler",
+            "parameters",
+            "signature",
+            "target-exact-routes",
+            "target-pattern-routes",
+            "target-pattern-segments",
+            "maximum-specificity-chain",
+            "overlaps",
+            "more-specific",
+            "less-specific"
+        ]
+    ),
     plan_record!("logical-plan.type-addition", ["object"]),
     plan_record!(
         "logical-plan.dependency",
@@ -303,6 +345,8 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
         [
             "allocations",
             "owners",
+            "http-route-befores",
+            "http-route-afters",
             "types",
             "dependencies",
             "retirements",
@@ -342,6 +386,7 @@ const DEFAULT_STRUCTURAL_OWNERS: u64 = 100_000;
 const DEFAULT_SEMANTIC_OWNERS: u64 = 10_000;
 const DEFAULT_SELECTED_TESTS: u64 = 10_000;
 const DEFAULT_IMPACT_REASONS: u64 = 110_000;
+const DEFAULT_HTTP_ROUTE_EVIDENCE: u64 = DEFAULT_SEMANTIC_OWNERS;
 
 /// Fixed plan-file admission covering every logical record possible under the current default
 /// change admissions. Requests may declare larger engine budgets, but their actual logical plan
@@ -350,6 +395,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
     + DEFAULT_EXTRACTION_RECORDS
     + DEFAULT_ALLOCATIONS
     + DEFAULT_OWNER_CHANGES
+    + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2)
     + DEFAULT_TYPE_ADDITIONS
     + DEFAULT_DEPENDENCY_CHANGES
     + DEFAULT_RETIREMENT_CHANGES
@@ -363,9 +409,10 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_512;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_563;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
+const MAXIMUM_HTTP_ROUTE_RECORD_BYTES: u64 = 65_536;
 const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
 const MAXIMUM_DEPENDENCY_RECORD_BYTES: u64 = 699;
 const MAXIMUM_RETIREMENT_RECORD_BYTES: u64 = 1_225;
@@ -386,6 +433,7 @@ pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORDS_BYTES
     + DEFAULT_EXTRACTION_OWNER_RECORDS * MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES
     + DEFAULT_ALLOCATIONS * MAXIMUM_ALLOCATION_RECORD_BYTES
     + DEFAULT_OWNER_CHANGES * MAXIMUM_OWNER_RECORD_BYTES
+    + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2) * MAXIMUM_HTTP_ROUTE_RECORD_BYTES
     + DEFAULT_TYPE_ADDITIONS * MAXIMUM_TYPE_RECORD_BYTES
     + DEFAULT_DEPENDENCY_CHANGES * MAXIMUM_DEPENDENCY_RECORD_BYTES
     + DEFAULT_RETIREMENT_CHANGES * MAXIMUM_RETIREMENT_RECORD_BYTES
@@ -797,6 +845,16 @@ where
     for owner in plan.owners {
         encode_owner_change(owner, encoder)?;
     }
+    for route in evidence.http_routes.values() {
+        if let Some(before) = &route.before {
+            encode_http_route_before(route, before, encoder)?;
+        }
+    }
+    for route in evidence.http_routes.values() {
+        if route.after.is_some() {
+            encode_http_route_after(route, encoder)?;
+        }
+    }
     for digest in plan.types {
         encoder.append(
             "logical-plan.type-addition",
@@ -866,6 +924,26 @@ where
         &[
             ("allocations", count(evidence.allocations.len())?),
             ("owners", count(plan.owners.len())?),
+            (
+                "http-route-befores",
+                count(
+                    evidence
+                        .http_routes
+                        .values()
+                        .filter(|route| route.before.is_some())
+                        .count(),
+                )?,
+            ),
+            (
+                "http-route-afters",
+                count(
+                    evidence
+                        .http_routes
+                        .values()
+                        .filter(|route| route.after.is_some())
+                        .count(),
+                )?,
+            ),
             ("types", count(plan.types.len())?),
             ("dependencies", count(plan.dependencies.len())?),
             ("retirements", count(plan.retirements.len())?),
@@ -1437,6 +1515,113 @@ where
     )
 }
 
+fn encode_http_route_before<F>(
+    evidence: &HttpRoutePlanEvidence,
+    route: &HttpRouteRecord,
+    encoder: &mut PlanEncoder<'_, F>,
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(&[u8]) -> Result<(), Diagnostic>,
+{
+    encoder.append(
+        "logical-plan.http-route-before",
+        &[
+            ("route", evidence.route.to_string()),
+            ("changed", evidence.changed.to_string()),
+            ("method", route.method.clone()),
+            ("kind", http_selector_kind(&route.selector).to_owned()),
+            ("selector", route.selector.display()),
+            ("captures", http_capture_names(&route.selector)),
+            ("target", route.target.to_string()),
+            ("port-package", route.port.package.to_string()),
+            ("port", route.port.port.to_string()),
+            ("signature", http_route_signature(&route.selector)),
+        ],
+    )
+}
+
+fn encode_http_route_after<F>(
+    evidence: &HttpRoutePlanEvidence,
+    encoder: &mut PlanEncoder<'_, F>,
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(&[u8]) -> Result<(), Diagnostic>,
+{
+    let after = evidence.after.as_ref().ok_or_else(|| {
+        plan_corrupt(
+            "change_logical_plan_http_route_after",
+            "HTTP route after encoder received absent validation evidence",
+        )
+    })?;
+    let route = &after.record;
+    encoder.append(
+        "logical-plan.http-route-after",
+        &[
+            ("route", evidence.route.to_string()),
+            ("changed", evidence.changed.to_string()),
+            ("method", route.method.clone()),
+            ("kind", http_selector_kind(&route.selector).to_owned()),
+            ("selector", route.selector.display()),
+            ("captures", http_capture_names(&route.selector)),
+            ("target", route.target.to_string()),
+            ("port-package", route.port.package.to_string()),
+            ("port", route.port.port.to_string()),
+            ("handler-package", after.handler.package.to_string()),
+            ("handler", after.handler.declaration.to_string()),
+            (
+                "parameters",
+                after
+                    .parameters
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            ("signature", http_route_signature(&route.selector)),
+            ("target-exact-routes", after.exact_routes.to_string()),
+            ("target-pattern-routes", after.pattern_routes.to_string()),
+            (
+                "target-pattern-segments",
+                after.pattern_segments.to_string(),
+            ),
+            (
+                "maximum-specificity-chain",
+                after.maximum_specificity_chain.to_string(),
+            ),
+            ("overlaps", after.overlaps.to_string()),
+            ("more-specific", after.more_specific.to_string()),
+            ("less-specific", after.less_specific.to_string()),
+        ],
+    )
+}
+
+fn http_selector_kind(selector: &HttpRouteSelector) -> &'static str {
+    match selector {
+        HttpRouteSelector::Exact { .. } => "exact",
+        HttpRouteSelector::Pattern { .. } => "pattern",
+    }
+}
+
+fn http_capture_names(selector: &HttpRouteSelector) -> String {
+    selector
+        .capture_names()
+        .into_iter()
+        .map(Name::as_str)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn http_route_signature(selector: &HttpRouteSelector) -> String {
+    let mut signature = String::from("(HttpRequest");
+    for capture in selector.capture_names() {
+        signature.push(',');
+        signature.push_str(capture.as_str());
+        signature.push_str(":Text");
+    }
+    signature.push_str(")->HttpResponse");
+    signature
+}
+
 fn has_class(classes: &[OwnerChangeClass], class: OwnerChangeClass) -> String {
     classes.contains(&class).to_string()
 }
@@ -1620,6 +1805,8 @@ impl EndpointFields {
 pub struct LogicalPlanCounts {
     pub allocations: u64,
     pub owners: u64,
+    pub http_route_befores: u64,
+    pub http_route_afters: u64,
     pub types: u64,
     pub dependencies: u64,
     pub retirements: u64,
@@ -1739,6 +1926,12 @@ struct PlanDecoder {
     declared_counts: Option<LogicalPlanCounts>,
     last_allocation: Option<AuthoredAllocation>,
     last_owner: Option<OwnerKey>,
+    last_http_route_before: Option<HttpRouteId>,
+    last_http_route_after: Option<HttpRouteId>,
+    changed_http_route_befores: BTreeSet<HttpRouteId>,
+    unchanged_http_route_befores: BTreeSet<HttpRouteId>,
+    changed_http_route_afters: BTreeSet<HttpRouteId>,
+    unchanged_http_route_afters: BTreeSet<HttpRouteId>,
     last_type: Option<TypeObjectDigest>,
     last_dependency: Option<PackageId>,
     last_retirement: Option<OwnerKey>,
@@ -1780,6 +1973,12 @@ impl PlanDecoder {
             declared_counts: None,
             last_allocation: None,
             last_owner: None,
+            last_http_route_before: None,
+            last_http_route_after: None,
+            changed_http_route_befores: BTreeSet::new(),
+            unchanged_http_route_befores: BTreeSet::new(),
+            changed_http_route_afters: BTreeSet::new(),
+            unchanged_http_route_afters: BTreeSet::new(),
             last_type: None,
             last_dependency: None,
             last_retirement: None,
@@ -1876,8 +2075,8 @@ impl PlanDecoder {
                 ));
             }
             self.next_fixed += 1;
-        } else if (16..=31).contains(&descriptor_index) {
-            if descriptor_index < self.phase || self.phase >= 32 {
+        } else if (16..=33).contains(&descriptor_index) {
+            if descriptor_index < self.phase || self.phase >= 34 {
                 return Err(plan_source_error(
                     "change_plan_file_order",
                     format!(
@@ -1887,22 +2086,22 @@ impl PlanDecoder {
                 ));
             }
             self.phase = descriptor_index;
-        } else if descriptor_index == 32 {
-            if self.phase >= 32 || self.declared_counts.is_some() {
+        } else if descriptor_index == 34 {
+            if self.phase >= 34 || self.declared_counts.is_some() {
                 return Err(plan_source_error(
                     "change_plan_file_counts_duplicate",
                     "logical plan contains a duplicate or misplaced counts record",
                 ));
             }
-            self.phase = 32;
-        } else if descriptor_index == 33 {
-            if self.phase != 32 || self.declared_counts.is_none() {
+            self.phase = 34;
+        } else if descriptor_index == 35 {
+            if self.phase != 34 || self.declared_counts.is_none() {
                 return Err(plan_source_error(
                     "change_plan_file_digest_order",
                     "logical plan digest must follow exactly one counts record",
                 ));
             }
-            self.phase = 33;
+            self.phase = 35;
             self.trailer_seen = true;
         } else {
             return Err(plan_source_error(
@@ -1914,7 +2113,7 @@ impl PlanDecoder {
             ));
         }
 
-        if descriptor_index != 33 {
+        if descriptor_index != 35 {
             self.hasher.update(line);
         }
         self.validate_typed(descriptor_index, record)
@@ -1961,16 +2160,18 @@ impl PlanDecoder {
             20 => self.decode_extraction_owner(record),
             21 => self.decode_allocation(record),
             22 => self.decode_owner(record),
-            23 => self.decode_type(record),
-            24 => self.decode_dependency(record),
-            25 => self.decode_retirement(record),
-            26 => self.decode_relation(record, false),
-            27 => self.decode_relation(record, true),
-            28 => self.decode_selection(record, SelectionKind::Structural),
-            29 => self.decode_selection(record, SelectionKind::Semantic),
-            30 => self.decode_selection(record, SelectionKind::Test),
-            31 => self.decode_reason(record),
-            32 => {
+            23 => self.decode_http_route(record, false),
+            24 => self.decode_http_route(record, true),
+            25 => self.decode_type(record),
+            26 => self.decode_dependency(record),
+            27 => self.decode_retirement(record),
+            28 => self.decode_relation(record, false),
+            29 => self.decode_relation(record, true),
+            30 => self.decode_selection(record, SelectionKind::Structural),
+            31 => self.decode_selection(record, SelectionKind::Semantic),
+            32 => self.decode_selection(record, SelectionKind::Test),
+            33 => self.decode_reason(record),
+            34 => {
                 let counts = decode_counts(record)?;
                 if counts != self.counts {
                     return Err(plan_source_error(
@@ -1979,10 +2180,11 @@ impl PlanDecoder {
                     ));
                 }
                 self.validate_extraction_counts()?;
+                self.validate_http_route_counts()?;
                 self.declared_counts = Some(counts);
                 Ok(())
             }
-            33 => self.decode_trailer(record),
+            35 => self.decode_trailer(record),
             _ => Err(plan_source_error(
                 "change_plan_file_record_unknown",
                 "logical plan descriptor has no typed decoder",
@@ -2316,6 +2518,29 @@ impl PlanDecoder {
         Ok(())
     }
 
+    fn validate_http_route_counts(&self) -> Result<(), Diagnostic> {
+        if self.unchanged_http_route_befores != self.unchanged_http_route_afters
+            || !self
+                .changed_http_route_befores
+                .is_disjoint(&self.unchanged_http_route_afters)
+            || !self
+                .unchanged_http_route_befores
+                .is_disjoint(&self.changed_http_route_afters)
+            || self
+                .changed_http_route_befores
+                .union(&self.changed_http_route_afters)
+                .count()
+                .saturating_add(self.unchanged_http_route_befores.len())
+                > usize::try_from(DEFAULT_HTTP_ROUTE_EVIDENCE).unwrap_or(usize::MAX)
+        {
+            return Err(plan_source_error(
+                "change_plan_file_http_route_sets",
+                "HTTP route before/after evidence disagrees on preserved identities or exceeds its bound",
+            ));
+        }
+        Ok(())
+    }
+
     fn decode_allocation(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
         let domain = parse_identity_kind(field(record, 0))?;
         let ordinal = parse_u64(field(record, 1), "allocation ordinal")?;
@@ -2403,6 +2628,128 @@ impl PlanDecoder {
         })?;
         self.last_owner = Some(owner);
         increment(&mut self.counts.owners, "owner change")
+    }
+
+    fn decode_http_route(&mut self, record: &CompactRecord, after: bool) -> Result<(), Diagnostic> {
+        let route = field(record, 0).parse::<HttpRouteId>()?;
+        let changed = parse_bool(field(record, 1), "HTTP route change")?;
+        let previous = if after {
+            &mut self.last_http_route_after
+        } else {
+            &mut self.last_http_route_before
+        };
+        if previous.is_some_and(|previous| previous >= route) {
+            return Err(plan_source_error(
+                "change_plan_file_http_route_order",
+                "HTTP route evidence is duplicated or out of canonical identity order",
+            ));
+        }
+        *previous = Some(route);
+
+        crate::platform::kernel::validate_http_route_method(field(record, 2))?;
+        let selector = match field(record, 3) {
+            "exact" => HttpRouteSelector::exact(field(record, 4).to_owned()),
+            "pattern" => HttpRouteSelector::parse_pattern(field(record, 4)),
+            _ => Err(plan_source_error(
+                "change_plan_file_http_route_kind",
+                "HTTP route selector kind must be exact or pattern",
+            )),
+        }?;
+        if selector.display() != field(record, 4)
+            || http_capture_names(&selector) != field(record, 5)
+        {
+            return Err(plan_source_error(
+                "change_plan_file_http_route_selector",
+                "HTTP route selector, kind, and capture sequence disagree",
+            ));
+        }
+        field(record, 6).parse::<TargetId>()?;
+        field(record, 7).parse::<PackageId>()?;
+        field(record, 8).parse::<PortId>()?;
+
+        if after {
+            field(record, 9).parse::<PackageId>()?;
+            field(record, 10).parse::<DeclarationId>()?;
+            let parameters = field(record, 11)
+                .split(',')
+                .map(str::parse::<ParameterId>)
+                .collect::<Result<Vec<_>, _>>()?;
+            let expected_parameters = selector.capture_count().saturating_add(1);
+            if parameters.len() != expected_parameters
+                || parameters.iter().copied().collect::<BTreeSet<_>>().len() != expected_parameters
+                || field(record, 12) != http_route_signature(&selector)
+            {
+                return Err(plan_source_error(
+                    "change_plan_file_http_route_signature",
+                    "HTTP route handler parameters or derived signature disagree with its captures",
+                ));
+            }
+            let exact_routes = parse_u64(field(record, 13), "target exact route count")?;
+            let pattern_routes = parse_u64(field(record, 14), "target pattern route count")?;
+            let pattern_segments = parse_u64(field(record, 15), "target pattern segments")?;
+            let maximum_chain = parse_u64(field(record, 16), "maximum specificity chain")?;
+            let overlaps = parse_u64(field(record, 17), "overlapping route count")?;
+            let more_specific = parse_u64(field(record, 18), "more-specific route count")?;
+            let less_specific = parse_u64(field(record, 19), "less-specific route count")?;
+            let route_count = exact_routes.checked_add(pattern_routes).ok_or_else(|| {
+                plan_resource_error(
+                    "change_plan_file_http_route_count",
+                    "HTTP target route count overflowed",
+                )
+            })?;
+            if route_count == 0
+                || route_count
+                    > u64::try_from(
+                        crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET,
+                    )
+                    .unwrap_or(u64::MAX)
+                || pattern_segments
+                    > u64::try_from(
+                        crate::platform::kernel::contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET,
+                    )
+                    .unwrap_or(u64::MAX)
+                || maximum_chain == 0
+                || maximum_chain > route_count
+                || overlaps >= route_count
+                || more_specific.checked_add(less_specific) != Some(overlaps)
+            {
+                return Err(plan_source_error(
+                    "change_plan_file_http_route_topology",
+                    "HTTP route target counts, specificity, or overlap evidence exceed exact bounds",
+                ));
+            }
+        } else if field(record, 9) != http_route_signature(&selector) {
+            return Err(plan_source_error(
+                "change_plan_file_http_route_signature",
+                "HTTP route derived base signature disagrees with its capture sequence",
+            ));
+        }
+
+        let (changed_routes, unchanged_routes, count) = if after {
+            (
+                &mut self.changed_http_route_afters,
+                &mut self.unchanged_http_route_afters,
+                &mut self.counts.http_route_afters,
+            )
+        } else {
+            (
+                &mut self.changed_http_route_befores,
+                &mut self.unchanged_http_route_befores,
+                &mut self.counts.http_route_befores,
+            )
+        };
+        let inserted = if changed {
+            changed_routes.insert(route) && !unchanged_routes.contains(&route)
+        } else {
+            unchanged_routes.insert(route) && !changed_routes.contains(&route)
+        };
+        if !inserted {
+            return Err(plan_source_error(
+                "change_plan_file_http_route_identity",
+                "HTTP route evidence repeats one identity or disagrees on change classification",
+            ));
+        }
+        increment(count, "HTTP route evidence")
     }
 
     fn decode_type(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
@@ -2581,7 +2928,7 @@ impl PlanDecoder {
     }
 
     fn finish(self) -> Result<DecodedLogicalPlan, Diagnostic> {
-        if !self.trailer_seen || self.phase != 33 {
+        if !self.trailer_seen || self.phase != 35 {
             return Err(plan_source_error(
                 "change_plan_file_incomplete",
                 "logical plan file is missing its counts or digest trailer",
@@ -2994,20 +3341,22 @@ fn decode_counts(record: &CompactRecord) -> Result<LogicalPlanCounts, Diagnostic
     Ok(LogicalPlanCounts {
         allocations: parse_u64(field(record, 0), "allocation count")?,
         owners: parse_u64(field(record, 1), "owner count")?,
-        types: parse_u64(field(record, 2), "type count")?,
-        dependencies: parse_u64(field(record, 3), "dependency count")?,
-        retirements: parse_u64(field(record, 4), "retirement count")?,
-        relations_removed: parse_u64(field(record, 5), "removed relation count")?,
-        relations_added: parse_u64(field(record, 6), "added relation count")?,
-        structural_owners: parse_u64(field(record, 7), "structural owner count")?,
-        semantic_owners: parse_u64(field(record, 8), "semantic owner count")?,
-        tests: parse_u64(field(record, 9), "test count")?,
-        reasons: parse_u64(field(record, 10), "reason count")?,
-        extractions: parse_u64(field(record, 11), "extraction count")?,
-        extraction_requirements: parse_u64(field(record, 12), "extraction requirement count")?,
-        extraction_captures: parse_u64(field(record, 13), "extraction capture count")?,
-        extraction_uses: parse_u64(field(record, 14), "extraction use count")?,
-        extraction_owners: parse_u64(field(record, 15), "extraction owner count")?,
+        http_route_befores: parse_u64(field(record, 2), "HTTP route before count")?,
+        http_route_afters: parse_u64(field(record, 3), "HTTP route after count")?,
+        types: parse_u64(field(record, 4), "type count")?,
+        dependencies: parse_u64(field(record, 5), "dependency count")?,
+        retirements: parse_u64(field(record, 6), "retirement count")?,
+        relations_removed: parse_u64(field(record, 7), "removed relation count")?,
+        relations_added: parse_u64(field(record, 8), "added relation count")?,
+        structural_owners: parse_u64(field(record, 9), "structural owner count")?,
+        semantic_owners: parse_u64(field(record, 10), "semantic owner count")?,
+        tests: parse_u64(field(record, 11), "test count")?,
+        reasons: parse_u64(field(record, 12), "reason count")?,
+        extractions: parse_u64(field(record, 13), "extraction count")?,
+        extraction_requirements: parse_u64(field(record, 14), "extraction requirement count")?,
+        extraction_captures: parse_u64(field(record, 15), "extraction capture count")?,
+        extraction_uses: parse_u64(field(record, 16), "extraction use count")?,
+        extraction_owners: parse_u64(field(record, 17), "extraction owner count")?,
     })
 }
 
@@ -3217,6 +3566,135 @@ fn relation_kind_order(kind: RelationKind) -> usize {
         .unwrap_or(usize::MAX)
 }
 
+fn validate_http_route_evidence(
+    evidence: &LogicalChangePlanEvidence,
+    owners: &[OwnerDiffEntry],
+) -> Result<(), Diagnostic> {
+    if evidence.http_routes.len()
+        > usize::try_from(DEFAULT_HTTP_ROUTE_EVIDENCE).unwrap_or(usize::MAX)
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_http_route_count",
+            "HTTP route review evidence exceeds the bounded semantic frontier",
+        ));
+    }
+    let changed_routes = owners
+        .iter()
+        .filter_map(|entry| match entry.owner {
+            OwnerKey::HttpRoute(route) if entry.objects.before != entry.objects.after => {
+                Some((route, entry))
+            }
+            _ => None,
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (route, route_evidence) in &evidence.http_routes {
+        if *route != route_evidence.route
+            || route_evidence.changed != changed_routes.contains_key(route)
+        {
+            return Err(plan_corrupt(
+                "change_logical_plan_http_route_identity",
+                "HTTP route review key or change classification disagrees with the semantic diff",
+            ));
+        }
+        for record in route_evidence
+            .before
+            .iter()
+            .chain(route_evidence.after.iter().map(|after| &after.record))
+        {
+            if record.header.owner != OwnerKey::HttpRoute(*route) {
+                return Err(plan_corrupt(
+                    "change_logical_plan_http_route_identity",
+                    "HTTP route review value has a foreign owner identity",
+                ));
+            }
+            crate::platform::kernel::validate_http_route_method(&record.method)?;
+            record.selector.validate_local()?;
+        }
+        if let Some(entry) = changed_routes.get(route) {
+            let before = route_evidence
+                .before
+                .as_ref()
+                .map(|record| encode_owner(&OwnerRecord::HttpRoute(record.clone())))
+                .transpose()?
+                .map(|(digest, _)| digest);
+            let after = route_evidence
+                .after
+                .as_ref()
+                .map(|after| encode_owner(&OwnerRecord::HttpRoute(after.record.clone())))
+                .transpose()?
+                .map(|(digest, _)| digest);
+            if before != entry.objects.before || after != entry.objects.after {
+                return Err(plan_corrupt(
+                    "change_logical_plan_http_route_objects",
+                    "HTTP route review values disagree with semantic-diff object identities",
+                ));
+            }
+        } else if route_evidence.before.as_ref()
+            != route_evidence.after.as_ref().map(|after| &after.record)
+        {
+            return Err(plan_corrupt(
+                "change_logical_plan_http_route_preserved",
+                "transitively checked HTTP route changed without a semantic owner edit",
+            ));
+        }
+        if let Some(after) = &route_evidence.after {
+            let route_count = after
+                .exact_routes
+                .checked_add(after.pattern_routes)
+                .ok_or_else(|| {
+                    plan_corrupt(
+                        "change_logical_plan_http_route_topology",
+                        "HTTP target route count overflowed",
+                    )
+                })?;
+            if after.parameters.len() != after.record.selector.capture_count().saturating_add(1)
+                || after
+                    .parameters
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    != after.parameters.len()
+                || route_count == 0
+                || route_count
+                    > u64::try_from(
+                        crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET,
+                    )
+                    .unwrap_or(u64::MAX)
+                || after.pattern_segments
+                    > u64::try_from(
+                        crate::platform::kernel::contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET,
+                    )
+                    .unwrap_or(u64::MAX)
+                || after.maximum_specificity_chain == 0
+                || after.maximum_specificity_chain > route_count
+                || after.overlaps >= route_count
+                || after.more_specific.checked_add(after.less_specific) != Some(after.overlaps)
+            {
+                return Err(plan_corrupt(
+                    "change_logical_plan_http_route_topology",
+                    "HTTP route handler, overlap, or specificity evidence is inconsistent",
+                ));
+            }
+        } else if !route_evidence.changed || route_evidence.before.is_none() {
+            return Err(plan_corrupt(
+                "change_logical_plan_http_route_delete",
+                "absent HTTP route candidate is not an exact changed deletion",
+            ));
+        }
+    }
+    if changed_routes
+        .keys()
+        .any(|route| !evidence.http_routes.contains_key(route))
+    {
+        return Err(plan_corrupt(
+            "change_logical_plan_http_route_missing",
+            "semantic HTTP route edit lacks complete logical review evidence",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_evidence(
     evidence: &LogicalChangePlanEvidence,
     owners: &[OwnerDiffEntry],
@@ -3228,6 +3706,7 @@ fn validate_evidence(
     if let Some(extraction) = &evidence.extraction {
         validate_extraction_evidence(extraction, owners, &evidence.allocations)?;
     }
+    validate_http_route_evidence(evidence, owners)?;
     if evidence
         .allocations
         .windows(2)
@@ -3817,8 +4296,8 @@ mod tests {
                 .maximum_relation_edges
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 772_790);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 308_621_464);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 792_790);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_619_341_515);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -4111,7 +4590,7 @@ mod tests {
         let six_digits = "999999";
         add(
             "logical-plan.counts",
-            &LOGICAL_PLAN_RECORD_DESCRIPTORS[32]
+            &LOGICAL_PLAN_RECORD_DESCRIPTORS[34]
                 .fields
                 .iter()
                 .map(|field| (*field, six_digits))

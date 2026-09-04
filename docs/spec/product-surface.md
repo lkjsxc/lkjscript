@@ -14,8 +14,8 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
-The active source snapshot is unreleased product 0.1.21. Immutable public latest remains v0.1.16;
-its tag, release, assets, and metadata continue to identify product 0.1.16. A source package version
+The active source snapshot is unreleased product 0.1.22. Immutable public latest remains v0.1.21;
+its tag, release, assets, and metadata continue to identify product 0.1.21. A source package version
 does not imply a tag or public release, and distribution cannot select the newer source snapshot
 until its independently authorized publication path closes.
 

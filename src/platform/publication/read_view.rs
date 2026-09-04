@@ -1,4 +1,4 @@
-//! Revision-pinned, bounded reads over accepted Graph 9 authority and its committed witness.
+//! Revision-pinned, bounded reads over accepted Graph 10 authority and its committed witness.
 
 use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
@@ -6,7 +6,7 @@ use super::{
 use crate::platform::change::{
     AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary,
     BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead,
-    CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DerivedDelta,
+    CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DerivedDelta, HttpRoutePlanEvidence,
     LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
     PreparedChangeAnalysis, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
     WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadAdmission,
@@ -26,7 +26,7 @@ use crate::platform::kernel::{
     RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
     decode_dependency, decode_dependency_binding, decode_owner, decode_owner_binding,
     decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
-    encode_dependency, encode_retirement, owner_map_key, retirement_map_key,
+    encode_dependency, encode_owner, encode_retirement, owner_map_key, retirement_map_key,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::package_interface::{
@@ -505,6 +505,10 @@ fn logical_plan_evidence(
     mut analysis: PreparedChangeAnalysis,
     allocations: Vec<AuthoredAllocation>,
     mut dependency_befores: BTreeMap<PackageId, DependencyRecord>,
+    mut http_route_befores: BTreeMap<
+        crate::platform::semantic_id::HttpRouteId,
+        crate::platform::kernel::HttpRouteRecord,
+    >,
     extraction: Option<crate::platform::change::FunctionExtractionEvidence>,
 ) -> Result<LogicalChangePlanEvidence, Vec<Diagnostic>> {
     if analysis.validation.structurally_checked != analysis.summaries.plan.structurally_checked
@@ -633,6 +637,112 @@ fn logical_plan_evidence(
         );
     }
 
+    let mut http_routes = BTreeMap::new();
+    for (route, after) in std::mem::take(&mut analysis.validation.http_routes) {
+        let owner = OwnerKey::HttpRoute(route);
+        let changed = analysis.canonical.owners.contains_key(&owner);
+        let before = if let Some(edit) = analysis.canonical.owners.get(&owner) {
+            match edit.before {
+                Some(expected) => {
+                    let record = http_route_befores.remove(&route).ok_or_else(|| {
+                        vec![read_error(
+                            DiagnosticClass::Corrupt,
+                            "change_logical_plan_http_route_before",
+                            "changed HTTP route lacks its retained logical base value",
+                        )]
+                    })?;
+                    let (observed, _) = encode_owner(&OwnerRecord::HttpRoute(record.clone()))
+                        .map_err(|diagnostic| vec![diagnostic])?;
+                    if observed != expected {
+                        return Err(vec![read_error(
+                            DiagnosticClass::Corrupt,
+                            "change_logical_plan_http_route_before",
+                            "HTTP route logical base value disagrees with its canonical edit",
+                        )]);
+                    }
+                    Some(record)
+                }
+                None => None,
+            }
+        } else {
+            Some(after.record.clone())
+        };
+        if let Some(edit) = analysis.canonical.owners.get(&owner) {
+            let Some((expected, OwnerRecord::HttpRoute(record))) = &edit.after else {
+                return Err(vec![read_error(
+                    DiagnosticClass::Corrupt,
+                    "change_logical_plan_http_route_after",
+                    "validated candidate HTTP route disagrees with a deletion or foreign edit",
+                )]);
+            };
+            let (observed, _) = encode_owner(&OwnerRecord::HttpRoute(record.clone()))
+                .map_err(|diagnostic| vec![diagnostic])?;
+            if observed != *expected || *record != after.record {
+                return Err(vec![read_error(
+                    DiagnosticClass::Corrupt,
+                    "change_logical_plan_http_route_after",
+                    "HTTP route validation evidence disagrees with its canonical candidate",
+                )]);
+            }
+        }
+        http_routes.insert(
+            route,
+            HttpRoutePlanEvidence {
+                route,
+                changed,
+                before,
+                after: Some(after),
+            },
+        );
+    }
+    for (owner, edit) in &analysis.canonical.owners {
+        let OwnerKey::HttpRoute(route) = owner else {
+            continue;
+        };
+        if edit.after.is_some() {
+            if !http_routes.contains_key(route) {
+                return Err(vec![read_error(
+                    DiagnosticClass::Corrupt,
+                    "change_logical_plan_http_route_after",
+                    "live changed HTTP route lacks validated topology evidence",
+                )]);
+            }
+            continue;
+        }
+        let expected = edit.before.ok_or_else(|| {
+            vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_http_route_delete",
+                "deleted HTTP route has no canonical base digest",
+            )]
+        })?;
+        let before = http_route_befores.remove(route).ok_or_else(|| {
+            vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_http_route_before",
+                "deleted HTTP route lacks its retained logical base value",
+            )]
+        })?;
+        let (observed, _) = encode_owner(&OwnerRecord::HttpRoute(before.clone()))
+            .map_err(|diagnostic| vec![diagnostic])?;
+        if observed != expected {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_http_route_before",
+                "deleted HTTP route logical value disagrees with its canonical base digest",
+            )]);
+        }
+        http_routes.insert(
+            *route,
+            HttpRoutePlanEvidence {
+                route: *route,
+                changed: true,
+                before: Some(before),
+                after: None,
+            },
+        );
+    }
+
     Ok(LogicalChangePlanEvidence {
         budget: analysis.budget,
         allocations,
@@ -644,12 +754,13 @@ fn logical_plan_evidence(
         tests: std::mem::take(&mut analysis.summaries.plan.tests),
         reasons: std::mem::take(&mut analysis.summaries.plan.reasons),
         extraction,
+        http_routes,
     })
 }
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
-/// Packs are append-only in the current Graph 9 store, so a later HEAD publication cannot alter
+/// Packs are append-only in the current Graph 10 store, so a later HEAD publication cannot alter
 /// any object visible through this view. Future physical deletion must add an explicit lease
 /// before it may coexist with these views.
 #[derive(Debug)]
@@ -747,6 +858,7 @@ impl RepositoryView {
             allocated,
             allocations,
             dependency_befores,
+            http_route_befores,
             extraction,
             work: lowering_work,
         } = lowering;
@@ -756,6 +868,7 @@ impl RepositoryView {
             prepared.analysis,
             allocations,
             dependency_befores,
+            http_route_befores,
             extraction,
         )?;
         Ok(PreparedAuthoredPublication {
@@ -1047,7 +1160,7 @@ impl RepositoryView {
         Ok(self.read(value, work))
     }
 
-    /// Reconstructs the complete logical Graph 9 view for independent full validation and
+    /// Reconstructs the complete logical Graph 10 view for independent full validation and
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {

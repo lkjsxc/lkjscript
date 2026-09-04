@@ -1,4 +1,4 @@
-//! Binding validated semantic authority into exact Graph 9 transaction, diff, and history objects.
+//! Binding validated semantic authority into exact Graph 10 transaction, diff, and history objects.
 
 use super::contract::{
     RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION, SEMANTIC_DIFF_CONTRACT_VERSION,

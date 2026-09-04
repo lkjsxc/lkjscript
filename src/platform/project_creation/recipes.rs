@@ -46,7 +46,7 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_command_standard_types",
-            "built-in standard primitive types disagree with canonical Graph 9 types",
+            "built-in standard primitive types disagree with canonical Graph 10 types",
         ));
     }
 
@@ -116,7 +116,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
     {
         return Err(recipe_error(
             "new_http_standard_types",
-            "built-in HTTP recipe declarations disagree with canonical Graph 9 primitive types",
+            "built-in HTTP recipe declarations disagree with canonical Graph 10 primitive types",
         ));
     }
 
@@ -236,7 +236,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
     {
         return Err(recipe_error(
             "new_nostr_standard_types",
-            "built-in standard HTTP server and client types disagree with canonical Graph 9 types",
+            "built-in standard HTTP server and client types disagree with canonical Graph 10 types",
         ));
     }
 
@@ -460,7 +460,7 @@ fn http_route(method: &str, path: &str) -> Result<AuthoredChange, Diagnostic> {
             symbol: TARGET.to_owned(),
         },
         method: method.to_owned(),
-        path: path.to_owned(),
+        selector: crate::platform::kernel::HttpRouteSelector::exact(path)?,
         port: AuthoredPortReference::Symbol {
             symbol: PORT.to_owned(),
         },

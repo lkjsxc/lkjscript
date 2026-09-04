@@ -17,7 +17,7 @@ Exact identities and receipts are in
 Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
 cross-application equality defect described in the historical campaign evidence.
 
-Current product source remains 0.1.21 and immutable public latest is v0.1.21. Its annotated tag
+Current product source is unreleased 0.1.22 and immutable public latest remains v0.1.21. Its annotated tag
 selects release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`; v0.1.16 and every older
 tag, release, asset, and attestation remain unchanged. No installer, registry package, second target,
 deployment, or hosted application state was created by this release.

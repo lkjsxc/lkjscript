@@ -1,12 +1,13 @@
-//! Independent exact-ID expression type and effect oracle for Graph 9.
+//! Independent exact-ID expression type and effect oracle for Graph 10.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::owner::{
-    BindingKind, CaseRecord, DeclarationPayload, FieldRecord, FunctionEffect, OperationRecord,
-    OwnerRecord, ParameterParent, PortImplementation, RequirementRecord,
+    BindingKind, CaseRecord, DeclarationPayload, FieldRecord, FunctionEffect,
+    HttpRoutePatternSegment, OperationRecord, OwnerRecord, ParameterParent, ParameterRecord,
+    ParameterUse, PortImplementation, RequirementRecord,
 };
 use super::reference::{DeclarationReference, RequirementReference};
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
@@ -416,10 +417,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             continue;
                         }
                     };
-                    let http_type = match crate::platform::http::semantic_http_types(
-                        &mut TypeObjectInterner::default(),
+                    let mut types = TypeObjectInterner::default();
+                    let capture_count = route.selector.capture_count();
+                    let http_type = match crate::platform::http::semantic_http_route_function_type(
+                        &mut types,
+                        capture_count,
                     ) {
-                        Ok(types) => types.function_type,
+                        Ok(function_type) => function_type,
                         Err(diagnostic) => {
                             self.push_diagnostic(diagnostic);
                             continue;
@@ -430,6 +434,43 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "kernel_type_http_route_port",
                             "HTTP route requires the exact semantic HTTP function-backed port shape",
                         );
+                    }
+                    let PortImplementation::Function(function) = port.implementation else {
+                        continue;
+                    };
+                    let parameters = match self.function_parameter_records(function) {
+                        Ok(parameters) => parameters,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    let captures = route.selector.capture_names();
+                    if parameters.len() != captures.len().saturating_add(1) {
+                        self.error(
+                            "kernel_type_http_route_parameters",
+                            "HTTP route backing function parameter count disagrees with its selector",
+                        );
+                        continue;
+                    }
+                    let text_type = match crate::platform::http::semantic_http_types(&mut types) {
+                        Ok(types) => types.text_type,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    for (parameter, capture) in parameters.iter().skip(1).zip(captures) {
+                        if parameter.name.as_str() != capture.as_str()
+                            || parameter.ty != text_type
+                            || parameter.use_mode != ParameterUse::Unrestricted
+                            || parameter.resource_requirement.is_some()
+                        {
+                            self.error(
+                                "kernel_type_http_route_capture_parameter",
+                                "HTTP route capture must index one same-named unrestricted Text parameter without a resource binding",
+                            );
+                        }
                     }
                 }
                 _ => {}
@@ -1344,6 +1385,93 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "dependency signature parameter has another owner kind",
                     )),
                 }
+            })
+            .collect()
+    }
+
+    fn function_parameter_records(
+        &self,
+        reference: DeclarationReference,
+    ) -> Result<Vec<ParameterRecord>, Diagnostic> {
+        let parameters = if reference.package == self.read.package_id() {
+            match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => match record.payload {
+                    DeclarationPayload::Function(function) => function.parameters,
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_http_route_function",
+                            "HTTP route port must resolve to a function declaration",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_http_route_function",
+                        "HTTP route backing function is missing",
+                    ));
+                }
+            }
+        } else {
+            match self.dependency_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                "HTTP route function",
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::Function(function) => function.parameters,
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_http_route_function",
+                            "HTTP route port must resolve to a dependency function declaration",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_http_route_function",
+                        "HTTP route backing dependency owner is not a declaration",
+                    ));
+                }
+            }
+        };
+        parameters
+            .into_iter()
+            .map(|parameter| {
+                let record = if reference.package == self.read.package_id() {
+                    match self.read.owner(OwnerKey::Parameter(parameter))? {
+                        Some(OwnerRecord::Parameter(record)) => record,
+                        _ => {
+                            return Err(type_error(
+                                "kernel_type_http_route_parameter",
+                                "HTTP route backing function parameter is missing",
+                            ));
+                        }
+                    }
+                } else {
+                    match self.dependency_owner(
+                        reference.package,
+                        OwnerKey::Parameter(parameter),
+                        "HTTP route parameter",
+                    )? {
+                        PackageInterfaceRecord::Parameter(record) => record,
+                        _ => {
+                            return Err(type_error(
+                                "kernel_type_http_route_parameter",
+                                "HTTP route dependency parameter has another owner kind",
+                            ));
+                        }
+                    }
+                };
+                if record.parent != ParameterParent::Function(reference.declaration) {
+                    return Err(type_error(
+                        "kernel_type_http_route_parameter_parent",
+                        "HTTP route function parameter belongs to another semantic parent",
+                    ));
+                }
+                Ok(record)
             })
             .collect()
     }

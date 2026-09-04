@@ -1,4 +1,4 @@
-//! Immutable Graph 9 revisions, separate acceptance bindings, and atomic HEAD records.
+//! Immutable Graph 10 revisions, separate acceptance bindings, and atomic HEAD records.
 
 use super::contract::{
     HEAD_ENVELOPE_DOMAIN, HEAD_MAGIC, MAXIMUM_HEAD_BYTES, MAXIMUM_REVISION_BYTES,

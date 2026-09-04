@@ -309,8 +309,10 @@ add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISI
 create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
 add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
 create.target as=$TARGET name=NAME component=DECLARATION [port=PORT] runner=command|http|interactive
-add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT
-set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT
+add.http-route as=$ROUTE target=TARGET method=METHOD path=EXACT_PATH port=PORT
+add.http-route as=$ROUTE target=TARGET method=METHOD pattern=PATH_PATTERN port=PORT
+set.http-route route=HTTP_ROUTE method=METHOD path=EXACT_PATH port=PORT
+set.http-route route=HTTP_ROUTE method=METHOD pattern=PATH_PATTERN port=PORT
 ```
 
 `add.dependency` accepts only the exact current built-in binding after its immutable transport has
@@ -320,9 +322,13 @@ unchecked-file lookup; unavailable, duplicate, stale, foreign, and mismatched bi
 independently budgeted operations. An `add.port` explicit function type must exactly agree with its
 function implementation. `create.target` binds an exact component and requires one exact port for
 `command` and `interactive`, but forbids that field for `http`; an HTTP target instead owns its
-nonempty finite `add.http-route` set. Each route binds an exact method/path key to a component-owned
-function-backed HTTP port, and `set.http-route` changes that binding without replacing route
-identity. For `interactive`, the exact port shape is `(Option<State>, SessionEvent) ->
+nonempty finite `add.http-route` set. Each route binds an exact method and exactly one typed exact
+path or whole-segment capture pattern to a component-owned function-backed HTTP port;
+`set.http-route` changes that binding without replacing route identity. Pattern captures index the
+handler's same-named ordered unrestricted `Text` parameter suffix, while an exact route retains the
+single `HttpRequest` parameter. Duplicate match languages and incomparable overlaps reject, and an
+exact or strictly more-specific selector wins without authored priority. For `interactive`, the
+exact port shape is `(Option<State>, SessionEvent) ->
 SessionDecision<State>` with one repeated closed ordinary concrete state type; streams,
 capabilities, functions, secrets, unresolved parameters, and other live values cannot enter
 retained state. Expression-backed ports, `SetTarget`, dependency removal, arbitrary transports,

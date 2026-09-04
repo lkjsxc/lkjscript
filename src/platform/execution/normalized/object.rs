@@ -1,4 +1,4 @@
-//! Exact Artifact 14 object-storage codec over the representation-neutral object engine.
+//! Exact Artifact 15 object-storage codec over the representation-neutral object engine.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};

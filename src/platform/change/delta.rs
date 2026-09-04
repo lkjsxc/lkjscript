@@ -1,4 +1,4 @@
-//! Exact normalized primitive edits over Graph 9 canonical maps.
+//! Exact normalized primitive edits over Graph 10 canonical maps.
 
 use super::{CanonicalBaseRead, CanonicalReadWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};

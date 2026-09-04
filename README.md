@@ -14,8 +14,8 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source remains `0.1.21`; immutable supported release `v0.1.21` selects exact
-release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. It includes public exact
+Current product source is unreleased `0.1.22`; immutable supported release `v0.1.21` remains at exact
+release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -25,7 +25,11 @@ through the same typed authored-operation engine and preserve their application 
 project-creation boundary. The release also includes one
 deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-The maintained `lkjournal-live-1` consumer proves authenticated multi-subscription server push over
+Unreleased 0.1.22 extends each graph-owned HTTP route with an exact-path or bounded
+whole-segment-pattern selector. Capture names index the handler's ordered unrestricted `Text`
+parameter suffix; ambiguous overlap and signature drift reject before publication. The maintained
+resource routes now use `/resource/{id}` patterns rather than query-selected identifiers while
+preserving route identity and domain behavior. The maintained `lkjournal-live-1` consumer proves authenticated multi-subscription server push over
 plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound WebSocket,
 TLS, a deployment, or a live-relay observation.
 
@@ -68,7 +72,7 @@ failure. Raw attempt/worker transition tokens are no longer graph or adapter inp
 and backup formats remain unchanged. Immutable `v0.1.15` publishes these semantics through the
 same copied-binary authoring, build, service, and worker boundaries.
 
-The current source and immutable v0.1.21 binary include public explicit type-parameter,
+Both the current source and immutable v0.1.21 binary include public explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -239,8 +243,21 @@ add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT
 set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT
 ```
 
-An HTTP target forbids a universal `port`; its graph-owned finite route set performs byte-exact,
-case-sensitive method/path selection and returns a fixed empty 404 for an unmatched valid pair.
+The unreleased 0.1.22 source additionally exposes the selector-indexed forms:
+
+```text
+add.http-route as=$ROUTE target=TARGET method=METHOD pattern="/literal/{capture}" port=PORT
+set.http-route route=HTTP_ROUTE method=METHOD pattern="/literal/{capture}" port=PORT
+```
+
+Exactly one of `path` or `pattern` is required. A pattern uses 1 through 64 nonempty literal or
+whole-capture segments and at most 32 unique captures. Each capture indexes a same-named ordered
+unrestricted `Text` handler parameter after `HttpRequest`. Duplicate languages and incomparable
+overlap reject; exact and strictly more-specific selectors win without authored priority. Matching
+preserves raw segment spelling and performs no percent decoding, normalization, or query selection.
+
+An HTTP target forbids a universal `port`; its graph-owned finite route set returns a fixed empty
+404 for an unmatched valid pair.
 Command and interactive targets still require one exact port. An interactive port must have the exact structural relation
 `(Option<State>, SessionEvent) -> SessionDecision<State>` with one closed ordinary concrete
 `State`. The same relation is independently reconstructed during accepted validation, package and
@@ -251,7 +268,7 @@ interactive topology; public `run` remains pure-command-only. See the normative
 The public
 vocabulary also includes exactly
 `add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
-capture, partial application, or inference alias. The generated
+lexical-closure, partial-application, or inference alias. The generated
 [change grammar](docs/generated/change-grammar.md),
 [function-definition projection](docs/generated/function-definition.md),
 [built-in interface](docs/generated/builtin-standard.md),

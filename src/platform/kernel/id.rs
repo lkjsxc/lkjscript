@@ -1,4 +1,4 @@
-//! Closed Graph 9 semantic owner identity domain.
+//! Closed Graph 10 semantic owner identity domain.
 
 use super::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::semantic_id::{
@@ -420,7 +420,7 @@ impl EncodedOwnerKey {
         self.0
     }
 
-    /// Strictly decodes the canonical tagged owner-key representation used by Graph 9 maps and
+    /// Strictly decodes the canonical tagged owner-key representation used by Graph 10 maps and
     /// witness entries.
     pub fn decode(bytes: &[u8]) -> Result<OwnerKey, Diagnostic> {
         let encoded: [u8; 17] = bytes.try_into().map_err(|_| {

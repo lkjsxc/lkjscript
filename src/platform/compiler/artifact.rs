@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 9 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 10 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -15,9 +15,9 @@ use crate::platform::kernel::{
     Idempotency, LocalValueReference, Name, OperationReference, OwnerKey, OwnerKind,
     OwnerObjectDigest, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
     PackageInterfaceDigest, PackageInterfaceRecord, PackageRevisionDigest, ParameterParent,
-    PortImplementation, PortReference, RequirementReference, ResourceLimit, SemanticStateDigest,
-    TypeForm, TypeObject, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
-    encode_type_object,
+    PortImplementation, PortReference, RequirementRecord, RequirementReference, ResourceLimit,
+    SemanticStateDigest, TypeForm, TypeObject, TypeObjectDigest, decode_owner,
+    decode_owner_binding, decode_type_object, encode_type_object, requirement_is_covered_by,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::package_interface::{
@@ -45,17 +45,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-14";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-14";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 14;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF14";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART14";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN14";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-15";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-15";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 15;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF15";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART15";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN15";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v14";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v14";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v14";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v14";
+    "lkjscript.artifact-manifest-envelope.v15";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v15";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v15";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v15";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -1016,6 +1016,7 @@ pub(crate) enum RuntimeOwnerExpectation {
     },
     Parameter {
         parent: ParameterParent,
+        name: Name,
         ty: TypeObjectDigest,
         use_mode: crate::platform::kernel::ParameterUse,
         resource_requirement: Option<RequirementReference>,
@@ -1040,8 +1041,9 @@ pub(crate) enum RuntimeOwnerExpectation {
     HttpRoute {
         target: TargetId,
         method: String,
-        path: String,
+        selector: crate::platform::kernel::HttpRouteSelector,
         port: PortReference,
+        capture_parameters: Vec<ParameterId>,
     },
 }
 
@@ -1125,6 +1127,7 @@ impl RuntimeOwnerExpectation {
             (
                 Self::Parameter {
                     parent,
+                    name,
                     ty,
                     use_mode,
                     resource_requirement,
@@ -1132,6 +1135,7 @@ impl RuntimeOwnerExpectation {
                 OwnerRecord::Parameter(record),
             ) => {
                 record.parent == *parent
+                    && record.name == *name
                     && record.ty == *ty
                     && record.use_mode == *use_mode
                     && record.resource_requirement == *resource_requirement
@@ -1185,14 +1189,15 @@ impl RuntimeOwnerExpectation {
                 Self::HttpRoute {
                     target,
                     method,
-                    path,
+                    selector,
                     port,
+                    capture_parameters: _,
                 },
                 OwnerRecord::HttpRoute(record),
             ) => {
                 record.target == *target
                     && record.method == *method
-                    && record.path == *path
+                    && record.selector == *selector
                     && record.port == *port
             }
             _ => false,
@@ -1454,8 +1459,9 @@ pub(crate) fn runtime_owner_expectations(
                         RuntimeOwnerExpectation::HttpRoute {
                             target: *target,
                             method: route.method.clone(),
-                            path: route.path.clone(),
+                            selector: route.selector.clone(),
                             port: table_value(&unit.tables.ports, route.port, "HTTP route port")?,
+                            capture_parameters: route.capture_parameters.clone(),
                         },
                     )?;
                 }
@@ -1479,7 +1485,164 @@ pub(crate) fn runtime_owner_expectations(
             ));
         }
     }
+    validate_artifact_http_route_contracts(units, &expected)?;
     Ok(expected)
+}
+
+fn validate_artifact_http_route_contracts(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    expected: &BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>,
+) -> Result<(), Diagnostic> {
+    for ((package, owner), unit) in units {
+        let CompilationPayload::Target {
+            component,
+            routes,
+            runner: RunnerKind::Http,
+            ..
+        } = &unit.payload
+        else {
+            continue;
+        };
+        let component = table_value(
+            &unit.tables.declarations,
+            *component,
+            "HTTP target component",
+        )?;
+        let component_unit = units
+            .get(&(
+                component.package,
+                OwnerKey::Declaration(component.declaration),
+            ))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_component",
+                    "HTTP route target component unit is missing",
+                )
+            })?;
+        let CompilationPayload::Component { .. } = &component_unit.payload else {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_http_route_component",
+                "HTTP target component reference names another compiler payload",
+            ));
+        };
+        for route in routes {
+            let port = table_value(&unit.tables.ports, route.port, "HTTP route port")?;
+            let Some(RuntimeOwnerExpectation::Port {
+                function_type,
+                implementation: RuntimePortImplementation::Function(function),
+                ..
+            }) = expected.get(&(port.package, OwnerKey::Port(port.port)))
+            else {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_port",
+                    "HTTP route port is not an exact function-backed runtime owner",
+                ));
+            };
+            let expected_type = crate::platform::http::semantic_http_route_function_type(
+                &mut crate::platform::kernel::TypeObjectInterner::default(),
+                route.selector.capture_count(),
+            )?;
+            if *function_type != expected_type {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_port_type",
+                    "HTTP route port type disagrees with its selector-indexed contract",
+                ));
+            }
+            let function_unit = units
+                .get(&(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                ))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_http_route_function",
+                        "HTTP route backing function unit is missing",
+                    )
+                })?;
+            let CompilationPayload::Function { signature, .. } = &function_unit.payload else {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_function",
+                    "HTTP route backing declaration is not a function payload",
+                ));
+            };
+            let http = crate::platform::http::semantic_http_types(
+                &mut crate::platform::kernel::TypeObjectInterner::default(),
+            )?;
+            let first_type = signature
+                .parameters
+                .first()
+                .map(|parameter| {
+                    table_value(
+                        &function_unit.tables.types,
+                        parameter.ty,
+                        "HTTP request parameter type",
+                    )
+                })
+                .transpose()?;
+            let result = table_value(
+                &function_unit.tables.types,
+                signature.result,
+                "HTTP response result type",
+            )?;
+            if !signature.type_parameters.is_empty()
+                || signature.parameters.len() != route.selector.capture_count().saturating_add(1)
+                || first_type != Some(http.request_type)
+                || result != http.response_type
+            {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_function_signature",
+                    "HTTP route backing function disagrees with its request/capture/response signature",
+                ));
+            }
+            let captures = route.selector.capture_names();
+            for (parameter, capture) in signature.parameters.iter().skip(1).zip(&captures) {
+                let ty = table_value(
+                    &function_unit.tables.types,
+                    parameter.ty,
+                    "HTTP capture parameter type",
+                )?;
+                if parameter.name.as_str() != capture.as_str()
+                    || ty != http.text_type
+                    || parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_http_route_capture_parameter",
+                        "HTTP route capture disagrees with its compiled function parameter",
+                    ));
+                }
+            }
+            let actual_capture_parameters = signature
+                .parameters
+                .iter()
+                .skip(1)
+                .map(|parameter| parameter.parameter)
+                .collect::<Vec<_>>();
+            if actual_capture_parameters != route.capture_parameters {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_capture_binding",
+                    "HTTP route leaf capture identities disagree with the backing signature",
+                ));
+            }
+        }
+        if !matches!(owner, OwnerKey::Target(_)) || *package != component.package {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_http_route_target_binding",
+                "HTTP target unit or component escaped its exact package",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn insert_signature_expectations(
@@ -1533,6 +1696,7 @@ fn insert_parameter_expectation(
         (package, OwnerKey::Parameter(parameter.parameter)),
         RuntimeOwnerExpectation::Parameter {
             parent,
+            name: parameter.name.clone(),
             ty: table_value(&unit.tables.types, parameter.ty, "runtime parameter type")?,
             use_mode: parameter.use_mode,
             resource_requirement: parameter
@@ -2410,7 +2574,148 @@ fn validate_runtime_owners(
             "artifact runtime metadata omitted one exact compiler-unit boundary owner",
         ));
     }
+    validate_loaded_http_route_requirement_closure(units, &records)?;
     Ok(records)
+}
+
+fn validate_loaded_http_route_requirement_closure(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    records: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+) -> Result<(), Diagnostic> {
+    for ((package, _), unit) in units {
+        let CompilationPayload::Target {
+            component,
+            routes,
+            runner: RunnerKind::Http,
+            ..
+        } = &unit.payload
+        else {
+            continue;
+        };
+        let component = table_value(
+            &unit.tables.declarations,
+            *component,
+            "HTTP target component",
+        )?;
+        let component_unit = units
+            .get(&(
+                component.package,
+                OwnerKey::Declaration(component.declaration),
+            ))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_requirement_closure",
+                    "HTTP route component unit is missing during requirement reconstruction",
+                )
+            })?;
+        let CompilationPayload::Component { requirements, .. } = &component_unit.payload else {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_http_route_requirement_closure",
+                "HTTP route component has a foreign compiler payload",
+            ));
+        };
+        let component_requirements = requirements
+            .iter()
+            .map(|requirement| {
+                let reference = table_value(
+                    &component_unit.tables.requirements,
+                    requirement.requirement,
+                    "HTTP component requirement",
+                )?;
+                let record = exact_requirement_record(records, reference)?;
+                Ok((reference, record))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        for route in routes {
+            let port = table_value(&unit.tables.ports, route.port, "HTTP route port")?;
+            let port_record = match records.get(&(port.package, OwnerKey::Port(port.port))) {
+                Some(OwnerRecord::Port(record)) => record,
+                _ => {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_http_route_requirement_closure",
+                        "HTTP route port record is missing during requirement reconstruction",
+                    ));
+                }
+            };
+            let function = match port_record.implementation {
+                PortImplementation::Function(function) => function,
+                PortImplementation::Expression(_) => continue,
+            };
+            let function_unit = units
+                .get(&(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                ))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_http_route_requirement_closure",
+                        "HTTP route function unit is missing during requirement reconstruction",
+                    )
+                })?;
+            let CompilationPayload::Function { signature, .. } = &function_unit.payload else {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_requirement_closure",
+                    "HTTP route function has a foreign compiler payload",
+                ));
+            };
+            for requirement in &signature.task_requirements {
+                let reference = table_value(
+                    &function_unit.tables.requirements,
+                    *requirement,
+                    "HTTP function requirement",
+                )?;
+                let candidate = exact_requirement_record(records, reference)?;
+                let matches = component_requirements
+                    .iter()
+                    .filter(|(component_reference, component)| {
+                        requirement_is_covered_by(
+                            reference.package,
+                            candidate,
+                            component_reference.package,
+                            component,
+                        )
+                    })
+                    .count();
+                if matches != 1 {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_http_route_requirement_closure",
+                        "HTTP route handler requirement has no unique compatible component capability slot",
+                    ));
+                }
+            }
+        }
+        if *package != component.package {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_http_route_requirement_closure",
+                "HTTP target and component packages disagree during requirement reconstruction",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn exact_requirement_record(
+    records: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    reference: RequirementReference,
+) -> Result<&RequirementRecord, Diagnostic> {
+    match records.get(&(
+        reference.package,
+        OwnerKey::Requirement(reference.requirement),
+    )) {
+        Some(OwnerRecord::Requirement(record)) => Ok(record),
+        _ => Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_http_route_requirement_closure",
+            "HTTP route requirement runtime metadata is missing or has a foreign owner kind",
+        )),
+    }
 }
 
 fn validate_reference_owners(

@@ -748,6 +748,16 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
         ],
     )?;
     builder.type_function("@http_function", &["@request"], "@response")?;
+    builder.type_function(
+        "@http_function_one_capture",
+        &["@request", "text"],
+        "@response",
+    )?;
+    builder.type_function(
+        "@http_function_two_captures",
+        &["@request", "text", "text"],
+        "@response",
+    )?;
     Ok(())
 }
 
@@ -1795,6 +1805,13 @@ fn empty_bytes(builder: &mut Builder<'_>) -> Result<String, DevError> {
     builder.external_call("bytes-from-text", vec![empty])
 }
 
+struct HttpHandlerNames<'a> {
+    function: &'a str,
+    name: &'a str,
+    request: &'a str,
+    port: &'a str,
+}
+
 fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     add_route_handlers(builder)?;
 
@@ -1807,24 +1824,30 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let homepage = schema_guard(builder, homepage)?;
     add_http_handler(
         builder,
-        "$handle_home",
-        "handle-home",
-        "$home_request",
+        HttpHandlerNames {
+            function: "$handle_home",
+            name: "handle-home",
+            request: "$home_request",
+            port: "home",
+        },
         homepage,
         &["$data"],
-        "home",
+        &[],
     )?;
 
     let list = builder.call("$handle_list", &[], vec![])?;
     let list = schema_guard(builder, list)?;
     add_http_handler(
         builder,
-        "$handle_list_route",
-        "handle-list-route",
-        "$list_request",
+        HttpHandlerNames {
+            function: "$handle_list_route",
+            name: "handle-list-route",
+            request: "$list_request",
+            port: "list",
+        },
         list,
         &["$data"],
-        "list",
+        &[],
     )?;
 
     let request = builder.local("$create_request")?;
@@ -1835,15 +1858,18 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let create = schema_guard(builder, create)?;
     add_http_handler(
         builder,
-        "$handle_create_route",
-        "handle-create-route",
-        "$create_request",
+        HttpHandlerNames {
+            function: "$handle_create_route",
+            name: "handle-create-route",
+            request: "$create_request",
+            port: "create",
+        },
         create,
         &["$streams", "$data", "$identifiers", "$clock"],
-        "create",
+        &[],
     )?;
 
-    let id = request_query_identity(builder, "$update_request")?;
+    let id = builder.local("$update_route_id")?;
     let request = builder.local("$update_request")?;
     let headers = builder.field_name(request, "headers")?;
     let request = builder.local("$update_request")?;
@@ -1852,25 +1878,54 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
     let update = schema_guard(builder, update)?;
     add_http_handler(
         builder,
-        "$handle_update_route",
-        "handle-update-route",
-        "$update_request",
+        HttpHandlerNames {
+            function: "$handle_update_route",
+            name: "handle-update-route",
+            request: "$update_request",
+            port: "update",
+        },
         update,
         &["$streams", "$data", "$clock"],
-        "update",
+        &[("$update_route_id", "id", "text")],
     )?;
 
-    let id = request_query_identity(builder, "$delete_request")?;
+    let space = builder.local("$delete_route_space")?;
+    let posts = builder.text(POSTS_SPACE)?;
+    let correct_space = builder.external_call("text-equal", vec![space, posts])?;
+    let id = builder.local("$delete_route_id")?;
     let delete = builder.call("$handle_delete", &[], vec![id])?;
+    let wrong_space = error_response(builder, 404, "not_found")?;
+    let delete = builder.if_expression(correct_space, delete, wrong_space)?;
     let delete = schema_guard(builder, delete)?;
     add_http_handler(
         builder,
-        "$handle_delete_route",
-        "handle-delete-route",
-        "$delete_request",
+        HttpHandlerNames {
+            function: "$handle_delete_route",
+            name: "handle-delete-route",
+            request: "$delete_request",
+            port: "delete",
+        },
         delete,
         &["$data"],
-        "delete",
+        &[
+            ("$delete_route_space", "space", "text"),
+            ("$delete_route_id", "id", "text"),
+        ],
+    )?;
+
+    let featured = text_response(builder, 200, "text/plain; charset=utf-8", "featured-exact")?;
+    let featured = schema_guard(builder, featured)?;
+    add_http_handler(
+        builder,
+        HttpHandlerNames {
+            function: "$handle_featured_route",
+            name: "handle-featured-route",
+            request: "$featured_request",
+            port: "featured",
+        },
+        featured,
+        &["$data"],
+        &[],
     )?;
 
     builder.record(
@@ -1892,16 +1947,10 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
             "$http_port_create",
         ),
         (
-            "$http_route_update",
-            "PUT",
-            "/api/posts",
-            "$http_port_update",
-        ),
-        (
-            "$http_route_delete",
+            "$http_route_featured",
             "DELETE",
-            "/api/posts",
-            "$http_port_delete",
+            "/api/posts/featured",
+            "$http_port_featured",
         ),
     ] {
         builder.record(
@@ -1911,6 +1960,31 @@ fn add_handler(builder: &mut Builder<'_>) -> Result<(), DevError> {
                 ("target", "$serve_target".to_owned()),
                 ("method", method.to_owned()),
                 ("path", path.to_owned()),
+                ("port", port.to_owned()),
+            ],
+        )?;
+    }
+    for (route, method, pattern, port) in [
+        (
+            "$http_route_update",
+            "PUT",
+            "/api/posts/{id}",
+            "$http_port_update",
+        ),
+        (
+            "$http_route_delete",
+            "DELETE",
+            "/api/{space}/{id}",
+            "$http_port_delete",
+        ),
+    ] {
+        builder.record(
+            "add.http-route",
+            vec![
+                ("as", route.to_owned()),
+                ("target", "$serve_target".to_owned()),
+                ("method", method.to_owned()),
+                ("pattern", pattern.to_owned()),
                 ("port", port.to_owned()),
             ],
         )?;
@@ -1926,57 +2000,40 @@ fn schema_guard(builder: &mut Builder<'_>, success: String) -> Result<String, De
 
 fn add_http_handler(
     builder: &mut Builder<'_>,
-    function: &str,
-    name: &str,
-    request: &str,
+    names: HttpHandlerNames<'_>,
     body: String,
     requirements: &[&str],
-    port_name: &str,
+    captures: &[(&str, &str, &str)],
 ) -> Result<(), DevError> {
+    let mut parameters = vec![(names.request, "request", "@request")];
+    parameters.extend_from_slice(captures);
     builder.create_function(
-        function,
-        name,
+        names.function,
+        names.name,
         "@response",
         requirements,
         body,
-        &[(request, "request", "@request")],
+        &parameters,
     )?;
+    let function_type = match captures.len() {
+        0 => "@http_function",
+        1 => "@http_function_one_capture",
+        2 => "@http_function_two_captures",
+        _ => {
+            return Err(DevError::corrupt(
+                "stateful HTTP proof requested more than two capture parameters",
+            ));
+        }
+    };
     builder.record(
         "add.port",
         vec![
-            ("as", format!("$http_port_{port_name}")),
+            ("as", format!("$http_port_{}", names.port)),
             ("component", "$application_component".to_owned()),
-            ("name", port_name.to_owned()),
-            ("type", "@http_function".to_owned()),
-            ("function", function.to_owned()),
+            ("name", names.port.to_owned()),
+            ("type", function_type.to_owned()),
+            ("function", names.function.to_owned()),
         ],
-    )
-}
-
-fn request_query_identity(
-    builder: &mut Builder<'_>,
-    request_parameter: &str,
-) -> Result<String, DevError> {
-    let request = builder.local(request_parameter)?;
-    let query = builder.field_name(request, "query_parameters")?;
-    let key = builder.text("id")?;
-    let fallback = builder.list("text", vec![])?;
-    let values = builder.external_call("query-get-or", vec![query, key, fallback])?;
-    builder.let_one(
-        "query-id-values",
-        values,
-        None,
-        |builder, values_binding| {
-            let values = builder.local(values_binding)?;
-            let length = builder.generic_external_call("list-length", "text", vec![values])?;
-            let one = builder.i64(1)?;
-            let exactly_one = builder.external_call("i64-equal", vec![length, one])?;
-            let values = builder.local(values_binding)?;
-            let zero = builder.i64(0)?;
-            let selected = builder.generic_external_call("list-get", "text", vec![values, zero])?;
-            let missing = builder.text("")?;
-            builder.if_expression(exactly_one, selected, missing)
-        },
     )
 }
 

@@ -14,16 +14,18 @@ and first-party-data copied-binary HTTP acceptance, the current semantic-scale h
 resource-owned maintained durable-queue worker cutover, plus complete revision-pinned local-function
 definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
 bound consume-only private task-function handoff with the maintained worker split, plus one bounded
-identity-preserving graph-native function extraction and the maintained `update-resource` split are
-current architecture. Graph-owned structured sessions now admit one relational `interactive`
+identity-preserving graph-native function extraction and the maintained `update-resource` split,
+plus bounded graph-owned exact/pattern HTTP selectors whose captures index handler parameters, are
+current architecture. Ambiguous overlap, signature drift, and query-selected maintained resource
+dispatch are absent. Graph-owned structured sessions now admit one relational `interactive`
 target over a byte-bounded RFC 6455 server: ordinary state crosses finite callbacks while one
 resident parent owns the connection and all joined resources. Maintained `lkjournal-live-1` proves
 authenticated multi-subscription push with an implementation-disjoint raw client. One crash-safe
 rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source and
-immutable `v0.1.21` are consolidated: v0.1.21 is the supported public
+PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source is
+unreleased `0.1.22`; immutable `v0.1.21` remains the supported public
 `x86_64-unknown-linux-musl` distribution. Its exact and latest downloads independently passed static
 inspection, distributed HTTP with complete function-definition projection and exact routes,
 deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, structured sessions, identity-preserving
@@ -84,7 +86,8 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    implemented. Constraints, inference, lexical capture/closures, component composition,
    specialization, AOT, JIT, SIMD, or custom allocation still require multiple maintained
    workloads, independent semantic/reference behavior, measurements, and explicit reversal
-   conditions. Do not infer capture from the existence of named function values.
+   conditions. Do not infer lexical closure capture from route-segment capture or named function
+   values.
 
 Inbound TLS is not a roadmap item. The present listener remains plaintext and requires an
 appropriate external trusted transport boundary; outbound HTTPS trust is confined to one exact

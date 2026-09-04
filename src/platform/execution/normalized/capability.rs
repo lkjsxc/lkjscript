@@ -1,4 +1,4 @@
-//! Exact deployment-grant binding for normalized Graph 9 requirements.
+//! Exact deployment-grant binding for normalized Graph 10 requirements.
 
 use super::prepare::NormalizedProgram;
 use super::resource::NormalizedResourceScope;

@@ -1,15 +1,18 @@
 //! Owner-frontier structural and semantic validation over an isolated candidate overlay.
 
 use super::{
-    CanonicalBaseRead, CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay, SummaryDelta,
-    ValidationAdmission, WitnessBaseRead, WitnessReadWork,
+    CanonicalBaseRead, CanonicalDelta, DerivedDelta, HttpRouteValidationEvidence, ImpactPlan,
+    KernelOverlay, SummaryDelta, ValidationAdmission, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExactOwnerKey, ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
-    OwnerKey, OwnerRecord, PackageId, RelationEdge, RelationEndpoint, RelationKind, TypeObject,
-    TypeObjectDigest, validate_affine_roots_with_limits, validate_expression_roots_with_limits,
-    validate_http_route_key,
+    DeclarationPayload, DeclarationReference, ExactOwnerKey, ExpressionRead,
+    ExpressionValidationExhaustion, ExpressionValidationLimits, FunctionEffect, OwnerKey,
+    OwnerRecord, PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceRecord,
+    ParameterParent, ParameterRecord, ParameterUse, PortImplementation, RelationEdge,
+    RelationEndpoint, RelationKind, TypeObject, TypeObjectDigest, TypeObjectInterner,
+    analyze_http_route_set, http_route_languages_overlap, http_route_strictly_more_specific,
+    validate_affine_roots_with_limits, validate_expression_roots_with_limits,
 };
 use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +36,8 @@ pub struct IncrementalValidationReport {
     pub semantically_checked: BTreeSet<OwnerKey>,
     pub summaries_reused: u64,
     pub tests_selected: u64,
+    pub http_routes:
+        BTreeMap<crate::platform::semantic_id::HttpRouteId, HttpRouteValidationEvidence>,
     pub work: IncrementalValidationWork,
 }
 
@@ -134,7 +139,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     let mut work = 0_usize;
-    if let Err(diagnostic) = validate_http_topology_frontier(
+    let http_routes = match validate_http_topology_frontier(
         overlay,
         impact,
         canonical,
@@ -142,8 +147,12 @@ pub(crate) fn validate_incremental_frontier_with_admission<
         &mut structural.work,
         admission,
     ) {
-        push_bounded_diagnostic(&mut diagnostics, diagnostic, admission)?;
-    }
+        Ok(http_routes) => http_routes,
+        Err(diagnostic) => {
+            push_bounded_diagnostic(&mut diagnostics, diagnostic, admission)?;
+            BTreeMap::new()
+        }
+    };
     let mut live_semantic_roots = Vec::new();
     for owner in &impact.semantically_checked {
         match overlay.owner(*owner) {
@@ -245,6 +254,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
             semantically_checked: impact.semantically_checked.clone(),
             summaries_reused,
             tests_selected: impact.tests.len() as u64,
+            http_routes,
             work: structural.work,
         })
     } else {
@@ -259,15 +269,16 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
     base_witness: &W,
     work: &mut IncrementalValidationWork,
     admission: ValidationAdmission,
-) -> Result<(), Diagnostic> {
-    use crate::platform::kernel::PortImplementation;
-    use crate::platform::kernel::contract::{
-        MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
-    };
+) -> Result<
+    BTreeMap<crate::platform::semantic_id::HttpRouteId, HttpRouteValidationEvidence>,
+    Diagnostic,
+> {
+    use crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET;
     use crate::platform::package::RunnerKind;
 
     let package = overlay.package_id();
     let mut targets = BTreeSet::new();
+    let mut evidence = BTreeMap::new();
     let removed_route_edges = candidate_http_route_relation_removals(canonical, overlay)?;
     let added_route_edges = canonical_http_route_relation_additions(canonical, overlay)?;
     for owner in &impact.semantically_checked {
@@ -305,10 +316,6 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
         targets.insert(target);
     }
 
-    let http_function_type = crate::platform::http::semantic_http_types(
-        &mut crate::platform::kernel::TypeObjectInterner::default(),
-    )?
-    .function_type;
     for target in targets {
         charge_http_owner(work, admission, "HTTP target topology")?;
         let target_owner = OwnerKey::Target(target);
@@ -397,8 +404,7 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
             }
         }
 
-        let mut keys = BTreeSet::new();
-        let mut aggregate = 0usize;
+        let mut route_bindings = Vec::with_capacity(edges.len());
         for edge in edges {
             if edge.kind != RelationKind::HttpRouteTarget || edge.target != target_endpoint {
                 return Err(validation_error(
@@ -433,38 +439,11 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
                     "HTTP route target relation names a missing or foreign owner",
                 ));
             };
-            validate_http_route_key(&route.method, &route.path)?;
             if route.target != target {
                 return Err(validation_error(
                     DiagnosticClass::Corrupt,
                     "change_validate_http_route_binding",
                     "HTTP route owner and target relation disagree",
-                ));
-            }
-            if !keys.insert((route.method.clone(), route.path.clone())) {
-                return Err(validation_error(
-                    DiagnosticClass::Semantic,
-                    "kernel_http_route_duplicate",
-                    "HTTP target contains a duplicate exact method/path pair",
-                ));
-            }
-            aggregate = aggregate
-                .checked_add(route.method.len())
-                .and_then(|value| value.checked_add(route.path.len()))
-                .ok_or_else(|| {
-                    validation_error(
-                        DiagnosticClass::Semantic,
-                        "kernel_http_target_route_bytes",
-                        "HTTP target route-key byte count overflowed",
-                    )
-                })?;
-            if aggregate > MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET {
-                return Err(validation_error(
-                    DiagnosticClass::Semantic,
-                    "kernel_http_target_route_bytes",
-                    format!(
-                        "HTTP target route keys exceed {MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET} bytes"
-                    ),
                 ));
             }
             if route.port.package != package {
@@ -490,20 +469,221 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
                     "HTTP route port does not belong to its target component",
                 ));
             }
-            if !matches!(port.implementation, PortImplementation::Function(_)) {
-                return Err(validation_error(
-                    DiagnosticClass::Semantic,
-                    "kernel_http_route_port_implementation",
-                    "HTTP route port must be function-backed",
-                ));
-            }
-            if port.function_type != http_function_type {
+            let function = match &port.implementation {
+                PortImplementation::Function(function) => *function,
+                PortImplementation::Expression(_) => {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_http_route_port_implementation",
+                        "HTTP route port must be function-backed",
+                    ));
+                }
+            };
+            let expected_function_type = crate::platform::http::semantic_http_route_function_type(
+                &mut TypeObjectInterner::default(),
+                route.selector.capture_count(),
+            )?;
+            if port.function_type != expected_function_type {
                 return Err(validation_error(
                     DiagnosticClass::Semantic,
                     "kernel_type_http_route_port",
                     "HTTP route requires the exact semantic HTTP function-backed port shape",
                 ));
             }
+            let parameters = candidate_function_parameters(overlay, function, work, admission)?;
+            validate_capture_parameters(&route.selector, &parameters)?;
+            route_bindings.push((route, function, parameters));
+        }
+        let route_records = route_bindings
+            .iter()
+            .map(|(route, _, _)| route.clone())
+            .collect::<Vec<_>>();
+        let analysis = analyze_http_route_set(&route_records)?;
+        for (route, handler, parameters) in route_bindings {
+            let OwnerKey::HttpRoute(route_id) = route.header.owner else {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_identity",
+                    "validated HTTP route has a foreign owner identity",
+                ));
+            };
+            let mut overlaps = 0u64;
+            let mut more_specific = 0u64;
+            let mut less_specific = 0u64;
+            let mut parameter_ids = Vec::with_capacity(parameters.len());
+            for parameter in parameters {
+                let OwnerKey::Parameter(parameter) = parameter.header.owner else {
+                    return Err(validation_error(
+                        DiagnosticClass::Corrupt,
+                        "change_validate_http_route_parameter_identity",
+                        "validated HTTP handler parameter has a foreign owner identity",
+                    ));
+                };
+                parameter_ids.push(parameter);
+            }
+            for other in &route_records {
+                if route.header.owner == other.header.owner
+                    || !http_route_languages_overlap(&route, other)
+                {
+                    continue;
+                }
+                overlaps = overlaps.saturating_add(1);
+                if http_route_strictly_more_specific(&route, other) {
+                    more_specific = more_specific.saturating_add(1);
+                } else if http_route_strictly_more_specific(other, &route) {
+                    less_specific = less_specific.saturating_add(1);
+                }
+            }
+            if evidence
+                .insert(
+                    route_id,
+                    HttpRouteValidationEvidence {
+                        record: route,
+                        handler,
+                        parameters: parameter_ids,
+                        exact_routes: u64::try_from(analysis.exact_routes).unwrap_or(u64::MAX),
+                        pattern_routes: u64::try_from(analysis.pattern_routes).unwrap_or(u64::MAX),
+                        pattern_segments: u64::try_from(analysis.pattern_segments)
+                            .unwrap_or(u64::MAX),
+                        maximum_specificity_chain: u64::try_from(
+                            analysis.maximum_specificity_chain,
+                        )
+                        .unwrap_or(u64::MAX),
+                        overlaps,
+                        more_specific,
+                        less_specific,
+                    },
+                )
+                .is_some()
+            {
+                return Err(validation_error(
+                    DiagnosticClass::Corrupt,
+                    "change_validate_http_route_identity",
+                    "validated HTTP topology repeats one route identity",
+                ));
+            }
+        }
+    }
+    Ok(evidence)
+}
+
+fn candidate_function_parameters<B: CanonicalBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
+    function: DeclarationReference,
+    work: &mut IncrementalValidationWork,
+    admission: ValidationAdmission,
+) -> Result<Vec<ParameterRecord>, Diagnostic> {
+    charge_http_owner(work, admission, "HTTP route backing function")?;
+    let parameter_ids = if function.package == overlay.package_id() {
+        match overlay.owner(OwnerKey::Declaration(function.declaration))? {
+            Some(OwnerRecord::Declaration(record)) => match record.payload {
+                DeclarationPayload::Function(function) => function.parameters,
+                _ => {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_type_http_route_function",
+                        "HTTP route port must resolve to a function declaration",
+                    ));
+                }
+            },
+            _ => {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_type_http_route_function",
+                    "HTTP route backing function is missing",
+                ));
+            }
+        }
+    } else {
+        match overlay.package_interface_owner(
+            function.package,
+            OwnerKey::Declaration(function.declaration),
+        )? {
+            Some(PackageInterfaceRecord::Declaration(record)) => match record.payload {
+                PackageInterfaceDeclarationPayload::Function(function) => function.parameters,
+                _ => {
+                    return Err(validation_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_type_http_route_function",
+                        "HTTP route port must resolve to a dependency function declaration",
+                    ));
+                }
+            },
+            _ => {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_type_http_route_function",
+                    "HTTP route backing dependency function is missing",
+                ));
+            }
+        }
+    };
+    parameter_ids
+        .into_iter()
+        .map(|parameter| {
+            charge_http_owner(work, admission, "HTTP route function parameter")?;
+            let record = if function.package == overlay.package_id() {
+                match overlay.owner(OwnerKey::Parameter(parameter))? {
+                    Some(OwnerRecord::Parameter(record)) => record,
+                    _ => {
+                        return Err(validation_error(
+                            DiagnosticClass::Semantic,
+                            "kernel_type_http_route_parameter",
+                            "HTTP route backing function parameter is missing",
+                        ));
+                    }
+                }
+            } else {
+                match overlay
+                    .package_interface_owner(function.package, OwnerKey::Parameter(parameter))?
+                {
+                    Some(PackageInterfaceRecord::Parameter(record)) => record,
+                    _ => {
+                        return Err(validation_error(
+                            DiagnosticClass::Semantic,
+                            "kernel_type_http_route_parameter",
+                            "HTTP route dependency parameter is missing",
+                        ));
+                    }
+                }
+            };
+            if record.parent != ParameterParent::Function(function.declaration) {
+                return Err(validation_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_type_http_route_parameter_parent",
+                    "HTTP route parameter belongs to another function",
+                ));
+            }
+            Ok(record)
+        })
+        .collect()
+}
+
+fn validate_capture_parameters(
+    selector: &crate::platform::kernel::HttpRouteSelector,
+    parameters: &[ParameterRecord],
+) -> Result<(), Diagnostic> {
+    let captures = selector.capture_names();
+    if parameters.len() != captures.len().saturating_add(1) {
+        return Err(validation_error(
+            DiagnosticClass::Semantic,
+            "kernel_type_http_route_parameters",
+            "HTTP route backing function parameter count disagrees with its selector",
+        ));
+    }
+    let text_type =
+        crate::platform::http::semantic_http_types(&mut TypeObjectInterner::default())?.text_type;
+    for (parameter, capture) in parameters.iter().skip(1).zip(captures) {
+        if parameter.name.as_str() != capture.as_str()
+            || parameter.ty != text_type
+            || parameter.use_mode != ParameterUse::Unrestricted
+            || parameter.resource_requirement.is_some()
+        {
+            return Err(validation_error(
+                DiagnosticClass::Semantic,
+                "kernel_type_http_route_capture_parameter",
+                "HTTP route capture must index one same-named unrestricted Text parameter without a resource binding",
+            ));
         }
     }
     Ok(())

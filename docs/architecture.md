@@ -237,7 +237,7 @@ derived and cannot select or advance semantic authority.
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/interactive/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
-| HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response and handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
+| HTTP semantic boundary | `platform/http.rs` | exact structural request/header/query/response types and selector-indexed handler types shared by authoring and runtime admission | listener adaptation, resident state, or application policy |
 | Structured-session semantic boundary | `platform/session.rs`, `packages/standard` | canonical event/decision family, exact repeated ordinary state relation, phase and retained-state admission | connections, framing, timers, application policy, or deployment bounds |
 | Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, outbound WebSocket, or application response policy |
 | Operational data | `platform/data.rs`, normalized data/queue adapters, `platform/queue.rs`, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, private queue attempt tuples and one durable queue backend | program meaning, public raw lease authority, object bytes, deployment policy, or remote database service |
@@ -295,8 +295,8 @@ CapabilityResource<Interface> + parameter use / optional helper binding
  language-order affine validator + disjoint finite oracle
                  │ borrow / consume / one direct acyclic handoff
                  ▼
- compiler-unit 4 / bytecode 3 local loads + exact binding
-                 │ Artifact 14 shape/call-graph validation
+ compiler-unit 5 / bytecode 3 local loads + exact binding
+                 │ Artifact 15 shape/call-graph/route-signature validation
                  ▼
  task resource scope: scope + kind + interface + requirement
                  │ reserve before effect; commit or release
@@ -329,7 +329,7 @@ The interactive path keeps semantic state and live ownership deliberately disjoi
 graph handler: (Option<State>, SessionEvent) -> SessionDecision<State>
                               │ exact closed repeated State relation
                               ▼
-                 Artifact 14 + deployment 4 preparation
+                 Artifact 15 + deployment 4 preparation
                               │ validate all session limits before readiness
                               ▼
           one parent session scope owns RFC 6455 connection
@@ -416,29 +416,32 @@ independent limits remain operator authority. Project creation validates and syn
 descriptor, and empty generated directory before one destination rename; readiness performs no
 network request.
 
-## Exact inbound HTTP topology
+## Signature-indexed inbound HTTP topology
 
 An HTTP target has no universal handler port. Stable route owners form its sole nonempty finite
 dispatch authority:
 
 ```text
-HTTP target + component ── owns ── exact (method, path) route owners
-                                      │ each names one component port
+HTTP target + component ── owns ── method + typed exact/pattern selectors
+                                      │ capture order indexes port/function parameters
                                       ▼
-                         canonical compiler route table
+                       compiler exact index + segment trie
                                       │ strict artifact/load/preflight binding
                                       ▼
-validated transport request ── one exact lookup ── selected handler at most once
+validated path spelling ── bounded specificity lookup ── one handler + captures
                                       │ no match
                                       └──────────── fixed empty 404, no task or capability
 ```
 
-The compiler table and prepared lookup index are derived and disposable. They bind route, target,
-component, port, function shape, and requirement closure back to accepted authority and cannot be
-overridden by a deployment descriptor. Canonical order is unsigned method bytes then path bytes;
-the runtime uses the adapter's validated path spelling without normalization or an implicit method.
-Route identity survives a supported method/path/port change, while target inspection exposes only
-the canonical route-set digest and count. Bounded context traversal exposes the ordinary
+The compiler table and prepared matcher are derived and disposable. They bind route, selector
+segments, captures, target, component, port, function parameters, HTTP types, and requirement
+closure back to accepted authority and cannot be overridden by a deployment descriptor. Canonical
+order binds method, selector kind and segments, capture order, and port identity. Duplicate match
+languages and incomparable overlap reject; exact and strictly more-specific literal refinements
+win without priority or source order. Runtime matching preserves validated raw segment spelling and
+performs no decoding, normalization, implicit method, or query selection. Route identity survives a
+supported method/selector/port change, while target inspection exposes exact/pattern counts, the
+route-set digest, and maximum specificity chain. Bounded context traversal exposes the ordinary
 route/target, route/port, port/function, component, and effect relations rather than a second route
 projection.
 
@@ -459,7 +462,7 @@ copied binary discovery
                      ▼
           one compact typed authored request
  dependency + component + requirements + function-backed HTTP ports
- + target + exact routes + task effects + explicit generic/function values
+ + target + exact/pattern routes + indexed capture parameters + task effects
                      │
             plan / exact-base apply
                      ▼
@@ -473,7 +476,7 @@ HTTP client -> HTTP adapter -> graph handler/domain policy
                              -> first-party ordered data adapter
 ```
 
-The graph owns the finite exact route set and each route-to-port binding, plus header/body
+The graph owns the finite typed route set and each selector-to-port/function binding, plus header/body
 admission, strict JSON interpretation, post domain types and validation, response
 status/headers/body, space/schema/index policy, canonical typed
 encoding, expectations, and transaction boundaries. HTTP/domain functions call a narrow
@@ -483,8 +486,9 @@ listener, and runtime limits. Runtime facts are operational authority; they neve
 meaning or share semantic repository identities.
 
 The request creates each handler with its exact result and requirement closure, and topology
-validation checks route keys, duplicate absence, port/function agreement, component requirement
-closure, component/port ownership, route/target ownership, and HTTP runner shape before
+validation checks selector grammar and bounds, overlap/specificity, indexed parameter names/order/
+types, port/function agreement, component requirement closure, component/port ownership,
+route/target ownership, and HTTP runner shape before
 publication. Generic runtime call frames carry concrete graph type
 substitutions for standard JSON/list declarations in both production and reference tiers. An
 idempotent apply retry reopens the accepted request's exact parent and hides only the child-added

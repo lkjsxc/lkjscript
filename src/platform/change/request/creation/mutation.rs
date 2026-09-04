@@ -1,4 +1,4 @@
-//! Typed additions and contract updates for existing Graph 9 owners.
+//! Typed additions and contract updates for existing Graph 10 owners.
 
 use super::*;
 use crate::platform::kernel::{
@@ -103,9 +103,9 @@ pub(in crate::platform::change::request) fn lower_mutation<
             symbol,
             target,
             method,
-            path,
+            selector,
             port,
-        } => lower_add_http_route(lowerer, symbol, target, method, path, port),
+        } => lower_add_http_route(lowerer, symbol, target, method, selector, port),
         AuthoredChange::SetDeclarationVisibility {
             declaration,
             visibility,
@@ -181,9 +181,9 @@ pub(in crate::platform::change::request) fn lower_mutation<
         AuthoredChange::SetHttpRoute {
             route,
             method,
-            path,
+            selector,
             port,
-        } => lower_set_http_route(lowerer, route, method, path, port),
+        } => lower_set_http_route(lowerer, route, method, selector, port),
         _ => Err(mutation_corrupt(
             "change_mutation_dispatch",
             "non-mutation change reached mutation lowering",
@@ -571,7 +571,7 @@ fn lower_add_http_route<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Siz
     symbol: &str,
     target: &OwnerSelector,
     method: &str,
-    path: &str,
+    selector: &crate::platform::kernel::HttpRouteSelector,
     port: &AuthoredPortReference,
 ) -> Result<(), Diagnostic> {
     let route = lowerer.http_route_symbol(symbol)?;
@@ -584,25 +584,25 @@ fn lower_add_http_route<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Siz
         header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute),
         target,
         method: method.to_owned(),
-        path: path.to_owned(),
+        selector: selector.clone(),
         port,
     }))
 }
 
 fn lower_set_http_route<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
-    selector: &OwnerSelector,
+    route_selector: &OwnerSelector,
     method: &str,
-    path: &str,
+    selector: &crate::platform::kernel::HttpRouteSelector,
     port: &AuthoredPortReference,
 ) -> Result<(), Diagnostic> {
     let port = lowerer.lower_port_reference(port)?;
-    let owner = lowerer.resolve_owner(selector)?;
+    let owner = lowerer.resolve_owner(route_selector)?;
     let OwnerRecord::HttpRoute(record) = lowerer.candidate_mut(owner)? else {
         return Err(mutation_kind("HTTP route", owner));
     };
     record.method = method.to_owned();
-    record.path = path.to_owned();
+    record.selector = selector.clone();
     record.port = port;
     Ok(())
 }

@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 9 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 10 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -233,7 +233,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 9 authority",
+                        "selected target is absent from canonical Graph 10 authority",
                     ));
                 }
             };
@@ -263,7 +263,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 9 authority",
+                        "selected target port is absent from canonical Graph 10 authority",
                     ));
                 }
             };

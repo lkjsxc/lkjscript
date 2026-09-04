@@ -1,6 +1,7 @@
-//! Exact structural HTTP boundary for normalized resident deployments.
+//! Signature-indexed structural HTTP boundary for normalized resident deployments.
 
 use super::capability::NormalizedAdapterKind;
+use super::prepare::{NormalizedEntryPoint, NormalizedHttpRoute};
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
 use super::value::PortIndex;
@@ -13,7 +14,10 @@ use crate::platform::http::{
     encode_live_response, execution_error_status, finish_request_body_pump, pump_request_body,
     safe_error_response, semantic_http_types, static_response, validate_request,
 };
-use crate::platform::kernel::{Name, RequirementReference, TypeObjectInterner};
+use crate::platform::kernel::{
+    HttpRoutePatternSegment, HttpRouteSelector, Name, ParameterUse, RequirementReference,
+    TypeObjectInterner,
+};
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::HttpRouteId;
 use axum::Router;
@@ -31,6 +35,344 @@ pub(crate) struct NormalizedHttpApplication {
     resident: NormalizedResidentDeployment,
     limits: HttpLimits,
     stream_requirement: RequirementReference,
+    matcher: PreparedHttpMatcher,
+}
+
+#[derive(Clone)]
+struct PreparedHttpMatcher {
+    exact: BTreeMap<Arc<str>, BTreeMap<Arc<str>, usize>>,
+    patterns: BTreeMap<Arc<str>, PatternTrie>,
+    nodes: u64,
+}
+
+#[derive(Clone, Default)]
+struct PatternTrie {
+    nodes: Vec<PatternTrieNode>,
+}
+
+#[derive(Clone, Default)]
+struct PatternTrieNode {
+    literals: BTreeMap<Arc<str>, usize>,
+    capture: Option<usize>,
+    route: Option<usize>,
+}
+
+struct RouteSelection {
+    route: Option<usize>,
+    matcher_steps: u64,
+}
+
+struct SelectedRoute {
+    route: HttpRouteId,
+    port: PortIndex,
+    captures: Vec<NormalizedValue>,
+    capture_bytes: u64,
+}
+
+impl PreparedHttpMatcher {
+    fn new(routes: &[NormalizedHttpRoute]) -> Result<Self, Diagnostic> {
+        validate_matcher_route_set(routes)?;
+        let mut exact = BTreeMap::<Arc<str>, BTreeMap<Arc<str>, usize>>::new();
+        let mut patterns = BTreeMap::<Arc<str>, PatternTrie>::new();
+        for (index, route) in routes.iter().enumerate() {
+            match &route.selector {
+                HttpRouteSelector::Exact { path } => {
+                    if exact
+                        .entry(route.method.clone())
+                        .or_default()
+                        .insert(Arc::from(path.as_str()), index)
+                        .is_some()
+                    {
+                        return Err(http_corrupt(
+                            "normalized_http_matcher_exact_duplicate",
+                            "prepared exact HTTP index repeats one method/path",
+                        ));
+                    }
+                }
+                HttpRouteSelector::Pattern { segments } => {
+                    patterns
+                        .entry(route.method.clone())
+                        .or_default()
+                        .insert(segments, index)?;
+                }
+            }
+        }
+        let trie_nodes = patterns.values().try_fold(0usize, |total, trie| {
+            total.checked_add(trie.nodes.len()).ok_or_else(|| {
+                http_corrupt(
+                    "normalized_http_matcher_nodes",
+                    "prepared HTTP matcher node accounting overflowed",
+                )
+            })
+        })?;
+        let nodes = trie_nodes
+            .checked_add(
+                routes
+                    .iter()
+                    .filter(|route| matches!(route.selector, HttpRouteSelector::Exact { .. }))
+                    .count(),
+            )
+            .ok_or_else(|| {
+                http_corrupt(
+                    "normalized_http_matcher_nodes",
+                    "prepared HTTP matcher node accounting overflowed",
+                )
+            })?;
+        let maximum_nodes =
+            crate::platform::kernel::contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET
+                .checked_add(crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET)
+                .and_then(|value| {
+                    value.checked_add(
+                        crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET,
+                    )
+                })
+                .ok_or_else(|| {
+                    http_corrupt(
+                        "normalized_http_matcher_nodes",
+                        "HTTP matcher node bound overflowed",
+                    )
+                })?;
+        if nodes > maximum_nodes {
+            return Err(http_corrupt(
+                "normalized_http_matcher_nodes",
+                "prepared HTTP matcher exceeds its finite node bound",
+            ));
+        }
+        Ok(Self {
+            exact,
+            patterns,
+            nodes: u64::try_from(nodes).map_err(|_| {
+                http_corrupt(
+                    "normalized_http_matcher_nodes",
+                    "prepared HTTP matcher node count is not representable",
+                )
+            })?,
+        })
+    }
+
+    fn select(&self, method: &str, path: &str) -> RouteSelection {
+        if let Some(route) = self
+            .exact
+            .get(method)
+            .and_then(|paths| paths.get(path))
+            .copied()
+        {
+            return RouteSelection {
+                route: Some(route),
+                matcher_steps: 1,
+            };
+        }
+        let Some(trie) = self.patterns.get(method) else {
+            return RouteSelection {
+                route: None,
+                matcher_steps: 1,
+            };
+        };
+        let Some(path) = path.strip_prefix('/') else {
+            return RouteSelection {
+                route: None,
+                matcher_steps: 1,
+            };
+        };
+        let mut steps = 0u64;
+        let route = trie.select(path.split('/'), &mut steps);
+        RouteSelection {
+            route,
+            matcher_steps: steps.saturating_add(1),
+        }
+    }
+}
+
+impl PatternTrie {
+    fn insert(
+        &mut self,
+        segments: &[HttpRoutePatternSegment],
+        route: usize,
+    ) -> Result<(), Diagnostic> {
+        if self.nodes.is_empty() {
+            self.nodes.push(PatternTrieNode::default());
+        }
+        let mut node = 0usize;
+        for segment in segments {
+            let next = match segment {
+                HttpRoutePatternSegment::Literal(literal) => {
+                    if let Some(next) = self.nodes[node].literals.get(literal.as_str()).copied() {
+                        next
+                    } else {
+                        let next = self.nodes.len();
+                        self.nodes.push(PatternTrieNode::default());
+                        self.nodes[node]
+                            .literals
+                            .insert(Arc::from(literal.as_str()), next);
+                        next
+                    }
+                }
+                HttpRoutePatternSegment::Capture(_) => {
+                    if let Some(next) = self.nodes[node].capture {
+                        next
+                    } else {
+                        let next = self.nodes.len();
+                        self.nodes.push(PatternTrieNode::default());
+                        self.nodes[node].capture = Some(next);
+                        next
+                    }
+                }
+            };
+            node = next;
+        }
+        if self.nodes[node].route.replace(route).is_some() {
+            return Err(http_corrupt(
+                "normalized_http_matcher_pattern_duplicate",
+                "prepared HTTP matcher repeats one pattern language",
+            ));
+        }
+        Ok(())
+    }
+
+    fn select<'a>(&self, segments: std::str::Split<'a, char>, steps: &mut u64) -> Option<usize> {
+        self.select_node(0, segments, steps)
+    }
+
+    fn select_node<'a>(
+        &self,
+        node_index: usize,
+        mut segments: std::str::Split<'a, char>,
+        steps: &mut u64,
+    ) -> Option<usize> {
+        *steps = steps.saturating_add(1);
+        let node = self.nodes.get(node_index)?;
+        let Some(segment) = segments.next() else {
+            return node.route;
+        };
+        if segment.is_empty() {
+            return None;
+        }
+        if let Some(next) = node.literals.get(segment).copied()
+            && let Some(route) = self.select_node(next, segments.clone(), steps)
+        {
+            return Some(route);
+        }
+        node.capture
+            .and_then(|next| self.select_node(next, segments, steps))
+    }
+}
+
+fn validate_matcher_route_set(routes: &[NormalizedHttpRoute]) -> Result<(), Diagnostic> {
+    let mut route_bytes = 0usize;
+    let mut pattern_segments = 0usize;
+    let mut previous: Option<&NormalizedHttpRoute> = None;
+    for route in routes {
+        crate::platform::kernel::validate_http_route_method(&route.method).map_err(|_| {
+            http_corrupt(
+                "normalized_http_route_key",
+                "normalized HTTP route contains an invalid method",
+            )
+        })?;
+        route.selector.validate_local().map_err(|_| {
+            http_corrupt(
+                "normalized_http_route_selector",
+                "normalized HTTP route contains an invalid selector",
+            )
+        })?;
+        if let Some(previous) = previous
+            && previous
+                .method
+                .as_bytes()
+                .cmp(route.method.as_bytes())
+                .then_with(|| {
+                    crate::platform::kernel::http_route_selector_cmp(
+                        &previous.selector,
+                        &route.selector,
+                    )
+                })
+                != std::cmp::Ordering::Less
+        {
+            return Err(http_corrupt(
+                "normalized_http_route_order",
+                "normalized HTTP routes are duplicate or noncanonical",
+            ));
+        }
+        previous = Some(route);
+        route_bytes = route_bytes
+            .checked_add(route.method.len())
+            .and_then(|value| value.checked_add(route.selector.key_bytes()))
+            .ok_or_else(|| {
+                http_corrupt(
+                    "normalized_http_route_bytes",
+                    "normalized HTTP route-key byte accounting overflowed",
+                )
+            })?;
+        if let HttpRouteSelector::Pattern { segments } = &route.selector {
+            pattern_segments = pattern_segments
+                .checked_add(segments.len())
+                .ok_or_else(|| {
+                    http_corrupt(
+                        "normalized_http_route_pattern_segments",
+                        "normalized HTTP pattern-segment accounting overflowed",
+                    )
+                })?;
+        }
+    }
+    if route_bytes > crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET
+        || pattern_segments
+            > crate::platform::kernel::contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET
+    {
+        return Err(http_corrupt(
+            "normalized_http_route_bounds",
+            "normalized HTTP routes exceed aggregate selector bounds",
+        ));
+    }
+    for (index, left) in routes.iter().enumerate() {
+        for right in routes.iter().skip(index + 1) {
+            if left.port == right.port
+                && left.selector.capture_names() != right.selector.capture_names()
+            {
+                return Err(http_corrupt(
+                    "normalized_http_route_shared_port_signature",
+                    "normalized HTTP routes sharing a port disagree on capture names",
+                ));
+            }
+            if left.method != right.method {
+                continue;
+            }
+            match (&left.selector, &right.selector) {
+                (
+                    HttpRouteSelector::Exact { path: left },
+                    HttpRouteSelector::Exact { path: right },
+                ) if left == right => {
+                    return Err(http_corrupt(
+                        "normalized_http_route_duplicate_language",
+                        "normalized exact HTTP routes repeat one match language",
+                    ));
+                }
+                (
+                    HttpRouteSelector::Pattern {
+                        segments: left_segments,
+                    },
+                    HttpRouteSelector::Pattern {
+                        segments: right_segments,
+                    },
+                ) if crate::platform::kernel::http_route_patterns_overlap(
+                    left_segments,
+                    right_segments,
+                ) && !crate::platform::kernel::http_route_pattern_strictly_more_specific(
+                    left_segments,
+                    right_segments,
+                ) && !crate::platform::kernel::http_route_pattern_strictly_more_specific(
+                    right_segments,
+                    left_segments,
+                ) =>
+                {
+                    return Err(http_corrupt(
+                        "normalized_http_route_overlap",
+                        "normalized HTTP patterns overlap without strict specificity",
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
 }
 
 impl NormalizedHttpApplication {
@@ -56,55 +398,75 @@ impl NormalizedHttpApplication {
             ));
         }
         let program = resident.program();
-        let function_type = semantic_http_types(&mut TypeObjectInterner::default())?.function_type;
-        let mut previous = None;
-        let mut route_bytes = 0usize;
+        let matcher = PreparedHttpMatcher::new(&resident.target().http_routes)?;
         for route in resident.target().http_routes.iter() {
-            crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
-                |_| {
-                    http_corrupt(
-                        "normalized_http_route_key",
-                        "normalized HTTP route contains an invalid method or path",
-                    )
-                },
-            )?;
-            let key = (route.method.as_bytes(), route.path.as_bytes());
-            if previous.is_some_and(|previous| previous >= key) {
-                return Err(http_corrupt(
-                    "normalized_http_route_order",
-                    "normalized HTTP routes are duplicate or noncanonical",
-                ));
-            }
-            previous = Some(key);
-            route_bytes = route_bytes
-                .checked_add(route.method.len())
-                .and_then(|value| value.checked_add(route.path.len()))
-                .ok_or_else(|| {
-                    http_corrupt(
-                        "normalized_http_route_bytes",
-                        "normalized HTTP route-key byte accounting overflowed",
-                    )
-                })?;
-            if route_bytes
-                > crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET
-            {
-                return Err(http_corrupt(
-                    "normalized_http_route_bytes",
-                    "normalized HTTP route keys exceed the aggregate byte bound",
-                ));
-            }
             let port = program.ports.get(route.port.0 as usize).ok_or_else(|| {
                 http_corrupt(
                     "normalized_http_route_port",
                     "selected HTTP route port escaped the exact runtime table",
                 )
             })?;
-            if port.component != resident.target().component || port.function_type != function_type
+            let expected_type = crate::platform::http::semantic_http_route_function_type(
+                &mut TypeObjectInterner::default(),
+                route.selector.capture_count(),
+            )?;
+            let function = match &port.entry {
+                NormalizedEntryPoint::Function(function) => *function,
+                _ => {
+                    return Err(http_corrupt(
+                        "normalized_http_handler_function",
+                        "HTTP route port is not backed by one prepared function",
+                    ));
+                }
+            };
+            if port.component != resident.target().component
+                || port.function_type != expected_type
+                || function != route.function
             {
                 return Err(http_diagnostic(
                     "normalized_http_handler_signature",
-                    "each HTTP route must select a function-backed port on the target component with the exact current structural request and response types",
+                    "each HTTP route must select its exact function-backed component port with the selector-indexed request/capture/response type",
                 ));
+            }
+            let handler = program.functions.get(function.0 as usize).ok_or_else(|| {
+                http_corrupt(
+                    "normalized_http_handler_function",
+                    "HTTP route function escaped the prepared function table",
+                )
+            })?;
+            let http = semantic_http_types(&mut TypeObjectInterner::default())?;
+            let captures = route.selector.capture_names();
+            if handler.parameters.len() != captures.len().saturating_add(1)
+                || handler
+                    .parameters
+                    .first()
+                    .is_none_or(|parameter| parameter.ty != http.request_type)
+                || handler.result != http.response_type
+                || route.capture_parameters.len() != captures.len()
+            {
+                return Err(http_corrupt(
+                    "normalized_http_handler_parameters",
+                    "HTTP route handler parameters disagree with its selector",
+                ));
+            }
+            for ((parameter, capture), expected_parameter) in handler
+                .parameters
+                .iter()
+                .skip(1)
+                .zip(&captures)
+                .zip(route.capture_parameters.iter())
+            {
+                if parameter.parameter != *expected_parameter
+                    || parameter.name.as_str() != capture.as_str()
+                    || parameter.ty != http.text_type
+                    || parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                {
+                    return Err(http_corrupt(
+                        "normalized_http_handler_capture",
+                        "HTTP route capture disagrees with its prepared handler parameter",
+                    ));
+                }
             }
         }
         let mut stream_requirements = resident
@@ -145,6 +507,7 @@ impl NormalizedHttpApplication {
             resident,
             limits,
             stream_requirement,
+            matcher,
         })
     }
 
@@ -154,11 +517,15 @@ impl NormalizedHttpApplication {
     ) -> Result<(HttpResponse, HttpDispatchObservation), ExecutionError> {
         validate_request(&request, &self.limits)?;
         let method_is_head = request.method == "HEAD";
-        let Some((route, port)) = self.select_route(&request.method, &request.path) else {
+        let (selected, matcher_steps) = self.select_route(&request.method, &request.path)?;
+        let Some(selected) = selected else {
             return Ok((
                 unmatched_response(),
                 HttpDispatchObservation {
                     route: None,
+                    matcher_steps,
+                    captures: 0,
+                    capture_bytes: 0,
                     task_id: None,
                     queue_nanoseconds: 0,
                     execution_nanoseconds: 0,
@@ -174,9 +541,18 @@ impl NormalizedHttpApplication {
             std::mem::take(&mut request.body),
         )?;
         let request = request_value(request, query_parameters, body)?;
+        let capture_count = u64::try_from(selected.captures.len()).map_err(|_| {
+            ExecutionError::resource(
+                "http_route_capture_count",
+                "HTTP route capture count is not representable",
+            )
+        })?;
+        let mut arguments = Vec::with_capacity(selected.captures.len().saturating_add(1));
+        arguments.push(request);
+        arguments.extend(selected.captures);
         let receipt = self
             .resident
-            .invoke_port_scoped(resources, port, vec![request])
+            .invoke_port_scoped(resources, selected.port, arguments)
             .await?;
         let mut response = response_value(receipt.value, &self.limits)?;
         if method_is_head {
@@ -185,7 +561,10 @@ impl NormalizedHttpApplication {
         Ok((
             response,
             HttpDispatchObservation {
-                route: Some(route),
+                route: Some(selected.route),
+                matcher_steps,
+                captures: capture_count,
+                capture_bytes: selected.capture_bytes,
                 task_id: Some(receipt.task_id),
                 queue_nanoseconds: receipt.queue_nanoseconds,
                 execution_nanoseconds: receipt.execution_nanoseconds,
@@ -212,6 +591,7 @@ impl NormalizedHttpApplication {
             )
         })?;
         let resident = self.resident.clone();
+        let matcher_nodes = self.matcher.nodes;
         let serving = axum::serve(listener, self.router())
             .with_graceful_shutdown(shutdown)
             .await
@@ -250,6 +630,7 @@ impl NormalizedHttpApplication {
             contract_version: HTTP_ADAPTER_CONTRACT_VERSION,
             local_address: local_address.to_string(),
             accepted_at_transport: true,
+            matcher_nodes,
             shutdown,
         })
     }
@@ -258,21 +639,100 @@ impl NormalizedHttpApplication {
         &self.resident
     }
 
-    fn select_route(&self, method: &str, path: &str) -> Option<(HttpRouteId, PortIndex)> {
-        self.resident
+    fn select_route(
+        &self,
+        method: &str,
+        path: &str,
+    ) -> Result<(Option<SelectedRoute>, u64), ExecutionError> {
+        let selection = self.matcher.select(method, path);
+        if selection.matcher_steps > self.matcher.nodes.saturating_add(1) {
+            return Err(protocol_error(
+                "http_route_match_work",
+                "HTTP route matcher exceeded its prepared node bound",
+            ));
+        }
+        let Some(index) = selection.route else {
+            return Ok((None, selection.matcher_steps));
+        };
+        let route = self
+            .resident
             .target()
             .http_routes
-            .binary_search_by(|route| {
-                route
-                    .method
-                    .as_bytes()
-                    .cmp(method.as_bytes())
-                    .then_with(|| route.path.as_bytes().cmp(path.as_bytes()))
-            })
-            .ok()
-            .and_then(|index| self.resident.target().http_routes.get(index))
-            .map(|route| (route.route, route.port))
+            .get(index)
+            .ok_or_else(|| {
+                protocol_error(
+                    "http_route_match_leaf",
+                    "HTTP route matcher selected a foreign prepared leaf",
+                )
+            })?;
+        let (captures, capture_bytes) = capture_arguments(&route.selector, path)?;
+        Ok((
+            Some(SelectedRoute {
+                route: route.route,
+                port: route.port,
+                captures,
+                capture_bytes,
+            }),
+            selection.matcher_steps,
+        ))
     }
+}
+
+fn capture_arguments(
+    selector: &HttpRouteSelector,
+    path: &str,
+) -> Result<(Vec<NormalizedValue>, u64), ExecutionError> {
+    let HttpRouteSelector::Pattern { segments } = selector else {
+        return Ok((Vec::new(), 0));
+    };
+    let path = path.strip_prefix('/').ok_or_else(|| {
+        protocol_error(
+            "http_route_capture_path",
+            "matched HTTP pattern received a path without its leading slash",
+        )
+    })?;
+    let mut values = path.split('/');
+    let mut captures = Vec::with_capacity(selector.capture_count());
+    let mut bytes = 0u64;
+    for segment in segments {
+        let value = values.next().ok_or_else(|| {
+            protocol_error(
+                "http_route_capture_path",
+                "matched HTTP pattern received too few path segments",
+            )
+        })?;
+        match segment {
+            HttpRoutePatternSegment::Literal(literal) if literal != value => {
+                return Err(protocol_error(
+                    "http_route_capture_literal",
+                    "matched HTTP pattern literal drifted during capture construction",
+                ));
+            }
+            HttpRoutePatternSegment::Capture(_) => {
+                let length = u64::try_from(value.len()).map_err(|_| {
+                    ExecutionError::resource(
+                        "http_route_capture_bytes",
+                        "HTTP capture byte length is not representable",
+                    )
+                })?;
+                bytes = bytes.checked_add(length).ok_or_else(|| {
+                    ExecutionError::resource(
+                        "http_route_capture_bytes",
+                        "HTTP capture byte accounting overflowed",
+                    )
+                })?;
+                captures.push(NormalizedValue::text(value.to_owned()));
+            }
+            HttpRoutePatternSegment::Literal(_) => {}
+        }
+    }
+    if values.next().is_some() || captures.len() != selector.capture_count() {
+        return Err(protocol_error(
+            "http_route_capture_path",
+            "matched HTTP pattern path or capture count drifted during construction",
+        ));
+    }
+    Ok((captures, bytes))
 }
 
 async fn normalized_live_handler(
@@ -287,7 +747,14 @@ async fn normalized_live_handler(
     if let Err(error) = validate_request(&request, &application.limits) {
         return safe_error_response(&error, execution_error_status(&error));
     }
-    let Some((_route, port)) = application.select_route(&request.method, &request.path) else {
+    let (selected, _matcher_steps) = match application.select_route(&request.method, &request.path)
+    {
+        Ok(selection) => selection,
+        Err(error) => {
+            return safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+    let Some(selected) = selected else {
         drop(body);
         return encode_live_response(unmatched_response()).unwrap_or_else(|error| {
             safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR)
@@ -322,6 +789,9 @@ async fn normalized_live_handler(
         Ok(request) => request,
         Err(error) => return safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR),
     };
+    let mut arguments = Vec::with_capacity(selected.captures.len().saturating_add(1));
+    arguments.push(request);
+    arguments.extend(selected.captures);
     let chunk_bytes = application
         .resident
         .deployment()
@@ -342,7 +812,7 @@ async fn normalized_live_handler(
     ));
     let outcome = application
         .resident
-        .invoke_port_scoped(resources, port, vec![request])
+        .invoke_port_scoped(resources, selected.port, arguments)
         .await
         .and_then(|receipt| response_value(receipt.value, &application.limits));
     if let Err(response) = finish_request_body_pump(pump, deadline).await {
@@ -579,4 +1049,59 @@ fn http_corrupt(code: &'static str, message: &'static str) -> Diagnostic {
 
 fn http_io(code: &'static str, message: String) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Infrastructure, code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::execution::normalized::value::FunctionIndex;
+
+    #[test]
+    fn prepared_matcher_uses_exact_then_comparable_pattern_specificity() {
+        let route = |ordinal: u64, selector: HttpRouteSelector, port: u32| -> NormalizedHttpRoute {
+            NormalizedHttpRoute {
+                route: HttpRouteId::migrate(b"prepared-http-specificity", ordinal),
+                method: Arc::from("GET"),
+                selector,
+                port: PortIndex(port),
+                function: FunctionIndex(port),
+                capture_parameters: Arc::from([]),
+            }
+        };
+        let routes = vec![
+            route(
+                0,
+                HttpRouteSelector::exact("/api/posts/featured").unwrap(),
+                0,
+            ),
+            route(
+                1,
+                HttpRouteSelector::parse_pattern("/api/posts/{id}").unwrap(),
+                1,
+            ),
+            route(
+                2,
+                HttpRouteSelector::parse_pattern("/api/{category}/{id}").unwrap(),
+                2,
+            ),
+            route(
+                3,
+                HttpRouteSelector::parse_pattern("/{scope}/{category}/{id}").unwrap(),
+                3,
+            ),
+        ];
+        let matcher = PreparedHttpMatcher::new(&routes).unwrap();
+
+        for (path, expected) in [
+            ("/api/posts/featured", Some(0)),
+            ("/api/posts/42", Some(1)),
+            ("/api/users/42", Some(2)),
+            ("/other/users/42", Some(3)),
+            ("/api/users", None),
+        ] {
+            let selection = matcher.select("GET", path);
+            assert_eq!(selection.route, expected, "{path}");
+            assert!((1..=matcher.nodes.saturating_add(1)).contains(&selection.matcher_steps));
+        }
+    }
 }

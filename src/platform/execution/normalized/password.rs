@@ -1,4 +1,4 @@
-//! Exact Graph 9 binding for password hashing and verification.
+//! Exact Graph 10 binding for password hashing and verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::resource::NormalizedResourceScope;

@@ -5040,7 +5040,10 @@ fn validate_targets(context: &PackageContext<'_>) -> Result<(), Diagnostic> {
             if target.port.is_some() || target.routes.is_empty() {
                 return Err(semantic_without_location(
                     "semantic_http_target_topology",
-                    format!("HTTP target '{}' has no exact route topology", target.name),
+                    format!(
+                        "HTTP target '{}' has no graph-owned route topology",
+                        target.name
+                    ),
                 ));
             }
             for route in &target.routes {
@@ -5415,7 +5418,7 @@ mod tests {
 
     fn standard_package() -> ValidatedPackage {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"standard","modules":[{"name":"core","path":"src/core.lkj"},{"name":"clock","path":"src/clock.lkj"},{"name":"random","path":"src/random.lkj"},{"name":"relational","path":"src/relational.lkj"},{"name":"http","path":"src/http.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"standard","modules":[{"name":"core","path":"src/core.lkj"},{"name":"clock","path":"src/clock.lkj"},{"name":"random","path":"src/random.lkj"},{"name":"relational","path":"src/relational.lkj"},{"name":"http","path":"src/http.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("standard descriptor");
         validate_package_documents(
@@ -5464,7 +5467,7 @@ mod tests {
         ledger_operations: &str,
     ) -> PackageDescriptor {
         let json = format!(
-            "{{\"contract_version\":2,\"package_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"name\":\"resource-service\",\"modules\":[{{\"name\":\"service\",\"path\":\"src/service.lkj\"}}],\"dependencies\":[{{\"alias\":\"std\",\"package_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"revision_digest\":\"{}\",\"artifact_digest\":\"{}\",\"artifact\":\"dependencies/standard.lkpackage\"}}],\"targets\":[{{\"name\":\"serve\",\"component\":\"service.Web\",\"routes\":[{{\"method\":\"GET\",\"path\":\"/\",\"port\":\"service\"}}],\"runner\":\"http\"}}]}}",
+            "{{\"contract_version\":3,\"package_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"name\":\"resource-service\",\"modules\":[{{\"name\":\"service\",\"path\":\"src/service.lkj\"}}],\"dependencies\":[{{\"alias\":\"std\",\"package_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"revision_digest\":\"{}\",\"artifact_digest\":\"{}\",\"artifact\":\"dependencies/standard.lkpackage\"}}],\"targets\":[{{\"name\":\"serve\",\"component\":\"service.Web\",\"routes\":[{{\"method\":\"GET\",\"selector\":{{\"kind\":\"exact\",\"path\":\"/\"}},\"port\":\"service\"}}],\"runner\":\"http\"}}]}}",
             standard.revision_digest,
             "c".repeat(64)
         );
@@ -5508,7 +5511,7 @@ mod tests {
     #[test]
     fn nominal_identity_is_not_a_path_or_position() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"domain","path":"src/moved/domain.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"domain","path":"src/moved/domain.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let package = validate_package_documents(
@@ -5533,7 +5536,7 @@ mod tests {
     #[test]
     fn source_oracle_resolves_exports_and_globals_but_keeps_lexical_variables() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"references","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"references","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let package = validate_package_documents(
@@ -5586,7 +5589,7 @@ mod tests {
     #[test]
     fn canonical_relations_reconstruct_calls_types_fields_and_tests() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"relations","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"relations","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let package = validate_package_documents(
@@ -5657,7 +5660,7 @@ mod tests {
     #[test]
     fn unresolved_and_private_imports_reject() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"a","path":"src/a.lkj"},{"name":"b","path":"src/b.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"a","path":"src/a.lkj"},{"name":"b","path":"src/b.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let error = validate_package_documents(
@@ -5678,7 +5681,7 @@ mod tests {
     #[test]
     fn possible_visibility_requires_an_idempotency_key_contract() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"effects","path":"src/effects.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"effects","path":"src/effects.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let error = validate_package_documents(
@@ -5696,7 +5699,7 @@ mod tests {
     #[test]
     fn unknown_and_foreign_intrinsic_contracts_reject_during_semantic_validation() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"core","path":"src/core.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"core","path":"src/core.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let unknown = validate_package_documents(
@@ -5761,7 +5764,7 @@ mod tests {
     #[test]
     fn pure_effect_and_undergranted_component_reject() {
         let descriptor = decode_package(
-            br#"{"contract_version":2,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"bad","path":"src/bad.lkj"}],"dependencies":[],"targets":[]}"#,
+            br#"{"contract_version":3,"package_id":"1234567890abcdef1234567890abcdef","name":"sample","modules":[{"name":"bad","path":"src/bad.lkj"}],"dependencies":[],"targets":[]}"#,
         )
         .expect("descriptor");
         let error = validate_package_documents(

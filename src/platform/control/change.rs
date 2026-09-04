@@ -15,8 +15,8 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
-    DeclarationVisibility, ExternalVisibility, Idempotency, ImplementationName, Name,
-    NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ParameterUse, ResourceUnit,
+    DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency, ImplementationName,
+    Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ParameterUse, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-13";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 13;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-10";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 10;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-14";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 14;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-11";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 11;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -158,10 +158,11 @@ pub(crate) enum CompactChangeFieldForm {
     ExactExpression,
     HttpMethod,
     HttpPath,
+    HttpPattern,
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 29] = [
+    pub(crate) const ALL: [Self; 30] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -191,6 +192,7 @@ impl CompactChangeFieldForm {
         Self::ExactExpression,
         Self::HttpMethod,
         Self::HttpPath,
+        Self::HttpPattern,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -224,6 +226,7 @@ impl CompactChangeFieldForm {
             Self::ExactExpression => "exact_expression",
             Self::HttpMethod => "http_method",
             Self::HttpPath => "http_path",
+            Self::HttpPattern => "http_pattern",
         }
     }
 
@@ -258,6 +261,7 @@ impl CompactChangeFieldForm {
             Self::ExactExpression => "expr_HEX",
             Self::HttpMethod => "ASCII_HTTP_TOKEN_1_TO_32_BYTES",
             Self::HttpPath => "/EXACT_PATH_1_TO_16384_BYTES",
+            Self::HttpPattern => "/LITERAL/{capture}/..._1_TO_64_SEGMENTS",
         }
     }
 }
@@ -831,8 +835,13 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
             CompactChangeOperationField {
                 name: "path",
-                required: true,
+                required: false,
                 form: FieldForm::HttpPath,
+            },
+            CompactChangeOperationField {
+                name: "pattern",
+                required: false,
+                form: FieldForm::HttpPattern,
             },
             CompactChangeOperationField {
                 name: "port",
@@ -951,8 +960,13 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
             CompactChangeOperationField {
                 name: "path",
-                required: true,
+                required: false,
                 form: FieldForm::HttpPath,
+            },
+            CompactChangeOperationField {
+                name: "pattern",
+                required: false,
+                form: FieldForm::HttpPattern,
             },
             CompactChangeOperationField {
                 name: "port",
@@ -2677,7 +2691,7 @@ impl Decoder {
                 symbol: symbol(record, "as")?,
                 target: parse_owner_selector(record, "target")?,
                 method: required(record, "method")?.to_owned(),
-                path: required(record, "path")?.to_owned(),
+                selector: parse_http_route_selector(record)?,
                 port: parse_port_reference(record, "port")?,
             }),
             CompactChangeOperation::AddDependency => {
@@ -2741,7 +2755,7 @@ impl Decoder {
             CompactChangeOperation::SetHttpRoute => Ok(AuthoredChange::SetHttpRoute {
                 route: parse_owner_selector(record, "route")?,
                 method: required(record, "method")?.to_owned(),
-                path: required(record, "path")?.to_owned(),
+                selector: parse_http_route_selector(record)?,
                 port: parse_port_reference(record, "port")?,
             }),
             CompactChangeOperation::DeleteOwner => {
@@ -3546,6 +3560,18 @@ fn parse_owner_parent(
         Ok(AuthoredOwnerParent::Package)
     } else {
         parse_field(record, field_name).map(AuthoredOwnerParent::Owner)
+    }
+}
+
+fn parse_http_route_selector(record: &CompactRecord) -> Result<HttpRouteSelector, Diagnostic> {
+    match (optional(record, "path"), optional(record, "pattern")) {
+        (Some(path), None) => HttpRouteSelector::exact(path.to_owned()),
+        (None, Some(pattern)) => HttpRouteSelector::parse_pattern(pattern),
+        _ => Err(record_error(
+            record,
+            "change_http_route_selector",
+            "HTTP route mutation requires exactly one of path or pattern",
+        )),
     }
 }
 

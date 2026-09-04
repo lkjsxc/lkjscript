@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-04 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-05 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -22,23 +22,23 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_95ac9237bc2d13a04f64f034dfad2f19350514c332d9c44450898202d9418968`; state `semantic_state_3ad6b17958f658838de09ad1f3de8201d5c344b11a8d094840c169f41d9ebfca` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_fb1407157c4fec5cba07a9c89d0145b1282becd70fc49147f54fb52131c34a89`; state `semantic_state_5e40e43902cb2614c934a2c3dbc596145819aaa009f7c8fc83acab41dadaeed3` |
-| built-in standard dependency | package revision `package_revision_8630f8830e1233b7f99e177fa86dafad01546dc21138418de5250078a4e039b2`; transport `package_transport_fbd76bbd6638c36d434a697a8243c87fef6346f72c4f5de16a60579649cf09bf`; artifact manifest `artifact_manifest_ada0f37322364b65d0adc719b69ed65550a873991be34764145d796518b3be5b` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617`; state `semantic_state_8c6bc5e8a1b83e0018d60223c63bf6b1d9b8999d0ca247b1d8bbaaf600ac9e15` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9`; state `semantic_state_11cccd6ab1f48dbcc637737aab3e4740a29a1b3678e94b9e0899b4cc755d4c0c` |
+| built-in standard dependency | package revision `package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9`; transport `package_transport_52a7f2a867563eb5367443df9f21518051a4fa0ed527317026651207a1d78124`; artifact manifest `artifact_manifest_4a45508f7083e9e1d913596eb3c7a37e624df08b2bbe2a38db61ee150148b691` |
 
 The standard package owns 550 live semantic owners, 106 compiler units, and 20 graph tests. Its
-current artifact has 1,057 closure objects and 327,518 bytes. `lkjournal` owns 2,046 live semantic
-owners and one exact standard dependency; its two-package artifact has 196 compiler units, 3,543
-closure objects, and 1,061,717 bytes. Its complete dependency closure runs 27 graph tests. Both
+current artifact has 1,057 closure objects and 328,738 bytes. `lkjournal` owns 2,040 live semantic
+owners and one exact standard dependency; its two-package artifact has 196 compiler units, 3,538
+closure objects, and 1,062,638 bytes. Its complete dependency closure runs 27 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 114,656 bytes | `d2c1b49df32eebe3ebb8dbf82931e0634c41659de0cc92fd3bfa349c52a2d5c2` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 327,518 bytes | `7f93e15a573129d9cacd3929d285b6d7f9ce075db57127cf099bc1501720a58e` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,061,717 bytes | `1dc6c9f93a72bfe848c59389c1922604dedd22f2fef3250dd523fc4186fcc11e` |
+| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 114,656 bytes | `12ba58397c04c5479ae3eae92d68d413826c30dbe14769be9f0748598453d485` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 328,738 bytes | `0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,062,638 bytes | `1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -104,21 +104,21 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source and immutable public latest are consolidated at `0.1.21`; `v0.1.21` selects
-the exact release-input source commit named above. The product retains the exact-requirement-bound
-affine handoff, identity-preserving extraction, incremental catalog, graph-owned structured
-sessions, and exact inbound HTTP route topology. Graph 9, validation witness 5, owner summary 4,
-validator 9, package 2, package interface 6, compiler-unit 4, bytecode 3, Artifact 14, resident
-runtime 3, function-definition projection 2, service receipt 9, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 5, compact change 13, authored change 10,
-logical change plan 3, query 5,
-project creation 4, registry 10, CLI 22, deployment 4, HTTP adapter 2, and structured-session 1 are
+Current product source is unreleased `0.1.22`; immutable public latest remains `v0.1.21` at the
+exact release-input source commit named above. The source retains the exact-requirement-bound affine
+handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
+adds signature-indexed inbound HTTP path captures. Graph 10, validation witness 6, owner summary 5,
+validator 10, package 3, package interface 6, compiler-unit 5, bytecode 3, Artifact 15, resident
+runtime 3, function-definition projection 2, service receipt 10, distributed-HTTP receipt 4,
+outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 14, authored change 11,
+logical change plan 4, query 6,
+project creation 5, registry 11, CLI 23, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
 The standard package meaning and derived identities let its maintained HTTP and Nostr consumers own
-exact route sets. `lkjournal` owns eleven exact HTTP
-routes while preserving its `serve`, worker `work`, interactive `lkjournal-live-1`, shared
+typed exact/pattern route sets. `lkjournal` owns eight exact and three pattern HTTP routes while
+preserving its `serve`, worker `work`, interactive `lkjournal-live-1`, shared
 first-party data authority, and stable worker split. Existing deployment, data, queue, object,
 outbound HTTP, structured-session, and predecessor immutable release formats remain unchanged. The
 consolidated release performed no deployment, hosted-data mutation, or live-relay contact.
@@ -129,7 +129,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`6baea8b872fe3c5df77a2178f55f8804d9e9e8de91ea6c71cfb1c0a5401c884d` in current source.
+`e1eb51f0a9b0e7dca8e6aae7a086766b7396f44c7c02cb9e6fd37eca49ec1ee3` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -146,7 +146,7 @@ An `interactive` target has exactly one function-backed port structurally equal 
 `(Option<State>, SessionEvent) -> SessionDecision<State>`. Every repeated `State` is the same
 closed ordinary concrete type and cannot retain a stream, capability resource, function, secret,
 unresolved parameter, static value, or other live authority. Accepted validation, compiler
-lowering, package construction, Artifact 14 loading, and deployment preparation reconstruct that
+lowering, package construction, Artifact 15 loading, and deployment preparation reconstruct that
 relation independently. The canonical standard types encode open, message, tick, peer-close, and
 shutdown events plus accept, continue, reject, close, and finish decisions; the runtime enforces
 their state and phase pairs before installing any next state.
@@ -160,16 +160,32 @@ capacity is reserved before a potentially effectful callback; a failed or invali
 installs neither state nor partial output. Public `run` remains pure-command-only, and no live
 resource becomes a graph value or result.
 
-Every inbound HTTP target now owns one nonempty finite set of stable exact `(method, path) -> port`
-route owners and has no universal port. The graph admits at most 4,096 routes and 4 MiB of aggregate
-method-plus-path bytes per target; methods are nonempty ASCII tokens of at most 32 bytes and paths
-begin with `/`, contain no query or fragment, and use at most 16 KiB. Canonical method/path byte
-order determines the route-set digest independently of authored operation order. Compilation,
-Artifact 14 loading, deployment preparation, in-memory execution, and live HTTP all bind the same
-route, target, component, port, function type, and requirement closure. Valid unmatched pairs return
-a fixed empty 404 without application headers, graph invocation, capability use, or a resident task;
-matching is case-sensitive and performs no implicit HEAD, percent decoding, slash normalization, or
-query selection.
+Every inbound HTTP target now owns one nonempty finite set of stable exact-or-pattern route owners
+and has no universal port. Exact selectors retain literal path bytes; patterns contain 1 through 64
+nonempty literal or whole `{capture}` segments, at most 32 unique captures, and no wildcard, tail,
+optional, mixed, or regex segment. Each target admits at most 4,096 routes, 4 MiB of aggregate key
+bytes, and 65,536 stored pattern segments. Duplicate match languages and incomparable overlap
+reject; exact routes and strictly more-specific literal refinements win without authored priority.
+The route-set digest binds selector kind, canonical segments, capture order, and port identity.
+
+A pattern's capture names index the backing function's same-named ordered unrestricted `Text`
+parameter suffix after `HttpRequest`. Compilation, Artifact 15 loading, deployment preparation,
+in-memory execution, and live HTTP independently bind the route, target, component, port, function,
+parameters, HTTP types, and requirement closure. The prepared exact index and literal-first trie do
+not scan or allocate the complete route set for an ordinary match. Captures preserve raw validated
+segment spelling; matching performs no percent or Unicode decoding, normalization, slash collapse,
+case folding, implicit method handling, or query selection. Valid unmatched pairs return a fixed
+empty 404 without application headers, graph invocation, capability use, or a resident task.
+
+`lkjournal` preserves route identities `route_79ebd79a701800e82e13dbe560944d55`,
+`route_8f26a5cc2dcb7f777ad6d2bbe426ee93`, and `route_a92b27a1757c26506bb0bbac601e9f42` while
+selecting `GET /resource/{id}`, `GET /resource/{id}/history`, and
+`POST /resource/{id}/update`. Their handlers now receive trailing `id: Text` parameters
+`param_ec41b6e339d68388c9df7bbf7c6eac16`, `param_8959bcba1113d7e685ae2dd85802f819`, and
+`param_ece943fd633a7a6c2976e6f50609eb21`; identifier syntax remains application
+policy. The predecessor `/resource`, `/resource/history`, and `/resource/update` selection paths
+and handler `id` query lookup are absent. Other HTTP, worker, interactive, data, queue, object, and
+domain behavior remains unchanged.
 
 `data initialize|verify|backup|restore` owns operational lifecycle for one local
 `lkjscript-data-store-1` root and `lkjscript-data-backup-1` logical backup. Initialize and restore
@@ -212,7 +228,7 @@ deployment input and uses first-party data. Immutable `v0.1.10` remains unchange
 PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
 values are explicit monomorphic references to pure named functions; generic task functions,
-capture, partial application, inference, and maps remain unavailable. The current public compact
+lexical closures, partial application, inference, and maps remain unavailable. The current public compact
 surface additionally exposes exact `add.dependency`, `create.component`, function-backed
 `add.port`, conditionally portless `create.target`, `add.http-route`, and `set.http-route` records
 alongside interface/external creation, operation parameters,
@@ -268,14 +284,14 @@ definition, and output is unknown `change` input.
 
 The maintained `lkjournal` worker entry remains task function
 `decl_a914bb78de075ff44a857ac028d704f3`. Its definition digest is
-`definition_7e338a79862a43db977555289435f77bbef498bb4491d6d6ea3f1d8b9d9b2fa7`:
+`definition_e5859f5a458aafa079c43186f737f7ad821da2bba2f499c199ef6623863bac61`:
 84 logical records, comprising 9 contract, 15 body, 40 reference, and 18 fact records, with 18
 structural edges, 40 reference edges, depth 3, and 33,389 logical bytes. It retains claim and
 absent/live dispatch, then transfers the live lease exactly once into private task helper
 `decl_7f443401f4946c55fa239c5430e8ad93` with no later entry use.
 
 The helper digest is
-`definition_c7dc6451daaf741e385a6532b709450c0710a8741c8fbc3e5f954b795a5ca39d`:
+`definition_4af7237d165ed2c255b89a74f35829593ef8cd21a87397556af5240ead2fb1d4`:
 153 logical records, comprising 3 contract, 36 body, 73 reference, and 39 fact records, with 39
 structural edges, 73 reference edges, depth 6, and 65,945 logical bytes. Its final consume lease
 parameter is bound to exact requirement `req_0cebded5cb056cda5484e39aa40594ad` and owns processing,
@@ -286,9 +302,10 @@ predecessor.
 
 The formerly largest maintained function `decl_0693166bd7c29bee83d2ead289148f65`
 (`update-resource`) retains its identity and now has definition digest
-`definition_0f438eec071818210a6aeb2254b924ff6199a3a93c158420f83aa7e1b9325f9a`:
-404 logical records, including 17 contract, 96 body, 177 reference, and 101 fact records, with depth
-17 and 168,470 logical bytes. Its exact data-only subtree rooted at
+`definition_cece2c65da440eaf44cb6aaf84454d6804df033dae63615d7986aa73598adb49`:
+397 logical records, including 18 contract, 93 body, 175 reference, and 99 fact records, with depth
+17 and 165,495 logical bytes. Its request is followed by the route-indexed unrestricted `id: Text`
+parameter; the predecessor query lookup is absent. Its exact data-only subtree rooted at
 `expr_22692186086bc39d6caf2cfe244879c8` retains all 101 movable owner identities under generated
 private helper `decl_53936ef7d46ee491d41aef8c37cdffef` (`commit-resource-update`). The helper
 captures unrestricted locals `actor`, `id`, `input`, and `entry` in first-use order, owns only the
@@ -298,7 +315,7 @@ exact `data` task requirement, and has digest
 15 and 181,807 logical bytes. The predecessor 192-body-record ownership shape is gone; the 96- and
 101-record results are both below its 144-record feasibility threshold. The independently selected
 largest maintained definition is now `decl_97e3d3c28142723096e5b121c0205ef2`, with 148 body records
-and digest `definition_c91f1a9b507cbc23230e2afbed38239ac6c15f90fecb0eebf771dd03551551ee`.
+and digest `definition_a0e1d237ade379087dcc5ca832fd67a7a84b15ff64da7eaed2c7a3910687a483`.
 
 `change plan` and `change apply` share typed lowering and a reviewed logical-plan
 commitment; apply is the only normal existing-project semantic writer. Exact idempotent apply

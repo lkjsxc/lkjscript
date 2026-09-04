@@ -1,4 +1,4 @@
-//! Derived, implementation-free package interface records for exact Graph 9 dependencies.
+//! Derived, implementation-free package interface records for exact Graph 10 dependencies.
 //!
 //! These records are not accepted program authority. They are deterministic projections of one
 //! validated package revision. Exact dependency bindings select one storage-independent package

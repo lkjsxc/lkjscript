@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 9 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 10 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -250,10 +250,6 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                             "HTTP target retained a universal port",
                         ));
                     }
-                    let http_type = crate::platform::http::semantic_http_types(
-                        &mut crate::platform::kernel::TypeObjectInterner::default(),
-                    )?
-                    .function_type;
                     let mut routes = Vec::with_capacity(route_ids.len());
                     for route_id in route_ids {
                         let OwnerRecord::HttpRoute(route) = self.required_owner(
@@ -288,27 +284,82 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                                 "HTTP route port identity names another owner kind",
                             ));
                         };
-                        if port.declaration != record.component.declaration
-                            || port.function_type != http_type
-                            || !matches!(port.implementation, PortImplementation::Function(_))
-                        {
+                        let capture_count = route.selector.capture_count();
+                        let mut http_types = crate::platform::kernel::TypeObjectInterner::default();
+                        let expected_function_type =
+                            crate::platform::http::semantic_http_route_function_type(
+                                &mut http_types,
+                                capture_count,
+                            )?;
+                        let PortImplementation::Function(function) = port.implementation else {
                             return Err(compiler_corrupt(
                                 "compiler_http_route_port_relation",
                                 "HTTP route port has the wrong component, shape, or implementation",
                             ));
+                        };
+                        if port.declaration != record.component.declaration
+                            || port.function_type != expected_function_type
+                        {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_port_relation",
+                                "HTTP route port has the wrong component or selector-indexed shape",
+                            ));
+                        }
+                        let (parameters, result) = self.http_function_parameters(function)?;
+                        let semantic_http =
+                            crate::platform::http::semantic_http_types(&mut http_types)?;
+                        if parameters.len() != capture_count.saturating_add(1)
+                            || parameters
+                                .first()
+                                .is_none_or(|parameter| parameter.ty != semantic_http.request_type)
+                            || result != semantic_http.response_type
+                        {
+                            return Err(compiler_corrupt(
+                                "compiler_http_route_function_signature",
+                                "HTTP route backing function disagrees with the request/capture/response contract",
+                            ));
+                        }
+                        let capture_names = route.selector.capture_names();
+                        for (parameter, capture) in parameters.iter().skip(1).zip(&capture_names) {
+                            if parameter.name.as_str() != capture.as_str()
+                                || parameter.ty != semantic_http.text_type
+                                || parameter.use_mode != ParameterUse::Unrestricted
+                                || parameter.resource_requirement.is_some()
+                            {
+                                return Err(compiler_corrupt(
+                                    "compiler_http_route_capture_parameter",
+                                    "HTTP route capture disagrees with its indexed function parameter",
+                                ));
+                            }
                         }
                         routes.push(CompiledHttpRoute {
                             route: *route_id,
                             method: route.method,
-                            path: route.path,
+                            selector: route.selector,
                             port: self.tables.port(route.port)?,
+                            capture_parameters: parameters
+                                .iter()
+                                .skip(1)
+                                .map(|parameter| match parameter.header.owner {
+                                    OwnerKey::Parameter(parameter) => Ok(parameter),
+                                    _ => Err(compiler_corrupt(
+                                        "compiler_http_route_capture_parameter_identity",
+                                        "HTTP route capture parameter has another owner identity",
+                                    )),
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
                         });
                     }
                     routes.sort_by(|left, right| {
                         left.method
                             .as_bytes()
                             .cmp(right.method.as_bytes())
-                            .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
+                            .then_with(|| {
+                                crate::platform::kernel::http_route_selector_cmp(
+                                    &left.selector,
+                                    &right.selector,
+                                )
+                            })
                     });
                     return Ok(CompilationPayload::Target {
                         component,
@@ -512,6 +563,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             )?;
             compiled_parameters.push(CompiledParameter {
                 parameter: *parameter,
+                name: parameter_record.name.clone(),
                 ty: self.tables.ty(parameter_record.ty)?,
                 use_mode: parameter_record.use_mode,
                 resource_requirement: parameter_record
@@ -567,6 +619,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             )?;
             parameters.push(CompiledParameter {
                 parameter: *parameter,
+                name: parameter_record.name.clone(),
                 ty: self.tables.ty(parameter_record.ty)?,
                 use_mode: parameter_record.use_mode,
                 resource_requirement: None,
@@ -950,6 +1003,83 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     .map(|record| record.use_mode)
             })
             .collect()
+    }
+
+    fn http_function_parameters(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<
+        (
+            Vec<crate::platform::kernel::ParameterRecord>,
+            TypeObjectDigest,
+        ),
+        Diagnostic,
+    > {
+        let (parameters, result) = if function.package == self.package {
+            match self.required_owner(
+                OwnerKey::Declaration(function.declaration),
+                "HTTP route references a missing backing function",
+            )? {
+                OwnerRecord::Declaration(record) => match record.payload {
+                    DeclarationPayload::Function(signature)
+                        if signature.type_parameters.is_empty() =>
+                    {
+                        (signature.parameters, signature.result)
+                    }
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_http_route_function",
+                            "HTTP route backing declaration must be one nongeneric function",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_http_route_function",
+                        "HTTP route backing function identity names another owner kind",
+                    ));
+                }
+            }
+        } else {
+            match self.exact_package_interface_owner(
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
+                        signature,
+                    ) if signature.type_parameters.is_empty() => {
+                        (signature.parameters, signature.result)
+                    }
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_http_route_function",
+                            "HTTP route dependency backing declaration must be one nongeneric function",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_http_route_function",
+                        "HTTP route dependency backing function has another owner kind",
+                    ));
+                }
+            }
+        };
+        let records = parameters
+            .into_iter()
+            .map(|parameter| self.exact_parameter(function.package, parameter))
+            .collect::<Result<Vec<_>, _>>()?;
+        if records
+            .iter()
+            .any(|parameter| parameter.parent != ParameterParent::Function(function.declaration))
+        {
+            return Err(compiler_corrupt(
+                "compiler_http_route_parameter_parent",
+                "HTTP route backing function parameter belongs to another declaration",
+            ));
+        }
+        Ok((records, result))
     }
 
     fn case_payload_is_resource(&mut self, reference: CaseReference) -> Result<bool, Diagnostic> {

@@ -44,8 +44,10 @@ use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::http_client::HTTP_CLIENT_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
 use super::super::kernel::contract::{
-    GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
-    MAXIMUM_HTTP_ROUTE_METHOD_BYTES, MAXIMUM_HTTP_ROUTE_PATH_BYTES, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+    GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, MAXIMUM_HTTP_PATTERN_CAPTURES,
+    MAXIMUM_HTTP_PATTERN_SEGMENTS, MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET,
+    MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTE_METHOD_BYTES,
+    MAXIMUM_HTTP_ROUTE_PATH_BYTES, MAXIMUM_HTTP_ROUTES_PER_TARGET,
 };
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::normalized_query::{
@@ -95,9 +97,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-10";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 10;
-pub const CLI_CONTRACT_VERSION: u16 = 22;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-11";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 11;
+pub const CLI_CONTRACT_VERSION: u16 = 23;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -597,7 +599,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN09", "LKJTYP09", "LKJSMR01", "LKJDEP09", "LKJRET09"],
+            magic_values: &["LKJOWN10", "LKJTYP10", "LKJSMR01", "LKJDEP10", "LKJRET10"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -723,7 +725,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM08"],
+            magic_values: &["LKJSUM09"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -746,7 +748,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT05"],
+            magic_values: &["LKJWIT06"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -757,7 +759,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 9,
+            version: 10,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -783,7 +785,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR10", "LKJABG01"],
+            magic_values: &["LKJACR11", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -916,7 +918,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN04"],
+            magic_values: &["LKJCUN05"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -938,7 +940,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF14"],
+            magic_values: &["LKJAMF15"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -952,7 +954,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART14", "LKJAEN14"],
+            magic_values: &["LKJART15", "LKJAEN15"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -1010,7 +1012,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::HttpAdapter,
             "HTTP adapter",
-            "lkjscript-http-adapter-2",
+            "lkjscript-http-adapter-3",
             HTTP_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -1623,6 +1625,27 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             MAXIMUM_HTTP_ROUTE_PATH_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_pattern_segments",
+            MAXIMUM_HTTP_PATTERN_SEGMENTS,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_pattern_captures",
+            MAXIMUM_HTTP_PATTERN_CAPTURES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "http_pattern_segments_per_target",
+            MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -2960,6 +2983,54 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reject the file and regenerate it from the prepared candidate.",
         ),
         diagnostic(
+            "change_plan_file_http_route_order",
+            DiagnosticClass::Source,
+            "Logical HTTP route evidence is duplicated or outside canonical identity order.",
+            "Reject the file and regenerate it from the prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_kind",
+            DiagnosticClass::Source,
+            "Logical HTTP route evidence names an unknown selector kind.",
+            "Reject the file and regenerate it with exact or pattern selector evidence.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_selector",
+            DiagnosticClass::Source,
+            "Logical HTTP route selector spelling, kind, segments, or captures disagree.",
+            "Reject the file and regenerate it from the exact prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_signature",
+            DiagnosticClass::Source,
+            "Logical HTTP route captures, parameters, or derived handler signature disagree.",
+            "Reject the file and regenerate it from the exact prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_count",
+            DiagnosticClass::Resource,
+            "Logical HTTP route count accounting overflowed or exceeds its finite bound.",
+            "Reject the file and regenerate it from a smaller valid candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_topology",
+            DiagnosticClass::Source,
+            "Logical HTTP route counts, specificity, overlap, or pattern-segment evidence disagree.",
+            "Reject the file and regenerate it from the exact prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_identity",
+            DiagnosticClass::Source,
+            "Logical HTTP route evidence repeats an identity or disagrees on its change class.",
+            "Reject the file and regenerate it from the exact prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_http_route_sets",
+            DiagnosticClass::Source,
+            "Logical HTTP route before/after sets disagree or exceed the evidence bound.",
+            "Reject the file and regenerate it from the exact prepared candidate.",
+        ),
+        diagnostic(
             "change_plan_file_dependency_object",
             DiagnosticClass::Source,
             "A logical dependency value disagrees with its object identity.",
@@ -3022,26 +3093,176 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_http_route_path",
             DiagnosticClass::Semantic,
-            "An HTTP route path is malformed or exceeds the exact path bound.",
+            "An exact HTTP route path or pattern transport spelling is malformed or excessive.",
             "Use a path beginning with /, without query, fragment, or control bytes, within 16384 bytes.",
+        ),
+        diagnostic(
+            "change_http_route_selector",
+            DiagnosticClass::Source,
+            "An HTTP route mutation supplies both path and pattern or supplies neither.",
+            "Supply exactly one of path for an exact selector or pattern for a capture selector.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern does not use the canonical rooted pattern grammar.",
+            "Begin the pattern with / and use only nonempty whole literal or {capture} segments.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_segment",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern has an empty, trailing, mixed, or brace-malformed segment.",
+            "Use one nonempty literal or one whole {capture} in every segment and omit a trailing slash.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_segments",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern has no segments or exceeds the 64-segment bound.",
+            "Use between 1 and 64 nonempty literal or whole-capture segments.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_capture",
+            DiagnosticClass::Semantic,
+            "An HTTP route capture is not one whole segment with a valid graph Name.",
+            "Use {name} as the complete segment, where name follows graph Name grammar.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_capture_duplicate",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern repeats one capture name.",
+            "Give every capture a unique name in left-to-right route order.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_captures",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern has no captures or exceeds the 32-capture bound.",
+            "Use between 1 and 32 unique whole-segment captures.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_literal",
+            DiagnosticClass::Semantic,
+            "An HTTP route pattern literal is empty or contains forbidden path or brace bytes.",
+            "Use one nonempty brace-free literal path segment without query, fragment, or control bytes.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_bytes",
+            DiagnosticClass::Resource,
+            "An HTTP route pattern overflows accounting or exceeds 16384 canonical bytes.",
+            "Reduce the canonical pattern spelling to at most 16384 bytes.",
         ),
         diagnostic(
             "kernel_http_target_route_count",
             DiagnosticClass::Semantic,
             "An HTTP target has zero routes or exceeds the finite route bound.",
-            "Give the target 1 through 4096 distinct exact routes.",
+            "Give the target 1 through 4096 valid exact or pattern routes.",
         ),
         diagnostic(
-            "kernel_http_route_duplicate",
+            "kernel_http_route_count",
             DiagnosticClass::Semantic,
-            "One HTTP target contains a duplicate exact method and path pair.",
-            "Delete or change one duplicate; port identity does not distinguish route keys.",
+            "An analyzed HTTP route set is empty or exceeds the 4096-route bound.",
+            "Retain between 1 and 4096 exact or pattern routes on the target.",
         ),
         diagnostic(
-            "kernel_http_target_route_bytes",
-            DiagnosticClass::Semantic,
-            "One HTTP target exceeds the aggregate route-key byte bound.",
+            "kernel_http_route_aggregate",
+            DiagnosticClass::Resource,
+            "One HTTP target overflows or exceeds the aggregate route-key byte bound.",
             "Reduce its aggregate method-plus-path bytes to at most 4194304.",
+        ),
+        diagnostic(
+            "kernel_http_route_pattern_segment_aggregate",
+            DiagnosticClass::Resource,
+            "One HTTP target overflows or exceeds 65536 stored pattern segments.",
+            "Reduce the number or segment count of patterns on the target.",
+        ),
+        diagnostic(
+            "kernel_http_route_duplicate_language",
+            DiagnosticClass::Semantic,
+            "Two same-method HTTP routes accept the same path language.",
+            "Delete or change one exact duplicate or capture-name-only pattern variant.",
+        ),
+        diagnostic(
+            "kernel_http_route_incomparable_overlap",
+            DiagnosticClass::Semantic,
+            "Two same-method patterns overlap without a strict specificity relation.",
+            "Make the patterns disjoint or make every literal of one a matching literal in the other.",
+        ),
+        diagnostic(
+            "kernel_http_route_shared_port_signature",
+            DiagnosticClass::Semantic,
+            "Routes sharing one port disagree on their ordered capture-name suffix.",
+            "Use one capture-name sequence for a shared port or bind the routes to separate ports.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_port",
+            DiagnosticClass::Semantic,
+            "An HTTP route port does not have its selector-indexed HTTP function type.",
+            "Use (HttpRequest)->HttpResponse for exact routes and append one Text for each pattern capture.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_parameters",
+            DiagnosticClass::Semantic,
+            "An HTTP route handler parameter count or HTTP request/response shape disagrees with its selector.",
+            "Declare HttpRequest first, then exactly one Text per capture, and return HttpResponse.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_capture_parameter",
+            DiagnosticClass::Semantic,
+            "An HTTP capture does not index the same-named unrestricted Text handler parameter.",
+            "Match capture names and order exactly and remove any resource binding from those Text parameters.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_function",
+            DiagnosticClass::Semantic,
+            "An HTTP route port does not resolve to one exact function declaration.",
+            "Bind the route to a function-backed port whose function is present in the root package or an exact dependency.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_parameter",
+            DiagnosticClass::Semantic,
+            "An indexed HTTP route handler parameter is missing or has another owner kind.",
+            "Restore every parameter named by the handler declaration and retry the route mutation.",
+        ),
+        diagnostic(
+            "kernel_type_http_route_parameter_parent",
+            DiagnosticClass::Semantic,
+            "An indexed HTTP route parameter belongs to another function.",
+            "Use parameters owned by the exact function backing the selected route port.",
+        ),
+        diagnostic(
+            "kernel_http_route_requirement_closure",
+            DiagnosticClass::Semantic,
+            "An HTTP route handler capability is not covered by one compatible target-component slot.",
+            "Provide one name-, interface-, operation-, and limit-compatible component requirement for every handler requirement.",
+        ),
+        diagnostic(
+            "kernel_http_route_port_missing",
+            DiagnosticClass::Semantic,
+            "An HTTP route selects a missing port.",
+            "Select an existing exact function-backed port owned by the target component.",
+        ),
+        diagnostic(
+            "kernel_http_route_port_kind",
+            DiagnosticClass::Semantic,
+            "An HTTP route port reference resolves to another owner kind.",
+            "Select an exact port owner from the target component.",
+        ),
+        diagnostic(
+            "kernel_http_route_port_implementation",
+            DiagnosticClass::Semantic,
+            "An HTTP route selects a port that is not backed directly by one function.",
+            "Bind the route to a function-backed port with the selector-indexed HTTP signature.",
+        ),
+        diagnostic(
+            "kernel_http_route_port_package",
+            DiagnosticClass::Semantic,
+            "An HTTP route selects a port outside the root package.",
+            "Select a root-package port owned by the exact target component.",
+        ),
+        diagnostic(
+            "kernel_http_route_target_missing",
+            DiagnosticClass::Semantic,
+            "An HTTP route selects a missing, foreign, or retired target.",
+            "Select a live root-package HTTP target and retry the mutation.",
         ),
         diagnostic(
             "kernel_http_target_universal_port",
@@ -5898,6 +6119,10 @@ fn validate_compact_change_inventory(
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
             ("add.parameter", "requirement"),
+            ("add.http-route", "path"),
+            ("add.http-route", "pattern"),
+            ("set.http-route", "path"),
+            ("set.http-route", "pattern"),
             ("create.target", "port"),
         ];
         if !field.required && !optional.contains(&(field.operation, field.name)) {
@@ -5913,6 +6138,10 @@ fn validate_compact_change_inventory(
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
         ("add.parameter", "requirement"),
+        ("add.http-route", "path"),
+        ("add.http-route", "pattern"),
+        ("set.http-route", "path"),
+        ("set.http-route", "pattern"),
         ("create.target", "port"),
     ] {
         if !fields

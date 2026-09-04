@@ -20,12 +20,12 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_fb1407157c4fec5cba07a9c89d0145b1282becd70fc49147f54fb52131c34a89`;
-- semantic state: `semantic_state_5e40e43902cb2614c934a2c3dbc596145819aaa009f7c8fc83acab41dadaeed3`;
-- package revision: `package_revision_8630f8830e1233b7f99e177fa86dafad01546dc21138418de5250078a4e039b2`;
-- artifact manifest: `artifact_manifest_eff8c201d1f415400b407ed14294bd1762552ea4cbe736624b351dc417cc9295`;
-- artifact bundle: `artifact_bundle_b9f422fa042fd3f12758fc936b5f47ed2ec522ed1eb72997dab37e2cdd15a9d7`;
-- 2,046 live root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9`;
+- semantic state: `semantic_state_11cccd6ab1f48dbcc637737aab3e4740a29a1b3678e94b9e0899b4cc755d4c0c`;
+- package revision: `package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9`;
+- artifact manifest: `artifact_manifest_561a57c404ee1429bbc6f4bf326b8089c4acf86b033c98ac5cf5535f7abbd463`;
+- artifact bundle: `artifact_bundle_fedd83ac62aeeed15a772c40cc075d85b76dfda95e37cf66f6892f0d4edd356a`;
+- 2,040 live root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
 
@@ -33,12 +33,12 @@ From the repository root:
 
 ```sh
 cargo build --workspace --release --locked
-target/release/lkjscript --project applications/lkjournal status
-target/release/lkjscript --project applications/lkjournal query owners --limit 20
-target/release/lkjscript --project applications/lkjournal inspect owner module \
+target/release/lkjscript status --project applications/lkjournal
+target/release/lkjscript query --project applications/lkjournal owners --limit 20
+target/release/lkjscript inspect --project applications/lkjournal owner module \
   mod_50e2d3318b93f572dad082bd4f42c526
-target/release/lkjscript --project applications/lkjournal check
-target/release/lkjscript --project applications/lkjournal build \
+target/release/lkjscript check --project applications/lkjournal
+target/release/lkjscript build --project applications/lkjournal \
   --output /tmp/lkjournal-current.lkja
 ```
 
@@ -51,33 +51,34 @@ not change accepted `HEAD`.
 Package-visible task function `decl_0693166bd7c29bee83d2ead289148f65` (`update-resource`) retains
 its stable identity and delegates the exact data-only commit subtree to private same-module helper
 `decl_53936ef7d46ee491d41aef8c37cdffef` (`commit-resource-update`). Their definition bodies contain
-96 and 101 records respectively; the moved root remains
+93 and 101 records respectively; the moved root remains
 `expr_22692186086bc39d6caf2cfe244879c8`.
 
 The normalized artifact contains HTTP target `serve`
 (`target_e6f0a45c5f938ba39a19de585e8fc0d7`) with route-set
-`http_routes_3e1502e837a3993d43ec6b9903259de808d2d608a598b45582c6cdf344994ed0`,
+`http_routes_5343767ca1ac4bfc0c59fa610ddbd011f135ad87043921426a20ad3191e0aea2`,
 worker target `work`
 (`target_3608e4377fe1adb3ef15e610a9b5e0e5`), and interactive target `lkjournal-live-1`
 (`target_4370908b66ee6a998ac707bbe43f351b`), their component/port meaning, and declared requirements.
 It contains no grants, credentials, listener address, host paths, or deployment secrets.
 
-The `serve` target has no universal or fallback port. Its eleven stable graph-owned exact routes
-are `GET /`, `GET /health`, `GET /resource`, `GET /resource/history`, `GET /resources`,
+The `serve` target has no universal or fallback port. Its eight exact and three pattern routes
+are `GET /`, `GET /health`, `GET /resource/{id}`, `GET /resource/{id}/history`, `GET /resources`,
 `POST /initialize`, `POST /login`, `POST /objects`, `POST /objects/reconcile`,
-`POST /resource/update`, and `POST /resources`. Each selects its own function-backed component
-port. Authentication, authorization, query/body validation, domain transitions, data/object/queue
-policy, and responses remain in those handlers; an unmatched valid method/path pair is the
-platform-owned empty 404 and invokes none of them.
+`POST /resource/{id}/update`, and `POST /resources`. Each pattern capture indexes the handler's
+trailing unrestricted `id: Text` parameter; each route selects its own function-backed component
+port. Authentication, authorization, body validation, domain transitions, data/object/queue policy,
+and responses remain in those handlers; an unmatched valid method/path pair is the platform-owned
+empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,061,717-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,062,638-byte
 artifact bundle above (SHA-256
-`1dc6c9f93a72bfe848c59389c1922604dedd22f2fef3250dd523fc4186fcc11e`). The service descriptor
+`1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
-validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
+validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
 readiness only after first-party data/queue/object preflight. It does not discover this typed
 meaning graph repository or read accepted `HEAD`.
 
@@ -137,9 +138,9 @@ implicitly change durable queue state.
 | `POST /login?actor=…` | password verification and random expiring bearer session |
 | `POST /resources` | strict typed JSON create, resource/snapshot transaction, enqueue |
 | `GET /resources` | actor-owned resource summaries |
-| `GET /resource?id=…` | authenticated owner read |
-| `GET /resource/history?id=…` | immutable ordered snapshots |
-| `POST /resource/update?id=…` | strict typed JSON exact-base update and snapshot transaction |
+| `GET /resource/{id}` | authenticated owner read through a typed path capture |
+| `GET /resource/{id}/history` | immutable ordered snapshots through a typed path capture |
+| `POST /resource/{id}/update` | strict typed JSON exact-base update and snapshot transaction through a typed path capture |
 | `POST /objects?name=…` | streaming no-replace object publication and data metadata reference |
 | `POST /objects/reconcile?name=…` | reconcile a possibly visible object publication |
 

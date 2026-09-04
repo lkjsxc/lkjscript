@@ -28,7 +28,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 9;
+const SERVICE_CONTRACT_VERSION: u32 = 10;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
 const QUEUE_DATA_CONTRACT: &str = "lkjscript-durable-queue-data-1";
 const QUEUE_NAMESPACE: &str = "lkjournal-queue";
@@ -46,34 +46,81 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "1dc6c9f93a72bfe848c59389c1922604dedd22f2fef3250dd523fc4186fcc11e";
-const EXPECTED_HTTP_ROUTES: [(&str, &str, &str, &str); 11] = [
-    ("GET", "/", "home", "home"),
-    ("GET", "/health", "health", "health-route"),
-    ("GET", "/resource", "read-resource", "read-resource"),
+    "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8";
+const HTTP_REQUEST_TYPE: &str =
+    "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
+const HTTP_RESPONSE_TYPE: &str =
+    "type_object_f8f50c70db1af80a836ea1eb63c388326fe94b15ba62571b14c960b8204cf1da";
+const TEXT_TYPE: &str =
+    "type_object_d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3";
+const EXPECTED_HTTP_ROUTES: [(&str, &str, &str, &str, &str, &str); 11] = [
+    ("GET", "/", "exact", "", "home", "home"),
+    ("GET", "/health", "exact", "", "health", "health-route"),
     (
         "GET",
-        "/resource/history",
+        "/resource/{id}",
+        "pattern",
+        "id",
+        "read-resource",
+        "read-resource",
+    ),
+    (
+        "GET",
+        "/resource/{id}/history",
+        "pattern",
+        "id",
         "resource-history",
         "resource-history",
     ),
-    ("GET", "/resources", "list-resources", "list-resources"),
-    ("POST", "/initialize", "initialize", "initialize"),
-    ("POST", "/login", "login", "login"),
-    ("POST", "/objects", "publish-object", "publish-object"),
+    (
+        "GET",
+        "/resources",
+        "exact",
+        "",
+        "list-resources",
+        "list-resources",
+    ),
+    (
+        "POST",
+        "/initialize",
+        "exact",
+        "",
+        "initialize",
+        "initialize",
+    ),
+    ("POST", "/login", "exact", "", "login", "login"),
+    (
+        "POST",
+        "/objects",
+        "exact",
+        "",
+        "publish-object",
+        "publish-object",
+    ),
     (
         "POST",
         "/objects/reconcile",
+        "exact",
+        "",
         "reconcile-object",
         "reconcile-object",
     ),
     (
         "POST",
-        "/resource/update",
+        "/resource/{id}/update",
+        "pattern",
+        "id",
         "update-resource",
         "update-resource",
     ),
-    ("POST", "/resources", "create-resource", "create-resource"),
+    (
+        "POST",
+        "/resources",
+        "exact",
+        "",
+        "create-resource",
+        "create-resource",
+    ),
 ];
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
@@ -188,6 +235,8 @@ struct RunnerStopped {
     remaining_tasks: u64,
     cleanup_failures: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    matcher_nodes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     productive_iterations: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions: Option<SessionRuntimeObservation>,
@@ -280,10 +329,19 @@ struct HttpRouteTopologyObservation {
     target_name: String,
     component: String,
     route_count: u64,
+    exact_routes: u64,
+    pattern_routes: u64,
+    pattern_segments: u64,
+    maximum_specificity_chain: u64,
     route_set: String,
     independent_route_set: String,
     oracle_digest: String,
     routes: Vec<HttpRouteObservation>,
+    independent_languages_valid: bool,
+    independent_signatures_valid: bool,
+    independent_selection_valid: bool,
+    independent_selection_cases: u64,
+    capture_parameters: u64,
     distinct_ports: u64,
     distinct_functions: u64,
     context_queries: u64,
@@ -300,17 +358,40 @@ struct HttpRouteTopologyObservation {
 struct HttpRouteObservation {
     id: String,
     method: String,
+    selector: String,
     path: String,
+    segments: u64,
+    captures: Vec<String>,
+    specificity: String,
     port: String,
     port_name: String,
     function: String,
     function_name: String,
+    signature: String,
+    parameters: Vec<HttpRouteParameterObservation>,
+    result: String,
+    effect: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRouteParameterObservation {
+    id: String,
+    index: u64,
+    name: String,
+    ty: String,
+    use_mode: String,
+    requirement: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct HttpRouteRuntimeObservation {
+    matcher_nodes: u64,
+    matcher_step_bound: u64,
     query_did_not_select_route: bool,
+    capture_query_ignored: bool,
+    capture_raw_spelling_preserved: bool,
     mismatch_cases: u64,
     fixed_404_status: u16,
     fixed_404_empty_body: bool,
@@ -793,7 +874,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-14 service bundle",
+        "maintained artifact-15 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -826,13 +907,34 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
                 .as_ref()
                 .is_none_or(|stopped| !stopped.clean())
         })
+        || receipt.runners.iter().any(|runner| {
+            runner
+                .ready
+                .as_ref()
+                .is_some_and(|ready| ready.runner == "http")
+                && runner
+                    .stopped
+                    .as_ref()
+                    .and_then(|stopped| stopped.matcher_nodes)
+                    .is_none_or(|nodes| nodes == 0)
+        })
         || !result.artifact_identity.fresh_build_equal
         || result.data_contract != DATA_CONTRACT
         || !result.authority_unchanged
         || result.authority_before != result.authority_after
         || result.http_route_topology.target_name != "serve"
         || result.http_route_topology.route_count != EXPECTED_HTTP_ROUTES.len() as u64
+        || result.http_route_topology.exact_routes != 8
+        || result.http_route_topology.pattern_routes != 3
+        || result.http_route_topology.pattern_segments != 8
+        || result.http_route_topology.maximum_specificity_chain != 1
         || result.http_route_topology.routes.len() as u64 != result.http_route_topology.route_count
+        || !result.http_route_topology.independent_languages_valid
+        || !result.http_route_topology.independent_signatures_valid
+        || !result.http_route_topology.independent_selection_valid
+        || result.http_route_topology.independent_selection_cases
+            != result.http_route_topology.route_count
+        || result.http_route_topology.capture_parameters != 3
         || result.http_route_topology.distinct_ports != result.http_route_topology.route_count
         || result.http_route_topology.distinct_functions != result.http_route_topology.route_count
         || result.http_route_topology.context_queries != result.http_route_topology.route_count
@@ -852,6 +954,11 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || !result.http_route_topology.authority_unchanged
         || !result.http_route_topology.isolated_copy_removed
         || !result.http_route_runtime.query_did_not_select_route
+        || result.http_route_runtime.matcher_nodes == 0
+        || result.http_route_runtime.matcher_step_bound
+            != result.http_route_runtime.matcher_nodes.saturating_add(1)
+        || !result.http_route_runtime.capture_query_ignored
+        || !result.http_route_runtime.capture_raw_spelling_preserved
         || result.http_route_runtime.mismatch_cases != 6
         || result.http_route_runtime.fixed_404_status != 404
         || !result.http_route_runtime.fixed_404_empty_body
@@ -1048,7 +1155,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-14 service bundle",
+            "maintained artifact-15 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1576,7 +1683,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-14 build",
+        "service readiness disagrees with the exact fresh artifact-15 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -1643,7 +1750,7 @@ fn run_acceptance(
     require(
         fixed_404_empty_body && fixed_404_no_application_headers && unmatched_head_not_get,
         "route_miss_response",
-        "an exact HTTP route mismatch did not return the fixed empty header-free 404",
+        "an HTTP route mismatch did not return the fixed empty header-free 404",
     )?;
     let health_after_misses_response = context.request(
         "health-after-route-misses",
@@ -1664,8 +1771,12 @@ fn run_acceptance(
         "route_miss_cleanup",
         "service did not remain usable after a body-bearing exact route miss",
     )?;
-    let http_route_runtime = HttpRouteRuntimeObservation {
+    let mut http_route_runtime = HttpRouteRuntimeObservation {
+        matcher_nodes: 0,
+        matcher_step_bound: 0,
         query_did_not_select_route,
+        capture_query_ignored: false,
+        capture_raw_spelling_preserved: false,
         mismatch_cases: mismatch_cases.len() as u64,
         fixed_404_status: 404,
         fixed_404_empty_body,
@@ -2038,7 +2149,7 @@ fn run_acceptance(
         "resource list failed",
     )?;
 
-    let resource_path = format!("/resource?{}", query(&[("id", &resource_id)]));
+    let resource_path = format!("/resource/{resource_id}?id=ignored-by-pattern-capture");
     let read = context.request(
         "read-resource",
         service_port,
@@ -2053,9 +2164,42 @@ fn run_acceptance(
         "resource_read",
         "resource read failed",
     )?;
+    http_route_runtime.capture_query_ignored = true;
+
+    let Some(first_identity_byte) = resource_id.as_bytes().first().copied() else {
+        return Err(ServiceFailure::failed(
+            "resource_identity_spelling",
+            "maintained resource identity is empty",
+        ));
+    };
+    let raw_spelling_suffix = resource_id.get(1..).ok_or_else(|| {
+        ServiceFailure::failed(
+            "resource_identity_spelling",
+            "maintained resource identity is not byte-addressable ASCII",
+        )
+    })?;
+    let raw_spelling_path = format!("/resource/%{first_identity_byte:02X}{raw_spelling_suffix}");
+    let raw_spelling = context.request(
+        "resource-capture-raw-spelling",
+        service_port,
+        "GET",
+        &raw_spelling_path,
+        b"",
+        &[("Authorization", &authorization)],
+    )?;
+    timings.insert(
+        "resource_capture_raw_spelling".to_owned(),
+        raw_spelling.elapsed_nanoseconds,
+    );
+    http_route_runtime.capture_raw_spelling_preserved = raw_spelling.status == 404;
+    require(
+        http_route_runtime.capture_raw_spelling_preserved,
+        "resource_capture_raw_spelling",
+        "HTTP capture spelling was decoded or normalized before the maintained handler",
+    )?;
 
     let update_body = br##"{"title":"Acceptance entry revised","body":"# Revised","base":0}"##;
-    let update_path = format!("/resource/update?{}", query(&[("id", &resource_id)]));
+    let update_path = format!("/resource/{resource_id}/update");
     let updated = context.request(
         "update-resource",
         service_port,
@@ -2107,7 +2251,7 @@ fn run_acceptance(
         "stale update did not reject",
     )?;
 
-    let history_path = format!("/resource/history?{}", query(&[("id", &resource_id)]));
+    let history_path = format!("/resource/{resource_id}/history");
     let history = context.request(
         "resource-history",
         service_port,
@@ -2264,7 +2408,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-14 build",
+        "worker readiness disagrees with the exact fresh artifact-15 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -2283,7 +2427,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-14 build",
+        "second worker readiness disagrees with the exact fresh artifact-15 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -2452,7 +2596,25 @@ fn run_acceptance(
         first_runtime,
         restart_runtime,
     };
-    context.stop_runner(service_index)?;
+    let service_stopped = context.stop_runner(service_index)?;
+    let matcher_nodes = service_stopped.matcher_nodes.ok_or_else(|| {
+        ServiceFailure::failed(
+            "http_matcher_observation",
+            "HTTP service stop receipt omitted its prepared matcher node count",
+        )
+    })?;
+    require(
+        matcher_nodes != 0,
+        "http_matcher_observation",
+        "HTTP service prepared an empty matcher",
+    )?;
+    http_route_runtime.matcher_nodes = matcher_nodes;
+    http_route_runtime.matcher_step_bound = matcher_nodes.checked_add(1).ok_or_else(|| {
+        ServiceFailure::failed(
+            "http_matcher_observation",
+            "HTTP service matcher step bound overflowed",
+        )
+    })?;
 
     let restart_index = context.start_runner(
         "service-restart",
@@ -2595,7 +2757,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-14 bundle identity",
+        "restored service readiness changed the exact artifact-15 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -2617,7 +2779,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 9 authority inventory",
+        "service acceptance changed the maintained Graph 10 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -3481,6 +3643,17 @@ fn parse_stopped_event(bytes: &[u8]) -> Result<RunnerStopped, ServiceFailure> {
                             "runner cleanup failure list is absent",
                         )
                     })?,
+                matcher_nodes: receipt
+                    .get("matcher_nodes")
+                    .map(|value| {
+                        value.as_u64().ok_or_else(|| {
+                            ServiceFailure::failed(
+                                "runner_matcher_nodes",
+                                "HTTP matcher node count is invalid",
+                            )
+                        })
+                    })
+                    .transpose()?,
                 productive_iterations: receipt
                     .get("productive_iterations")
                     .map(|value| {
@@ -3642,7 +3815,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-14 bundle",
+            "maintained deployment descriptor does not bind the current artifact-15 bundle",
         ));
     }
     if let Some(port) = port {
@@ -3966,6 +4139,22 @@ fn verify_http_route_topology(
             service_required_field(inspected_target, "route-count")?,
             "HTTP route count",
         )?;
+        let exact_routes = service_parse_u64(
+            service_required_field(inspected_target, "exact-routes")?,
+            "exact HTTP route count",
+        )?;
+        let pattern_routes = service_parse_u64(
+            service_required_field(inspected_target, "pattern-routes")?,
+            "pattern HTTP route count",
+        )?;
+        let pattern_segments = service_parse_u64(
+            service_required_field(inspected_target, "pattern-segments")?,
+            "HTTP pattern segment count",
+        )?;
+        let maximum_specificity_chain = service_parse_u64(
+            service_required_field(inspected_target, "maximum-specificity-chain")?,
+            "HTTP route maximum specificity chain",
+        )?;
         let route_set = service_required_field(inspected_target, "route-set")?.to_owned();
         let predecessor_port_absent = inspected_target
             .fields
@@ -4060,8 +4249,17 @@ fn verify_http_route_topology(
                 "route component",
             )?;
             let method = service_required_field(route, "method")?.to_owned();
+            let selector = service_required_field(route, "selector")?.to_owned();
             let path = service_required_field(route, "path")?.to_owned();
+            let segments = service_parse_u64(
+                service_required_field(route, "segments")?,
+                "HTTP route segment count",
+            )?;
+            let captures = split_capture_names(service_required_field(route, "captures")?)?;
+            let specificity = service_required_field(route, "specificity")?.to_owned();
             let port = service_required_field(route, "port")?.to_owned();
+            let inspected_handler = service_required_field(route, "handler")?.to_owned();
+            let signature = service_required_field(route, "signature")?.to_owned();
 
             let context_output = context.invoke(CommandRequest::standard(
                 &format!("route-context-{index:02}"),
@@ -4110,9 +4308,10 @@ fn verify_http_route_topology(
             require(
                 port.ends_with(context_port)
                     && context_target == target
-                    && component.ends_with(context_component),
+                    && component.ends_with(context_component)
+                    && inspected_handler.ends_with(function.as_str()),
                 "route_context_owner",
-                "HTTP route inspection and bounded context disagree on target, component, or port",
+                "HTTP route inspection and bounded context disagree on target, component, port, or handler",
             )?;
             for (kind, source, destination) in [
                 ("http_route_target", route_id.as_str(), target.as_str()),
@@ -4127,14 +4326,29 @@ fn verify_http_route_topology(
                     format!("HTTP route bounded context omitted {kind} {source} -> {destination}"),
                 )?;
             }
+            let (parameters, result, effect) = inspect_http_route_handler_contract(
+                context,
+                &copied_binary,
+                &copied_application,
+                index,
+                &function,
+            )?;
             routes.push(HttpRouteObservation {
                 id: route_id.clone(),
                 method,
+                selector,
                 path,
+                segments,
+                captures,
+                specificity,
                 port,
                 port_name: service_required_field(port_owner, "name")?.to_owned(),
                 function,
                 function_name: service_required_field(function_owner, "name")?.to_owned(),
+                signature,
+                parameters,
+                result,
+                effect,
             });
         }
         routes.sort_by(|left, right| {
@@ -4145,7 +4359,9 @@ fn verify_http_route_topology(
                 .then_with(|| left.id.as_bytes().cmp(right.id.as_bytes()))
         });
         require_current_http_route_inventory(&routes)?;
-        let independent_route_set = independent_http_route_set(&routes)?;
+        let independent = independently_validate_http_routes(&routes)?;
+        let independent_selection_cases = independently_validate_http_route_selection(&routes)?;
+        let independent_route_set = independent.route_set;
         require(
             independent_route_set == route_set,
             "route_set_digest",
@@ -4166,6 +4382,14 @@ fn verify_http_route_topology(
             "route_handler_sharing",
             "lkjournal unexpectedly shares a port or function between distinct route behaviors",
         )?;
+        require(
+            independent.exact_routes == exact_routes
+                && independent.pattern_routes == pattern_routes
+                && independent.pattern_segments == pattern_segments
+                && independent.maximum_specificity_chain == maximum_specificity_chain,
+            "route_set_analysis",
+            "independent HTTP route analysis disagrees with target inspection",
+        )?;
         let oracle_digest = http_route_oracle_digest(&routes);
         let authority_after = observe_graph_authority(&copied_application)?;
         let tree_after = service_tree_digest(&copied_application)?;
@@ -4173,17 +4397,26 @@ fn verify_http_route_topology(
         require(
             authority_unchanged,
             "route_authority_changed",
-            "HTTP route inspection changed the isolated Graph 9 application copy",
+            "HTTP route inspection changed the isolated Graph 10 application copy",
         )?;
         Ok(HttpRouteTopologyObservation {
             target,
             target_name: "serve".to_owned(),
             component,
             route_count,
+            exact_routes,
+            pattern_routes,
+            pattern_segments,
+            maximum_specificity_chain,
             route_set,
             independent_route_set,
             oracle_digest,
             routes,
+            independent_languages_valid: true,
+            independent_signatures_valid: true,
+            independent_selection_valid: true,
+            independent_selection_cases,
+            capture_parameters: independent.capture_parameters,
             distinct_ports,
             distinct_functions,
             context_queries: route_ids.len() as u64,
@@ -4261,13 +4494,675 @@ fn context_relation_exists(
     Ok(false)
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum IndependentHttpRouteSelector {
+    Exact(String),
+    Pattern(Vec<IndependentHttpPatternSegment>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum IndependentHttpPatternSegment {
+    Literal(String),
+    Capture(String),
+}
+
+#[derive(Debug)]
+struct IndependentHttpRouteAnalysis {
+    route_set: String,
+    exact_routes: u64,
+    pattern_routes: u64,
+    pattern_segments: u64,
+    maximum_specificity_chain: u64,
+    capture_parameters: u64,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct IndependentHttpRouteMatch {
+    route: String,
+    captures: Vec<(String, String)>,
+}
+
+struct IndependentHttpRouteCandidate<'a> {
+    route: &'a HttpRouteObservation,
+    selector: IndependentHttpRouteSelector,
+    captures: Vec<(String, String)>,
+}
+
+fn split_capture_names(value: &str) -> Result<Vec<String>, ServiceFailure> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    let captures = value.split(',').map(str::to_owned).collect::<Vec<_>>();
+    let mut unique = BTreeSet::new();
+    for capture in &captures {
+        require(
+            independent_graph_name_is_valid(capture) && unique.insert(capture.as_str()),
+            "route_capture_inventory",
+            "HTTP route inspection exposed a malformed or duplicate capture name",
+        )?;
+    }
+    Ok(captures)
+}
+
+fn inspect_http_route_handler_contract(
+    context: &mut ServiceContext,
+    binary: &Path,
+    application: &Path,
+    index: usize,
+    function: &str,
+) -> Result<(Vec<HttpRouteParameterObservation>, String, String), ServiceFailure> {
+    let output = context.invoke(CommandRequest::standard(
+        &format!("route-handler-definition-{index:02}"),
+        vec![
+            binary.to_string_lossy().into_owned(),
+            "--project".to_owned(),
+            application.to_string_lossy().into_owned(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "task_function".to_owned(),
+            function.to_owned(),
+            "--detail".to_owned(),
+            "definition".to_owned(),
+            "--limit".to_owned(),
+            "64".to_owned(),
+            "--bytes".to_owned(),
+            "65536".to_owned(),
+        ],
+    ))?;
+    let records = service_compact_records("HTTP route handler definition", &output)?;
+    service_require_field(&records, "result", "status", "success")?;
+    service_require_field(&records, "page", "start", "0")?;
+    let functions = records
+        .iter()
+        .filter(|record| record.operation == "definition.function")
+        .collect::<Vec<_>>();
+    require(
+        functions.len() == 1,
+        "route_handler_definition",
+        "HTTP route handler projection did not expose exactly one function contract",
+    )?;
+    let function_record = functions.first().copied().ok_or_else(|| {
+        ServiceFailure::failed(
+            "route_handler_definition",
+            "HTTP route handler projection omitted its function contract",
+        )
+    })?;
+    service_require_exact(
+        service_required_field(function_record, "id")?,
+        function,
+        "HTTP route handler definition identity",
+    )?;
+    service_require_exact(
+        service_required_field(function_record, "kind")?,
+        "task_function",
+        "HTTP route handler definition kind",
+    )?;
+    let parameter_count = service_parse_u64(
+        service_required_field(function_record, "parameters")?,
+        "HTTP route handler parameter count",
+    )?;
+    let mut parameters = records
+        .iter()
+        .filter(|record| record.operation == "definition.parameter")
+        .map(|record| {
+            service_require_exact(
+                service_required_field(record, "parent")?,
+                function,
+                "HTTP route handler parameter parent",
+            )?;
+            Ok(HttpRouteParameterObservation {
+                id: service_required_field(record, "id")?.to_owned(),
+                index: service_parse_u64(
+                    service_required_field(record, "index")?,
+                    "HTTP route handler parameter index",
+                )?,
+                name: service_required_field(record, "name")?.to_owned(),
+                ty: service_required_field(record, "type")?.to_owned(),
+                use_mode: service_required_field(record, "use")?.to_owned(),
+                requirement: service_required_field(record, "requirement")?.to_owned(),
+            })
+        })
+        .collect::<Result<Vec<_>, ServiceFailure>>()?;
+    parameters.sort_by_key(|parameter| parameter.index);
+    require(
+        parameters.len() as u64 == parameter_count
+            && parameters
+                .iter()
+                .enumerate()
+                .all(|(index, parameter)| parameter.index == index as u64),
+        "route_handler_parameters",
+        "HTTP route handler definition omitted, duplicated, or reordered parameters",
+    )?;
+    Ok((
+        parameters,
+        service_required_field(function_record, "result")?.to_owned(),
+        service_required_field(function_record, "effect")?.to_owned(),
+    ))
+}
+
+fn independently_validate_http_routes(
+    routes: &[HttpRouteObservation],
+) -> Result<IndependentHttpRouteAnalysis, ServiceFailure> {
+    require(
+        !routes.is_empty() && routes.len() <= 4_096,
+        "route_oracle_count",
+        "independent HTTP route oracle observed an empty or exhausted route set",
+    )?;
+    let mut parsed = Vec::with_capacity(routes.len());
+    let mut aggregate_bytes = 0usize;
+    let mut pattern_segments = 0usize;
+    let mut exact_routes = 0usize;
+    let mut pattern_routes = 0usize;
+    let mut capture_parameters = 0usize;
+    let mut route_ids = BTreeSet::new();
+    for route in routes {
+        require(
+            route_ids.insert(route.id.as_str()),
+            "route_oracle_identity",
+            "independent HTTP route oracle observed a duplicate route identity",
+        )?;
+        independently_validate_http_method(&route.method)?;
+        let selector = independently_parse_http_selector(route)?;
+        aggregate_bytes = aggregate_bytes
+            .checked_add(route.method.len())
+            .and_then(|value| value.checked_add(route.path.len()))
+            .ok_or_else(|| {
+                ServiceFailure::failed(
+                    "route_oracle_bytes",
+                    "independent HTTP route byte accounting overflowed",
+                )
+            })?;
+        require(
+            aggregate_bytes <= 4 * 1_048_576,
+            "route_oracle_bytes",
+            "independent HTTP route oracle observed exhausted aggregate key bytes",
+        )?;
+        match &selector {
+            IndependentHttpRouteSelector::Exact(_) => exact_routes += 1,
+            IndependentHttpRouteSelector::Pattern(segments) => {
+                pattern_routes += 1;
+                pattern_segments =
+                    pattern_segments
+                        .checked_add(segments.len())
+                        .ok_or_else(|| {
+                            ServiceFailure::failed(
+                                "route_oracle_segments",
+                                "independent HTTP pattern segment accounting overflowed",
+                            )
+                        })?;
+                require(
+                    pattern_segments <= 65_536,
+                    "route_oracle_segments",
+                    "independent HTTP route oracle observed exhausted pattern segments",
+                )?;
+            }
+        }
+        capture_parameters = capture_parameters
+            .checked_add(route.captures.len())
+            .ok_or_else(|| {
+                ServiceFailure::failed(
+                    "route_oracle_captures",
+                    "independent HTTP capture accounting overflowed",
+                )
+            })?;
+        independently_validate_http_signature(route)?;
+        parsed.push((route, selector));
+    }
+    for (index, (left_route, left_selector)) in parsed.iter().enumerate() {
+        for (right_route, right_selector) in parsed.iter().skip(index + 1) {
+            require(
+                left_route.port != right_route.port
+                    || independent_capture_names(left_selector)
+                        == independent_capture_names(right_selector),
+                "route_oracle_shared_port",
+                "independent HTTP route oracle found a shared port with signature drift",
+            )?;
+            if left_route.method != right_route.method
+                || !independent_http_selectors_overlap(left_selector, right_selector)
+            {
+                continue;
+            }
+            require(
+                independent_http_selector_more_specific(left_selector, right_selector)
+                    || independent_http_selector_more_specific(right_selector, left_selector),
+                "route_oracle_overlap",
+                "independent HTTP route oracle found duplicate or incomparable match languages",
+            )?;
+        }
+    }
+    let mut maximum_specificity_chain = 1usize;
+    for (route, selector) in &parsed {
+        let less_specific = parsed
+            .iter()
+            .filter(|(other_route, other_selector)| {
+                route.method == other_route.method
+                    && independent_http_selector_more_specific(selector, other_selector)
+            })
+            .count();
+        maximum_specificity_chain = maximum_specificity_chain.max(less_specific.saturating_add(1));
+    }
+    Ok(IndependentHttpRouteAnalysis {
+        route_set: independent_http_route_set(&parsed)?,
+        exact_routes: exact_routes as u64,
+        pattern_routes: pattern_routes as u64,
+        pattern_segments: pattern_segments as u64,
+        maximum_specificity_chain: maximum_specificity_chain as u64,
+        capture_parameters: capture_parameters as u64,
+    })
+}
+
+fn independently_validate_http_route_selection(
+    routes: &[HttpRouteObservation],
+) -> Result<u64, ServiceFailure> {
+    let mut cases = 0u64;
+    for route in routes {
+        let selector = independently_parse_http_selector(route)?;
+        let (path, expected_captures) = independent_http_selector_example(&selector);
+        let selected =
+            independently_select_http_route(routes, &route.method, &path)?.ok_or_else(|| {
+                ServiceFailure::failed(
+                    "route_oracle_selection",
+                    "independent HTTP route oracle did not select an authored example",
+                )
+            })?;
+        require(
+            selected.route == route.id && selected.captures == expected_captures,
+            "route_oracle_selection",
+            "independent HTTP route selection or raw capture extraction disagrees with the authored selector",
+        )?;
+        cases = cases.checked_add(1).ok_or_else(|| {
+            ServiceFailure::failed(
+                "route_oracle_selection",
+                "independent HTTP route selection case accounting overflowed",
+            )
+        })?;
+    }
+    Ok(cases)
+}
+
+fn independently_select_http_route(
+    routes: &[HttpRouteObservation],
+    method: &str,
+    path: &str,
+) -> Result<Option<IndependentHttpRouteMatch>, ServiceFailure> {
+    independently_validate_http_routes(routes)?;
+    independently_validate_http_method(method)?;
+    independently_validate_http_path(path)?;
+    let mut selected: Option<IndependentHttpRouteCandidate<'_>> = None;
+    for route in routes.iter().filter(|route| route.method == method) {
+        let selector = independently_parse_http_selector(route)?;
+        let Some(captures) = independent_http_selector_captures(&selector, path) else {
+            continue;
+        };
+        match &selected {
+            None => {
+                selected = Some(IndependentHttpRouteCandidate {
+                    route,
+                    selector,
+                    captures,
+                });
+            }
+            Some(current)
+                if independent_http_selector_more_specific(&selector, &current.selector) =>
+            {
+                selected = Some(IndependentHttpRouteCandidate {
+                    route,
+                    selector,
+                    captures,
+                });
+            }
+            Some(current)
+                if independent_http_selector_more_specific(&current.selector, &selector) => {}
+            Some(_) => {
+                return Err(ServiceFailure::failed(
+                    "route_oracle_selection",
+                    "independent HTTP route selection encountered a non-unique most-specific match",
+                ));
+            }
+        }
+    }
+    Ok(selected.map(|selected| IndependentHttpRouteMatch {
+        route: selected.route.id.clone(),
+        captures: selected.captures,
+    }))
+}
+
+fn independent_http_selector_example(
+    selector: &IndependentHttpRouteSelector,
+) -> (String, Vec<(String, String)>) {
+    match selector {
+        IndependentHttpRouteSelector::Exact(path) => (path.clone(), Vec::new()),
+        IndependentHttpRouteSelector::Pattern(segments) => {
+            let mut path = String::new();
+            let mut captures = Vec::new();
+            for (index, segment) in segments.iter().enumerate() {
+                path.push('/');
+                match segment {
+                    IndependentHttpPatternSegment::Literal(value) => path.push_str(value),
+                    IndependentHttpPatternSegment::Capture(name) => {
+                        let value = format!("oracle%2F{index}");
+                        path.push_str(&value);
+                        captures.push((name.clone(), value));
+                    }
+                }
+            }
+            (path, captures)
+        }
+    }
+}
+
+fn independent_http_selector_captures(
+    selector: &IndependentHttpRouteSelector,
+    path: &str,
+) -> Option<Vec<(String, String)>> {
+    match selector {
+        IndependentHttpRouteSelector::Exact(exact) => (exact == path).then_some(Vec::new()),
+        IndependentHttpRouteSelector::Pattern(segments) => {
+            let values = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
+            if values.len() != segments.len() || values.iter().any(|value| value.is_empty()) {
+                return None;
+            }
+            let mut captures = Vec::new();
+            for (segment, value) in segments.iter().zip(values) {
+                match segment {
+                    IndependentHttpPatternSegment::Literal(literal) if literal == value => {}
+                    IndependentHttpPatternSegment::Literal(_) => return None,
+                    IndependentHttpPatternSegment::Capture(name) => {
+                        captures.push((name.clone(), value.to_owned()));
+                    }
+                }
+            }
+            Some(captures)
+        }
+    }
+}
+
+fn independently_validate_http_method(method: &str) -> Result<(), ServiceFailure> {
+    require(
+        !method.is_empty()
+            && method.len() <= 32
+            && method.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(
+                        byte,
+                        b'!' | b'#'
+                            | b'$'
+                            | b'%'
+                            | b'&'
+                            | b'\''
+                            | b'*'
+                            | b'+'
+                            | b'-'
+                            | b'.'
+                            | b'^'
+                            | b'_'
+                            | b'`'
+                            | b'|'
+                            | b'~'
+                    )
+            }),
+        "route_oracle_method",
+        "independent HTTP route oracle observed a malformed method token",
+    )
+}
+
+fn independently_validate_http_path(path: &str) -> Result<(), ServiceFailure> {
+    require(
+        !path.is_empty()
+            && path.len() <= 16 * 1_024
+            && path.starts_with('/')
+            && !path
+                .bytes()
+                .any(|byte| byte == b'?' || byte == b'#' || byte.is_ascii_control()),
+        "route_oracle_path",
+        "independent HTTP route oracle observed a malformed path spelling",
+    )
+}
+
+fn independently_parse_http_selector(
+    route: &HttpRouteObservation,
+) -> Result<IndependentHttpRouteSelector, ServiceFailure> {
+    independently_validate_http_path(&route.path)?;
+    match route.selector.as_str() {
+        "exact" => {
+            require(
+                route.segments == 0 && route.captures.is_empty() && route.specificity == "exact",
+                "route_oracle_exact",
+                "exact HTTP route inspection exposed pattern-only fields",
+            )?;
+            Ok(IndependentHttpRouteSelector::Exact(route.path.clone()))
+        }
+        "pattern" => {
+            let body = route.path.strip_prefix('/').ok_or_else(|| {
+                ServiceFailure::failed(
+                    "route_oracle_pattern",
+                    "HTTP route pattern omitted its leading slash",
+                )
+            })?;
+            require(
+                !body.is_empty() && !body.ends_with('/'),
+                "route_oracle_pattern",
+                "HTTP route pattern has no segments or has a trailing slash",
+            )?;
+            let mut segments = Vec::new();
+            let mut captures = Vec::new();
+            let mut unique_captures = BTreeSet::new();
+            for value in body.split('/') {
+                require(
+                    !value.is_empty() && segments.len() < 64,
+                    "route_oracle_pattern_segments",
+                    "HTTP route pattern has an empty or exhausted segment list",
+                )?;
+                let segment = if let Some(name) = value
+                    .strip_prefix('{')
+                    .and_then(|candidate| candidate.strip_suffix('}'))
+                {
+                    require(
+                        !name.contains(['{', '}'])
+                            && independent_graph_name_is_valid(name)
+                            && unique_captures.insert(name),
+                        "route_oracle_pattern_capture",
+                        "HTTP route pattern has a malformed or duplicate whole-segment capture",
+                    )?;
+                    captures.push(name.to_owned());
+                    IndependentHttpPatternSegment::Capture(name.to_owned())
+                } else {
+                    require(
+                        !value.contains(['{', '}'])
+                            && !value.bytes().any(|byte| {
+                                byte == b'?' || byte == b'#' || byte.is_ascii_control()
+                            }),
+                        "route_oracle_pattern_literal",
+                        "HTTP route pattern has a malformed literal segment",
+                    )?;
+                    IndependentHttpPatternSegment::Literal(value.to_owned())
+                };
+                segments.push(segment);
+            }
+            let literal_count = segments.len().saturating_sub(captures.len());
+            require(
+                !captures.is_empty()
+                    && captures.len() <= 32
+                    && route.segments == segments.len() as u64
+                    && route.captures == captures
+                    && route.specificity == literal_count.to_string(),
+                "route_oracle_pattern_shape",
+                "HTTP route pattern inspection disagrees with independently parsed segments or captures",
+            )?;
+            Ok(IndependentHttpRouteSelector::Pattern(segments))
+        }
+        _ => Err(ServiceFailure::failed(
+            "route_oracle_selector",
+            "HTTP route inspection exposed an unknown selector kind",
+        )),
+    }
+}
+
+fn independent_graph_name_is_valid(value: &str) -> bool {
+    if value.is_empty() || value.len() > 128 {
+        return false;
+    }
+    let mut bytes = value.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+fn independent_capture_names(selector: &IndependentHttpRouteSelector) -> Vec<&str> {
+    match selector {
+        IndependentHttpRouteSelector::Exact(_) => Vec::new(),
+        IndependentHttpRouteSelector::Pattern(segments) => segments
+            .iter()
+            .filter_map(|segment| match segment {
+                IndependentHttpPatternSegment::Literal(_) => None,
+                IndependentHttpPatternSegment::Capture(name) => Some(name.as_str()),
+            })
+            .collect(),
+    }
+}
+
+fn independently_validate_http_signature(
+    route: &HttpRouteObservation,
+) -> Result<(), ServiceFailure> {
+    let expected_signature = if route.captures.is_empty() {
+        "(HttpRequest)->HttpResponse".to_owned()
+    } else {
+        format!(
+            "(HttpRequest,{})->HttpResponse",
+            std::iter::repeat_n("Text", route.captures.len())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+    let parameter_shape = route.parameters.len() == route.captures.len().saturating_add(1)
+        && route.parameters.first().is_some_and(|parameter| {
+            parameter.index == 0
+                && parameter.ty == HTTP_REQUEST_TYPE
+                && parameter.use_mode == "unrestricted"
+                && parameter.requirement == "none"
+        })
+        && route
+            .parameters
+            .iter()
+            .skip(1)
+            .zip(&route.captures)
+            .all(|(parameter, capture)| {
+                parameter.name == *capture
+                    && parameter.ty == TEXT_TYPE
+                    && parameter.use_mode == "unrestricted"
+                    && parameter.requirement == "none"
+            });
+    require(
+        route.signature == expected_signature
+            && parameter_shape
+            && route.result == HTTP_RESPONSE_TYPE
+            && route.effect == "task",
+        "route_oracle_signature",
+        "HTTP route captures do not index the handler's ordered unrestricted Text suffix",
+    )
+}
+
+fn independent_http_selectors_overlap(
+    left: &IndependentHttpRouteSelector,
+    right: &IndependentHttpRouteSelector,
+) -> bool {
+    match (left, right) {
+        (IndependentHttpRouteSelector::Exact(left), IndependentHttpRouteSelector::Exact(right)) => {
+            left == right
+        }
+        (
+            IndependentHttpRouteSelector::Exact(path),
+            IndependentHttpRouteSelector::Pattern(segments),
+        )
+        | (
+            IndependentHttpRouteSelector::Pattern(segments),
+            IndependentHttpRouteSelector::Exact(path),
+        ) => independent_pattern_matches_path(segments, path),
+        (
+            IndependentHttpRouteSelector::Pattern(left),
+            IndependentHttpRouteSelector::Pattern(right),
+        ) => {
+            left.len() == right.len()
+                && left.iter().zip(right).all(|(left, right)| {
+                    !matches!(
+                        (left, right),
+                        (
+                            IndependentHttpPatternSegment::Literal(left),
+                            IndependentHttpPatternSegment::Literal(right)
+                        ) if left != right
+                    )
+                })
+        }
+    }
+}
+
+fn independent_http_selector_more_specific(
+    left: &IndependentHttpRouteSelector,
+    right: &IndependentHttpRouteSelector,
+) -> bool {
+    match (left, right) {
+        (
+            IndependentHttpRouteSelector::Exact(path),
+            IndependentHttpRouteSelector::Pattern(segments),
+        ) => independent_pattern_matches_path(segments, path),
+        (
+            IndependentHttpRouteSelector::Pattern(left),
+            IndependentHttpRouteSelector::Pattern(right),
+        ) if left.len() == right.len() => {
+            let mut strict = false;
+            for (left, right) in left.iter().zip(right) {
+                match (left, right) {
+                    (
+                        IndependentHttpPatternSegment::Literal(left),
+                        IndependentHttpPatternSegment::Literal(right),
+                    ) if left == right => {}
+                    (
+                        IndependentHttpPatternSegment::Literal(_),
+                        IndependentHttpPatternSegment::Capture(_),
+                    ) => strict = true,
+                    (
+                        IndependentHttpPatternSegment::Capture(_),
+                        IndependentHttpPatternSegment::Capture(_),
+                    ) => {}
+                    _ => return false,
+                }
+            }
+            strict
+        }
+        _ => false,
+    }
+}
+
+fn independent_pattern_matches_path(
+    segments: &[IndependentHttpPatternSegment],
+    path: &str,
+) -> bool {
+    let Some(path) = path.strip_prefix('/') else {
+        return false;
+    };
+    let mut values = path.split('/');
+    for segment in segments {
+        let Some(value) = values.next() else {
+            return false;
+        };
+        if value.is_empty()
+            || matches!(segment, IndependentHttpPatternSegment::Literal(literal) if literal != value)
+        {
+            return false;
+        }
+    }
+    values.next().is_none()
+}
+
 fn require_current_http_route_inventory(
     routes: &[HttpRouteObservation],
 ) -> Result<(), ServiceFailure> {
     require(
         http_route_inventory_is_current(routes),
         "route_inventory",
-        "lkjournal exact HTTP route, port, or function inventory changed",
+        "lkjournal HTTP selector, capture, port, or function inventory changed",
     )
 }
 
@@ -4277,48 +5172,76 @@ fn http_route_inventory_is_current(routes: &[HttpRouteObservation]) -> bool {
             .iter()
             .zip(EXPECTED_HTTP_ROUTES)
             .all(|(route, expected)| {
-                (
-                    route.method.as_str(),
-                    route.path.as_str(),
-                    route.port_name.as_str(),
-                    route.function_name.as_str(),
-                ) == expected
+                route.method == expected.0
+                    && route.path == expected.1
+                    && route.selector == expected.2
+                    && route.captures.join(",") == expected.3
+                    && route.port_name == expected.4
+                    && route.function_name == expected.5
             })
 }
 
 fn http_route_oracle_digest(routes: &[HttpRouteObservation]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"lkjscript.dev.http-route-oracle.v1");
+    hasher.update(b"lkjscript.dev.http-route-oracle.v2");
     hasher.update((routes.len() as u64).to_be_bytes());
     for route in routes {
         for field in [
             route.id.as_bytes(),
             route.method.as_bytes(),
+            route.selector.as_bytes(),
             route.path.as_bytes(),
+            route.specificity.as_bytes(),
             route.port.as_bytes(),
             route.port_name.as_bytes(),
             route.function.as_bytes(),
             route.function_name.as_bytes(),
+            route.signature.as_bytes(),
+            route.result.as_bytes(),
+            route.effect.as_bytes(),
         ] {
             hasher.update((field.len() as u64).to_be_bytes());
             hasher.update(field);
+        }
+        hasher.update(route.segments.to_be_bytes());
+        hasher.update((route.captures.len() as u64).to_be_bytes());
+        for capture in &route.captures {
+            hasher.update((capture.len() as u64).to_be_bytes());
+            hasher.update(capture.as_bytes());
+        }
+        hasher.update((route.parameters.len() as u64).to_be_bytes());
+        for parameter in &route.parameters {
+            hasher.update(parameter.index.to_be_bytes());
+            for field in [
+                parameter.id.as_bytes(),
+                parameter.name.as_bytes(),
+                parameter.ty.as_bytes(),
+                parameter.use_mode.as_bytes(),
+                parameter.requirement.as_bytes(),
+            ] {
+                hasher.update((field.len() as u64).to_be_bytes());
+                hasher.update(field);
+            }
         }
     }
     format!("route_oracle_{}", lower_hex(&hasher.finalize()))
 }
 
-fn independent_http_route_set(routes: &[HttpRouteObservation]) -> Result<String, ServiceFailure> {
+fn independent_http_route_set(
+    routes: &[(&HttpRouteObservation, IndependentHttpRouteSelector)],
+) -> Result<String, ServiceFailure> {
     let mut routes = routes.iter().collect::<Vec<_>>();
     routes.sort_by(|left, right| {
-        left.method
+        left.0
+            .method
             .as_bytes()
-            .cmp(right.method.as_bytes())
-            .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
-            .then_with(|| left.id.as_bytes().cmp(right.id.as_bytes()))
+            .cmp(right.0.method.as_bytes())
+            .then_with(|| independent_http_selector_cmp(&left.1, &right.1))
+            .then_with(|| left.0.id.as_bytes().cmp(right.0.id.as_bytes()))
     });
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.http-route-set.v1");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.http-route-set.v2");
     hasher.update(&(routes.len() as u64).to_be_bytes());
-    for route in routes {
+    for (route, selector) in routes {
         let route_id = exact_identity_bytes(&route.id, "route_", "HTTP route identity")?;
         let (package, port) = route.port.split_once('/').ok_or_else(|| {
             ServiceFailure::failed(
@@ -4331,8 +5254,7 @@ fn independent_http_route_set(routes: &[HttpRouteObservation]) -> Result<String,
         hasher.update(&route_id);
         hasher.update(&(route.method.len() as u64).to_be_bytes());
         hasher.update(route.method.as_bytes());
-        hasher.update(&(route.path.len() as u64).to_be_bytes());
-        hasher.update(route.path.as_bytes());
+        independent_hash_http_selector(&mut hasher, selector);
         hasher.update(&package);
         hasher.update(&port);
     }
@@ -4340,6 +5262,83 @@ fn independent_http_route_set(routes: &[HttpRouteObservation]) -> Result<String,
         "http_routes_{}",
         lower_hex(hasher.finalize().as_bytes())
     ))
+}
+
+fn independent_http_selector_cmp(
+    left: &IndependentHttpRouteSelector,
+    right: &IndependentHttpRouteSelector,
+) -> std::cmp::Ordering {
+    match (left, right) {
+        (IndependentHttpRouteSelector::Exact(left), IndependentHttpRouteSelector::Exact(right)) => {
+            left.as_bytes().cmp(right.as_bytes())
+        }
+        (IndependentHttpRouteSelector::Exact(_), IndependentHttpRouteSelector::Pattern(_)) => {
+            std::cmp::Ordering::Less
+        }
+        (IndependentHttpRouteSelector::Pattern(_), IndependentHttpRouteSelector::Exact(_)) => {
+            std::cmp::Ordering::Greater
+        }
+        (
+            IndependentHttpRouteSelector::Pattern(left),
+            IndependentHttpRouteSelector::Pattern(right),
+        ) => {
+            for (left, right) in left.iter().zip(right) {
+                let ordering = match (left, right) {
+                    (
+                        IndependentHttpPatternSegment::Literal(left),
+                        IndependentHttpPatternSegment::Literal(right),
+                    ) => left.as_bytes().cmp(right.as_bytes()),
+                    (
+                        IndependentHttpPatternSegment::Literal(_),
+                        IndependentHttpPatternSegment::Capture(_),
+                    ) => std::cmp::Ordering::Less,
+                    (
+                        IndependentHttpPatternSegment::Capture(_),
+                        IndependentHttpPatternSegment::Literal(_),
+                    ) => std::cmp::Ordering::Greater,
+                    (
+                        IndependentHttpPatternSegment::Capture(left),
+                        IndependentHttpPatternSegment::Capture(right),
+                    ) => left.as_bytes().cmp(right.as_bytes()),
+                };
+                if ordering != std::cmp::Ordering::Equal {
+                    return ordering;
+                }
+            }
+            left.len().cmp(&right.len())
+        }
+    }
+}
+
+fn independent_hash_http_selector(
+    hasher: &mut blake3::Hasher,
+    selector: &IndependentHttpRouteSelector,
+) {
+    match selector {
+        IndependentHttpRouteSelector::Exact(path) => {
+            hasher.update(&[0]);
+            hasher.update(&(path.len() as u64).to_be_bytes());
+            hasher.update(path.as_bytes());
+        }
+        IndependentHttpRouteSelector::Pattern(segments) => {
+            hasher.update(&[1]);
+            hasher.update(&(segments.len() as u64).to_be_bytes());
+            for segment in segments {
+                match segment {
+                    IndependentHttpPatternSegment::Literal(value) => {
+                        hasher.update(&[0]);
+                        hasher.update(&(value.len() as u64).to_be_bytes());
+                        hasher.update(value.as_bytes());
+                    }
+                    IndependentHttpPatternSegment::Capture(name) => {
+                        hasher.update(&[1]);
+                        hasher.update(&(name.len() as u64).to_be_bytes());
+                        hasher.update(name.as_bytes());
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn exact_identity_bytes(
@@ -5655,7 +6654,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 9);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 10);
     }
 
     #[test]
@@ -5663,11 +6662,62 @@ mod tests {
         let route = |id: &str, method: &str, path: &str, port: &str| HttpRouteObservation {
             id: id.to_owned(),
             method: method.to_owned(),
+            selector: "exact".to_owned(),
             path: path.to_owned(),
+            segments: 0,
+            captures: Vec::new(),
+            specificity: "exact".to_owned(),
             port: port.to_owned(),
             port_name: "ignored-name".to_owned(),
             function: "decl_00000000000000000000000000000000".to_owned(),
             function_name: "ignored-function".to_owned(),
+            signature: "(HttpRequest)->HttpResponse".to_owned(),
+            parameters: vec![HttpRouteParameterObservation {
+                id: "param_00000000000000000000000000000000".to_owned(),
+                index: 0,
+                name: "request".to_owned(),
+                ty: HTTP_REQUEST_TYPE.to_owned(),
+                use_mode: "unrestricted".to_owned(),
+                requirement: "none".to_owned(),
+            }],
+            result: HTTP_RESPONSE_TYPE.to_owned(),
+            effect: "task".to_owned(),
+        };
+        let pattern_route = |id: &str, method: &str, path: &str, captures: &[&str], port: &str| {
+            let mut value = route(id, method, path, port);
+            value.selector = "pattern".to_owned();
+            value.segments = path
+                .strip_prefix('/')
+                .expect("rooted test pattern")
+                .split('/')
+                .count() as u64;
+            value.captures = captures
+                .iter()
+                .map(|capture| (*capture).to_owned())
+                .collect();
+            value.specificity = value
+                .segments
+                .saturating_sub(value.captures.len() as u64)
+                .to_string();
+            value.signature = format!(
+                "(HttpRequest,{})->HttpResponse",
+                std::iter::repeat_n("Text", captures.len())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            value
+                .parameters
+                .extend(captures.iter().enumerate().map(|(index, capture)| {
+                    HttpRouteParameterObservation {
+                        id: format!("param_{:032x}", index.saturating_add(1)),
+                        index: index.saturating_add(1) as u64,
+                        name: (*capture).to_owned(),
+                        ty: TEXT_TYPE.to_owned(),
+                        use_mode: "unrestricted".to_owned(),
+                        requirement: "none".to_owned(),
+                    }
+                }));
+            value
         };
         let first = route(
             "route_11111111111111111111111111111111",
@@ -5681,24 +6731,164 @@ mod tests {
             "/items",
             "pkg_22222222222222222222222222222222/port_55555555555555555555555555555555",
         );
-        let forward = independent_http_route_set(&[first.clone(), second.clone()])
-            .expect("independent route set");
-        let reversed = independent_http_route_set(&[second.clone(), first.clone()])
-            .expect("order-invariant independent route set");
+        let forward = independently_validate_http_routes(&[first.clone(), second.clone()])
+            .expect("independent route set")
+            .route_set;
+        let reversed = independently_validate_http_routes(&[second.clone(), first.clone()])
+            .expect("order-invariant independent route set")
+            .route_set;
         assert_eq!(forward, reversed);
         assert!(forward.starts_with("http_routes_"));
         assert_eq!(forward.len(), 76);
+
+        let exact = route(
+            "route_66666666666666666666666666666666",
+            "GET",
+            "/items/special",
+            "pkg_22222222222222222222222222222222/port_77777777777777777777777777777777",
+        );
+        let broad = pattern_route(
+            "route_88888888888888888888888888888888",
+            "GET",
+            "/items/{id}",
+            &["id"],
+            "pkg_22222222222222222222222222222222/port_99999999999999999999999999999999",
+        );
+        let two_capture = pattern_route(
+            "route_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "DELETE",
+            "/api/{space}/{id}",
+            &["space", "id"],
+            "pkg_22222222222222222222222222222222/port_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+        let analysis = independently_validate_http_routes(&[
+            exact.clone(),
+            broad.clone(),
+            two_capture.clone(),
+        ])
+        .expect("comparable exact-pattern route set");
+        assert_eq!(analysis.exact_routes, 1);
+        assert_eq!(analysis.pattern_routes, 2);
+        assert_eq!(analysis.pattern_segments, 5);
+        assert_eq!(analysis.capture_parameters, 3);
+        assert_eq!(analysis.maximum_specificity_chain, 2);
+        assert_eq!(
+            independently_select_http_route(
+                &[exact.clone(), broad.clone(), two_capture.clone()],
+                "GET",
+                "/items/special",
+            )
+            .expect("exact precedence selection")
+            .expect("exact precedence match"),
+            IndependentHttpRouteMatch {
+                route: exact.id.clone(),
+                captures: Vec::new(),
+            }
+        );
+        assert_eq!(
+            independently_select_http_route(
+                &[exact.clone(), broad.clone(), two_capture.clone()],
+                "GET",
+                "/items/raw%2Fvalue",
+            )
+            .expect("raw pattern selection")
+            .expect("raw pattern match"),
+            IndependentHttpRouteMatch {
+                route: broad.id.clone(),
+                captures: vec![("id".to_owned(), "raw%2Fvalue".to_owned())],
+            }
+        );
+        assert_eq!(
+            independently_select_http_route(
+                &[exact.clone(), broad.clone(), two_capture.clone()],
+                "DELETE",
+                "/api/posts/abc",
+            )
+            .expect("two-capture selection")
+            .expect("two-capture match"),
+            IndependentHttpRouteMatch {
+                route: two_capture.id.clone(),
+                captures: vec![
+                    ("space".to_owned(), "posts".to_owned()),
+                    ("id".to_owned(), "abc".to_owned()),
+                ],
+            }
+        );
+        assert!(
+            independently_select_http_route(
+                &[exact.clone(), broad.clone(), two_capture.clone()],
+                "GET",
+                "/items",
+            )
+            .expect("valid unmatched selection")
+            .is_none()
+        );
+
+        let duplicate_language = pattern_route(
+            "route_cccccccccccccccccccccccccccccccc",
+            "GET",
+            "/items/{other}",
+            &["other"],
+            "pkg_22222222222222222222222222222222/port_dddddddddddddddddddddddddddddddd",
+        );
+        assert_eq!(
+            independently_validate_http_routes(&[broad.clone(), duplicate_language])
+                .expect_err("capture-name-only language duplicate")
+                .code,
+            "route_oracle_overlap"
+        );
+
+        let incomparable_left = pattern_route(
+            "route_cccccccccccccccccccccccccccccccc",
+            "GET",
+            "/api/{kind}/fixed",
+            &["kind"],
+            "pkg_22222222222222222222222222222222/port_dddddddddddddddddddddddddddddddd",
+        );
+        let incomparable_right = pattern_route(
+            "route_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "GET",
+            "/api/posts/{id}",
+            &["id"],
+            "pkg_22222222222222222222222222222222/port_ffffffffffffffffffffffffffffffff",
+        );
+        assert_eq!(
+            independently_validate_http_routes(&[incomparable_left, incomparable_right])
+                .expect_err("incomparable overlapping patterns")
+                .code,
+            "route_oracle_overlap"
+        );
+
+        let mut misnamed = broad.clone();
+        misnamed.parameters[1].name = "other".to_owned();
+        assert_eq!(
+            independently_validate_http_routes(&[misnamed])
+                .expect_err("misnamed indexed parameter")
+                .code,
+            "route_oracle_signature"
+        );
+
+        let mut shared_port_drift = two_capture;
+        shared_port_drift.port = broad.port.clone();
+        assert_eq!(
+            independently_validate_http_routes(&[broad.clone(), shared_port_drift])
+                .expect_err("shared port capture sequence drift")
+                .code,
+            "route_oracle_shared_port"
+        );
 
         let mut changed = second;
         changed.path = "/other".to_owned();
         assert_ne!(
             forward,
-            independent_http_route_set(&[first.clone(), changed]).expect("changed route set")
+            independently_validate_http_routes(&[first.clone(), changed])
+                .expect("changed route set")
+                .route_set
         );
         let mut malformed = first;
         malformed.id = "route_A1111111111111111111111111111111".to_owned();
         assert_eq!(
-            independent_http_route_set(&[malformed])
+            independently_validate_http_routes(&[malformed])
                 .expect_err("uppercase identity must reject")
                 .code,
             "route_identity_hex"
@@ -5806,11 +6996,12 @@ mod tests {
         assert_eq!(ready.secret_names, ["bootstrap-token"]);
         let stopped = parse_stopped_event(
             br#"{"ok":true,"event":"ready"}
-{"ok":true,"event":"stopped","receipt":{"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
+{"ok":true,"event":"stopped","receipt":{"matcher_nodes":7,"productive_iterations":3,"shutdown":{"admission_stopped":true,"remaining_tasks":0,"cleanup_failures":[]}}}
 "#,
         )
         .expect("parse stopped event");
         assert!(stopped.clean());
+        assert_eq!(stopped.matcher_nodes, Some(7));
         assert_eq!(stopped.productive_iterations, Some(3));
         assert_eq!(
             parse_ready_event(

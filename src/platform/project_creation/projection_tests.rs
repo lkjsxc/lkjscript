@@ -37,7 +37,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Command,
-            "recipe_projection_3371111f5b29ea3733a057820ac8b389a82bd1cc66fadaa3eb23eee791f8178c",
+            "recipe_projection_be87f531eec7fe96ebe4c784efa699dbedd955d6ae0d9d548d8bec4292947160",
             10,
             2,
             4,
@@ -45,7 +45,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_02ae1023e091b62e34e89efb83eb4899225633f7ea0e9f6332b2edf0b6357a73",
+            "recipe_projection_ebfc81363fc6c817f5d432d4e2c20a3d256f605a648fdef5a501873743e484e6",
             21,
             12,
             10,
@@ -53,7 +53,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_21959733f7422dd7e34117f25eaa8e48eb1a8438a7a548bdfa0cf7e3350932fc",
+            "recipe_projection_55c6cb68f909496c6318822e0a731bf55a9ddfe1be32ef05992a33c26ea1ae1b",
             56,
             12,
             43,
@@ -187,7 +187,7 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
                     "http-route:{}/{} {}",
                     identity(&identities, record.target),
                     record.method,
-                    record.path
+                    record.selector.display()
                 ),
             )),
             _ => None,

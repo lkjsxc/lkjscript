@@ -1,4 +1,4 @@
-//! Exact Graph 9 semantic references without mutable locators.
+//! Exact Graph 10 semantic references without mutable locators.
 
 use super::id::PackageId;
 use crate::platform::semantic_id::{

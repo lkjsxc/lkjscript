@@ -5709,7 +5709,7 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
 }
 
 #[test]
-fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
+fn copied_binary_reviews_changes_inspects_and_deletes_http_routes() {
     let temporary = tempfile::TempDir::new().expect("isolated HTTP route workspace");
     let copied_binary = temporary.path().join("lkjscript");
     copy_executable(&binary(), &copied_binary);
@@ -5725,6 +5725,14 @@ fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
             record.operation == "change.operation"
                 && compact_field(record, "name") == Some(operation)
         }));
+        for field in ["path", "pattern"] {
+            assert!(grammar.iter().any(|record| {
+                record.operation == "change.operation-field"
+                    && compact_field(record, "operation") == Some(operation)
+                    && compact_field(record, "name") == Some(field)
+                    && compact_field(record, "required") == Some("false")
+            }));
+        }
     }
     for (condition, port) in [
         ("runner=http", "forbidden"),
@@ -5817,6 +5825,12 @@ fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
     assert_eq!(compact_field(route_owner, "target"), Some(target.as_str()));
     assert_eq!(compact_field(route_owner, "method"), Some("GET"));
     assert_eq!(compact_field(route_owner, "path"), Some("/"));
+    assert_eq!(compact_field(route_owner, "selector"), Some("exact"));
+    assert_eq!(compact_field(route_owner, "captures"), Some(""));
+    assert_eq!(
+        compact_field(route_owner, "signature"),
+        Some("(HttpRequest)->HttpResponse")
+    );
     let component = compact_field(route_owner, "component")
         .expect("route component")
         .to_owned();
@@ -5841,6 +5855,13 @@ fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
         Some(component.as_str())
     );
     assert_eq!(compact_field(target_owner, "route-count"), Some("1"));
+    assert_eq!(compact_field(target_owner, "exact-routes"), Some("1"));
+    assert_eq!(compact_field(target_owner, "pattern-routes"), Some("0"));
+    assert_eq!(compact_field(target_owner, "pattern-segments"), Some("0"));
+    assert_eq!(
+        compact_field(target_owner, "maximum-specificity-chain"),
+        Some("1")
+    );
     let initial_route_set = compact_field(target_owner, "route-set")
         .expect("initial route-set digest")
         .to_owned();
@@ -5966,7 +5987,7 @@ fn copied_binary_reviews_changes_inspects_and_deletes_exact_http_routes() {
         (
             "duplicate",
             format!("add.http-route as=$duplicate target={target} method=GET path=/a port={port}"),
-            "kernel_http_route_duplicate",
+            "kernel_http_route_duplicate_language",
         ),
         (
             "method",

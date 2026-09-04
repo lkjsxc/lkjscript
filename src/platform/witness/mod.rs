@@ -1,11 +1,11 @@
-//! Private owner-granular Graph 9 validation witness.
+//! Private owner-granular Graph 10 validation witness.
 //!
 //! The witness is wholly derived from canonical kernel records. A full rebuild is retained as the
 //! independent authority for later delta-update and impact-planning work.
 
 #![allow(
     unused_imports,
-    reason = "private witness exports become crate consumers at the Graph 9 repository cutover"
+    reason = "private witness exports become crate consumers at the Graph 10 repository cutover"
 )]
 
 mod codec;

@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 9 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 10 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,

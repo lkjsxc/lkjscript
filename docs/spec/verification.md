@@ -50,6 +50,17 @@ points, accounting peaks, and join/permit observations to prove one transition, 
 reservation, event ordering, coalesced ticks, item/byte backpressure, cancellation, phase failures,
 and zero resources after parent completion.
 
+HTTP route-pattern acceptance uses a separate route-language oracle. It may read bounded public
+route, parameter, port, and function projections, but it cannot call production selector parsing,
+overlap, specificity, route-set digest, compiler, artifact, preparation, matcher, or capture code.
+The oracle independently parses public whole-segment patterns, reconstructs match languages and
+specificity order, validates capture names against the ordered unrestricted `Text` parameter
+suffix, selects routes, and extracts raw segment spelling. It must agree on exact precedence,
+comparable nesting, two-capture order, route-set identity, malformed and exhausted patterns,
+duplicate languages, incomparable overlap, signature drift, shared-port disagreement, and
+order-invariance. A raw TCP HTTP/1.1 client observes dispatch and effects without importing Axum or
+production HTTP helpers; live effects execute only once through production.
+
 Migration evidence for maintained consumers compares a sorted generation-neutral projection of
 predecessor and current typed meaning, including identity continuity, declarations/members, type and
 expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
@@ -128,6 +139,15 @@ requirement, function-backed port, and target solely through ordinary compact pl
 inspect, check, build, and prepare/serve it. It must reject stale, predecessor, foreign, malformed,
 and relationally invalid inputs without a checkout-only authoring helper or a semantic-authority
 change during runtime.
+
+A copied executable in a separate empty `minimal` project must discover the `add.http-route` and
+`set.http-route` selector fields and limits, author both exact and pattern routes through ordinary
+compact plan/apply, and inspect their selector segments, captures, handler signatures, route-set
+digest, and maximum specificity chain. It must change and delete pattern routes while preserving
+stable route identity, reject altered commitments and stale bases without publication, then check,
+build, prepare, and serve the result. Raw requests must prove exact-over-pattern selection, two
+ordered captures, raw spelling, query independence, fixed no-effect 404 behavior, bounded matcher
+work, restart equality, and complete cleanup.
 
 The copied executable must discover function-definition inspection offline, force multiple pages
 with changed resume budgets, and independently recompute the complete digest from raw compact
@@ -214,12 +234,15 @@ result, bounded logs, and complete cleanup.
 The stateful owner creates a dependency-free `minimal` project, discovers and exports the exact
 built-in transport through the copied candidate, stages it without changing semantic `HEAD`, and
 constructs one bounded request adding the dependency, component, requirements, function-backed HTTP
-port, `serve` target, and BBS policy. It retains one application definition across contributor,
+ports, `serve` target, exact and pattern routes, indexed capture parameters, and BBS policy. It
+retains one application definition across contributor,
 target-admission, pre-publication, and anonymous public verification. It may use public parsing
 utilities but no recipe owner builder, source, fixture topology, or `http` recipe. Passing evidence
 requires direct/input normalization equality, reviewed plan/apply, idempotent reprepare,
-clean/incremental artifact equality, the named reducer/function value/standard fold construction,
-real HTTP create/read/update/delete, missing/nonmatching/repeated/reordered header admission,
+clean/incremental artifact equality, a complete pattern add/set/delete lifecycle, exact precedence,
+two ordered captures, raw spelling and query independence, the named reducer/function value/standard
+fold construction, real HTTP create/read/update/delete, and missing/nonmatching/repeated/reordered
+header admission,
 strict malformed input, expectation rollback, schema divergence failure, restart persistence,
 logical backup/absent-root restore, corrupt/absent-root failed startup, graceful shutdown, unchanged
 accepted graph authority, and data/runner-root cleanup. Timeout, early exit, data failure, shutdown

@@ -26,10 +26,10 @@ use super::{
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, IdentityKind,
-    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageRevisionDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
-    encode_dependency, encode_owner,
+    ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, HttpRouteRecord,
+    HttpRouteSelector, IdentityKind, ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey,
+    OwnerKind, OwnerRecord, PackageId, PackageRevisionDigest, RetirementRecord, TypeObject,
+    TypeObjectDigest, TypeObjectInterner, encode_dependency, encode_owner,
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
@@ -175,7 +175,7 @@ pub enum AuthoredChange {
         symbol: String,
         target: OwnerSelector,
         method: String,
-        path: String,
+        selector: HttpRouteSelector,
         port: AuthoredPortReference,
     },
     SetDeclarationVisibility {
@@ -225,7 +225,7 @@ pub enum AuthoredChange {
     SetHttpRoute {
         route: OwnerSelector,
         method: String,
-        path: String,
+        selector: HttpRouteSelector,
         port: AuthoredPortReference,
     },
     AddDependency {
@@ -459,6 +459,7 @@ pub struct AuthoredLowering {
     pub allocated: BTreeMap<String, OwnerKey>,
     pub allocations: Vec<AuthoredAllocation>,
     pub dependency_befores: BTreeMap<PackageId, DependencyRecord>,
+    pub http_route_befores: BTreeMap<HttpRouteId, HttpRouteRecord>,
     pub extraction: Option<super::FunctionExtractionEvidence>,
     pub work: AuthoredLoweringWork,
 }
@@ -1913,6 +1914,19 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             .saturating_add(self.dependency_edits.len())
             .saturating_add(self.retirement_edits.len());
         let mut edits = Vec::with_capacity(estimated_edits);
+        let mut http_route_befores = BTreeMap::new();
+        for owner in &self.owner_edits {
+            let OwnerKey::HttpRoute(route) = owner else {
+                continue;
+            };
+            if let Some(OwnerRecord::HttpRoute(record)) = self
+                .owners
+                .get(owner)
+                .and_then(|working| working.original.as_ref())
+            {
+                http_route_befores.insert(*route, record.clone());
+            }
+        }
         for (digest, object) in type_objects {
             if self.type_additions.contains(&digest) {
                 edits.push(PrimitiveEdit::AddTypeObject { digest, object });
@@ -1984,6 +1998,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 self.allocations
             },
             dependency_befores,
+            http_route_befores,
             extraction: self.extraction,
             work: self.work,
         })

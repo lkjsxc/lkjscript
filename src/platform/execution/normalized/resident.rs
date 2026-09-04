@@ -1,4 +1,4 @@
-//! Bounded resident execution for exact Graph 9 deployments.
+//! Bounded resident execution for exact Graph 10 deployments.
 
 use super::deployment::NormalizedPreparedDeployment;
 use super::prepare::{NormalizedProgram, NormalizedTarget};

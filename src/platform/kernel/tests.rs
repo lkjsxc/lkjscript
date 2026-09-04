@@ -609,7 +609,7 @@ fn normalized_prototype_passes_full_oracle() {
 }
 
 #[test]
-fn graph_nine_permits_a_structurally_empty_package() {
+fn graph_ten_permits_a_structurally_empty_package() {
     let snapshot = KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
@@ -628,13 +628,13 @@ fn graph_nine_permits_a_structurally_empty_package() {
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     };
-    let report = validate_full(&snapshot).expect("empty package is valid Graph 9 authority");
+    let report = validate_full(&snapshot).expect("empty package is valid Graph 10 authority");
     assert_eq!(report.owners_checked, 0);
     assert_eq!(report.relation_edges, 0);
 }
 
 #[test]
-fn exact_http_topology_full_oracle_rejects_structural_predecessors_and_drift() {
+fn typed_http_topology_full_oracle_rejects_structural_predecessors_and_drift() {
     let base = crate::platform::execution::normalized::tests::normalized_http_snapshot();
     validate_full(&base).expect("exact HTTP topology fixture");
     let (target, route, port) = base
@@ -682,7 +682,7 @@ fn exact_http_topology_full_oracle_rejects_structural_predecessors_and_drift() {
         OwnerRecord::HttpRoute(duplicate_route),
     );
     refresh(&mut duplicate);
-    assert!(codes(&duplicate).contains("kernel_http_route_duplicate"));
+    assert!(codes(&duplicate).contains("kernel_http_route_duplicate_language"));
 
     let mut malformed = base.clone();
     let Some(OwnerRecord::HttpRoute(route_record)) =
@@ -690,7 +690,9 @@ fn exact_http_topology_full_oracle_rejects_structural_predecessors_and_drift() {
     else {
         panic!("HTTP route record")
     };
-    route_record.path = "relative".to_owned();
+    route_record.selector = HttpRouteSelector::Exact {
+        path: "relative".to_owned(),
+    };
     assert!(codes(&malformed).contains("kernel_http_route_path"));
 
     let mut predecessor = base.clone();
@@ -761,7 +763,7 @@ fn http_route_set_digest_enforces_exact_count_and_aggregate_boundaries() {
             header: OwnerHeader::new(OwnerKey::HttpRoute(id), OwnerKind::HttpRoute),
             target,
             method: "G".to_owned(),
-            path,
+            selector: HttpRouteSelector::exact(path).unwrap(),
             port,
         }
     };
@@ -782,7 +784,10 @@ fn http_route_set_digest_enforces_exact_count_and_aggregate_boundaries() {
         digest
     );
 
-    exact_aggregate[0].path.push('x');
+    let HttpRouteSelector::Exact { path } = &mut exact_aggregate[0].selector else {
+        unreachable!();
+    };
+    path.push('x');
     assert_eq!(
         http_route_set_digest(&exact_aggregate)
             .expect_err("one byte over aggregate bound")
@@ -799,6 +804,504 @@ fn http_route_set_digest_enforces_exact_count_and_aggregate_boundaries() {
             .code,
         "kernel_http_route_count"
     );
+}
+
+#[test]
+fn http_pattern_grammar_is_whole_segment_bounded_and_explicitly_encoded() {
+    let selector =
+        HttpRouteSelector::parse_pattern("/resource/{id}/history").expect("canonical pattern");
+    assert_eq!(selector.kind_name(), "pattern");
+    assert_eq!(selector.display(), "/resource/{id}/history");
+    assert_eq!(selector.segment_count(), 3);
+    assert_eq!(selector.capture_count(), 1);
+    assert_eq!(
+        selector
+            .capture_names()
+            .into_iter()
+            .map(Name::as_str)
+            .collect::<Vec<_>>(),
+        ["id"]
+    );
+    assert_eq!(
+        HttpRouteSelector::exact("/literal/{braces}")
+            .expect("braces remain exact bytes")
+            .display(),
+        "/literal/{braces}"
+    );
+
+    for malformed in [
+        "",
+        "relative/{id}",
+        "/",
+        "/resource/",
+        "/resource//{id}",
+        "/resource/id",
+        "/resource/{id}-mixed",
+        "/resource/prefix-{id}",
+        "/resource/{id}/{id}",
+        "/resource/{}",
+        "/resource/{9id}",
+        "/resource/{id}?query",
+        "/resource/{id}#fragment",
+    ] {
+        assert!(
+            HttpRouteSelector::parse_pattern(malformed).is_err(),
+            "malformed pattern was accepted: {malformed:?}"
+        );
+    }
+
+    let maximum = format!(
+        "/{}",
+        (0..contract::MAXIMUM_HTTP_PATTERN_SEGMENTS)
+            .map(|index| if index % 2 == 0 {
+                format!("literal{index}")
+            } else {
+                format!("{{capture{index}}}")
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+    let maximum = HttpRouteSelector::parse_pattern(&maximum).expect("exact segment maximum");
+    assert_eq!(maximum.segment_count(), 64);
+    assert_eq!(maximum.capture_count(), 32);
+    let over_segments = format!("{}/literal-over", maximum.display());
+    assert_eq!(
+        HttpRouteSelector::parse_pattern(&over_segments)
+            .expect_err("one segment over")
+            .code,
+        "kernel_http_route_pattern_segments"
+    );
+    let over_captures = format!(
+        "/{}",
+        (0..=contract::MAXIMUM_HTTP_PATTERN_CAPTURES)
+            .map(|index| format!("{{capture{index}}}"))
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+    assert_eq!(
+        HttpRouteSelector::parse_pattern(&over_captures)
+            .expect_err("one capture over")
+            .code,
+        "kernel_http_route_pattern_captures"
+    );
+
+    let encoded = bincode::encode_to_vec(&selector, bincode::config::standard())
+        .expect("explicit selector encoding");
+    assert_eq!(
+        encoded.first(),
+        Some(&1),
+        "pattern selector has an explicit tag"
+    );
+    let (decoded, consumed): (HttpRouteSelector, usize) =
+        bincode::decode_from_slice(&encoded, bincode::config::standard())
+            .expect("selector round trip");
+    assert_eq!(decoded, selector);
+    assert_eq!(consumed, encoded.len());
+    for malformed in [vec![2], vec![1, 0], vec![1, 65]] {
+        assert!(
+            bincode::decode_from_slice::<HttpRouteSelector, _>(
+                &malformed,
+                bincode::config::standard()
+            )
+            .is_err(),
+            "malformed selector bytes were accepted: {malformed:?}"
+        );
+    }
+}
+
+#[test]
+fn http_pattern_languages_require_unique_deterministic_specificity() {
+    let snapshot = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let target = snapshot
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::HttpRoute(route) => Some(route.target),
+            _ => None,
+        })
+        .expect("HTTP target fixture");
+    let route = |ordinal: u64, method: &str, pattern: &str, port_ordinal: u64| {
+        let route = HttpRouteId::migrate(b"http-pattern-language", ordinal);
+        HttpRouteRecord {
+            header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute),
+            target,
+            method: method.to_owned(),
+            selector: if pattern.starts_with("exact:") {
+                HttpRouteSelector::exact(pattern.trim_start_matches("exact:")).unwrap()
+            } else {
+                HttpRouteSelector::parse_pattern(pattern).unwrap()
+            },
+            port: PortReference {
+                package: snapshot.root.package_id,
+                port: PortId::migrate(b"http-pattern-port", port_ordinal),
+            },
+        }
+    };
+
+    let mut comparable = vec![
+        route(0, "GET", "/{first}/{second}", 0),
+        route(1, "GET", "/resource/{second}", 1),
+        route(2, "GET", "exact:/resource/current", 2),
+        route(3, "POST", "/{first}/{second}", 3),
+        route(4, "GET", "/disjoint/{value}/tail", 4),
+    ];
+    let analysis = analyze_http_route_set(&comparable).expect("comparable and disjoint routes");
+    assert_eq!(analysis.exact_routes, 1);
+    assert_eq!(analysis.pattern_routes, 4);
+    assert_eq!(analysis.maximum_specificity_chain, 3);
+    let digest = http_route_set_digest(&comparable).expect("route digest");
+    comparable.reverse();
+    assert_eq!(
+        http_route_set_digest(&comparable).expect("order-independent route digest"),
+        digest
+    );
+
+    let duplicate_language = [
+        route(10, "GET", "/resource/{id}", 10),
+        route(11, "GET", "/resource/{other}", 11),
+    ];
+    assert_eq!(
+        analyze_http_route_set(&duplicate_language)
+            .expect_err("capture-name-only language variant")
+            .code,
+        "kernel_http_route_duplicate_language"
+    );
+
+    let incomparable = [
+        route(12, "GET", "/resource/{id}", 12),
+        route(13, "GET", "/{owner}/current", 13),
+    ];
+    assert_eq!(
+        analyze_http_route_set(&incomparable)
+            .expect_err("incomparable overlap")
+            .code,
+        "kernel_http_route_incomparable_overlap"
+    );
+
+    let shared_port_drift = [
+        route(14, "GET", "/resource/{id}", 14),
+        route(15, "POST", "/resource/{resource}", 14),
+    ];
+    assert_eq!(
+        analyze_http_route_set(&shared_port_drift)
+            .expect_err("shared-port capture drift across methods")
+            .code,
+        "kernel_http_route_shared_port_signature"
+    );
+}
+
+#[test]
+fn http_pattern_segment_aggregate_accepts_exact_limit_and_rejects_one_over() {
+    let snapshot = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let (target, port) = snapshot
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::HttpRoute(route) => Some((route.target, route.port)),
+            _ => None,
+        })
+        .expect("HTTP route fixture");
+    let route = |ordinal: u64| {
+        let id = HttpRouteId::migrate(b"http-pattern-segment-bound", ordinal);
+        let pattern = format!(
+            "/{{id}}/{}",
+            (1..contract::MAXIMUM_HTTP_PATTERN_SEGMENTS)
+                .map(|index| format!("s{index}"))
+                .collect::<Vec<_>>()
+                .join("/")
+        );
+        HttpRouteRecord {
+            header: OwnerHeader::new(OwnerKey::HttpRoute(id), OwnerKind::HttpRoute),
+            target,
+            method: format!("M{ordinal}"),
+            selector: HttpRouteSelector::parse_pattern(&pattern).unwrap(),
+            port,
+        }
+    };
+    let exact_count = contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET
+        / contract::MAXIMUM_HTTP_PATTERN_SEGMENTS;
+    let mut routes = (0..exact_count as u64).map(route).collect::<Vec<_>>();
+    let analysis = analyze_http_route_set(&routes).expect("exact pattern-segment aggregate");
+    assert_eq!(
+        analysis.pattern_segments,
+        contract::MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET
+    );
+    routes.push(route(exact_count as u64));
+    assert_eq!(
+        analyze_http_route_set(&routes)
+            .expect_err("one pattern beyond aggregate")
+            .code,
+        "kernel_http_route_pattern_segment_aggregate"
+    );
+}
+
+fn signature_indexed_http_snapshot() -> (
+    KernelSnapshot,
+    HttpRouteId,
+    DeclarationId,
+    [ParameterId; 2],
+    PortId,
+    TypeObjectDigest,
+) {
+    let mut snapshot = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let (target, port) = snapshot
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::HttpRoute(route) => Some((route.target, route.port.port)),
+            _ => None,
+        })
+        .expect("HTTP route binding");
+    let function = match snapshot.owners.get(&OwnerKey::Port(port)) {
+        Some(OwnerRecord::Port(PortRecord {
+            implementation: PortImplementation::Function(function),
+            ..
+        })) => *function,
+        _ => panic!("HTTP function-backed port"),
+    };
+    assert_eq!(function.package, snapshot.root.package_id);
+
+    let mut interner = TypeObjectInterner::default();
+    let http = crate::platform::http::semantic_http_types(&mut interner).unwrap();
+    let function_type =
+        crate::platform::http::semantic_http_route_function_type(&mut interner, 2).unwrap();
+    for (digest, object) in interner.into_objects() {
+        if let Some(previous) = snapshot.types.insert(digest, object.clone()) {
+            assert_eq!(previous, object);
+        }
+    }
+    let parameters = [
+        ParameterId::migrate(b"signature-indexed-http", 0),
+        ParameterId::migrate(b"signature-indexed-http", 1),
+    ];
+    let OwnerRecord::Declaration(declaration) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(function.declaration))
+        .expect("HTTP handler declaration")
+    else {
+        panic!("HTTP handler owner kind")
+    };
+    let DeclarationPayload::Function(handler) = &mut declaration.payload else {
+        panic!("HTTP handler declaration kind")
+    };
+    handler.parameters.extend(parameters);
+    for (parameter, capture) in parameters.into_iter().zip(["id", "revision"]) {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Parameter(parameter),
+                    OwnerRecord::Parameter(ParameterRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Parameter(parameter),
+                            OwnerKind::Parameter,
+                        ),
+                        parent: ParameterParent::Function(function.declaration),
+                        name: name(capture),
+                        ty: http.text_type,
+                        use_mode: ParameterUse::Unrestricted,
+                        resource_requirement: None,
+                    }),
+                )
+                .is_none()
+        );
+    }
+    let OwnerRecord::Port(port_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Port(port))
+        .expect("HTTP port")
+    else {
+        panic!("HTTP port owner kind")
+    };
+    let previous_function_type = port_record.function_type;
+    port_record.function_type = function_type;
+    if previous_function_type != function_type {
+        snapshot.types.remove(&previous_function_type);
+    }
+
+    snapshot
+        .owners
+        .retain(|_, record| !matches!(record, OwnerRecord::HttpRoute(_)));
+    let route = HttpRouteId::migrate(b"signature-indexed-http", 0);
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::HttpRoute(route),
+                OwnerRecord::HttpRoute(HttpRouteRecord {
+                    header: OwnerHeader::new(OwnerKey::HttpRoute(route), OwnerKind::HttpRoute,),
+                    target,
+                    method: "GET".to_owned(),
+                    selector:
+                        HttpRouteSelector::parse_pattern("/resource/{id}/history/{revision}",)
+                            .unwrap(),
+                    port: PortReference {
+                        package: snapshot.root.package_id,
+                        port,
+                    },
+                }),
+            )
+            .is_none()
+    );
+    snapshot.root.owners = MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    (
+        snapshot,
+        route,
+        function.declaration,
+        parameters,
+        port,
+        http.bytes_type,
+    )
+}
+
+#[test]
+fn full_oracle_indexes_pattern_captures_into_exact_function_parameters() {
+    let (snapshot, route, function, parameters, port, bytes_type) =
+        signature_indexed_http_snapshot();
+    validate_full(&snapshot).expect("signature-indexed pattern snapshot");
+    let codes = |snapshot: &KernelSnapshot| {
+        validate_full(snapshot)
+            .expect_err("invalid signature-indexed HTTP graph")
+            .into_iter()
+            .map(|diagnostic| diagnostic.code)
+            .collect::<BTreeSet<_>>()
+    };
+
+    let mut missing = snapshot.clone();
+    let OwnerRecord::Declaration(record) = missing
+        .owners
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(handler) = &mut record.payload else {
+        unreachable!()
+    };
+    let removed = handler.parameters.pop().unwrap();
+    missing.owners.remove(&OwnerKey::Parameter(removed));
+    missing.root.owners = MapRoot::from_parts(
+        missing.root.owners.page(),
+        missing.owners.len() as u64,
+        missing.root.owners.content(),
+    );
+    let missing_codes = codes(&missing);
+    assert!(
+        missing_codes.contains("kernel_type_http_route_parameters"),
+        "{missing_codes:?}"
+    );
+
+    let mut reordered = snapshot.clone();
+    let OwnerRecord::Declaration(record) = reordered
+        .owners
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(handler) = &mut record.payload else {
+        unreachable!()
+    };
+    handler.parameters.swap(1, 2);
+    assert!(codes(&reordered).contains("kernel_type_http_route_capture_parameter"));
+
+    for mutation in ["name", "type", "use", "resource"] {
+        let mut invalid = snapshot.clone();
+        let resource_requirement = invalid.owners.values().find_map(|record| match record {
+            OwnerRecord::Requirement(requirement) => {
+                let OwnerKey::Requirement(requirement) = requirement.header.owner else {
+                    return None;
+                };
+                Some(RequirementReference {
+                    package: invalid.root.package_id,
+                    requirement,
+                })
+            }
+            _ => None,
+        });
+        let OwnerRecord::Parameter(parameter) = invalid
+            .owners
+            .get_mut(&OwnerKey::Parameter(parameters[0]))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        match mutation {
+            "name" => parameter.name = name("other"),
+            "type" => parameter.ty = bytes_type,
+            "use" => parameter.use_mode = ParameterUse::Borrow,
+            "resource" => parameter.resource_requirement = resource_requirement,
+            _ => unreachable!(),
+        }
+        let invalid_codes = codes(&invalid);
+        assert!(
+            invalid_codes.contains("kernel_type_http_route_capture_parameter"),
+            "missing route signature diagnostic for {mutation}: {invalid_codes:?}"
+        );
+    }
+
+    let mut shared_port_drift = snapshot.clone();
+    let OwnerRecord::HttpRoute(existing) = shared_port_drift
+        .owners
+        .get(&OwnerKey::HttpRoute(route))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let second = HttpRouteId::migrate(b"signature-indexed-http", 1);
+    shared_port_drift.owners.insert(
+        OwnerKey::HttpRoute(second),
+        OwnerRecord::HttpRoute(HttpRouteRecord {
+            header: OwnerHeader::new(OwnerKey::HttpRoute(second), OwnerKind::HttpRoute),
+            target: existing.target,
+            method: "POST".to_owned(),
+            selector: HttpRouteSelector::parse_pattern("/resource/{resource}/history/{revision}")
+                .unwrap(),
+            port: PortReference {
+                package: shared_port_drift.root.package_id,
+                port,
+            },
+        }),
+    );
+    shared_port_drift.root.owners = MapRoot::from_parts(
+        shared_port_drift.root.owners.page(),
+        shared_port_drift.owners.len() as u64,
+        shared_port_drift.root.owners.content(),
+    );
+    assert!(codes(&shared_port_drift).contains("kernel_http_route_shared_port_signature"));
+
+    let mut missing_component_closure = snapshot.clone();
+    let OwnerRecord::HttpRoute(route_record) = missing_component_closure
+        .owners
+        .get(&OwnerKey::HttpRoute(route))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let OwnerRecord::Target(target_record) = missing_component_closure
+        .owners
+        .get(&OwnerKey::Target(route_record.target))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let component = target_record.component.declaration;
+    let OwnerRecord::Declaration(component_record) = missing_component_closure
+        .owners
+        .get_mut(&OwnerKey::Declaration(component))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Component { requirements, .. } = &mut component_record.payload else {
+        unreachable!()
+    };
+    requirements.clear();
+    assert!(codes(&missing_component_closure).contains("kernel_http_route_requirement_closure"));
 }
 
 #[test]
@@ -1144,7 +1647,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "5d5d0d12c9f51a8b26fd6ab20ceb30eb2446ad4bc89cac527d06895886078bef"
+        "fe839b8f363ba45759ea5b8602ad29948818ea746f483bd10d62b6b327fb6452"
     );
 }
 

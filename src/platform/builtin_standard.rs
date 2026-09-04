@@ -1,6 +1,6 @@
 //! Exact first-party standard package material embedded in the released executable.
 //!
-//! The maintained Graph 9 package owns both generated assets. This module validates the complete
+//! The maintained Graph 10 package owns both generated assets. This module validates the complete
 //! package transport and artifact closure before exposing either one to project creation, linking,
 //! inspection, or export.
 
@@ -34,11 +34,11 @@ const STANDARD_TRANSPORT_PACK: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_95ac9237bc2d13a04f64f034dfad2f19350514c332d9c44450898202d9418968";
+    "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_8630f8830e1233b7f99e177fa86dafad01546dc21138418de5250078a4e039b2";
+    "package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_fbd76bbd6638c36d434a697a8243c87fef6346f72c4f5de16a60579649cf09bf";
+    "package_transport_52a7f2a867563eb5367443df9f21518051a4fa0ed527317026651207a1d78124";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
@@ -1018,7 +1018,7 @@ mod tests {
     #[test]
     fn maintained_standard_is_the_byte_owner_of_embedded_assets() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
-        let repository = GraphRepository::open(&root).expect("open maintained Graph 9 standard");
+        let repository = GraphRepository::open(&root).expect("open maintained Graph 10 standard");
         let exported = repository
             .export_package_transport()
             .expect("export maintained standard transport");

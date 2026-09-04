@@ -2,17 +2,17 @@
 //!
 //! Record and list order is part of authored intent and allocation traversal, including for
 //! collections that lower into keyed graph relations. Independent HTTP route additions are the
-//! exception: their graph-owned set semantics require canonical target/method/path/port order.
+//! exception: their graph-owned set semantics require canonical target/method/selector/port order.
 
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    AnnotationClass, DeclarationVisibility, DocumentationClass, ExternalVisibility, Idempotency,
-    ParameterUse, ResourceUnit,
+    AnnotationClass, DeclarationVisibility, DocumentationClass, ExternalVisibility,
+    HttpRoutePatternSegment, HttpRouteSelector, Idempotency, ParameterUse, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR10";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR11";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -37,7 +37,7 @@ pub(super) fn authored_http_route_sort_key(
     let AuthoredChange::AddHttpRoute {
         target,
         method,
-        path,
+        selector,
         port,
         ..
     } = change
@@ -50,7 +50,7 @@ pub(super) fn authored_http_route_sort_key(
     let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
     writer.owner_selector(target, definitions)?;
     writer.string(method)?;
-    writer.string(path)?;
+    writer.http_route_selector(selector)?;
     writer.port_reference(port, definitions)?;
     Ok(writer.finish())
 }
@@ -180,6 +180,28 @@ impl Writer {
 
     fn name(&mut self, value: &Name) -> Result<(), Diagnostic> {
         self.string(value.as_str())
+    }
+
+    fn http_route_selector(&mut self, selector: &HttpRouteSelector) -> Result<(), Diagnostic> {
+        match selector {
+            HttpRouteSelector::Exact { path } => {
+                self.tag(0)?;
+                self.string(path)
+            }
+            HttpRouteSelector::Pattern { segments } => {
+                self.tag(1)?;
+                self.list(segments, |writer, segment| match segment {
+                    HttpRoutePatternSegment::Literal(value) => {
+                        writer.tag(0)?;
+                        writer.string(value)
+                    }
+                    HttpRoutePatternSegment::Capture(name) => {
+                        writer.tag(1)?;
+                        writer.name(name)
+                    }
+                })
+            }
+        }
     }
 
     fn list<T>(
@@ -706,26 +728,26 @@ impl Writer {
                 symbol,
                 target,
                 method,
-                path,
+                selector,
                 port,
             } => {
                 self.tag(37)?;
                 self.symbol(symbol, definitions)?;
                 self.owner_selector(target, definitions)?;
                 self.string(method)?;
-                self.string(path)?;
+                self.http_route_selector(selector)?;
                 self.port_reference(port, definitions)
             }
             AuthoredChange::SetHttpRoute {
                 route,
                 method,
-                path,
+                selector,
                 port,
             } => {
                 self.tag(38)?;
                 self.owner_selector(route, definitions)?;
                 self.string(method)?;
-                self.string(path)?;
+                self.http_route_selector(selector)?;
                 self.port_reference(port, definitions)
             }
         }
@@ -1551,7 +1573,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "1d9f873a05eb9fe70d8b9bf3c2ba72a343b721205908e8161b6ae7410d01c0bc"
+            "90af9d4b2489356010cbf99aea5ec8750c4f98efe7cdfb2ad978326cad7a4fc0"
         );
     }
 
@@ -1663,7 +1685,7 @@ mod tests {
                 owner: OwnerKey::Target(target),
             },
             method: method.to_owned(),
-            path: path.to_owned(),
+            selector: HttpRouteSelector::exact(path).unwrap(),
             port: AuthoredPortReference::Exact { package, port },
         };
         let request = |first: AuthoredChange, second: AuthoredChange| AuthoredChangeSet {

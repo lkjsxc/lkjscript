@@ -13,7 +13,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 2;
+pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_HTTP_HEADER_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_HTTP_HEADERS: usize = 1_024;
@@ -89,6 +89,23 @@ pub(crate) fn semantic_http_types(
         request_type,
         response_type,
         function_type,
+    })
+}
+
+pub(crate) fn semantic_http_route_function_type(
+    types: &mut TypeObjectInterner,
+    capture_count: usize,
+) -> Result<TypeObjectDigest, Diagnostic> {
+    let http = semantic_http_types(types)?;
+    if capture_count == 0 {
+        return Ok(http.function_type);
+    }
+    let mut parameters = Vec::with_capacity(capture_count.saturating_add(1));
+    parameters.push(http.request_type);
+    parameters.extend(std::iter::repeat_n(http.text_type, capture_count));
+    types.intern(TypeForm::Function {
+        parameters,
+        result: http.response_type,
     })
 }
 
@@ -192,6 +209,9 @@ pub struct HttpResponse {
 #[serde(deny_unknown_fields)]
 pub struct HttpDispatchObservation {
     pub route: Option<HttpRouteId>,
+    pub matcher_steps: u64,
+    pub captures: u64,
+    pub capture_bytes: u64,
     pub task_id: Option<u64>,
     pub queue_nanoseconds: u64,
     pub execution_nanoseconds: u64,
@@ -205,6 +225,7 @@ pub struct HttpServerReceipt {
     pub contract_version: u16,
     pub local_address: String,
     pub accepted_at_transport: bool,
+    pub matcher_nodes: u64,
     pub shutdown: ShutdownReceipt,
 }
 

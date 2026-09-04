@@ -27,8 +27,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-4";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 4;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-5";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {

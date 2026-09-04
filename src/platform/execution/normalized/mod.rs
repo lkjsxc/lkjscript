@@ -1,4 +1,4 @@
-//! Prepared execution over strict Graph 9 artifacts.
+//! Prepared execution over strict Graph 10 artifacts.
 
 mod byte_stream;
 mod capability;

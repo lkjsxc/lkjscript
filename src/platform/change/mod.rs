@@ -1,8 +1,8 @@
-//! Private Graph 9 generic semantic-change substrate.
+//! Private Graph 10 generic semantic-change substrate.
 
 #![allow(
     unused_imports,
-    reason = "private change exports become crate consumers at the Graph 9 repository cutover"
+    reason = "private change exports become crate consumers at the Graph 10 repository cutover"
 )]
 
 mod authority;
@@ -46,7 +46,8 @@ pub use impact::{
 };
 pub use logical_plan::{
     AuthoredAllocation, FunctionExtractionCapture, FunctionExtractionEvidence,
-    LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
+    HttpRoutePlanEvidence, HttpRouteValidationEvidence, LogicalChangePlanEvidence,
+    LogicalDependencyValues, LogicalRetirementValues,
 };
 pub use overlay::KernelOverlay;
 pub use prepare::{

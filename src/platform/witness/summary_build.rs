@@ -1104,7 +1104,7 @@ fn local_summary(
         OwnerRecord::HttpRoute(record) => {
             implementation.piece(1, &record.target)?;
             implementation.piece(2, &record.method)?;
-            implementation.piece(3, &record.path)?;
+            implementation.piece(3, &record.selector)?;
             implementation.piece(4, &record.port)?;
         }
         OwnerRecord::Documentation(record) => {

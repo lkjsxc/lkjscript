@@ -18,7 +18,7 @@ use crate::platform::kernel::{
     Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
     ParameterParent, ParameterUse, PortReference, RequirementReference, ResourceLimit,
     SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
-    decode_type_object, encode_type_object,
+    TypeObjectInterner, decode_type_object, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
@@ -44,6 +44,15 @@ struct LoadedCompilationInputs {
 struct FunctionValidationInputs<'a> {
     types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
     requirements: &'a [NormalizedRequirement],
+}
+
+struct TargetPreparationInputs<'a> {
+    indexes: &'a RuntimeIndexes,
+    runtime_owners: &'a RuntimeOwnerMap,
+    requirements: &'a [NormalizedRequirement],
+    components: &'a [NormalizedComponent],
+    ports: &'a [NormalizedPort],
+    functions: &'a [NormalizedFunction],
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -260,8 +269,10 @@ pub struct NormalizedTarget {
 pub struct NormalizedHttpRoute {
     pub route: HttpRouteId,
     pub method: Arc<str>,
-    pub path: Arc<str>,
+    pub selector: crate::platform::kernel::HttpRouteSelector,
     pub port: PortIndex,
+    pub function: FunctionIndex,
+    pub capture_parameters: Arc<[ParameterId]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -339,8 +350,15 @@ impl NormalizedProgram {
             &mut work,
         )?;
         let tests = prepare_tests(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
-        let (targets, root_target_names) =
-            prepare_targets(&artifact, &units, &indexes, &runtime_owners, &ports)?;
+        let target_inputs = TargetPreparationInputs {
+            indexes: &indexes,
+            runtime_owners: &runtime_owners,
+            requirements: &requirements,
+            components: &components,
+            ports: &ports,
+            functions: &functions,
+        };
+        let (targets, root_target_names) = prepare_targets(&artifact, &units, &target_inputs)?;
 
         work.functions = functions.len() as u64;
         work.record_layouts = records.len() as u64;
@@ -1538,10 +1556,14 @@ fn prepare_tests(
 fn prepare_targets(
     artifact: &LoadedArtifact,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
-    indexes: &RuntimeIndexes,
-    runtime_owners: &RuntimeOwnerMap,
-    ports: &[NormalizedPort],
+    inputs: &TargetPreparationInputs<'_>,
 ) -> Result<(TargetMap, RootTargetNames), Diagnostic> {
+    let indexes = inputs.indexes;
+    let runtime_owners = inputs.runtime_owners;
+    let requirements = inputs.requirements;
+    let components = inputs.components;
+    let ports = inputs.ports;
+    let functions = inputs.functions;
     let mut targets = BTreeMap::new();
     let mut root_names = BTreeMap::new();
     for ((package, owner), unit) in units {
@@ -1594,7 +1616,8 @@ fn prepare_targets(
             ));
         }
         use crate::platform::kernel::contract::{
-            MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET, MAXIMUM_HTTP_ROUTES_PER_TARGET,
+            MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET, MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET,
+            MAXIMUM_HTTP_ROUTES_PER_TARGET,
         };
         if (*runner == RunnerKind::Http)
             && (routes.is_empty() || routes.len() > MAXIMUM_HTTP_ROUTES_PER_TARGET)
@@ -1605,27 +1628,45 @@ fn prepare_targets(
             ));
         }
         let mut route_bytes = 0usize;
-        let mut previous_route_key = None;
+        let mut pattern_segments = 0usize;
+        let mut previous_route = None;
         for route in routes {
-            crate::platform::kernel::validate_http_route_key(&route.method, &route.path).map_err(
-                |_| {
-                    runtime_corrupt(
-                        "normalized_http_route_key",
-                        "prepared HTTP route contains an invalid method or path",
-                    )
+            crate::platform::kernel::validate_http_route_method(&route.method).map_err(|_| {
+                runtime_corrupt(
+                    "normalized_http_route_key",
+                    "prepared HTTP route contains an invalid method",
+                )
+            })?;
+            route.selector.validate_local().map_err(|_| {
+                runtime_corrupt(
+                    "normalized_http_route_selector",
+                    "prepared HTTP route contains an invalid selector",
+                )
+            })?;
+            if previous_route.is_some_and(
+                |previous: &crate::platform::compiler::unit::CompiledHttpRoute| {
+                    previous
+                        .method
+                        .as_bytes()
+                        .cmp(route.method.as_bytes())
+                        .then_with(|| {
+                            crate::platform::kernel::http_route_selector_cmp(
+                                &previous.selector,
+                                &route.selector,
+                            )
+                        })
+                        != std::cmp::Ordering::Less
                 },
-            )?;
-            let route_key = (route.method.as_bytes(), route.path.as_bytes());
-            if previous_route_key.is_some_and(|previous| previous >= route_key) {
+            ) {
                 return Err(runtime_corrupt(
                     "normalized_http_route_order",
                     "prepared HTTP routes are duplicate or outside canonical key order",
                 ));
             }
-            previous_route_key = Some(route_key);
+            previous_route = Some(route);
             route_bytes = route_bytes
                 .checked_add(route.method.len())
-                .and_then(|value| value.checked_add(route.path.len()))
+                .and_then(|value| value.checked_add(route.selector.key_bytes()))
                 .ok_or_else(|| {
                     runtime_corrupt(
                         "normalized_http_route_bytes",
@@ -1638,8 +1679,28 @@ fn prepare_targets(
                     "prepared HTTP route keys exceed the aggregate byte bound",
                 ));
             }
+            if let crate::platform::kernel::HttpRouteSelector::Pattern { segments } =
+                &route.selector
+            {
+                pattern_segments =
+                    pattern_segments
+                        .checked_add(segments.len())
+                        .ok_or_else(|| {
+                            runtime_corrupt(
+                                "normalized_http_route_pattern_segments",
+                                "prepared HTTP pattern-segment accounting overflowed",
+                            )
+                        })?;
+                if pattern_segments > MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET {
+                    return Err(runtime_corrupt(
+                        "normalized_http_route_pattern_segments",
+                        "prepared HTTP target exceeds the pattern-segment bound",
+                    ));
+                }
+            }
         }
         let mut normalized_routes = Vec::with_capacity(routes.len());
+        let mut route_owners = Vec::with_capacity(routes.len());
         for route in routes {
             let reference =
                 index_copy(&unit.tables.ports, route.port, "normalized HTTP route port")?;
@@ -1650,6 +1711,27 @@ fn prepare_targets(
                     "HTTP route port escaped the prepared port table",
                 )
             })?;
+            let function = match &prepared_port.entry {
+                NormalizedEntryPoint::Function(function) => *function,
+                _ => {
+                    return Err(runtime_corrupt(
+                        "normalized_http_route_function",
+                        "HTTP route port is not backed by one prepared function",
+                    ));
+                }
+            };
+            let prepared_function = functions.get(function.0 as usize).ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_http_route_function",
+                    "HTTP route backing function escaped the prepared function table",
+                )
+            })?;
+            validate_prepared_http_route_requirements(
+                component,
+                prepared_function,
+                components,
+                requirements,
+            )?;
             let OwnerRecord::HttpRoute(route_owner) = exact_runtime_owner(
                 runtime_owners,
                 *package,
@@ -1664,22 +1746,76 @@ fn prepare_targets(
             };
             if route_owner.target != *target
                 || route_owner.method != route.method
-                || route_owner.path != route.path
+                || route_owner.selector != route.selector
                 || route_owner.port != reference
                 || prepared_port.component != component
-                || !matches!(prepared_port.entry, NormalizedEntryPoint::Function(_))
             {
                 return Err(runtime_corrupt(
                     "normalized_http_route_binding",
                     "HTTP route table disagrees with its owner, component, or function-backed port",
                 ));
             }
+            let mut types = TypeObjectInterner::default();
+            let expected_type = crate::platform::http::semantic_http_route_function_type(
+                &mut types,
+                route.selector.capture_count(),
+            )?;
+            let http = crate::platform::http::semantic_http_types(&mut types)?;
+            let captures = route.selector.capture_names();
+            if prepared_port.function_type != expected_type
+                || !prepared_function.type_parameters.is_empty()
+                || prepared_function.parameters.len() != captures.len().saturating_add(1)
+                || prepared_function
+                    .parameters
+                    .first()
+                    .is_none_or(|parameter| parameter.ty != http.request_type)
+                || prepared_function.result != http.response_type
+                || route.capture_parameters.len() != captures.len()
+            {
+                return Err(runtime_corrupt(
+                    "normalized_http_route_signature",
+                    "prepared HTTP route disagrees with its selector-indexed handler signature",
+                ));
+            }
+            for ((parameter, capture), expected_parameter) in prepared_function
+                .parameters
+                .iter()
+                .skip(1)
+                .zip(&captures)
+                .zip(&route.capture_parameters)
+            {
+                if parameter.parameter != *expected_parameter
+                    || parameter.name.as_str() != capture.as_str()
+                    || parameter.ty != http.text_type
+                    || parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_http_route_capture_parameter",
+                        "prepared HTTP route capture disagrees with its exact handler parameter",
+                    ));
+                }
+            }
+            route_owners.push(route_owner.clone());
             normalized_routes.push(NormalizedHttpRoute {
                 route: route.route,
                 method: Arc::from(route.method.as_str()),
-                path: Arc::from(route.path.as_str()),
+                selector: route.selector.clone(),
                 port: route_port,
+                function,
+                capture_parameters: route.capture_parameters.clone().into(),
             });
+        }
+        if *runner == RunnerKind::Http {
+            crate::platform::kernel::analyze_http_route_set(&route_owners).map_err(|error| {
+                runtime_corrupt(
+                    "normalized_http_route_set",
+                    format!(
+                        "prepared HTTP route set is ambiguous or outside semantic bounds: {} ({})",
+                        error.message, error.code
+                    ),
+                )
+            })?;
         }
         let target_value = NormalizedTarget {
             package: *package,
@@ -1708,6 +1844,60 @@ fn prepare_targets(
     Ok((targets, root_names))
 }
 
+fn validate_prepared_http_route_requirements(
+    component: ComponentIndex,
+    function: &NormalizedFunction,
+    components: &[NormalizedComponent],
+    requirements: &[NormalizedRequirement],
+) -> Result<(), Diagnostic> {
+    let component = components.get(component.0 as usize).ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_http_route_requirement_closure",
+            "HTTP route component escaped the prepared component table",
+        )
+    })?;
+    for candidate in function.task_requirements.iter().copied() {
+        let candidate = requirements.get(candidate.0 as usize).ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_http_route_requirement_closure",
+                "HTTP route function requirement escaped the prepared requirement table",
+            )
+        })?;
+        let matches = component
+            .requirements
+            .iter()
+            .filter_map(|index| requirements.get(index.0 as usize))
+            .filter(|component| {
+                candidate.reference.package == component.reference.package
+                    && candidate.name == component.name
+                    && candidate.interface == component.interface
+                    && candidate
+                        .operations
+                        .iter()
+                        .all(|operation| component.operations.binary_search(operation).is_ok())
+                    && candidate.limits.iter().all(|required| {
+                        component
+                            .limits
+                            .binary_search_by(|available| available.name.cmp(&required.name))
+                            .ok()
+                            .and_then(|index| component.limits.get(index))
+                            .is_some_and(|available| {
+                                available.unit == required.unit
+                                    && available.maximum <= required.maximum
+                            })
+                    })
+            })
+            .count();
+        if matches != 1 {
+            return Err(runtime_corrupt(
+                "normalized_http_route_requirement_closure",
+                "HTTP route function requirement has no unique compatible prepared component capability slot",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn exact_runtime_owner<'a>(
     owners: &'a RuntimeOwnerMap,
     package: PackageId,
@@ -1731,7 +1921,7 @@ fn normalized_parameters(
 ) -> Result<Vec<NormalizedParameter>, Diagnostic> {
     parameters
         .iter()
-        .map(|parameter| normalized_parameter(owners, package, unit, *parameter, indexes))
+        .map(|parameter| normalized_parameter(owners, package, unit, parameter, indexes))
         .collect()
 }
 
@@ -1739,7 +1929,7 @@ fn normalized_parameter(
     owners: &RuntimeOwnerMap,
     package: PackageId,
     unit: &CompilationUnit,
-    parameter: CompiledParameter,
+    parameter: &CompiledParameter,
     indexes: &RuntimeIndexes,
 ) -> Result<NormalizedParameter, Diagnostic> {
     let parameter_id = parameter.parameter;
@@ -1772,13 +1962,14 @@ fn normalized_parameter(
             .map(|index| (reference, index))
         })
         .transpose()?;
-    if compiled_type != record.ty
+    if parameter.name != record.name
+        || compiled_type != record.ty
         || parameter.use_mode != record.use_mode
         || compiled_requirement.map(|(reference, _)| reference) != record.resource_requirement
     {
         return Err(runtime_corrupt(
             "normalized_parameter_signature",
-            "compiled parameter type, use, or resource requirement disagrees with exact runtime-owner metadata",
+            "compiled parameter name, type, use, or resource requirement disagrees with exact runtime-owner metadata",
         ));
     }
     Ok(NormalizedParameter {

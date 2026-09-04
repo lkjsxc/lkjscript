@@ -1,4 +1,4 @@
-//! Exact deployment preparation for normalized Graph 9 capability adapters.
+//! Exact deployment preparation for normalized Graph 10 capability adapters.
 
 use super::byte_stream::{NormalizedByteStreamAdapter, NormalizedByteStreamOperation};
 use super::capability::{

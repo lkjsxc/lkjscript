@@ -2,10 +2,11 @@
 
 use super::{ChangeBudget, ImpactReason, RelationDelta};
 use crate::platform::kernel::{
-    DependencyRecord, FunctionEffect, IdentityKind, LocalValueReference, Name, OwnerKey,
-    ParameterUse, RequirementReference, RetirementRecord, TypeObjectDigest,
+    DeclarationReference, DependencyRecord, FunctionEffect, HttpRouteRecord, IdentityKind,
+    LocalValueReference, Name, OwnerKey, ParameterUse, RequirementReference, RetirementRecord,
+    TypeObjectDigest,
 };
-use crate::platform::semantic_id::{DeclarationId, ExpressionId, ParameterId};
+use crate::platform::semantic_id::{DeclarationId, ExpressionId, HttpRouteId, ParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One request-local identity without its presentation-only source label.
@@ -64,6 +65,30 @@ pub struct FunctionExtractionEvidence {
     pub helper_body_records: u64,
 }
 
+/// Candidate topology and exact handler binding independently validated for one HTTP route.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HttpRouteValidationEvidence {
+    pub record: HttpRouteRecord,
+    pub handler: DeclarationReference,
+    pub parameters: Vec<ParameterId>,
+    pub exact_routes: u64,
+    pub pattern_routes: u64,
+    pub pattern_segments: u64,
+    pub maximum_specificity_chain: u64,
+    pub overlaps: u64,
+    pub more_specific: u64,
+    pub less_specific: u64,
+}
+
+/// Review evidence for one changed or transitively revalidated HTTP route.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HttpRoutePlanEvidence {
+    pub route: HttpRouteId,
+    pub changed: bool,
+    pub before: Option<HttpRouteRecord>,
+    pub after: Option<HttpRouteValidationEvidence>,
+}
+
 /// Exact logical facts selected from the same analysis that produced a publication candidate.
 ///
 /// Owner/type/dependency/retirement digest edits remain owned by the prepared semantic diff. This
@@ -81,4 +106,5 @@ pub struct LogicalChangePlanEvidence {
     pub tests: BTreeSet<OwnerKey>,
     pub reasons: Vec<ImpactReason>,
     pub extraction: Option<FunctionExtractionEvidence>,
+    pub http_routes: BTreeMap<HttpRouteId, HttpRoutePlanEvidence>,
 }

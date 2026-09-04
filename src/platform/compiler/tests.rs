@@ -21,6 +21,7 @@ use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, Objec
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{bind_witness_manifest, rebuild_full_witness};
+use std::collections::{BTreeMap, BTreeSet};
 
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
@@ -763,7 +764,7 @@ fn compiled_http_route_table_rejects_zero_duplicate_noncanonical_and_predecessor
     let mut second = routes[0].clone();
     second.route =
         crate::platform::semantic_id::HttpRouteId::migrate(b"noncanonical-compiled-http-route", 0);
-    second.path = "/later".to_owned();
+    second.selector = crate::platform::kernel::HttpRouteSelector::exact("/later").unwrap();
     routes.insert(0, second);
     assert_eq!(
         noncanonical
@@ -1018,7 +1019,7 @@ fn body_reorder_changes_unit_key_but_repository_point_lowering_matches_memory() 
 
     let temporary = tempfile::tempdir().expect("compiler repository parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let view = created
         .repository
         .view_current()
@@ -1088,7 +1089,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("compiler manifest parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 9 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 10 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1114,7 +1115,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
     assert_eq!(validation.map.entries_visited, 22);
 
     drop(created);
-    let reopened = GraphRepository::open(&root).expect("reopen Graph 9 repository");
+    let reopened = GraphRepository::open(&root).expect("reopen Graph 10 repository");
     let cached = load_current_compilation(&reopened)
         .expect("load reopened compilation")
         .expect("reopened cache head");
@@ -1132,7 +1133,7 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
     let snapshot = structurally_empty_snapshot(b"empty-compiler-manifest");
     let temporary = tempfile::tempdir().expect("empty compiler parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("empty Graph 9 repository");
+        .expect("empty Graph 10 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1175,7 +1176,7 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("incremental manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1294,7 +1295,7 @@ fn rename_and_move_reuse_the_complete_compilation_unit_map() {
     let destination = module_named(&snapshot, "second");
     let temporary = tempfile::tempdir().expect("rename manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1395,7 +1396,7 @@ fn declaration_deletion_removes_one_unit_and_matches_a_clean_rebuild() {
     };
     let temporary = tempfile::tempdir().expect("deletion manifest parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1473,7 +1474,7 @@ fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("cache recovery parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 9 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 10 repository");
     let original_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1518,7 +1519,7 @@ fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("manifest decoder parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let built = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1557,7 +1558,7 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
     let outside = temporary.path().join("outside");
     let sentinel = b"outside cache sentinel";
     std::fs::write(&outside, sentinel).expect("outside sentinel");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 9 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 10 repository");
     let initial_head = created.repository.current().unwrap().head;
     let first = build_clean(
         &created.repository,
@@ -1610,7 +1611,7 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact link parent");
     let root = temporary.path().join("repository");
-    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 9 repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 10 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1618,9 +1619,9 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     .expect("clean normalized compilation");
 
     let first = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("link Graph 9 artifact");
+        .expect("link Graph 10 artifact");
     let second = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("repeat Graph 9 link");
+        .expect("repeat Graph 10 link");
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
@@ -1805,7 +1806,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
     let temporary = tempfile::tempdir().expect("dependency artifact parent");
     let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
     let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
-        .expect("source Graph 9 repository");
+        .expect("source Graph 10 repository");
     let source_compilation = build_clean(
         &source.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1871,7 +1872,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
 
     let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
     let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
-        .expect("target Graph 9 repository");
+        .expect("target Graph 10 repository");
     target
         .repository
         .stage_package_transport(exported.transport_digest, &exported.packs)
@@ -2012,7 +2013,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
         &unrelated_snapshot,
         None,
     )
-    .expect("unrelated Graph 9 repository");
+    .expect("unrelated Graph 10 repository");
     let unrelated_compilation = build_clean(
         &unrelated.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2043,7 +2044,7 @@ fn graph9_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact rejection parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 9 repository");
+        .expect("Graph 10 repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2230,7 +2231,7 @@ fn artifact_strictly_binds_each_derived_http_route_to_canonical_authority() {
     let OwnerRecord::HttpRoute(route) = &mut record else {
         panic!("HTTP route owner kind")
     };
-    route.path = "/artifact-drift".to_owned();
+    route.selector = crate::platform::kernel::HttpRouteSelector::exact("/artifact-drift").unwrap();
     let (digest, bytes) = encode_owner(&record).expect("encode drifting HTTP route");
     binding.object = digest;
     assert!(
@@ -2250,6 +2251,91 @@ fn artifact_strictly_binds_each_derived_http_route_to_canonical_authority() {
             .expect_err("artifact HTTP route drift")
             .code,
         "artifact_runtime_owner_semantics"
+    );
+}
+
+#[test]
+fn artifact_reconstructs_http_handler_requirement_closure_independently() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("applications/lkjournal/generated/lkjournal.lkja");
+    let bytes = std::fs::read(path).expect("maintained HTTP route artifact");
+    let loaded = load_artifact(&bytes).expect("load maintained HTTP route artifact");
+    let mut records = BTreeMap::new();
+    for package in &loaded.manifest.packages {
+        for binding in &package.runtime_owners {
+            let key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+            let bytes = loaded.objects.get(&key).expect("runtime owner bytes");
+            let record = decode_owner(bytes, binding.owner, binding.kind, binding.object)
+                .expect("runtime owner record");
+            assert!(
+                records
+                    .insert((package.package, binding.owner), record)
+                    .is_none()
+            );
+        }
+    }
+    let components = records
+        .values()
+        .filter_map(|record| match record {
+            OwnerRecord::Target(target) => {
+                Some((target.component.package, target.component.declaration))
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let task_requirements = records
+        .iter()
+        .filter_map(|((package, owner), record)| match (owner, record) {
+            (OwnerKey::Requirement(_), OwnerRecord::Requirement(requirement))
+                if !components.contains(&(*package, requirement.declaration)) =>
+            {
+                Some((*package, *owner))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(!task_requirements.is_empty());
+    let mut manifest = loaded.manifest.clone();
+    let mut objects = loaded.objects.clone();
+    for (package_id, owner) in task_requirements {
+        let package = manifest
+            .packages
+            .iter_mut()
+            .find(|package| package.package == package_id)
+            .expect("task requirement package");
+        let binding = package
+            .runtime_owners
+            .iter_mut()
+            .find(|binding| binding.owner == owner && binding.kind == OwnerKind::Requirement)
+            .expect("task requirement runtime binding");
+        let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+        let old_bytes = objects.remove(&old_key).expect("task requirement bytes");
+        let mut record = decode_owner(&old_bytes, binding.owner, binding.kind, binding.object)
+            .expect("task requirement record");
+        let OwnerRecord::Requirement(requirement) = &mut record else {
+            panic!("task requirement owner kind")
+        };
+        requirement.name = Name::new("incompatible-route-capability").unwrap();
+        let (digest, bytes) = encode_owner(&record).expect("encode incompatible task requirement");
+        binding.object = digest;
+        assert!(
+            objects
+                .insert(
+                    ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+                    bytes,
+                )
+                .is_none()
+        );
+    }
+    let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
+    manifest.closure = closure;
+    manifest.object_count = count;
+    manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(manifest, &objects)
+            .expect_err("incompatible HTTP handler capability closure")
+            .code,
+        "artifact_http_route_requirement_closure"
     );
 }
 

@@ -1,4 +1,4 @@
-//! Authored builders for Graph 9 declarations, members, targets, and retained attachments.
+//! Authored builders for Graph 10 declarations, members, targets, and retained attachments.
 
 use super::*;
 use crate::platform::kernel::{

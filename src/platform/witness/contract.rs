@@ -3,32 +3,32 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-5";
-pub const WITNESS_CONTRACT_VERSION: u16 = 5;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-4";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 4;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-9";
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-6";
+pub const WITNESS_CONTRACT_VERSION: u16 = 6;
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-5";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 5;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-10";
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT05";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM08";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v5";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v4";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT06";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM09";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v6";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v5";
 
-pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v5";
-pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v4";
-pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v5";
-pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v9";
+pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v6";
+pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v5";
+pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v6";
+pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v10";
 
-pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v4";
-pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v4";
-pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v4";
-pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v4";
-pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability.v4";
-pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation.v4";
-pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation.v4";
-pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test.v4";
+pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v5";
+pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v5";
+pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v5";
+pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v5";
+pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability.v5";
+pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation.v5";
+pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation.v5";
+pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test.v5";
 pub const VALIDATION_DEPENDENCY_DIGEST_DOMAIN: &str =
-    "lkjscript.owner-summary.validation-dependency.v4";
+    "lkjscript.owner-summary.validation-dependency.v5";
 
 pub const MAXIMUM_OWNER_SUMMARY_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_WITNESS_MANIFEST_BYTES: usize = 64 * 1024;
@@ -119,7 +119,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 19] = [
     },
     ValidatorFeatureDescriptor {
         name: "exact_http_route_topology",
-        version: 1,
+        version: 2,
     },
 ];
 

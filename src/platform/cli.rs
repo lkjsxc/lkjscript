@@ -37,10 +37,11 @@ use super::execution::normalized::NormalizedCommandPolicy;
 use super::kernel::{
     BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility, EncodedOwnerKey,
     ExactOwnerKey, ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect,
-    LocalValueReference, Name, OperationReference, OwnerKey as KernelOwnerKey,
+    HttpRouteSelector, LocalValueReference, Name, OperationReference, OwnerKey as KernelOwnerKey,
     OwnerKind as KernelOwnerKind, OwnerRecord, PackageId, PackageTransportDigest, ParameterParent,
-    ParameterUse, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit, TextValue,
-    TypeObjectDigest, encode_owner, http_route_set_digest,
+    ParameterUse, PortImplementation, RelationEndpoint, RelationKind, RequirementReference,
+    ResourceUnit, TextValue, TypeObjectDigest, analyze_http_route_set, encode_owner,
+    http_route_set_digest,
 };
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
@@ -1813,6 +1814,62 @@ fn compact_change_response(
             ("witness", counts.witness_entries_changed.to_string()),
         ],
     )?;
+    if !prepared.logical_plan.http_routes.is_empty() {
+        let routes = prepared.logical_plan.http_routes.values();
+        let reviewed = prepared.logical_plan.http_routes.len();
+        let changed = routes.clone().filter(|route| route.changed).count();
+        let befores = routes
+            .clone()
+            .filter(|route| route.before.is_some())
+            .count();
+        let afters = routes.clone().filter(|route| route.after.is_some()).count();
+        let exact_after = routes
+            .clone()
+            .filter(|route| {
+                route.after.as_ref().is_some_and(|after| {
+                    matches!(
+                        &after.record.selector,
+                        crate::platform::kernel::HttpRouteSelector::Exact { .. }
+                    )
+                })
+            })
+            .count();
+        let pattern_after = routes
+            .clone()
+            .filter(|route| {
+                route.after.as_ref().is_some_and(|after| {
+                    matches!(
+                        &after.record.selector,
+                        crate::platform::kernel::HttpRouteSelector::Pattern { .. }
+                    )
+                })
+            })
+            .count();
+        let captures_after = routes
+            .clone()
+            .filter_map(|route| route.after.as_ref())
+            .map(|after| after.record.selector.capture_count())
+            .sum::<usize>();
+        let maximum_chain = routes
+            .filter_map(|route| route.after.as_ref())
+            .map(|after| after.maximum_specificity_chain)
+            .max()
+            .unwrap_or(0);
+        append_compact_record(
+            &mut output,
+            "http-routes",
+            &[
+                ("reviewed", reviewed.to_string()),
+                ("changed", changed.to_string()),
+                ("before", befores.to_string()),
+                ("after", afters.to_string()),
+                ("exact-after", exact_after.to_string()),
+                ("pattern-after", pattern_after.to_string()),
+                ("captures-after", captures_after.to_string()),
+                ("maximum-specificity-chain", maximum_chain.to_string()),
+            ],
+        )?;
+    }
     let validation = publication.receipt.validation;
     append_compact_record(
         &mut output,
@@ -2288,10 +2345,56 @@ fn http_topology_inspection_fields(
                     "HTTP route and target were not read from one accepted revision",
                 ));
             }
+            let port_read = view.owner(KernelOwnerKey::Port(route.port.port))?;
+            let Some(OwnerRecord::Port(port)) = port_read.value else {
+                return Err(owner_inspection_error(
+                    DiagnosticClass::Corrupt,
+                    "http_route_port_missing",
+                    "HTTP route names a missing or foreign port owner",
+                ));
+            };
+            let PortImplementation::Function(handler) = port.implementation else {
+                return Err(owner_inspection_error(
+                    DiagnosticClass::Corrupt,
+                    "http_route_handler_missing",
+                    "HTTP route port is not function-backed",
+                ));
+            };
+            let captures = route
+                .selector
+                .capture_names()
+                .into_iter()
+                .map(Name::as_str)
+                .collect::<Vec<_>>()
+                .join(",");
+            let signature = if captures.is_empty() {
+                "(HttpRequest)->HttpResponse".to_owned()
+            } else {
+                format!(
+                    "(HttpRequest,{})->HttpResponse",
+                    std::iter::repeat_n("Text", route.selector.capture_count())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            };
             Ok(vec![
                 ("target", route.target.to_string()),
                 ("method", route.method.clone()),
-                ("path", route.path.clone()),
+                ("selector", route.selector.kind_name().to_owned()),
+                ("path", route.selector.display()),
+                ("segments", route.selector.segment_count().to_string()),
+                ("captures", captures),
+                (
+                    "specificity",
+                    match &route.selector {
+                        HttpRouteSelector::Exact { .. } => "exact".to_owned(),
+                        HttpRouteSelector::Pattern { .. } => route
+                            .selector
+                            .segment_count()
+                            .saturating_sub(route.selector.capture_count())
+                            .to_string(),
+                    },
+                ),
                 (
                     "component",
                     local_definition_reference(
@@ -2306,6 +2409,14 @@ fn http_topology_inspection_fields(
                         KernelOwnerKey::Port(route.port.port),
                     ),
                 ),
+                (
+                    "handler",
+                    local_definition_reference(
+                        handler.package,
+                        KernelOwnerKey::Declaration(handler.declaration),
+                    ),
+                ),
+                ("signature", signature),
             ])
         }
         OwnerRecord::Target(target) if target.runner == super::package::RunnerKind::Http => {
@@ -2365,6 +2476,7 @@ fn http_topology_inspection_fields(
                 routes.push(route);
             }
             let digest = http_route_set_digest(&routes)?;
+            let analysis = analyze_http_route_set(&routes)?;
             Ok(vec![
                 (
                     "component",
@@ -2374,6 +2486,13 @@ fn http_topology_inspection_fields(
                     ),
                 ),
                 ("route-count", routes.len().to_string()),
+                ("exact-routes", analysis.exact_routes.to_string()),
+                ("pattern-routes", analysis.pattern_routes.to_string()),
+                ("pattern-segments", analysis.pattern_segments.to_string()),
+                (
+                    "maximum-specificity-chain",
+                    analysis.maximum_specificity_chain.to_string(),
+                ),
                 ("route-set", format!("http_routes_{}", encode_hex(&digest))),
             ])
         }
