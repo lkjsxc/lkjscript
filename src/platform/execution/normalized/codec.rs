@@ -1,9 +1,10 @@
 //! Strict typed JSON conversion at normalized Graph 10 runner boundaries.
 
-use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
+use super::prepare::{NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::json::{JsonLimits, decode_strict};
 use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
@@ -13,7 +14,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub fn decode_typed(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     bytes: &[u8],
     ty: TypeObjectDigest,
     limits: JsonLimits,
@@ -23,7 +24,7 @@ pub fn decode_typed(
 }
 
 pub fn decode_value(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &JsonValue,
     ty: TypeObjectDigest,
     limits: JsonLimits,
@@ -32,7 +33,7 @@ pub fn decode_value(
 }
 
 pub fn encode_typed(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     limits: JsonLimits,
@@ -60,7 +61,7 @@ pub fn encode_typed(
 }
 
 pub fn encode_value(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     limits: JsonLimits,
@@ -70,7 +71,7 @@ pub fn encode_value(
 }
 
 fn from_json(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &JsonValue,
     ty: TypeObjectDigest,
     limits: JsonLimits,
@@ -197,7 +198,7 @@ fn from_json(
 }
 
 fn decode_named(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &JsonValue,
     declaration: DeclarationReference,
     limits: JsonLimits,
@@ -295,7 +296,7 @@ fn decode_named(
 }
 
 fn to_json(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     state: &mut EncodeState,
@@ -444,7 +445,7 @@ fn to_json(
 }
 
 fn encode_named(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     declaration: DeclarationReference,
     state: &mut EncodeState,
@@ -533,11 +534,11 @@ fn encode_named(
 }
 
 fn record_layout(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
 ) -> Option<(RecordLayoutIndex, &NormalizedRecordLayout)> {
     program
-        .records
+        .records()
         .iter()
         .enumerate()
         .find(|(_, layout)| layout.declaration == declaration)
@@ -549,11 +550,11 @@ fn record_layout(
 }
 
 fn variant_layout(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
 ) -> Option<(VariantLayoutIndex, &NormalizedVariantLayout)> {
     program
-        .variants
+        .variants()
         .iter()
         .enumerate()
         .find(|(_, layout)| layout.declaration == declaration)
@@ -564,9 +565,12 @@ fn variant_layout(
         })
 }
 
-fn type_form(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<&TypeForm, Diagnostic> {
+fn type_form(
+    program: &dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+) -> Result<&TypeForm, Diagnostic> {
     program
-        .types
+        .types()
         .get(&ty)
         .map(|object| &object.form)
         .ok_or_else(|| {

@@ -103,7 +103,10 @@ an interpreter program header, any runtime `DT_NEEDED` entry, a GLIBC version re
 machine, malformed or trailing linkage input, and a target-policy mismatch. It then runs the complete
 copied-binary command lifecycle with network unavailable during candidate execution in both pinned
 userlands. Finally it runs the exact candidate through the maintained distributed HTTP, transferred
-stateful HTTP, transferred outbound HTTP, and standalone service oracles. The outbound oracle uses
+stateful HTTP, transferred outbound HTTP, transferred offline-package composition, and standalone
+service oracles. The offline-package oracle reconstructs retained source containers independently,
+checks the fixed 11/12 diamond and standalone HTTP body without producer directories, and binds
+its complete command/file inventories to target-admission receipt 3. The outbound oracle uses
 only isolated loopback HTTP/TLS/DNS fixtures and contacts no live relay. Required unavailable,
 stale, foreign, reused, skipped,
 failed, or unrun evidence cannot produce a passing target-admission receipt.

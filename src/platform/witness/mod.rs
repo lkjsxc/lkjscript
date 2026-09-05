@@ -27,6 +27,7 @@ pub use digest::{
     ValidatorContractDigest,
 };
 pub use entry::*;
+pub(crate) use full::rebuild_full_witness_with_limit;
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
 pub(crate) use ownership::ownership_contributions;
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};

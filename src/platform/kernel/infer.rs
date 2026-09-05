@@ -110,9 +110,25 @@ pub(super) fn validate_expression_meaning(
     snapshot: &KernelSnapshot,
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
+    maximum_steps: usize,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
-    validate_expression_roots(snapshot, roots, diagnostics, work);
+    if validate_expression_roots_with_limits(
+        snapshot,
+        roots,
+        diagnostics,
+        work,
+        ExpressionValidationLimits {
+            maximum_steps,
+            maximum_diagnostics: usize::MAX,
+        },
+    ) == Err(ExpressionValidationExhaustion::Steps)
+    {
+        diagnostics.push(type_error(
+            "kernel_type_work",
+            "expression type validation exhausted its explicit work budget",
+        ));
+    }
 }
 
 pub(crate) fn validate_expression_roots<R: ExpressionRead>(

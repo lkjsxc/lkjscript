@@ -4,10 +4,11 @@
 //! The reference evaluator uses it so differential execution can detect changes in envelope,
 //! layout, ordering, and value behavior.
 
-use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
+use super::prepare::{NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,7 +23,7 @@ const ITEM_LIMIT: usize = 1_000_000;
 const DEPTH_LIMIT: usize = 128;
 
 pub(super) fn encode_typed(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
 ) -> Result<Vec<u8>, Diagnostic> {
@@ -39,7 +40,7 @@ pub(super) fn encode_typed(
 }
 
 pub(super) fn decode_typed(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     encoded: &[u8],
     ty: TypeObjectDigest,
 ) -> Result<NormalizedValue, Diagnostic> {
@@ -120,7 +121,7 @@ impl ReferenceBudget {
 }
 
 fn write_value(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     value: &NormalizedValue,
     output: &mut Vec<u8>,
@@ -185,7 +186,7 @@ fn write_value(
 }
 
 fn write_nominal(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
     value: &NormalizedValue,
     output: &mut Vec<u8>,
@@ -239,7 +240,7 @@ fn write_nominal(
 }
 
 fn read_value(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
     budget: &mut ReferenceBudget,
@@ -330,7 +331,7 @@ fn read_value(
 }
 
 fn read_nominal(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
     input: &mut ReferenceInput<'_>,
     budget: &mut ReferenceBudget,
@@ -373,7 +374,7 @@ fn read_nominal(
 }
 
 fn layout_digest(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
 ) -> Result<[u8; 32], Diagnostic> {
     let mut description = Vec::new();
@@ -383,7 +384,7 @@ fn layout_digest(
 }
 
 fn describe_type(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     ancestors: &mut BTreeSet<DeclarationReference>,
     description: &mut Vec<u8>,
@@ -474,9 +475,12 @@ fn describe_type(
     Ok(())
 }
 
-fn form(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<&TypeForm, Diagnostic> {
+fn form(
+    program: &dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+) -> Result<&TypeForm, Diagnostic> {
     program
-        .types
+        .types()
         .get(&ty)
         .map(|object| &object.form)
         .ok_or_else(|| {
@@ -488,11 +492,11 @@ fn form(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<&TypeForm, 
 }
 
 fn find_record(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
 ) -> Option<(RecordLayoutIndex, &NormalizedRecordLayout)> {
     program
-        .records
+        .records()
         .iter()
         .enumerate()
         .find(|(_, layout)| layout.declaration == declaration)
@@ -505,11 +509,11 @@ fn find_record(
 }
 
 fn find_variant(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     declaration: DeclarationReference,
 ) -> Option<(VariantLayoutIndex, &NormalizedVariantLayout)> {
     program
-        .variants
+        .variants()
         .iter()
         .enumerate()
         .find(|(_, layout)| layout.declaration == declaration)

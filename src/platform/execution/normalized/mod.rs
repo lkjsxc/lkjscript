@@ -15,6 +15,12 @@ mod password;
 mod prepare;
 mod queue;
 mod reference;
+mod reference_schema;
+pub(crate) use reference::{
+    NormalizedReferenceBinding, NormalizedReferenceOwnerRead, NormalizedReferenceRead,
+    NormalizedReferenceReadWork,
+};
+pub(crate) use reference_schema::NormalizedReferenceSchema;
 mod resident;
 mod resource;
 mod runner;
@@ -22,6 +28,7 @@ mod secret;
 mod security;
 mod session;
 mod value;
+mod value_schema;
 mod vm;
 mod worker;
 

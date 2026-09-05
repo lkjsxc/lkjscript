@@ -107,4 +107,12 @@ pub struct LogicalChangePlanEvidence {
     pub reasons: Vec<ImpactReason>,
     pub extraction: Option<FunctionExtractionEvidence>,
     pub http_routes: BTreeMap<HttpRouteId, HttpRoutePlanEvidence>,
+    pub package_closure_before: BTreeMap<
+        crate::platform::kernel::PackageId,
+        crate::platform::package_transport::PackageRevision,
+    >,
+    pub package_closure_after: BTreeMap<
+        crate::platform::kernel::PackageId,
+        crate::platform::package_transport::PackageRevision,
+    >,
 }

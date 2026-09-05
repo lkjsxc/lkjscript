@@ -11,6 +11,10 @@ and request spelling are normalized away only when they are not semantic.
 
 Production execution uses normalized bytecode and dense indexes. The canonical reference
 interpreter independently reads accepted semantic owners and evaluates their typed structures.
+Its callable identities, signatures, nominal layouts, generic type arguments, targets, tests, and
+blob reads are canonical-derived, not selected from compiler units or production resolver tables.
+Fault sensitivity removes compiled callable/layout/type/target tables while canonical evaluation
+continues, and omits a compiled test to require inventory disagreement instead of an empty pass.
 Every pure command and graph-owned test used for acceptance requires production/reference equality
 before comparing the expected value. Skipped, unavailable, cancelled, exhausted, or unrun work is
 not a pass. Live effects are not duplicated for differential evidence.
@@ -216,13 +220,46 @@ inputs without using `ldd` or trusting the target name.
 
 The candidate must complete the command lifecycle in two independently pinned Linux/amd64
 userlands: one musl-based and one older-glibc-based. Candidate execution has no network and no host
-library bind mount. Admission also requires the same bytes to pass the maintained distributed HTTP,
+library bind mount. Admission also requires the same bytes to pass the transferable offline-package
+composition oracle and the maintained distributed HTTP,
 stateful HTTP, outbound HTTP, and standalone service oracles using isolated authorities. The receipt records distinct userland, application,
 static-inspection, cleanup, and resource classifications. Static linkage and those two userlands do
 not imply a minimum kernel, universal Linux portability, another architecture, or hostile-code
 isolation.
 
 ## Transferable application evidence
+
+`lkjscript-dev offline-packages --binary PATH [--evidence-root ABSENT_ABSOLUTE_PATH] --machine`
+is the first-party copied-executable package oracle. Product/full and exact-target admission require
+it. Its projects and execution directory are private temporary state outside the checkout; the
+candidate receives only `LANG`, and the workflow never invokes Cargo or reads maintained checkouts,
+generated source assets, or compiled dependency assets. An explicit evidence root supports
+transferred no-checkout execution by the copied verifier and exact candidate.
+
+Only public authoring creates D's private helper and public offset, B's doubling function, C's
+negating function, and A's sum. The independently fixed diamond has five distinct packages and eight
+edges including shared standard arithmetic. After producer deletion it must return 11, remain 11
+after staging D2, reject a conflicting mixed closure, and return 12 after one paired replacement.
+The five selected packages run 24 tests exactly once in total. Public nominal types and rank-one
+generic calls cross D→B. Complete before/after review files, imported interface queries, visibility
+rejections, unavailable transitive source, stale/altered plans, exact cache recovery, and a raw
+standalone HTTP response from a non-built-in pure function are retained with exact identities.
+
+Before each export, a separate read-only current-graph reconstruction captures the public-authored
+producer's complete owner/object, type, retirement, and dependency inventory. It must match the
+transport reconstruction and the accepted revision reported by the copied binary. Retained
+inventories remain available after every producer directory is removed.
+
+The independent closure oracle reconstructs all package edges, canonical owners, types, current
+retirements, and public interfaces. It shares only neutral decoding/digests and the existing canonical
+type checker; it does not share production traversal, revision unification, completeness, interface
+projection, compiler/cache selection, or bytecode evaluation. Independently fixed hostile private
+bodies and omitted-edge/body faults detect admission bypass. Full semantic validation is not a
+second independently implemented type checker. Full-ceiling header guards and valid-container
+exact-fit/one-over cases under internal lowered byte/object/package bounds, bounded semantic/read
+work injection, malformed transports, immutable/readiness/publication
+interruption, and lost-acknowledgement retry are separate import/publication tests. Header guard
+tests do not claim maximum-capacity program execution.
 
 `distributed-http`, `stateful-http`, and `outbound-http` each have contributor and transferred execution contexts.
 Transferred mode requires an explicit absolute lexically canonical create-new evidence root outside

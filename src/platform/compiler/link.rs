@@ -22,7 +22,7 @@ use crate::platform::package_interface::build_package_interface;
 use crate::platform::persistent_map::{
     MapError, MapErrorClass, MapWork, MemoryPageStore, PersistentMap,
 };
-use crate::platform::publication::{GraphRepository, RepositoryReadWork, RepositoryView};
+use crate::platform::publication::{GraphRepository, RepositoryReadWork};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
@@ -65,6 +65,21 @@ pub fn link_artifact(
 ) -> Result<ArtifactLinkReceipt, Diagnostic> {
     let view = repository.view_current()?;
     let cached = load_exact_current_compilation(repository, compilation)?;
+    let exported = view.build_package_revision()?;
+    let store = repository.object_store()?;
+    let mut linked = link_prepared(&view, &store, &cached, &exported, dependencies)?;
+    add_repository_work(&mut linked.work.repository, exported.read_work);
+    Ok(linked)
+}
+
+pub(super) fn link_prepared(
+    view: &dyn crate::platform::change::CanonicalBaseRead,
+    store: &dyn ImmutableObjectStore,
+    cached: &super::cache::CachedCompilation,
+    exported: &crate::platform::publication::BuiltPackageRevision,
+    dependencies: &[LoadedArtifact],
+) -> Result<ArtifactLinkReceipt, Diagnostic> {
+    let compilation = cached.digest;
     let mut work = ArtifactLinkWork::default();
     let mut objects = BTreeMap::new();
     let mut packages = BTreeMap::new();
@@ -82,10 +97,6 @@ pub fn link_artifact(
         }
     }
 
-    let exported = repository.export_package_transport()?;
-    add_repository_work(&mut work.repository, exported.read_work);
-    add_map_work(&mut work.compilation_map, exported.interface_map_work);
-    work.store.add(exported.closure_work);
     let artifact_interface =
         build_package_interface(&exported.interface_owners, &exported.interface_types)?;
     add_map_work(&mut work.compilation_map, artifact_interface.map_work);
@@ -101,9 +112,10 @@ pub fn link_artifact(
         ),
         exported.revision_bytes.clone(),
     )?;
-    if exported.revision.package != view.package()
-        || exported.revision.revision.revision_id()? != view.revision()
-        || exported.revision.revision != view.current().revision.core
+    if exported.revision.package != view.package_id()
+        || view
+            .exact_revision()
+            .is_some_and(|revision| exported.revision.revision.revision_id().ok() != Some(revision))
         || cached.manifest.package_revision != exported.revision_digest
         || cached.manifest.semantic_state != exported.revision.revision.semantic_state
         || cached.manifest.package_interface != exported.revision.interface
@@ -131,7 +143,6 @@ pub fn link_artifact(
         }
     }
 
-    let store = repository.object_store()?;
     let compilation_key = compilation.object_key();
     let compilation_bytes = store
         .read(
@@ -149,7 +160,7 @@ pub fn link_artifact(
         })?;
     insert_object(&mut objects, compilation_key, compilation_bytes)?;
 
-    let reader = ObjectPageReader::new(&store);
+    let reader = ObjectPageReader::new(store);
     let units_map = PersistentMap::from_root(cached.manifest.units);
     let mut pages = MemoryPageStore::default();
     units_map
@@ -210,7 +221,7 @@ pub fn link_artifact(
             })?;
         let unit = CompilationUnit::decode(&unit_bytes, binding.object.object_key())?;
         if unit.key != binding.key
-            || unit.source.package != view.package()
+            || unit.source.package != view.package_id()
             || unit.source.owner != owner
             || unit.source.kind != binding.kind
         {
@@ -234,7 +245,10 @@ pub fn link_artifact(
             }
         }
         insert_object(&mut objects, binding.object.object_key(), unit_bytes)?;
-        if local_units.insert((view.package(), owner), unit).is_some() {
+        if local_units
+            .insert((view.package_id(), owner), unit)
+            .is_some()
+        {
             return Err(link_error(
                 DiagnosticClass::Corrupt,
                 "artifact_link_unit_duplicate",
@@ -247,15 +261,15 @@ pub fn link_artifact(
     let mut runtime_owners = Vec::new();
     let mut runtime_records = BTreeMap::new();
     for ((package, owner), expectation) in runtime_owner_expectations(&local_units)? {
-        if package != view.package() {
+        if package != view.package_id() {
             return Err(link_error(
                 DiagnosticClass::Corrupt,
                 "artifact_link_runtime_owner_package",
                 "local compiler units produced runtime metadata for another package",
             ));
         }
-        let read = view.owner(owner)?;
-        add_repository_work(&mut work.repository, read.work);
+        let read = view.read_owner(owner)?;
+        work.repository.add_canonical(read.work);
         let record = read.value.ok_or_else(|| {
             link_error(
                 DiagnosticClass::Corrupt,
@@ -285,7 +299,7 @@ pub fn link_artifact(
     }
 
     let reference_owners = build_reference_owner_map(
-        &view,
+        view,
         &local_units,
         &runtime_records,
         &mut objects,
@@ -339,8 +353,8 @@ pub fn link_artifact(
     insert_package(
         &mut packages,
         ArtifactPackage {
-            repository_id: view.current().head.repository_id,
-            package: view.package(),
+            repository_id: view.repository_id(),
+            package: view.package_id(),
             package_revision: exported.revision_digest,
             semantic_revision: exported.revision.revision.revision_id()?,
             semantic_state: exported.revision.revision.semantic_state,
@@ -359,7 +373,7 @@ pub fn link_artifact(
         compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
         bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
         compilation_manifest_contract_version: COMPILATION_MANIFEST_CONTRACT_VERSION,
-        root_package: view.package(),
+        root_package: view.package_id(),
         packages,
         closure,
         object_count,
@@ -374,13 +388,13 @@ pub fn link_artifact(
 }
 
 fn build_reference_owner_map(
-    view: &RepositoryView,
+    view: &dyn crate::platform::change::CanonicalBaseRead,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     runtime_owners: &BTreeMap<OwnerKey, OwnerRecord>,
     objects: &mut BTreeMap<ObjectKey, Vec<u8>>,
     work: &mut ArtifactLinkWork,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
-    let package = view.package();
+    let package = view.package_id();
     let mut pending = BTreeSet::new();
     for ((unit_package, owner), unit) in units {
         if *unit_package == package && reference_compilation_payload(&unit.payload) {
@@ -407,8 +421,8 @@ fn build_reference_owner_map(
                 "reference-execution closure exceeds its per-package owner bound",
             ));
         }
-        let read = view.owner(owner)?;
-        add_repository_work(&mut work.repository, read.work);
+        let read = view.read_owner(owner)?;
+        work.repository.add_canonical(read.work);
         let record = read.value.ok_or_else(|| {
             link_error(
                 DiagnosticClass::Corrupt,

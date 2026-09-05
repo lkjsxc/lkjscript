@@ -188,29 +188,15 @@ fn alternate_physical_transport(
     page_byte: u8,
 ) -> (
     crate::platform::kernel::PackageTransportDigest,
-    Vec<Vec<u8>>,
+    Vec<u8>,
     MapRoot,
 ) {
-    let mut objects = std::collections::BTreeMap::new();
-    for pack in &exported.packs {
-        let metadata = PackMetadata::decode(pack, true).expect("decode exported package pack");
-        metadata
-            .verify_all(pack)
-            .expect("verify exported package pack");
-        for entry in &metadata.entries {
-            if !matches!(
-                entry.key.domain,
-                ObjectDomain::PackageRevision | ObjectDomain::SemanticRoot
-            ) {
-                continue;
-            }
-            let bytes = metadata
-                .read(pack, entry.key, entry.key.domain.maximum_bytes())
-                .expect("read exported package object")
-                .expect("exported package object");
-            assert!(objects.insert(entry.key, bytes).is_none());
-        }
-    }
+    let original = crate::platform::package_transport::source::PackageContainer::decode(
+        &exported.container,
+        exported.transport_digest,
+    )
+    .unwrap();
+    let mut objects = original.objects;
 
     let alternate_interface = build_package_interface_with_leaf_target(
         &exported.interface_owners,
@@ -253,22 +239,16 @@ fn alternate_physical_transport(
         transport_bytes,
     );
 
-    let mut builder = PackBuilder::default();
-    for (key, bytes) in objects {
-        builder
-            .insert(key, &bytes)
-            .expect("insert alternate package transport object");
-    }
-    let interface_root = transport.interface_owners;
+    let binding = crate::platform::package_transport::PackageTransportBinding {
+        package_revision: exported.revision_digest,
+        transport: transport_digest,
+    };
+    let source =
+        crate::platform::package_transport::source::collect(&objects, binding, &[binding]).unwrap();
     (
         transport_digest,
-        vec![
-            builder
-                .seal()
-                .expect("seal alternate package transport")
-                .bytes,
-        ],
-        interface_root,
+        source.container.encode().unwrap(),
+        transport.interface_owners,
     )
 }
 
@@ -1804,7 +1784,7 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
 #[test]
 fn graph9_artifact_links_exact_compiled_dependency_closure() {
     let temporary = tempfile::tempdir().expect("dependency artifact parent");
-    let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let source_snapshot = crate::platform::kernel::tests::transport_snapshot();
     let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
         .expect("source Graph 10 repository");
     let source_compilation = build_clean(
@@ -1832,7 +1812,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
     let source_head = source.repository.current().unwrap().head;
     let source_initial_selection = source
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage original source transport selection");
     assert_eq!(source_initial_selection.previous_transport, None);
     let source_replacement = source
@@ -1875,7 +1855,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
         .expect("target Graph 10 repository");
     target
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage exact source interface");
     let request = AuthoredChangeSet {
         base: target.current.head.revision,

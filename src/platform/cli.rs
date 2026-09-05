@@ -56,7 +56,6 @@ use super::publication::{
 use super::semantic_id::{
     DeclarationId, ExpressionId, ModuleId, RepositoryId, RevisionId, encode_hex,
 };
-use super::storage::contract::MAXIMUM_PACK_BYTES;
 use super::witness::{
     BindingContainerRole, ExpressionRootRole, OwnershipEntry, OwnershipParent, OwnershipRole,
     SemanticDigest,
@@ -579,18 +578,11 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             let path = required_option(&arguments[3..], "--output")?;
             let repository = open_normalized_repository(project)?;
             let exported = repository.export_package_transport()?;
-            let [pack] = exported.packs.as_slice() else {
-                return Err(Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "package_transport_pack_count",
-                    "current public package export requires one bounded interface pack",
-                ));
-            };
             let publication = publish_create_new(
                 Path::new(&path),
-                pack,
-                MAXIMUM_PACK_BYTES,
-                "current package transport",
+                &exported.container,
+                crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
+                "current package source container",
             )?;
             let mut output = compact_response_writer()?;
             append_compact_record(
@@ -632,6 +624,15 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             return Ok(output.finish());
         }
         Some("dependency") => {
+            if matches!(
+                arguments.get(2).map(String::as_str),
+                Some("inspect" | "query")
+            ) {
+                return execute_dependency_projection(
+                    &arguments,
+                    open_normalized_repository(project)?,
+                );
+            }
             if arguments.get(2).map(String::as_str) != Some("stage") {
                 return Err(usage_error(
                     "package dependency requires the exact stage action",
@@ -644,11 +645,11 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             let path = required_option(&arguments[3..], "--input-file")?;
             let pack = read_bounded(
                 Path::new(&path),
-                MAXIMUM_PACK_BYTES,
-                "package transport pack",
+                crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
+                "package source container",
             )?;
             let repository = open_normalized_repository(project)?;
-            let receipt = repository.stage_package_transport(digest, &[pack])?;
+            let receipt = repository.stage_package_transport(digest, &pack)?;
             let mut output = compact_response_writer()?;
             append_compact_record(
                 &mut output,
@@ -685,6 +686,30 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                 &[
                     ("current-revision", receipt.current_revision.to_string()),
                     ("semantic-head-changed", "false".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "closure",
+                &[
+                    ("packages", receipt.closure_packages.to_string()),
+                    ("edges", receipt.closure_edges.to_string()),
+                    ("objects", receipt.closure_objects.to_string()),
+                    ("bytes", receipt.container_bytes.to_string()),
+                    ("commitment", receipt.container_commitment.clone()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "validation",
+                &[
+                    (
+                        "contract",
+                        crate::platform::package_transport::source::READINESS_CONTRACT_IDENTITY
+                            .to_owned(),
+                    ),
+                    ("visits", receipt.validation_visits.to_string()),
+                    ("read-bytes", receipt.validation_read_bytes.to_string()),
                 ],
             )?;
             append_compact_record(
@@ -907,6 +932,187 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             return Err(usage_error(
                 "package builtin accepts inspect, query, or export",
             ));
+        }
+    }
+    Ok(output.finish())
+}
+
+fn execute_dependency_projection(
+    arguments: &[String],
+    repository: GraphRepository,
+) -> Result<Vec<u8>, Diagnostic> {
+    use super::builtin_discovery::{
+        PackageInterfaceView, inspect_interface_owner, query_interface_owners,
+    };
+    let action = arguments
+        .get(2)
+        .map(String::as_str)
+        .ok_or_else(|| usage_error("dependency projection requires inspect or query"))?;
+    let owner = action == "inspect" && arguments.get(3).map(String::as_str) == Some("owner");
+    let offset = if owner {
+        6
+    } else if action == "query" {
+        4
+    } else {
+        3
+    };
+    if arguments.len() < offset
+        || (action == "query" && arguments.get(3).map(String::as_str) != Some("owners"))
+    {
+        return Err(usage_error(
+            "package dependency requires inspect [owner KIND ID] or query owners with --package-revision",
+        ));
+    }
+    let options = &arguments[offset..];
+    let allowed: &[&str] = if action == "query" {
+        &[
+            "--package-revision",
+            "--kind",
+            "--name",
+            "--parent",
+            "--limit",
+            "--bytes",
+            "--continuation",
+        ]
+    } else {
+        &["--package-revision"]
+    };
+    ensure_options(options, allowed, &[])?;
+    let revision = required_option(options, "--package-revision")?
+        .parse::<super::kernel::PackageRevisionDigest>()
+        .map_err(|error| direct_option_error("--package-revision", error))?;
+    let admitted = repository.staged_package_source(revision)?;
+    let package = admitted
+        .packages
+        .get(&revision)
+        .ok_or_else(|| usage_error("staged source has no selected package"))?;
+    let types = package
+        .interface_types
+        .iter()
+        .map(|(digest, bytes)| Ok((*digest, super::kernel::decode_type_object(bytes, *digest)?)))
+        .collect::<Result<std::collections::BTreeMap<_, _>, Diagnostic>>()?;
+    let view = PackageInterfaceView {
+        package: package.revision.package,
+        package_revision: revision,
+        interface_owners: &package.interface_owners,
+        interface_types: &types,
+    };
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", format!("package.dependency.{action}")),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "package",
+        &[
+            ("id", view.package.to_string()),
+            (
+                "revision",
+                package.revision.revision.revision_id()?.to_string(),
+            ),
+            ("package-revision", revision.to_string()),
+            ("transport", package.binding.transport.to_string()),
+            ("interface", package.revision.interface.to_string()),
+            (
+                "name",
+                package.snapshot.root.package_name.as_str().to_owned(),
+            ),
+        ],
+    )?;
+    if action == "inspect" {
+        if owner {
+            let kind = parse_interface_owner_kind(&arguments[4])?;
+            let owner = parse_kernel_owner_key(&arguments[5])?;
+            for record in inspect_interface_owner(&view, kind, owner)? {
+                append_dynamic_record(&mut output, &record.operation, &record.fields)?;
+            }
+        } else {
+            let container = admitted.container.encode()?;
+            append_compact_record(
+                &mut output,
+                "closure",
+                &[
+                    ("packages", admitted.packages.len().to_string()),
+                    ("edges", admitted.dependency_edges.to_string()),
+                    ("objects", admitted.container.objects.len().to_string()),
+                    ("bytes", container.len().to_string()),
+                    ("commitment", blake3::hash(&container).to_hex().to_string()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "interface",
+                &[
+                    ("owners", view.interface_owners.len().to_string()),
+                    ("types", view.interface_types.len().to_string()),
+                ],
+            )?;
+            for dependency in &package.revision.dependencies {
+                append_compact_record(
+                    &mut output,
+                    "dependency",
+                    &[
+                        ("package", dependency.package.to_string()),
+                        ("revision", dependency.semantic_revision.to_string()),
+                        ("package-revision", dependency.package_revision.to_string()),
+                    ],
+                )?;
+            }
+        }
+    } else {
+        let selector = BuiltinOwnerSelector {
+            kind: option_value(options, "--kind")?
+                .map(|value| parse_interface_owner_kind(&value))
+                .transpose()?,
+            name: option_value(options, "--name")?
+                .map(|value| Name::new(value).map(|name| name.as_str().to_owned()))
+                .transpose()?,
+            parent: option_value(options, "--parent")?
+                .map(|value| parse_kernel_owner_key(&value))
+                .transpose()?,
+        };
+        let limit = parse_usize_option(
+            option_value(options, "--limit")?,
+            "--limit",
+            BUILTIN_QUERY_DEFAULT_ITEMS,
+        )?;
+        let bytes = parse_usize_option(
+            option_value(options, "--bytes")?,
+            "--bytes",
+            BUILTIN_QUERY_DEFAULT_BYTES,
+        )?;
+        let continuation = option_value(options, "--continuation")?;
+        let page = query_interface_owners(&view, &selector, limit, bytes, continuation.as_deref())?;
+        append_compact_record(
+            &mut output,
+            "query",
+            &[
+                ("operation", "owners".to_owned()),
+                ("selector-digest", page.selector_digest),
+                ("package-revision", revision.to_string()),
+                ("ordering", BUILTIN_QUERY_ORDERING.to_owned()),
+            ],
+        )?;
+        for record in page.records {
+            append_dynamic_record(&mut output, &record.operation, &record.fields)?;
+        }
+        append_compact_record(
+            &mut output,
+            "summary",
+            &[
+                ("matched", page.matched.to_string()),
+                ("returned", page.returned.to_string()),
+                ("truncated", page.truncated.to_string()),
+                ("owner-record-bytes", page.rendered_owner_bytes.to_string()),
+            ],
+        )?;
+        if let Some(token) = page.continuation {
+            append_compact_record(&mut output, "continuation", &[("token", token)])?;
         }
     }
     Ok(output.finish())
@@ -1814,6 +2020,45 @@ fn compact_change_response(
             ("witness", counts.witness_entries_changed.to_string()),
         ],
     )?;
+    if !prepared.logical_plan.package_closure_before.is_empty()
+        || !prepared.logical_plan.package_closure_after.is_empty()
+    {
+        let before = &prepared.logical_plan.package_closure_before;
+        let after = &prepared.logical_plan.package_closure_after;
+        let added = after
+            .keys()
+            .filter(|package| !before.contains_key(package))
+            .count();
+        let removed = before
+            .keys()
+            .filter(|package| !after.contains_key(package))
+            .count();
+        let changed = after
+            .iter()
+            .filter(|(package, revision)| before.get(package).is_some_and(|old| old != *revision))
+            .count();
+        let interface_changes = after
+            .iter()
+            .filter(|(package, revision)| {
+                before
+                    .get(package)
+                    .is_some_and(|old| old.interface != revision.interface)
+            })
+            .count();
+        append_compact_record(
+            &mut output,
+            "package-closure",
+            &[
+                ("before", before.len().to_string()),
+                ("after", after.len().to_string()),
+                ("added", added.to_string()),
+                ("removed", removed.to_string()),
+                ("changed", changed.to_string()),
+                ("interface-changes", interface_changes.to_string()),
+                ("prepared-commitment", plan.token.prepared.to_string()),
+            ],
+        )?;
+    }
     if !prepared.logical_plan.http_routes.is_empty() {
         let routes = prepared.logical_plan.http_routes.values();
         let reviewed = prepared.logical_plan.http_routes.len();
@@ -6064,8 +6309,40 @@ fn read_bounded(path: &Path, maximum: usize, label: &str) -> Result<Vec<u8>, Dia
             format!("{label} '{}' is not a regular file", path.display()),
         ));
     }
-    let mut file = File::open(path).map_err(|error| io_error("read_open", path, error))?;
-    let mut bytes = Vec::new();
+    let fd = rustix::fs::open(
+        path,
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::NONBLOCK
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map_err(|error| io_error("read_open", path, error.into()))?;
+    let mut file = File::from(fd);
+    let opened = file
+        .metadata()
+        .map_err(|error| io_error("read_open", path, error))?;
+    if !opened.is_file() {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "read_type",
+            format!("{label} '{}' is not a regular file", path.display()),
+        ));
+    }
+    if opened.len() > maximum as u64 {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "read_limit",
+            format!("{label} exceeds {maximum} bytes"),
+        ));
+    }
+    let mut bytes = Vec::with_capacity(usize::try_from(opened.len()).map_err(|_| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "read_limit",
+            "bounded input length exceeds this platform",
+        )
+    })?);
     Read::by_ref(&mut file)
         .take((maximum as u64).saturating_add(1))
         .read_to_end(&mut bytes)

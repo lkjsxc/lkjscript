@@ -500,6 +500,17 @@ pub(crate) fn validate_package_interface_admitted<S: ImmutableObjectStore + ?Siz
     work: &mut StoreWork,
     admission: &mut MapAdmission,
 ) -> Result<PackageInterfaceValidation, Diagnostic> {
+    validate_package_interface_metered(package, root, store, work, admission, &mut |_| Ok(()))
+}
+
+pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Sized>(
+    package: PackageId,
+    root: MapRoot,
+    store: &S,
+    work: &mut StoreWork,
+    admission: &mut MapAdmission,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<PackageInterfaceValidation, Diagnostic> {
     if root.entries() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK as u64 {
         return Err(interface_error(
             DiagnosticClass::Resource,
@@ -554,8 +565,13 @@ pub(crate) fn validate_package_interface_admitted<S: ImmutableObjectStore + ?Siz
             ));
         }
     }
+    // Reserve owner/child-relation validation visits before traversing retained interface records.
+    // Canonical byte reads are charged separately by the caller's immutable source admission.
+    for owner in owners.values() {
+        visit(interface_owner_validation_visits(owner))?;
+    }
     validate_owner_closure(package, &owners)?;
-    let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work)?;
+    let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work, visit)?;
     reachable_objects.extend(type_keys);
     Ok(PackageInterfaceValidation {
         owners,
@@ -563,6 +579,36 @@ pub(crate) fn validate_package_interface_admitted<S: ImmutableObjectStore + ?Siz
         reachable_objects,
         map_work,
     })
+}
+
+pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -> u64 {
+    let children = match &owner.record {
+        PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
+            PackageInterfaceDeclarationPayload::Record { fields } => fields.len(),
+            PackageInterfaceDeclarationPayload::Variant { cases } => cases.len(),
+            PackageInterfaceDeclarationPayload::Interface { operations } => operations.len(),
+            PackageInterfaceDeclarationPayload::Function(function) => {
+                function.parameters.len()
+                    + function.type_parameters.len()
+                    + match &function.effect {
+                        FunctionEffect::Pure => 0,
+                        FunctionEffect::Task { requirements } => requirements.len(),
+                    }
+            }
+            PackageInterfaceDeclarationPayload::External(function) => {
+                function.parameters.len() + function.type_parameters.len()
+            }
+            PackageInterfaceDeclarationPayload::Component {
+                requirements,
+                ports,
+            } => requirements.len() + ports.len(),
+            PackageInterfaceDeclarationPayload::Constant { .. } => 0,
+        },
+        PackageInterfaceRecord::Operation(operation) => operation.parameters.len(),
+        PackageInterfaceRecord::Requirement(requirement) => 1 + requirement.operations.len(),
+        _ => 0,
+    };
+    1 + children as u64
 }
 
 fn validate_owner_closure(
@@ -808,6 +854,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     store: &S,
     work: &mut StoreWork,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
 ) -> Result<(BTreeMap<TypeObjectDigest, TypeObject>, BTreeSet<ObjectKey>), Diagnostic> {
     let mut objects = BTreeMap::new();
     let mut keys = BTreeSet::new();
@@ -825,6 +872,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         if !visited.insert((source, digest)) {
             continue;
         }
+        visit(1)?;
         if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK
             || depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
         {

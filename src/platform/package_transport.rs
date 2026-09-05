@@ -1,5 +1,8 @@
 //! Logical package-revision identity and separate physical acceptance transport.
 
+pub(crate) mod oracle;
+pub(crate) mod source;
+
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, FunctionEffect, OwnerKey, OwnerKind, PackageId,
@@ -8,7 +11,7 @@ use crate::platform::kernel::{
     semantic_state_digest_from_root,
 };
 use crate::platform::package_interface::{
-    PackageInterfaceValidation, package_interface_digest, validate_package_interface_admitted,
+    PackageInterfaceValidation, package_interface_digest, validate_package_interface_metered,
 };
 use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork};
 use crate::platform::publication::RevisionCore;
@@ -31,15 +34,8 @@ pub const PACKAGE_TRANSPORT_CONTRACT_IDENTITY: &str = "lkjscript-package-transpo
 pub const PACKAGE_TRANSPORT_CONTRACT_VERSION: u16 = 1;
 pub const PACKAGE_TRANSPORT_MAGIC: [u8; 8] = *b"LKJPKT01";
 pub const PACKAGE_TRANSPORT_ENVELOPE_DOMAIN: &str = "lkjscript.package-transport-envelope.v1";
-pub const PACKAGE_TRANSPORT_SELECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-package-transport-selection-1";
-pub const PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION: u16 = 1;
-pub const PACKAGE_TRANSPORT_SELECTION_MAGIC: [u8; 8] = *b"LKJPTS01";
-pub const PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-transport-selection-envelope.v1";
 pub const MAXIMUM_PACKAGE_REVISION_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_PACKAGE_TRANSPORT_BYTES: usize = 4 * 1_048_576;
-pub const MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES: usize = 1024;
 pub const MAXIMUM_PACKAGE_DEPENDENCIES: usize = 10_000;
 pub const MAXIMUM_PACKAGE_CLOSURE: usize = 10_000;
 pub const MAXIMUM_PACKAGE_CLOSURE_EDGES: usize = 100_000;
@@ -172,61 +168,6 @@ impl PackageRevision {
 pub struct PackageTransportBinding {
     pub package_revision: PackageRevisionDigest,
     pub transport: PackageTransportDigest,
-}
-
-/// One atomically replaceable, revision-scoped, nonsemantic transport selection.
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct PackageTransportSelection {
-    pub contract_version: u16,
-    pub binding: PackageTransportBinding,
-}
-
-impl PackageTransportSelection {
-    pub const fn new(binding: PackageTransportBinding) -> Self {
-        Self {
-            contract_version: PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION,
-            binding,
-        }
-    }
-
-    pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
-        self.validate()?;
-        crate::platform::packed::encode(
-            PACKAGE_TRANSPORT_SELECTION_MAGIC,
-            PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN,
-            self,
-            MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES,
-        )
-    }
-
-    pub fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
-        let value: Self = crate::platform::packed::decode(
-            bytes,
-            PACKAGE_TRANSPORT_SELECTION_MAGIC,
-            PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN,
-            MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES,
-        )?;
-        value.validate()?;
-        if value.encode()? != bytes {
-            return Err(package_error(
-                DiagnosticClass::Corrupt,
-                "package_transport_selection_canonical",
-                "package transport selection is not canonically encoded",
-            ));
-        }
-        Ok(value)
-    }
-
-    fn validate(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION {
-            return Err(package_error(
-                DiagnosticClass::Source,
-                "package_transport_selection_contract",
-                "package transport selection uses a predecessor or foreign contract",
-            ));
-        }
-        Ok(())
-    }
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -414,6 +355,7 @@ pub(crate) fn validate_package_revision_closure<S: ImmutableObjectStore + ?Sized
 
 #[derive(Debug)]
 pub(crate) struct PackageTransportClosureValidation {
+    pub selections: Vec<PackageTransportBinding>,
     pub root_transport_digest: PackageTransportDigest,
     pub root_revision: PackageRevision,
     pub root_transport: PackageTransport,
@@ -444,6 +386,24 @@ pub(crate) fn validate_package_transport_local_admitted<S: ImmutableObjectStore 
     work: &mut StoreWork,
     interface_map_admission: &mut MapAdmission,
 ) -> Result<(PackageTransport, PackageInterfaceValidation), Diagnostic> {
+    validate_package_transport_local_metered(
+        store,
+        selection,
+        revision,
+        work,
+        interface_map_admission,
+        &mut |_| Ok(()),
+    )
+}
+
+pub(crate) fn validate_package_transport_local_metered<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    selection: PackageTransportBinding,
+    revision: &PackageRevision,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<(PackageTransport, PackageInterfaceValidation), Diagnostic> {
     if selection.package_revision != revision.encode()?.0 {
         return Err(package_error(
             DiagnosticClass::Corrupt,
@@ -460,12 +420,13 @@ pub(crate) fn validate_package_transport_local_admitted<S: ImmutableObjectStore 
         ));
     }
     bind_transport(store, &transport, revision, work)?;
-    let interface = validate_package_interface_admitted(
+    let interface = validate_package_interface_metered(
         revision.package,
         transport.interface_owners,
         store,
         work,
         interface_map_admission,
+        visit,
     )?;
     Ok((transport, interface))
 }
@@ -494,6 +455,26 @@ pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStor
     expected: Option<&DependencyRecord>,
     work: &mut StoreWork,
     interface_map_admission: &mut MapAdmission,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    validate_package_transport_closure_metered(
+        store,
+        root_revision,
+        selections,
+        expected,
+        work,
+        interface_map_admission,
+        &mut |_| Ok(()),
+    )
+}
+
+pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    expected: Option<&DependencyRecord>,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
     let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
     if selections.len() != logical.revisions.len() {
@@ -525,16 +506,23 @@ pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStor
                 "physical transport selection names a revision outside the logical closure",
             )
         })?;
-        let (transport, interface) = validate_package_transport_local_admitted(
+        let (transport, interface) = validate_package_transport_local_metered(
             store,
             *selection,
             revision,
             work,
             interface_map_admission,
+            visit,
         )?;
         add_map_work(&mut interface_map_work, interface.map_work);
         interfaces.insert(transport.package_revision, interface);
         transports.insert(transport.package_revision, (selection.transport, transport));
+    }
+    for interface in interfaces.values() {
+        visit(interface.type_objects.len() as u64)?;
+        for owner in interface.owners.values() {
+            visit(crate::platform::package_interface::interface_owner_validation_visits(owner))?;
+        }
     }
     validate_interface_dependencies(&revisions, &interfaces)?;
     let (root_transport_digest, root_transport) =
@@ -565,6 +553,7 @@ pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStor
             )
         })?;
     Ok(PackageTransportClosureValidation {
+        selections: selections.to_vec(),
         root_transport_digest,
         root_revision,
         root_transport,
@@ -1461,23 +1450,77 @@ mod tests {
     #[test]
     fn transport_selection_is_strict_and_edge_budget_exhausts_before_enqueue() {
         let fixture = fixture(10, &[]);
-        let selection = PackageTransportSelection::new(PackageTransportBinding {
-            package_revision: fixture.revision_digest,
-            transport: fixture.transport_digest,
-        });
+        let selection = source::PackageReadiness {
+            bindings: BTreeMap::from([(fixture.revision_digest, fixture.transport_digest)]),
+        };
         let bytes = selection.encode().expect("transport selection");
-        assert_eq!(
-            PackageTransportSelection::decode(&bytes).unwrap(),
-            selection
-        );
+        assert_eq!(source::PackageReadiness::decode(&bytes).unwrap(), selection);
         let mut trailing = bytes;
         trailing.push(0);
-        assert!(PackageTransportSelection::decode(&trailing).is_err());
+        assert!(source::PackageReadiness::decode(&trailing).is_err());
+        assert_eq!(
+            reserve_dependency_edges(0, MAXIMUM_PACKAGE_CLOSURE_EDGES).unwrap(),
+            MAXIMUM_PACKAGE_CLOSURE_EDGES
+        );
         assert_eq!(
             reserve_dependency_edges(1, MAXIMUM_PACKAGE_CLOSURE_EDGES)
                 .unwrap_err()
                 .code,
             "package_revision_closure_edge_count"
+        );
+    }
+
+    #[test]
+    fn exact_logical_resolution_rejects_self_dependency_cycles_missing_edges_and_conflicts() {
+        let a = fixture(41, &[]);
+        let b = fixture(42, &[]);
+        let edge = |target: &Fixture| DependencyRecord {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            package: target.revision.package,
+            semantic_revision: target.revision.revision.revision_id().unwrap(),
+            package_revision: target.revision_digest,
+        };
+        let mut self_dependent = a.revision.clone();
+        self_dependent.dependencies.push(edge(&a));
+        assert_eq!(
+            self_dependent.encode().unwrap_err().code,
+            "package_revision_self_dependency"
+        );
+        // The structural cycle guard is exercised with independently fixed decoded records.
+        // Hash-bound public cycles must additionally pass identity and exact-unification checks;
+        // these hostile records are not a public authoring path or valid digest preimages.
+        let mut a_cycle = a.revision.clone();
+        let mut b_cycle = b.revision.clone();
+        a_cycle.dependencies.push(edge(&b));
+        b_cycle.dependencies.push(edge(&a));
+        let mut revisions =
+            BTreeMap::from([(a.revision_digest, a_cycle), (b.revision_digest, b_cycle)]);
+        assert_eq!(
+            reject_dependency_cycle(&revisions).unwrap_err().code,
+            "package_revision_dependency_cycle"
+        );
+        revisions.remove(&b.revision_digest);
+        assert_eq!(
+            reject_dependency_cycle(&revisions).unwrap_err().code,
+            "package_revision_closure_edge"
+        );
+        let a2 = fixture(41, &[&b]);
+        let left = fixture(43, &[&a]);
+        let right = fixture(44, &[&a2]);
+        let root = fixture(45, &[&left, &right]);
+        let mut store = MemoryPackedStore::default();
+        stage_objects(&mut store, &root.closure_objects);
+        assert_eq!(
+            validate_package_transport_closure(
+                &store,
+                root.revision_digest,
+                &selections(&root),
+                None,
+                &mut StoreWork::default(),
+            )
+            .unwrap_err()
+            .code,
+            "package_revision_closure_package_conflict"
         );
     }
 

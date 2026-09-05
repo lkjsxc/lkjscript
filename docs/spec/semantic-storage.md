@@ -115,14 +115,26 @@ deletion or compaction operation.
 
 ## Package transports
 
-`PACKAGE-TRANSPORTS` contains strict immutable dependency material selected by exact package
-revision. Installing a transport precedes initial dependent-repository publication, and reopening
-validates its canonical bytes and exact dependency binding. A transport is not editable authority,
-a lockfile, or ambient resolver input. Missing, foreign, duplicate, noncanonical, stale, or corrupt
-transport data rejects dependent lifecycle preparation.
+`PACKAGE-TRANSPORTS/CURRENT` is one atomic operational readiness inventory of exact logical
+package revisions and physical transports. Its version binds the code-complete validation contract.
+Canonical source objects live in the ordinary immutable pack owner, not shadow projects or separate
+editable repositories. The strict uncompressed container carries exactly one current transitive
+closure, including private implementations and current retirements, without historical bodies,
+operational data, grants, host paths, compiler caches, or executable units.
 
-The current command lifecycle supports only the generated built-in standard transport. Arbitrary
-transport installation is not a released operation.
+Staging fully reconstructs and validates the entire container before installation, synchronizes
+immutable material, verifies its installed bytes, and exposes one complete readiness inventory.
+The input read, interface and semantic validation, existing-object comparison, and durable readback
+share the fixed aggregate admission. Failure before visibility preserves prior readiness and HEAD;
+owned stages are removed, while unreachable immutable objects may remain. Lost acknowledgement
+after visibility is reported separately, and exact restaging identifies the complete staged result.
+Readiness is not a semantic dependency binding or a name registry. Acceptance rechecks the complete
+exact union and canonical availability under the publication lock. Missing or corrupt canonical
+source requires exact restaging, never a compiler-cache, embedded-revision, or checkout fallback.
+
+Predecessor per-revision selection/candidate files and bare interface-pack public input reject.
+Physical migration does not allocate semantic, package, or logical-revision identities. The embedded
+standard supplies ordinary exact source through this same owner and admission contract.
 
 ## Derived compiler cache
 

@@ -57,6 +57,7 @@ pub(super) fn validate_affine_meaning(
     snapshot: &super::KernelSnapshot,
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
+    maximum_steps: usize,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
     let _ = validate_affine_roots_with_limits(
@@ -65,7 +66,7 @@ pub(super) fn validate_affine_meaning(
         diagnostics,
         work,
         ExpressionValidationLimits {
-            maximum_steps: super::contract::MAXIMUM_VALIDATION_WORK,
+            maximum_steps,
             maximum_diagnostics: usize::MAX,
         },
     );

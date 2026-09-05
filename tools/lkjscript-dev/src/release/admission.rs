@@ -7,6 +7,7 @@ use super::target::{self, BuiltCandidate, TargetBuildReceipt, UserlandPolicy};
 use crate::distributed_http;
 use crate::error::DevError;
 use crate::evidence;
+use crate::offline_packages;
 use crate::outbound_http;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
 use crate::service;
@@ -22,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ADMISSION_SCHEMA: &str = "lkjscript-target-admission-receipt";
-const ADMISSION_SCHEMA_VERSION: u32 = 2;
+const ADMISSION_SCHEMA_VERSION: u32 = 3;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -225,6 +226,10 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             "transferred copied-binary deployment-bound outbound HTTP oracle passed",
         ),
         fresh(
+            "offline_packages",
+            "transferred public-authored offline package closure and standalone HTTP oracle passed",
+        ),
+        fresh(
             "stateful_http",
             "transferred first-party-data BBS oracle passed",
         ),
@@ -364,6 +369,7 @@ fn validate_receipt(
     let expected_oracles = [
         "distributed_http",
         "outbound_http",
+        "offline_packages",
         "stateful_http",
         "service_acceptance",
     ];
@@ -378,6 +384,7 @@ fn validate_receipt(
         "older_glibc_userland",
         "distributed_http",
         "outbound_http",
+        "offline_packages",
         "stateful_http",
         "service_acceptance",
     ];
@@ -888,6 +895,27 @@ fn run_oracles(
     let outbound_receipt = outbound_root.join("receipt.json");
     let outbound = outbound_http::read_transferred_receipt(&outbound_receipt, candidate, verifier)?;
 
+    let offline_root = context.evidence_root.join("offline-packages");
+    let offline_output = context.invoke(
+        "offline-packages-oracle",
+        vec![
+            verifier.display().to_string(),
+            "offline-packages".to_owned(),
+            "--binary".to_owned(),
+            candidate.display().to_string(),
+            "--evidence-root".to_owned(),
+            offline_root.display().to_string(),
+            "--machine".to_owned(),
+        ],
+        Expected::Passed,
+        ORACLE_TIMEOUT,
+        false,
+    )?;
+    require_machine_passed("offline packages", &offline_output)?;
+    let offline_receipt = offline_root.join("receipt.json");
+    let offline =
+        offline_packages::read_transferred_receipt(&offline_receipt, candidate, verifier)?;
+
     let stateful_root = context.evidence_root.join("stateful-http");
     let stateful_output = context.invoke(
         "stateful-http-oracle",
@@ -965,6 +993,19 @@ fn run_oracles(
             requests: outbound.requests,
             cleanup_complete: outbound.cleanup_complete,
             prerequisite: "http_client_adapter_1".to_owned(),
+        },
+        OracleObservation {
+            name: "offline_packages".to_owned(),
+            status: AdmissionStatus::Passed,
+            receipt: external_evidence(&offline_receipt)?,
+            verifier_sha256: offline.verifier_sha256,
+            candidate_sha256: offline.candidate_sha256,
+            elapsed_nanoseconds: offline.elapsed_nanoseconds,
+            commands: offline.commands.len() as u64,
+            runners: offline.runners.len() as u64,
+            requests: 1,
+            cleanup_complete: offline.cleanup_complete,
+            prerequisite: "code_complete_package_container_1".to_owned(),
         },
         OracleObservation {
             name: "stateful_http".to_owned(),
@@ -1447,7 +1488,7 @@ mod tests {
     #[test]
     fn admission_schema_and_required_classifications_are_stable() {
         assert_eq!(ADMISSION_SCHEMA, "lkjscript-target-admission-receipt");
-        assert_eq!(ADMISSION_SCHEMA_VERSION, 2);
+        assert_eq!(ADMISSION_SCHEMA_VERSION, 3);
         assert_eq!(
             [
                 "static_linkage",
@@ -1455,11 +1496,12 @@ mod tests {
                 "older_glibc_userland",
                 "distributed_http",
                 "outbound_http",
+                "offline_packages",
                 "stateful_http",
                 "service_acceptance",
             ]
             .len(),
-            7
+            8
         );
     }
 

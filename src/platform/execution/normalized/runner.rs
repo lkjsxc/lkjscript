@@ -61,6 +61,29 @@ struct PreparedCommandInvocation<'a> {
 }
 
 impl NormalizedReferenceRead for RepositoryView {
+    fn schema(&self) -> Result<std::sync::Arc<super::NormalizedReferenceSchema>, ExecutionError> {
+        let read = self
+            .reconstruct_full_oracle()
+            .map_err(repository_execution_error)?;
+        let mut schema = super::NormalizedReferenceSchema::reconstruct([&read.value])?;
+        schema.work.map_pages_read = read.work.map.pages_read;
+        schema.work.objects_read = read.work.store.objects_read;
+        schema.work.bytes_read = read
+            .work
+            .map
+            .bytes_read
+            .saturating_add(read.work.store.bytes_read);
+        Ok(std::sync::Arc::new(schema))
+    }
+
+    fn blob(
+        &self,
+        digest: crate::platform::kernel::BlobObjectDigest,
+    ) -> Result<Vec<u8>, ExecutionError> {
+        self.reference_blob(digest)
+            .map_err(repository_execution_error)
+    }
+
     fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
         Ok(NormalizedReferenceBinding {
             repository: self.current().head.repository_id,
@@ -207,7 +230,7 @@ pub fn run_effectful_command(
     })
 }
 
-/// Runs every prepared graph-owned test through dense and canonical execution.
+/// Runs each independently inventoried canonical graph test through dense and canonical execution.
 ///
 /// A supplied capability set must be deterministic and replayable because each test executes once
 /// per tier. Production deployment adapters are not appropriate here.
@@ -222,6 +245,18 @@ pub fn run_graph_tests(
     validate_authority_binding(program, authority_binding)?;
     let vm = NormalizedVm::new(program, policy);
     let reference = NormalizedReferenceInterpreter::from_reader(authority, program, policy);
+    let schema = authority.schema().map_err(execution_diagnostic)?;
+    let prepared_tests = program
+        .tests()
+        .map(|test| (test.declaration, test.comparison))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    if prepared_tests != schema.tests {
+        return Err(runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_test_inventory_differential",
+            "compiled tests differ from the independent complete canonical test inventory",
+        ));
+    }
     let mut receipt = NormalizedTestReceipt {
         revision: authority_binding.revision,
         passed: 0,
@@ -230,12 +265,12 @@ pub fn run_graph_tests(
         reference_expressions: 0,
         differential: "equal",
     };
-    for test in program.tests() {
+    for (declaration, comparison) in &schema.tests {
         let production = vm
-            .invoke_test(test.declaration, capabilities, control)
+            .invoke_test(*declaration, capabilities, control)
             .map_err(execution_diagnostic)?;
         let oracle = reference
-            .invoke_test(test.declaration, capabilities, control)
+            .invoke_test(*declaration, capabilities, control)
             .map_err(execution_diagnostic)?;
         receipt.production_instructions = receipt
             .production_instructions
@@ -251,11 +286,11 @@ pub fn run_graph_tests(
                 "normalized_test_differential",
                 format!(
                     "production and reference execution disagree for exact test {:?}",
-                    test.declaration
+                    declaration
                 ),
             ));
         }
-        let (production_equal, reference_equal) = match test.comparison {
+        let (production_equal, reference_equal) = match comparison {
             ComparisonPolicy::Exact => (
                 normalized_equal(&production.0.0, &production.1.0).map_err(execution_diagnostic)?,
                 reference_equal(&oracle.0.0, &oracle.1.0).map_err(execution_diagnostic)?,
@@ -272,7 +307,7 @@ pub fn run_graph_tests(
             let mut diagnostic = runner_error(
                 DiagnosticClass::Semantic,
                 "normalized_test_failed",
-                format!("exact graph-owned test {:?} failed", test.declaration),
+                format!("exact graph-owned test {:?} failed", declaration),
             );
             diagnostic.notes.push(format!(
                 "{} earlier graph-owned tests passed before this failure",

@@ -37,9 +37,9 @@ use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-4";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 4;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v4";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-5";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 5;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v5";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -341,6 +341,24 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
         ["kind", "source", "target", "relation-present", "relation"]
     ),
     plan_record!(
+        "logical-plan.package-before",
+        [
+            "package",
+            "semantic-revision",
+            "package-revision",
+            "interface"
+        ]
+    ),
+    plan_record!(
+        "logical-plan.package-after",
+        [
+            "package",
+            "semantic-revision",
+            "package-revision",
+            "interface"
+        ]
+    ),
+    plan_record!(
         "logical-plan.counts",
         [
             "allocations",
@@ -360,7 +378,9 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
             "extraction-requirements",
             "extraction-captures",
             "extraction-uses",
-            "extraction-owners"
+            "extraction-owners",
+            "package-befores",
+            "package-afters"
         ]
     ),
     plan_record!("logical-plan.digest", ["request", "prepared", "token"]),
@@ -398,6 +418,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
     + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2)
     + DEFAULT_TYPE_ADDITIONS
     + DEFAULT_DEPENDENCY_CHANGES
+    + 2 * DEFAULT_DEPENDENCY_CHANGES
     + DEFAULT_RETIREMENT_CHANGES
     + DEFAULT_RELATION_CHANGES
     + DEFAULT_STRUCTURAL_OWNERS
@@ -409,7 +430,8 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_563;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_608;
+const MAXIMUM_PACKAGE_RECORD_BYTES: u64 = 352;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
 const MAXIMUM_HTTP_ROUTE_RECORD_BYTES: u64 = 65_536;
@@ -436,6 +458,7 @@ pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORDS_BYTES
     + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2) * MAXIMUM_HTTP_ROUTE_RECORD_BYTES
     + DEFAULT_TYPE_ADDITIONS * MAXIMUM_TYPE_RECORD_BYTES
     + DEFAULT_DEPENDENCY_CHANGES * MAXIMUM_DEPENDENCY_RECORD_BYTES
+    + 2 * DEFAULT_DEPENDENCY_CHANGES * MAXIMUM_PACKAGE_RECORD_BYTES
     + DEFAULT_RETIREMENT_CHANGES * MAXIMUM_RETIREMENT_RECORD_BYTES
     + DEFAULT_RELATION_CHANGES * MAXIMUM_RELATION_RECORD_BYTES
     + (DEFAULT_STRUCTURAL_OWNERS + DEFAULT_SEMANTIC_OWNERS + DEFAULT_SELECTED_TESTS)
@@ -919,6 +942,31 @@ where
             ],
         )?;
     }
+    for (record, packages) in [
+        (
+            "logical-plan.package-before",
+            &evidence.package_closure_before,
+        ),
+        (
+            "logical-plan.package-after",
+            &evidence.package_closure_after,
+        ),
+    ] {
+        for (package, revision) in packages {
+            encoder.append(
+                record,
+                &[
+                    ("package", package.to_string()),
+                    (
+                        "semantic-revision",
+                        revision.revision.revision_id()?.to_string(),
+                    ),
+                    ("package-revision", revision.encode()?.0.to_string()),
+                    ("interface", revision.interface.to_string()),
+                ],
+            )?;
+        }
+    }
     encoder.append(
         "logical-plan.counts",
         &[
@@ -1003,6 +1051,14 @@ where
                     .as_ref()
                     .map_or(0, extraction_owner_record_count)
                     .to_string(),
+            ),
+            (
+                "package-befores",
+                count(evidence.package_closure_before.len())?,
+            ),
+            (
+                "package-afters",
+                count(evidence.package_closure_after.len())?,
             ),
         ],
     )?;
@@ -1821,6 +1877,8 @@ pub struct LogicalPlanCounts {
     pub extraction_captures: u64,
     pub extraction_uses: u64,
     pub extraction_owners: u64,
+    pub package_befores: u64,
+    pub package_afters: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1934,6 +1992,8 @@ struct PlanDecoder {
     unchanged_http_route_afters: BTreeSet<HttpRouteId>,
     last_type: Option<TypeObjectDigest>,
     last_dependency: Option<PackageId>,
+    last_package_before: Option<PackageId>,
+    last_package_after: Option<PackageId>,
     last_retirement: Option<OwnerKey>,
     last_removed_relation: Option<RelationEdge>,
     last_added_relation: Option<RelationEdge>,
@@ -1981,6 +2041,8 @@ impl PlanDecoder {
             unchanged_http_route_afters: BTreeSet::new(),
             last_type: None,
             last_dependency: None,
+            last_package_before: None,
+            last_package_after: None,
             last_retirement: None,
             last_removed_relation: None,
             last_added_relation: None,
@@ -2075,8 +2137,8 @@ impl PlanDecoder {
                 ));
             }
             self.next_fixed += 1;
-        } else if (16..=33).contains(&descriptor_index) {
-            if descriptor_index < self.phase || self.phase >= 34 {
+        } else if (16..=35).contains(&descriptor_index) {
+            if descriptor_index < self.phase || self.phase >= 36 {
                 return Err(plan_source_error(
                     "change_plan_file_order",
                     format!(
@@ -2086,22 +2148,22 @@ impl PlanDecoder {
                 ));
             }
             self.phase = descriptor_index;
-        } else if descriptor_index == 34 {
-            if self.phase >= 34 || self.declared_counts.is_some() {
+        } else if descriptor_index == 36 {
+            if self.phase >= 36 || self.declared_counts.is_some() {
                 return Err(plan_source_error(
                     "change_plan_file_counts_duplicate",
                     "logical plan contains a duplicate or misplaced counts record",
                 ));
             }
-            self.phase = 34;
-        } else if descriptor_index == 35 {
-            if self.phase != 34 || self.declared_counts.is_none() {
+            self.phase = 36;
+        } else if descriptor_index == 37 {
+            if self.phase != 36 || self.declared_counts.is_none() {
                 return Err(plan_source_error(
                     "change_plan_file_digest_order",
                     "logical plan digest must follow exactly one counts record",
                 ));
             }
-            self.phase = 35;
+            self.phase = 37;
             self.trailer_seen = true;
         } else {
             return Err(plan_source_error(
@@ -2113,7 +2175,7 @@ impl PlanDecoder {
             ));
         }
 
-        if descriptor_index != 35 {
+        if descriptor_index != 37 {
             self.hasher.update(line);
         }
         self.validate_typed(descriptor_index, record)
@@ -2171,7 +2233,9 @@ impl PlanDecoder {
             31 => self.decode_selection(record, SelectionKind::Semantic),
             32 => self.decode_selection(record, SelectionKind::Test),
             33 => self.decode_reason(record),
-            34 => {
+            34 => self.decode_package(record, false),
+            35 => self.decode_package(record, true),
+            36 => {
                 let counts = decode_counts(record)?;
                 if counts != self.counts {
                     return Err(plan_source_error(
@@ -2184,7 +2248,7 @@ impl PlanDecoder {
                 self.declared_counts = Some(counts);
                 Ok(())
             }
-            35 => self.decode_trailer(record),
+            37 => self.decode_trailer(record),
             _ => Err(plan_source_error(
                 "change_plan_file_record_unknown",
                 "logical plan descriptor has no typed decoder",
@@ -2927,8 +2991,40 @@ impl PlanDecoder {
         Ok(())
     }
 
+    fn decode_package(&mut self, record: &CompactRecord, after: bool) -> Result<(), Diagnostic> {
+        let package = field(record, 0).parse::<PackageId>()?;
+        let previous = if after {
+            &mut self.last_package_after
+        } else {
+            &mut self.last_package_before
+        };
+        if previous.is_some_and(|previous| previous >= package) {
+            return Err(plan_source_error(
+                "change_plan_package_order",
+                "package closure records must be unique and ordered",
+            ));
+        }
+        *previous = Some(package);
+        field(record, 1).parse::<RevisionId>()?;
+        field(record, 2).parse::<crate::platform::kernel::PackageRevisionDigest>()?;
+        field(record, 3).parse::<crate::platform::kernel::PackageInterfaceDigest>()?;
+        let count = if after {
+            &mut self.counts.package_afters
+        } else {
+            &mut self.counts.package_befores
+        };
+        increment(count, "package closure member")?;
+        if *count > DEFAULT_DEPENDENCY_CHANGES {
+            return Err(plan_source_error(
+                "change_plan_package_count",
+                "package closure exceeds bounded review membership",
+            ));
+        }
+        Ok(())
+    }
+
     fn finish(self) -> Result<DecodedLogicalPlan, Diagnostic> {
-        if !self.trailer_seen || self.phase != 35 {
+        if !self.trailer_seen || self.phase != 37 {
             return Err(plan_source_error(
                 "change_plan_file_incomplete",
                 "logical plan file is missing its counts or digest trailer",
@@ -3357,6 +3453,8 @@ fn decode_counts(record: &CompactRecord) -> Result<LogicalPlanCounts, Diagnostic
         extraction_captures: parse_u64(field(record, 15), "extraction capture count")?,
         extraction_uses: parse_u64(field(record, 16), "extraction use count")?,
         extraction_owners: parse_u64(field(record, 17), "extraction owner count")?,
+        package_befores: parse_u64(field(record, 18), "package before count")?,
+        package_afters: parse_u64(field(record, 19), "package after count")?,
     })
 }
 
@@ -4296,8 +4394,8 @@ mod tests {
                 .maximum_relation_edges
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 792_790);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_619_341_515);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 812_790);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_626_381_560);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -4334,6 +4432,19 @@ mod tests {
         let dependency_object = format!("dependency_object_{}", "f".repeat(64));
         let revision = format!("rev_{}", "f".repeat(64));
         let package_revision = format!("package_revision_{}", "f".repeat(64));
+        assert_record_maximum(
+            "logical-plan.package-before",
+            &[
+                ("package", &package),
+                ("semantic-revision", &revision),
+                ("package-revision", &package_revision),
+                (
+                    "interface",
+                    &format!("package_interface_{}", "f".repeat(64)),
+                ),
+            ],
+            MAXIMUM_PACKAGE_RECORD_BYTES,
+        );
         assert_record_maximum(
             "logical-plan.dependency",
             &[
@@ -4590,7 +4701,7 @@ mod tests {
         let six_digits = "999999";
         add(
             "logical-plan.counts",
-            &LOGICAL_PLAN_RECORD_DESCRIPTORS[34]
+            &LOGICAL_PLAN_RECORD_DESCRIPTORS[36]
                 .fields
                 .iter()
                 .map(|field| (*field, six_digits))

@@ -66,12 +66,14 @@ use super::super::package_interface::{
     PACKAGE_INTERFACE_CONTRACT_IDENTITY, PACKAGE_INTERFACE_CONTRACT_VERSION,
     PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
 };
+use super::super::package_transport::source::{
+    CONTAINER_CONTRACT_IDENTITY, CONTAINER_CONTRACT_VERSION, READINESS_CONTRACT_IDENTITY,
+    READINESS_CONTRACT_VERSION,
+};
 use super::super::package_transport::{
     PACKAGE_REVISION_CONTRACT_IDENTITY, PACKAGE_REVISION_CONTRACT_VERSION,
     PACKAGE_REVISION_ENVELOPE_DOMAIN, PACKAGE_TRANSPORT_CONTRACT_IDENTITY,
     PACKAGE_TRANSPORT_CONTRACT_VERSION, PACKAGE_TRANSPORT_ENVELOPE_DOMAIN,
-    PACKAGE_TRANSPORT_SELECTION_CONTRACT_IDENTITY, PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION,
-    PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN,
 };
 use super::super::project_creation::{
     PROJECT_CREATION_CONTRACT_IDENTITY, PROJECT_CREATION_CONTRACT_VERSION, ProjectTemplate,
@@ -99,7 +101,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-11";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 11;
-pub const CLI_CONTRACT_VERSION: u16 = 23;
+pub const CLI_CONTRACT_VERSION: u16 = 24;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -415,6 +417,7 @@ pub enum ContractKey {
     PackageRevision,
     PackageInterface,
     PackageTransport,
+    PackageContainer,
     PackageTransportSelection,
     CompilationManifest,
     CompilerUnit,
@@ -466,6 +469,7 @@ impl ContractKey {
             Self::PackageInterface => "package_interface",
             Self::PackageTransport => "package_transport",
             Self::PackageTransportSelection => "package_transport_selection",
+            Self::PackageContainer => "package_container",
             Self::CompilationManifest => "compilation_manifest",
             Self::CompilerUnit => "compiler_unit",
             Self::Bytecode => "bytecode",
@@ -888,13 +892,24 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::PackageTransportSelection,
             name: "repository package transport selection",
-            identity: PACKAGE_TRANSPORT_SELECTION_CONTRACT_IDENTITY,
-            version: PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION,
+            identity: READINESS_CONTRACT_IDENTITY,
+            version: READINESS_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Operational,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPTS01"],
-            digest_domains: &[PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN],
+            magic_values: &["LKJPTS02"],
+            digest_domains: &[],
+        },
+        ContractDescriptor {
+            key: ContractKey::PackageContainer,
+            name: "complete immutable package source container",
+            identity: CONTAINER_CONTRACT_IDENTITY,
+            version: CONTAINER_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::Operational,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJPKC01"],
+            digest_domains: &[],
         },
         ContractDescriptor {
             key: ContractKey::CompilationManifest,
@@ -1362,8 +1377,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Package,
-            "Inspect the built-in standard, export one current package transport, or stage one exact dependency transport without editing meaning.",
-            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH | package current export --kind transport --output PATH | package dependency stage --transport DIGEST --input-file PATH",
+            "Export a complete immutable source closure, stage it offline, or inspect exact staged public interfaces without editing meaning.",
+            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH | package current export --kind transport --output PATH | package dependency stage --transport DIGEST --input-file PATH | package dependency inspect [owner KIND ID] --package-revision REVISION | package dependency query owners --package-revision REVISION [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN]",
             (ControlModel::PackageRequest, ControlModel::PackageResult),
             AuthorityEffect::OptionalExternalOutput,
             ProjectRequirement::None,
@@ -1592,6 +1607,48 @@ pub struct LimitDescriptor {
 
 pub fn limit_descriptors() -> &'static [LimitDescriptor] {
     const LIMITS: &[LimitDescriptor] = &[
+        limit(
+            "package_container_bytes",
+            crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "package_container_objects",
+            crate::platform::package_transport::source::MAXIMUM_CONTAINER_OBJECTS,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "package_closure_packages",
+            crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "package_closure_edges",
+            crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE_EDGES,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        LimitDescriptor {
+            name: "package_validation_visits",
+            value: crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
+            class: LimitClass::DeterministicOperationBudget,
+            unit: LimitUnit::Work,
+            override_policy: OverridePolicy::Fixed,
+        },
+        LimitDescriptor {
+            name: "package_validation_read_bytes",
+            value: crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES,
+            class: LimitClass::DeterministicOperationBudget,
+            unit: LimitUnit::Bytes,
+            override_policy: OverridePolicy::Fixed,
+        },
         limit(
             "cli_response_bytes",
             MAXIMUM_CLI_RESPONSE_BYTES,
@@ -1981,8 +2038,69 @@ const fn extraction_review_corrupt_diagnostic(code: &'static str) -> DiagnosticD
     )
 }
 
+const fn package_source_diagnostic(code: &'static str) -> DiagnosticDescriptor {
+    diagnostic(
+        code,
+        DiagnosticClass::Corrupt,
+        "Exact immutable package source, readiness, or closure inventory is missing, malformed, or inconsistent.",
+        "Export valid code-complete source for the named exact revision, restage it, and replan; never substitute another revision or a cache.",
+    )
+}
+
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
+        package_source_diagnostic("package_container_completeness"),
+        package_source_diagnostic("package_container_contract"),
+        package_source_diagnostic("package_container_object_domain"),
+        package_source_diagnostic("package_container_object_order"),
+        package_source_diagnostic("package_container_root"),
+        package_source_diagnostic("package_container_selection"),
+        package_source_diagnostic("package_container_trailing"),
+        package_source_diagnostic("package_container_truncated"),
+        package_source_diagnostic("package_readiness_contract"),
+        package_source_diagnostic("package_readiness_length"),
+        package_source_diagnostic("package_readiness_order"),
+        package_source_diagnostic("package_source_blob"),
+        package_source_diagnostic("package_source_cycle"),
+        package_source_diagnostic("package_source_dependency"),
+        package_source_diagnostic("package_source_dependency_key"),
+        package_source_diagnostic("package_source_edges"),
+        package_source_diagnostic("package_source_interface"),
+        package_source_diagnostic("package_source_map"),
+        package_source_diagnostic("package_source_map_count"),
+        package_source_diagnostic("package_source_missing"),
+        package_source_diagnostic("package_source_public_owner"),
+        package_source_diagnostic("package_source_public_type"),
+        package_source_diagnostic("package_source_revision"),
+        package_source_diagnostic("package_source_snapshot"),
+        package_source_diagnostic("package_source_state"),
+        package_source_diagnostic("package_source_summary"),
+        package_source_diagnostic("package_source_transport"),
+        package_source_diagnostic("package_source_validation"),
+        diagnostic(
+            "package_source_budget",
+            DiagnosticClass::Resource,
+            "The complete source closure exhausted a fixed admission dimension.",
+            "Use the named bound and exact revision to export a smaller closure and restage; there is no public override.",
+        ),
+        diagnostic(
+            "package_source_container_bytes",
+            DiagnosticClass::Resource,
+            "Canonical source exceeds the container byte ceiling.",
+            "Export a smaller complete closure and restage.",
+        ),
+        diagnostic(
+            "package_source_object_bytes",
+            DiagnosticClass::Resource,
+            "One canonical object exceeds its narrower read ceiling.",
+            "Correct the producer graph and export valid source; restage the new exact binding.",
+        ),
+        diagnostic(
+            "package_source_objects",
+            DiagnosticClass::Resource,
+            "The complete source closure exceeds the distinct-object ceiling.",
+            "Export a smaller complete closure and restage.",
+        ),
         DiagnosticDescriptor {
             code: "cli_usage",
             class: DiagnosticClass::Source,
@@ -2276,12 +2394,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A target runner is outside the public topology slice.",
             "Use command, http, or interactive as reported by focused change discovery.",
-        ),
-        diagnostic(
-            "change_dependency_binding_unsupported",
-            DiagnosticClass::Source,
-            "Dependency addition does not name the exact executable-owned built-in binding.",
-            "Discover the current built-in package, semantic revision, and package revision and stage its exact exported transport.",
         ),
         diagnostic(
             "change_declaration_selector",

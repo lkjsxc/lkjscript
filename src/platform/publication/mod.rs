@@ -30,14 +30,14 @@ pub use prepare::{
     PreparedInitialPublication, PreparedPublication, PublicationOptions,
     prepare_change_publication, prepare_initial_publication,
 };
+pub(crate) use read_view::{
+    BuiltPackageRevision, RepositoryDefinitionAdmission, RepositoryDefinitionReader,
+    RepositoryQueryAdmission, RepositoryQueryRangeRead, RepositoryRelationQueryRange,
+};
 pub use read_view::{
     ExportedPackageTransport, MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS,
     PreparedAuthoredPublication, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
     RevisionWitnessMapUpdate, TestDependencyRead,
-};
-pub(crate) use read_view::{
-    RepositoryDefinitionAdmission, RepositoryDefinitionReader, RepositoryQueryAdmission,
-    RepositoryQueryRangeRead, RepositoryRelationQueryRange,
 };
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,

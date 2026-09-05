@@ -1,8 +1,8 @@
 # Evidence-gated roadmap
 
 Implemented work is intentionally absent. Typed meaning authority, the public CLI, offline minimal, command, and
-HTTP recipes lowered through public-representable authored operations, public exact built-in dependency and
-component/requirement/function-backed-port/target creation, exact built-in interface/deployment discovery, compact task/capability and explicit
+HTTP recipes lowered through public-representable authored operations, code-complete exact offline dependency and
+component/requirement/function-backed-port/target creation, bounded staged-interface/deployment discovery, compact task/capability and explicit
 named higher-order generic authoring, graph-owned `list-fold-left`,
 normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact bundle service/worker deployment,
@@ -25,7 +25,7 @@ rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source is
-unreleased `0.1.22`; immutable `v0.1.21` remains the supported public
+unreleased `0.1.23`; immutable `v0.1.21` remains the supported public
 `x86_64-unknown-linux-musl` distribution. Its exact and latest downloads independently passed static
 inspection, distributed HTTP with complete function-definition projection and exact routes,
 deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, structured sessions, identity-preserving
@@ -67,10 +67,11 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    system as its own dependency-closed admission with a hosted execution oracle, exact runtime
    inventory, stable asset identity, and public-download smoke. Do not introduce a speculative
    build matrix.
-7. **Normalized package management and removed project workflows.** Introduce package
-   inspection/staging/publication, history, drafts, review, project backup/restore, and repository health
-   only by exact consumer. Do not reinstate Graph 4 readers, compatibility commands, a general
-   remote registry, or storage bytes as authoring input.
+7. **External package distribution and removed project workflows.** Offline code-complete export,
+   staging, exact binding, and staged-interface inspection use the common immutable package path.
+   Select publication/network resolution, history, drafts, project backup/restore, and repository
+   health only from a named consumer with explicit authority and recovery. Do not reinstate Graph 4
+   readers, compatibility commands, a mutable remote registry, or storage bytes as authoring input.
 8. **Broader incremental compilation and validation.** Generalize beyond the currently selected
    compiler impacts and semantic edit classes only after clean/incremental artifact equality and
    randomized full-oracle evidence hold for signatures, types, effects, capabilities, targets,

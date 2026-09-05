@@ -76,10 +76,18 @@ enum ExpressionParent {
 }
 
 pub fn validate_full(snapshot: &KernelSnapshot) -> Result<FullValidationReport, Vec<Diagnostic>> {
+    validate_full_with_limit(snapshot, MAXIMUM_VALIDATION_WORK)
+}
+
+pub(crate) fn validate_full_with_limit(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+) -> Result<FullValidationReport, Vec<Diagnostic>> {
     let mut validator = FullValidator {
         snapshot,
         diagnostics: Vec::new(),
         work: 0,
+        maximum_work: maximum_work.min(MAXIMUM_VALIDATION_WORK),
         relations: Vec::new(),
         expression_parents: BTreeMap::new(),
         expression_root_owners: BTreeMap::new(),
@@ -113,6 +121,7 @@ struct FullValidator<'a> {
     snapshot: &'a KernelSnapshot,
     diagnostics: Vec<Diagnostic>,
     work: usize,
+    maximum_work: usize,
     relations: Vec<RelationEdge>,
     expression_parents: BTreeMap<ExpressionId, Vec<ExpressionParent>>,
     expression_root_owners: BTreeMap<ExpressionId, OwnerKey>,
@@ -316,10 +325,20 @@ impl FullValidator<'_> {
         self.validate_resource_shapes();
         self.validate_references();
         if self.diagnostics.is_empty() {
-            validate_expression_meaning(self.snapshot, &mut self.diagnostics, &mut self.work);
+            validate_expression_meaning(
+                self.snapshot,
+                &mut self.diagnostics,
+                &mut self.work,
+                self.maximum_work,
+            );
         }
         if self.diagnostics.is_empty() {
-            validate_affine_meaning(self.snapshot, &mut self.diagnostics, &mut self.work);
+            validate_affine_meaning(
+                self.snapshot,
+                &mut self.diagnostics,
+                &mut self.work,
+                self.maximum_work,
+            );
         }
         self.validate_relations();
     }
@@ -2482,7 +2501,7 @@ impl FullValidator<'_> {
 
     fn consume_work(&mut self) -> bool {
         self.work = self.work.saturating_add(1);
-        if self.work > MAXIMUM_VALIDATION_WORK {
+        if self.work > self.maximum_work {
             if !self
                 .diagnostics
                 .iter()
@@ -2499,7 +2518,7 @@ impl FullValidator<'_> {
     }
 
     fn exhausted(&self) -> bool {
-        self.work > MAXIMUM_VALIDATION_WORK
+        self.work > self.maximum_work
     }
 
     fn error(&mut self, code: &str, message: impl Into<String>) {

@@ -10,6 +10,50 @@ use super::kernel::{
 };
 use base64::Engine;
 
+pub(crate) struct PackageInterfaceView<'a> {
+    pub package: PackageId,
+    pub package_revision: super::kernel::PackageRevisionDigest,
+    pub interface_owners:
+        &'a std::collections::BTreeMap<OwnerKey, super::package_interface::PackageInterfaceOwner>,
+    pub interface_types:
+        &'a std::collections::BTreeMap<TypeObjectDigest, super::kernel::TypeObject>,
+}
+
+impl<'a> From<&'a BuiltinStandard> for PackageInterfaceView<'a> {
+    fn from(standard: &'a BuiltinStandard) -> Self {
+        Self {
+            package: standard.package,
+            package_revision: standard.package_revision,
+            interface_owners: &standard.interface_owners,
+            interface_types: &standard.interface_types,
+        }
+    }
+}
+
+pub(crate) fn query_builtin_owners(
+    standard: &BuiltinStandard,
+    selector: &BuiltinOwnerSelector,
+    limit: usize,
+    output_bytes: usize,
+    continuation: Option<&str>,
+) -> Result<BuiltinOwnerPage, Diagnostic> {
+    query_interface_owners(
+        &standard.into(),
+        selector,
+        limit,
+        output_bytes,
+        continuation,
+    )
+}
+
+pub(crate) fn inspect_builtin_owner(
+    standard: &BuiltinStandard,
+    kind: OwnerKind,
+    owner: OwnerKey,
+) -> Result<Vec<DiscoveryRecord>, Diagnostic> {
+    inspect_interface_owner(&standard.into(), kind, owner)
+}
+
 pub(crate) const BUILTIN_QUERY_DEFAULT_ITEMS: usize = 50;
 pub(crate) const BUILTIN_QUERY_MAXIMUM_ITEMS: usize = 10_000;
 pub(crate) const BUILTIN_QUERY_MINIMUM_BYTES: usize = 1_536;
@@ -105,8 +149,8 @@ pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 14] {
     ]
 }
 
-pub(crate) fn query_builtin_owners(
-    standard: &BuiltinStandard,
+pub(crate) fn query_interface_owners(
+    standard: &PackageInterfaceView<'_>,
     selector: &BuiltinOwnerSelector,
     limit: usize,
     output_bytes: usize,
@@ -185,8 +229,8 @@ pub(crate) fn query_builtin_owners(
     })
 }
 
-pub(crate) fn inspect_builtin_owner(
-    standard: &BuiltinStandard,
+pub(crate) fn inspect_interface_owner(
+    standard: &PackageInterfaceView<'_>,
     kind: OwnerKind,
     owner: OwnerKey,
 ) -> Result<Vec<DiscoveryRecord>, Diagnostic> {
@@ -242,7 +286,7 @@ fn owner_summary(
 }
 
 fn append_owner_detail(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     record: &PackageInterfaceRecord,
     records: &mut Vec<DiscoveryRecord>,
 ) -> Result<(), Diagnostic> {
@@ -382,7 +426,7 @@ fn declaration_detail(
 }
 
 fn append_child_owner(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     owner: OwnerKey,
     index: usize,
     records: &mut Vec<DiscoveryRecord>,
@@ -399,7 +443,7 @@ fn append_child_owner(
 }
 
 fn append_child_detail(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     record: &PackageInterfaceRecord,
     index: Option<usize>,
     records: &mut Vec<DiscoveryRecord>,
@@ -567,7 +611,7 @@ fn append_child_detail(
 }
 
 fn append_type_parameters(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     parameters: &[super::semantic_id::TypeParameterId],
     records: &mut Vec<DiscoveryRecord>,
 ) -> Result<(), Diagnostic> {
@@ -583,7 +627,7 @@ fn append_type_parameters(
 }
 
 fn append_parameters(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     parameters: &[super::semantic_id::ParameterId],
     records: &mut Vec<DiscoveryRecord>,
 ) -> Result<(), Diagnostic> {
@@ -594,7 +638,7 @@ fn append_parameters(
 }
 
 fn append_type(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     path: &str,
     digest: TypeObjectDigest,
     records: &mut Vec<DiscoveryRecord>,
@@ -862,7 +906,7 @@ fn selector_digest(bytes: &[u8]) -> [u8; 32] {
 }
 
 fn encode_continuation(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     selector: &[u8; 32],
     resume: OwnerKey,
 ) -> Result<String, Diagnostic> {
@@ -892,7 +936,7 @@ fn encode_continuation(
 }
 
 fn decode_continuation(
-    standard: &BuiltinStandard,
+    standard: &PackageInterfaceView<'_>,
     selector: &[u8; 32],
     token: &str,
 ) -> Result<OwnerKey, Diagnostic> {
@@ -1092,7 +1136,7 @@ mod tests {
                 .parse()
                 .expect("foreign nonzero package revision");
         let token = encode_continuation(
-            &stale,
+            &PackageInterfaceView::from(&stale),
             &selector_digest(&selector_bytes(&selector).expect("selector bytes")),
             owner,
         )
@@ -1109,7 +1153,7 @@ mod tests {
             .parse()
             .expect("foreign package");
         let token = encode_continuation(
-            &foreign,
+            &PackageInterfaceView::from(&foreign),
             &selector_digest(&selector_bytes(&selector).expect("selector bytes")),
             owner,
         )

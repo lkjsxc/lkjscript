@@ -2698,12 +2698,6 @@ impl Decoder {
                 let package = parse_field(record, "package")?;
                 let semantic_revision = parse_field(record, "semantic-revision")?;
                 let package_revision = parse_field(record, "package-revision")?;
-                validate_public_dependency_binding(
-                    record,
-                    package,
-                    semantic_revision,
-                    package_revision,
-                )?;
                 Ok(AuthoredChange::AddDependency {
                     package,
                     semantic_revision,
@@ -3893,26 +3887,6 @@ fn parse_runner_kind(record: &CompactRecord, field_name: &str) -> Result<RunnerK
     }
 }
 
-fn validate_public_dependency_binding(
-    record: &CompactRecord,
-    package: PackageId,
-    semantic_revision: RevisionId,
-    package_revision: PackageRevisionDigest,
-) -> Result<(), Diagnostic> {
-    let standard = crate::platform::builtin_standard::BuiltinStandard::load()?;
-    if package != standard.package
-        || semantic_revision != standard.semantic_revision
-        || package_revision != standard.package_revision
-    {
-        return Err(record_error(
-            record,
-            "change_dependency_binding_unsupported",
-            "add.dependency accepts only the exact executable-owned built-in package binding reported by package builtin inspect",
-        ));
-    }
-    Ok(())
-}
-
 fn parse_field_reference(
     record: &CompactRecord,
     field_name: &str,
@@ -4249,10 +4223,9 @@ mod tests {
             standard.semantic_revision,
             standard.package_revision,
         );
-        assert_eq!(
-            decode_compact_change("dependency.lkjc", unsupported.as_bytes()).unwrap_err()[0].code,
-            "change_dependency_binding_unsupported"
-        );
+        // Parsing admits exact typed intent. Repository admission, not embedded identity,
+        // owns verification of the package/revision binding and complete immutable source.
+        assert!(decode_compact_change("dependency.lkjc", unsupported.as_bytes()).is_ok());
 
         let bad_runner = format!(
             "request base={}\ncreate.target as=$target name=serve component=$component port=$port runner=worker\n",

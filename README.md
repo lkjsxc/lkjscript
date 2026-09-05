@@ -14,7 +14,7 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.22`; immutable supported release `v0.1.21` remains at exact
+Current product source is unreleased `0.1.23`; immutable supported release `v0.1.21` remains at exact
 release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
@@ -25,7 +25,7 @@ through the same typed authored-operation engine and preserve their application 
 project-creation boundary. The release also includes one
 deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-Unreleased 0.1.22 extends each graph-owned HTTP route with an exact-path or bounded
+Unreleased source retains the 0.1.22 extension of each graph-owned HTTP route with an exact-path or bounded
 whole-segment-pattern selector. Capture names index the handler's ordered unrestricted `Text`
 parameter suffix; ambiguous overlap and signature drift reject before publication. The maintained
 resource routes now use `/resource/{id}` patterns rather than query-selected identifiers while
@@ -243,7 +243,7 @@ add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT
 set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT
 ```
 
-The unreleased 0.1.22 source additionally exposes the selector-indexed forms:
+The unreleased source also exposes the selector-indexed forms:
 
 ```text
 add.http-route as=$ROUTE target=TARGET method=METHOD pattern="/literal/{capture}" port=PORT
@@ -421,7 +421,24 @@ Run focused discovery for exhaustive current grammar, limits, and response field
 ./lkjscript capabilities run
 ```
 
-## Built-in standard package
+## Offline packages and the standard supplier
+
+Unreleased 0.1.23 source adds code-complete offline package composition. A copied executable can
+export the current immutable graph and its exact transitive closure, including private bodies;
+stage it without changing HEAD; inspect staged public signatures; and review/apply exact dependency
+bindings. Check/build/run compile the admitted canonical code without producer directories. Public
+release v0.1.21 predates this general package workflow.
+
+```sh
+./lkjscript --project ./library package current export --kind transport --output ./library.lkjp
+./lkjscript --project ./consumer package dependency stage --transport package_transport_... --input-file ./library.lkjp
+./lkjscript --project ./consumer package dependency query owners --package-revision package_revision_...
+```
+
+Use the exact exported identities in reviewed `add.dependency` or `replace.dependency` records.
+Names do not resolve packages, staged transitive availability does not grant import visibility,
+and private-body transport is not source confidentiality. There is no registry, mutable version,
+network resolver, or package publication operation.
 
 The executable embeds one exact package transport and one exact artifact bundle generated from
 `packages/standard`:

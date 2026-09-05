@@ -221,7 +221,7 @@ fn linked_pure_program() -> (
     .expect("linked target repository");
     target_created
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage exact linked source package");
     let target_change = AuthoredChangeSet {
         base: target_created.current.head.revision,
@@ -1460,6 +1460,10 @@ struct UnitAdapter {
 struct WrongRevisionReader<'a>(&'a RepositoryView);
 
 impl NormalizedReferenceRead for WrongRevisionReader<'_> {
+    fn schema(&self) -> Result<Arc<super::NormalizedReferenceSchema>, ExecutionError> {
+        NormalizedReferenceRead::schema(self.0)
+    }
+
     fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
         let mut binding = NormalizedReferenceRead::binding(self.0)?;
         binding.revision = Some(RevisionId::from_digest([0x55; 32]));
@@ -3053,16 +3057,15 @@ fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
 
     assert_eq!(receipt.revision, Some(view.revision()));
     assert_eq!(receipt.result_json, b"null");
-    assert_eq!(receipt.reference.canonical_owner_reads, 7);
-    assert!(receipt.reference.canonical_owner_reads < snapshot.owners.len() as u64);
-    assert!(receipt.reference.canonical_map_pages_read > 0);
     assert_eq!(
-        receipt.reference.canonical_objects_read,
-        receipt
-            .reference
-            .canonical_map_pages_read
-            .saturating_add(receipt.reference.canonical_owner_reads),
-        "each exact semantic read touches one bounded map path and one owner object"
+        receipt.reference.canonical_owner_reads,
+        snapshot.owners.len() as u64 + 7,
+        "one independent layout inventory, followed by seven exact execution owner reads"
+    );
+    assert!(receipt.reference.canonical_map_pages_read > 0);
+    assert!(
+        receipt.reference.canonical_objects_read >= receipt.reference.canonical_owner_reads,
+        "inventory and point reads include every canonical owner plus type/map objects"
     );
     assert!(receipt.reference.canonical_bytes_read > 0);
 
@@ -3523,7 +3526,9 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
 #[test]
 fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budgets() {
     let (_temporary, _source, target, program, source, caller) = linked_pure_program();
-    let view = target.view_current().expect("linked target view");
+    let prepared = crate::platform::normalized_lifecycle::prepare_repository(target.clone())
+        .expect("independent canonical package source");
+    let view = prepared.reference;
     let policy = NormalizedRunPolicy::default();
     let control = ExecutionControl::uncancelled();
 
@@ -3537,8 +3542,10 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     assert_eq!(production.0, reference.0);
     assert_eq!(reference.1.calls, 2);
     assert_eq!(reference.1.maximum_call_depth, 2);
-    assert!(reference.1.canonical_objects_read > 0);
-    assert!(reference.1.canonical_map_pages_read > 0);
+    assert!(reference.1.canonical_owner_reads > 0);
+    // Source decoding is charged by admission; execution reads the independently reconstructed
+    // immutable owners, not artifact reference-owner maps or production bytecode.
+    assert_eq!(reference.1.canonical_map_pages_read, 0);
 
     let direct_dependency = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
         .invoke(source, Vec::new(), None, &control)
@@ -3571,6 +3578,68 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     assert_eq!(reference_error.code, "normalized_reference_call_depth");
     assert_eq!(production_error.class, ExecutionFailureClass::Resource);
     assert_eq!(reference_error.class, ExecutionFailureClass::Resource);
+
+    // Safe fault sensitivity: compiled call selection and units are unavailable to the oracle.
+    // The independent canonical dependency call remains evaluable, while production cannot run.
+    let mut absent_compiler = program.clone();
+    absent_compiler.functions = Arc::from([]);
+    absent_compiler.function_by_declaration.clear();
+    absent_compiler.records = Arc::from([]);
+    absent_compiler.variants = Arc::from([]);
+    absent_compiler.types.clear();
+    let independent = NormalizedReferenceInterpreter::from_reader(&view, &absent_compiler, policy)
+        .invoke(caller, Vec::new(), None, &control)
+        .expect("canonical dependency evaluation cannot consult compiled resolution");
+    assert_eq!(independent.0, NormalizedValue::Unit);
+    assert!(
+        NormalizedVm::new(&absent_compiler, policy)
+            .invoke(caller, Vec::new(), None, &control)
+            .is_err()
+    );
+}
+
+#[test]
+fn canonical_reference_layout_target_and_test_inventory_ignore_compiler_selection() {
+    let snapshot = pure_command_snapshot();
+    let mut program = prepare_snapshot(&snapshot);
+    let schema = super::NormalizedReferenceSchema::reconstruct([&snapshot])
+        .expect("independent canonical schema");
+    assert_eq!(schema.records.as_slice(), program.records.as_ref());
+    assert_eq!(schema.variants.as_slice(), program.variants.as_ref());
+    assert_eq!(schema.types, program.types);
+    assert_eq!(
+        schema.functions,
+        program
+            .functions
+            .iter()
+            .map(|function| function.declaration)
+            .collect::<Vec<_>>()
+    );
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedRunPolicy::default();
+    let expected = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+        .invoke_root_target(&Name::new("pure").unwrap(), Vec::new(), None, &control)
+        .expect("canonical root target")
+        .0;
+    program.functions = Arc::from([]);
+    program.function_by_declaration.clear();
+    program.records = Arc::from([]);
+    program.variants = Arc::from([]);
+    program.types.clear();
+    program.targets.clear();
+    program.root_target_names.clear();
+    program.tests.clear();
+    let actual = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+        .invoke_root_target(&Name::new("pure").unwrap(), Vec::new(), None, &control)
+        .expect("canonical root selection without compiled tables")
+        .0;
+    assert_eq!(actual, expected);
+    assert_eq!(
+        run_graph_tests(&snapshot, &program, None, policy, &control)
+            .expect_err("omitted compiler tests must not become a successful empty test run")
+            .code,
+        "normalized_test_inventory_differential"
+    );
 }
 
 #[test]

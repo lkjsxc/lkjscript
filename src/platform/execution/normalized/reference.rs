@@ -4,26 +4,27 @@ use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
 use super::codec::{decode_typed, encode_typed};
-use super::prepare::{NormalizedFunction, NormalizedProgram};
+use super::prepare::NormalizedProgram;
+use super::reference_schema::NormalizedReferenceSchema;
 use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex,
     VariantLayoutIndex,
 };
+use super::value_schema::NormalizedValueSchema;
 use super::vm::NormalizedRunPolicy;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
-    BindingKind, CaseReference, DeclarationPayload, DeclarationReference, ExpressionOperation,
-    FieldReference, FieldSelector, FunctionEffect, ImplementationName, KernelSnapshot,
-    LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterUse,
-    PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeForm,
-    TypeObjectDigest,
+    BindingKind, BlobObjectDigest, CaseReference, DeclarationPayload, DeclarationReference,
+    ExpressionOperation, FieldReference, FieldSelector, FunctionEffect, ImplementationName,
+    KernelSnapshot, LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord,
+    PackageId, ParameterRecord, ParameterUse, PortImplementation, RequirementReference,
+    SemanticStateDigest, TextValue, TypeForm, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{
-    BindingId, ExpressionId, RepositoryId, RevisionId, TypeParameterId,
+    BindingId, ExpressionId, ParameterId, RepositoryId, RevisionId, TypeParameterId,
 };
-use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -90,9 +91,36 @@ pub trait NormalizedReferenceRead {
     fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError>;
 
     fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError>;
+
+    fn schema(&self) -> Result<Arc<NormalizedReferenceSchema>, ExecutionError>;
+
+    fn blob(&self, _digest: BlobObjectDigest) -> Result<Vec<u8>, ExecutionError> {
+        Err(reference_error(
+            "normalized_reference_blob_missing",
+            "canonical blob source is unavailable to this reference reader",
+        ))
+    }
+
+    fn owner_in_package(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+        if package == self.binding()?.package {
+            return self.owner(owner);
+        }
+        Err(reference_error(
+            "normalized_reference_dependency_authority",
+            "canonical dependency source is unavailable to the reference reader",
+        ))
+    }
 }
 
 impl NormalizedReferenceRead for KernelSnapshot {
+    fn schema(&self) -> Result<Arc<NormalizedReferenceSchema>, ExecutionError> {
+        NormalizedReferenceSchema::reconstruct([self]).map(Arc::new)
+    }
+
     fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
         Ok(NormalizedReferenceBinding {
             repository: self.root.repository_id,
@@ -116,8 +144,8 @@ impl NormalizedReferenceRead for KernelSnapshot {
 pub trait NormalizedReferenceHost: Send + Sync {
     fn call(
         &self,
-        program: &NormalizedProgram,
-        function: &super::prepare::NormalizedFunction,
+        schema: &dyn NormalizedValueSchema,
+        function: &ReferenceSignature,
         implementation: &ImplementationName,
         type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
@@ -131,8 +159,8 @@ pub struct CoreNormalizedReferenceHost;
 impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
     fn call(
         &self,
-        program: &NormalizedProgram,
-        function: &super::prepare::NormalizedFunction,
+        schema: &dyn NormalizedValueSchema,
+        function: &ReferenceSignature,
         implementation: &ImplementationName,
         type_arguments: &[TypeObjectDigest],
         arguments: Vec<NormalizedValue>,
@@ -140,7 +168,7 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         reference_intrinsic(
-            program,
+            schema,
             function,
             implementation.as_str(),
             type_arguments,
@@ -150,6 +178,11 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
 }
 
 static CORE_REFERENCE_HOST: CoreNormalizedReferenceHost = CoreNormalizedReferenceHost;
+
+pub struct ReferenceSignature {
+    type_parameters: Vec<TypeParameterId>,
+    parameters: Vec<ParameterRecord>,
+}
 
 pub struct NormalizedReferenceInterpreter<'a> {
     authority: &'a dyn NormalizedReferenceRead,
@@ -213,15 +246,19 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
-        let target = self.program.root_target(name).ok_or_else(|| {
-            reference_error(
-                "normalized_reference_target_missing",
-                "root artifact package has no target with the exact selected name",
-            )
-        })?;
-        let target_id = target.target;
         let expected_name = name.clone();
         self.execute_scoped(capabilities, resources, control, move |state| {
+            let target_id = state
+                .schema
+                .targets
+                .get(&(state.binding.package, expected_name.clone()))
+                .copied()
+                .ok_or_else(|| {
+                    reference_error(
+                        "normalized_reference_target_missing",
+                        "canonical root package has no target with the exact selected name",
+                    )
+                })?;
             let record = match state.owner(OwnerKey::Target(target_id))? {
                 Some(OwnerRecord::Target(record)) => record,
                 Some(_) => {
@@ -336,11 +373,14 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 "reference authority and executable artifact do not bind one exact accepted root",
             ));
         }
+        let schema = self.authority.schema()?;
+        let schema_work = schema.work;
         let mut state = ReferenceState {
             authority: self.authority,
             binding,
             active_package: binding.package,
             program: self.program,
+            schema,
             policy: self.policy,
             host: self.host,
             capabilities,
@@ -360,10 +400,10 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 allocated_bytes: 0,
                 collection_items: 0,
                 maximum_call_depth: 0,
-                canonical_owner_reads: 0,
-                canonical_map_pages_read: 0,
-                canonical_objects_read: 0,
-                canonical_bytes_read: 0,
+                canonical_owner_reads: schema_work.owner_reads,
+                canonical_map_pages_read: schema_work.map_pages_read,
+                canonical_objects_read: schema_work.objects_read,
+                canonical_bytes_read: schema_work.bytes_read,
                 production_tier: "graph8_reference_records_2",
             },
         };
@@ -395,6 +435,7 @@ struct ReferenceState<'a> {
     binding: NormalizedReferenceBinding,
     active_package: PackageId,
     program: &'a NormalizedProgram,
+    schema: Arc<NormalizedReferenceSchema>,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
     capabilities: Option<&'a NormalizedCapabilities>,
@@ -415,12 +456,6 @@ impl ReferenceState<'_> {
         reference: DeclarationReference,
         expected: bool,
     ) -> Result<NormalizedValue, ExecutionError> {
-        if self.program.artifact().package(reference.package).is_none() {
-            return Err(reference_error(
-                "normalized_reference_dependency_package",
-                "exact test reference names a package outside the linked artifact closure",
-            ));
-        }
         let previous_package = self.active_package;
         self.active_package = reference.package;
         let result = (|| {
@@ -458,7 +493,7 @@ impl ReferenceState<'_> {
         type_arguments
             .iter()
             .map(|ty| {
-                self.program
+                self.schema
                     .substitute_type(*ty, substitutions, 0)
                     .ok_or_else(|| {
                         reference_type_error("call type argument escaped its exact function scope")
@@ -475,25 +510,6 @@ impl ReferenceState<'_> {
     ) -> Result<NormalizedValue, ExecutionError> {
         self.control.check()?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
-        if self.program.artifact().package(reference.package).is_none() {
-            return Err(reference_error(
-                "normalized_reference_dependency_package",
-                "exact declaration reference names a package outside the linked artifact closure",
-            ));
-        }
-        if let Some(function) = self.program.function(reference) {
-            let function = self
-                .program
-                .functions
-                .get(function.0 as usize)
-                .ok_or_else(|| {
-                    reference_error(
-                        "normalized_reference_function_index",
-                        "exact function index escaped the prepared table",
-                    )
-                })?;
-            self.validate_call_resources(function, &arguments)?;
-        }
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -510,6 +526,8 @@ impl ReferenceState<'_> {
             let declaration = self.declaration(reference)?;
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
+                    let parameters = self.parameters(reference.package, &function.parameters)?;
+                    self.validate_call_resources(&parameters, &arguments)?;
                     if !type_arguments.is_empty()
                         && type_arguments.len() != function.type_parameters.len()
                     {
@@ -558,6 +576,8 @@ impl ReferenceState<'_> {
                     }
                 }
                 DeclarationPayload::External(external) => {
+                    let parameters = self.parameters(reference.package, &external.parameters)?;
+                    self.validate_call_resources(&parameters, &arguments)?;
                     if !type_arguments.is_empty()
                         && type_arguments.len() != external.type_parameters.len()
                     {
@@ -569,28 +589,16 @@ impl ReferenceState<'_> {
                             "external argument count disagrees with canonical parameters",
                         ))
                     } else {
-                        let function_index = self.program.function(reference).ok_or_else(|| {
-                            reference_error(
-                                "normalized_reference_external_function",
-                                "canonical external declaration has no prepared function",
-                            )
-                        })?;
-                        let normalized_function = self
-                            .program
-                            .functions
-                            .get(function_index.0 as usize)
-                            .ok_or_else(|| {
-                                reference_error(
-                                    "normalized_reference_external_function",
-                                    "prepared external function index escaped the runtime table",
-                                )
-                            })?;
+                        let signature = ReferenceSignature {
+                            type_parameters: external.type_parameters,
+                            parameters,
+                        };
                         self.observation.external_calls =
                             self.observation.external_calls.saturating_add(1);
                         self.host
                             .call(
-                                self.program,
-                                normalized_function,
+                                self.schema.as_ref(),
+                                &signature,
                                 &external.implementation,
                                 &type_arguments,
                                 arguments,
@@ -624,15 +632,14 @@ impl ReferenceState<'_> {
     }
 
     fn validate_call_resources(
-        &self,
-        function: &NormalizedFunction,
+        &mut self,
+        parameters: &[ParameterRecord],
         arguments: &[NormalizedValue],
     ) -> Result<(), ExecutionError> {
-        for (index, (parameter, argument)) in function.parameters.iter().zip(arguments).enumerate()
-        {
+        for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
             match parameter.resource_requirement {
                 Some(requirement) => {
-                    if index.saturating_add(1) != function.parameters.len()
+                    if index.saturating_add(1) != parameters.len()
                         || parameter.use_mode != ParameterUse::Consume
                         || !matches!(argument, NormalizedValue::Resource(handle) if handle.is_affine_capability())
                     {
@@ -647,19 +654,19 @@ impl ReferenceState<'_> {
                             "resource-bearing call argument is not one exact runtime handle",
                         ));
                     };
-                    let requirement = self
-                        .program
-                        .requirements
-                        .get(requirement.0 as usize)
-                        .ok_or_else(|| {
-                            reference_error(
-                                "normalized_reference_resource_call_requirement",
-                                "resource parameter requirement escaped the prepared table",
-                            )
-                        })?;
+                    let Some(OwnerRecord::Requirement(record)) = self.owner_in_package(
+                        requirement.package,
+                        OwnerKey::Requirement(requirement.requirement),
+                    )?
+                    else {
+                        return Err(reference_error(
+                            "normalized_reference_resource_call_requirement",
+                            "resource parameter requirement is absent from canonical authority",
+                        ));
+                    };
                     self.resources.validate_queue_lease_transfer(
-                        requirement.reference,
-                        requirement.interface,
+                        requirement,
+                        record.interface,
                         *handle,
                     )?;
                 }
@@ -793,8 +800,8 @@ impl ReferenceState<'_> {
                 function,
                 type_arguments,
             } => {
-                let prepared = self.prepared_function(function)?;
-                if prepared
+                let signature = self.function_signature(function)?;
+                if signature
                     .parameters
                     .iter()
                     .any(|parameter| parameter.resource_requirement.is_some())
@@ -805,8 +812,12 @@ impl ReferenceState<'_> {
                     ));
                 }
                 let type_arguments = self.resolve_type_arguments(&type_arguments)?.into();
-                self.program
-                    .function(function)
+                self.schema
+                    .functions
+                    .binary_search(&function)
+                    .ok()
+                    .and_then(|index| u32::try_from(index).ok())
+                    .map(FunctionIndex)
                     .map(|function| NormalizedValue::Function {
                         function,
                         type_arguments,
@@ -814,7 +825,7 @@ impl ReferenceState<'_> {
                     .ok_or_else(|| {
                         reference_error(
                             "normalized_reference_function_value",
-                            "exact function value has no executable artifact unit",
+                            "exact function value is absent from the canonical callable inventory",
                         )
                     })
             }
@@ -1092,30 +1103,55 @@ impl ReferenceState<'_> {
         self.evaluate(expression, locals)
     }
 
-    fn prepared_function(
-        &self,
+    fn function_signature(
+        &mut self,
         reference: DeclarationReference,
-    ) -> Result<&NormalizedFunction, ExecutionError> {
-        let index = self.program.function(reference).ok_or_else(|| {
-            reference_error(
-                "normalized_reference_function_missing",
-                "exact function has no prepared runtime unit",
-            )
-        })?;
-        self.program.functions.get(index.0 as usize).ok_or_else(|| {
-            reference_error(
-                "normalized_reference_function_index",
-                "exact function index escaped the prepared runtime table",
-            )
+    ) -> Result<ReferenceSignature, ExecutionError> {
+        let (type_parameters, parameters) = match self.declaration(reference)?.payload {
+            DeclarationPayload::Function(function) => {
+                (function.type_parameters, function.parameters)
+            }
+            DeclarationPayload::External(external) => {
+                (external.type_parameters, external.parameters)
+            }
+            DeclarationPayload::Constant { .. } => (Vec::new(), Vec::new()),
+            _ => {
+                return Err(reference_type_error(
+                    "exact callable has a non-callable canonical owner",
+                ));
+            }
+        };
+        Ok(ReferenceSignature {
+            type_parameters,
+            parameters: self.parameters(reference.package, &parameters)?,
         })
     }
 
+    fn parameters(
+        &mut self,
+        package: PackageId,
+        parameters: &[ParameterId],
+    ) -> Result<Vec<ParameterRecord>, ExecutionError> {
+        parameters
+            .iter()
+            .map(|parameter| {
+                match self.owner_in_package(package, OwnerKey::Parameter(*parameter))? {
+                    Some(OwnerRecord::Parameter(record)) => Ok(record),
+                    _ => Err(reference_error(
+                        "normalized_reference_parameter_missing",
+                        "exact parameter is absent from canonical authority",
+                    )),
+                }
+            })
+            .collect()
+    }
+
     fn function_parameter_uses(
-        &self,
+        &mut self,
         reference: DeclarationReference,
     ) -> Result<Vec<ParameterUse>, ExecutionError> {
         Ok(self
-            .prepared_function(reference)?
+            .function_signature(reference)?
             .parameters
             .iter()
             .map(|parameter| parameter.use_mode)
@@ -1123,35 +1159,31 @@ impl ReferenceState<'_> {
     }
 
     fn operation_parameter_uses(
-        &self,
+        &mut self,
         reference: OperationReference,
     ) -> Result<Vec<ParameterUse>, ExecutionError> {
-        self.program
-            .operations
-            .iter()
-            .find(|operation| operation.reference == reference)
-            .map(|operation| {
-                operation
-                    .parameters
-                    .iter()
-                    .map(|parameter| parameter.use_mode)
-                    .collect()
-            })
-            .ok_or_else(|| {
-                reference_error(
-                    "normalized_reference_operation_missing",
-                    "exact capability operation has no prepared runtime definition",
-                )
-            })
+        let Some(OwnerRecord::Operation(operation)) =
+            self.owner_in_package(reference.package, OwnerKey::Operation(reference.operation))?
+        else {
+            return Err(reference_error(
+                "normalized_reference_operation_missing",
+                "exact capability operation is absent from canonical authority",
+            ));
+        };
+        Ok(self
+            .parameters(reference.package, &operation.parameters)?
+            .into_iter()
+            .map(|parameter| parameter.use_mode)
+            .collect())
     }
 
     fn case_payload_is_direct_resource(&self, layout: VariantLayoutIndex, case: u32) -> bool {
-        self.program
+        self.schema
             .variants
             .get(layout.0 as usize)
             .and_then(|variant| variant.cases.get(case as usize))
             .and_then(|case| case.payload)
-            .and_then(|payload| self.program.types.get(&payload))
+            .and_then(|payload| self.schema.types.get(&payload))
             .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. }))
     }
 
@@ -1206,34 +1238,7 @@ impl ReferenceState<'_> {
         package: PackageId,
         owner: OwnerKey,
     ) -> Result<Option<OwnerRecord>, ExecutionError> {
-        let read = if package == self.binding.package {
-            self.authority.owner(owner)?
-        } else {
-            let mut map = crate::platform::persistent_map::MapWork::default();
-            let mut store = StoreWork::default();
-            let record = self
-                .program
-                .artifact()
-                .reference_owner(package, owner, &mut map, &mut store)
-                .map_err(|diagnostic| {
-                    reference_error(
-                        "normalized_reference_dependency_authority",
-                        format!(
-                            "linked canonical reference-owner read failed ({}): {}",
-                            diagnostic.code, diagnostic.message
-                        ),
-                    )
-                })?;
-            NormalizedReferenceOwnerRead {
-                record,
-                work: NormalizedReferenceReadWork {
-                    owner_reads: 1,
-                    map_pages_read: map.pages_read,
-                    objects_read: store.objects_read,
-                    bytes_read: map.bytes_read.saturating_add(store.bytes_read),
-                },
-            }
-        };
+        let read = self.authority.owner_in_package(package, owner)?;
         self.observation.canonical_owner_reads = self
             .observation
             .canonical_owner_reads
@@ -1257,14 +1262,14 @@ impl ReferenceState<'_> {
         &self,
         function: FunctionIndex,
     ) -> Result<DeclarationReference, ExecutionError> {
-        self.program
+        self.schema
             .functions
             .get(function.0 as usize)
-            .map(|function| function.declaration)
+            .copied()
             .ok_or_else(|| {
                 reference_error(
                     "normalized_reference_function_index",
-                    "function value escaped the prepared artifact table",
+                    "function value escaped the independent canonical callable inventory",
                 )
             })
     }
@@ -1278,7 +1283,7 @@ impl ReferenceState<'_> {
         self.charge_items(values.len(), std::mem::size_of::<NormalizedValue>())?;
         if let Some(declaration) = nominal_type {
             let layout = self.record_layout(declaration)?;
-            let field_count = self.program.records[layout.0 as usize].fields.len();
+            let field_count = self.schema.records[layout.0 as usize].fields.len();
             let mut slots = vec![None; field_count];
             for (selector, value) in selectors.into_iter().zip(values) {
                 let FieldSelector::Nominal(field) = selector else {
@@ -1391,7 +1396,7 @@ impl ReferenceState<'_> {
         &self,
         declaration: DeclarationReference,
     ) -> Result<RecordLayoutIndex, ExecutionError> {
-        self.program
+        self.schema
             .records
             .iter()
             .position(|layout| layout.declaration == declaration)
@@ -1409,7 +1414,7 @@ impl ReferenceState<'_> {
         &self,
         field: FieldReference,
     ) -> Result<(RecordLayoutIndex, u32), ExecutionError> {
-        for (layout_index, layout) in self.program.records.iter().enumerate() {
+        for (layout_index, layout) in self.schema.records.iter().enumerate() {
             if let Some(offset) = layout
                 .fields
                 .iter()
@@ -1440,7 +1445,7 @@ impl ReferenceState<'_> {
         &self,
         case: CaseReference,
     ) -> Result<(VariantLayoutIndex, u32), ExecutionError> {
-        for (layout_index, layout) in self.program.variants.iter().enumerate() {
+        for (layout_index, layout) in self.schema.variants.iter().enumerate() {
             if let Some(tag) = layout
                 .cases
                 .iter()
@@ -1585,27 +1590,13 @@ impl ReferenceState<'_> {
         match value {
             TextValue::Inline { text } => Ok(Arc::from(text)),
             TextValue::Blob { digest, bytes } => {
-                let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());
-                let value = self
-                    .program
-                    .artifact()
-                    .read(
-                        key,
-                        ObjectDomain::Blob.maximum_bytes(),
-                        &mut StoreWork::default(),
-                    )
-                    .map_err(|error| {
-                        reference_error(
-                            "normalized_reference_blob_read",
-                            format!("reference text blob read failed: {}", error.message),
-                        )
-                    })?
-                    .ok_or_else(|| {
-                        reference_error(
-                            "normalized_reference_blob_missing",
-                            "reference text blob is absent from the exact artifact closure",
-                        )
-                    })?;
+                let value = self.authority.blob(digest)?;
+                self.observation.canonical_objects_read =
+                    self.observation.canonical_objects_read.saturating_add(1);
+                self.observation.canonical_bytes_read = self
+                    .observation
+                    .canonical_bytes_read
+                    .saturating_add(value.len() as u64);
                 if value.len() as u64 != bytes {
                     return Err(reference_error(
                         "normalized_reference_blob_length",
@@ -1732,8 +1723,8 @@ impl ReferenceState<'_> {
 }
 
 fn reference_intrinsic(
-    program: &NormalizedProgram,
-    function: &super::prepare::NormalizedFunction,
+    program: &dyn NormalizedValueSchema,
+    function: &ReferenceSignature,
     implementation: &str,
     type_arguments: &[TypeObjectDigest],
     arguments: Vec<NormalizedValue>,
@@ -2275,7 +2266,7 @@ fn reference_structural_record(
 }
 
 fn reference_record_field<'a>(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     record: &'a NormalizedRecord,
     name: &str,
 ) -> Option<&'a NormalizedValue> {
@@ -2289,7 +2280,7 @@ fn reference_record_field<'a>(
             None
         }
         NormalizedRecord::Nominal { layout, fields } => {
-            let layout = program.records.get(usize::try_from(layout.0).ok()?)?;
+            let layout = program.records().get(usize::try_from(layout.0).ok()?)?;
             for (index, field) in layout.fields.iter().enumerate() {
                 if field.name.as_str() == name {
                     return fields.get(index);
@@ -2301,7 +2292,7 @@ fn reference_record_field<'a>(
 }
 
 fn reference_bearer_token(
-    program: &NormalizedProgram,
+    program: &dyn NormalizedValueSchema,
     arguments: &[NormalizedValue],
 ) -> Result<NormalizedValue, ExecutionError> {
     let [NormalizedValue::List(headers)] = arguments else {
@@ -2809,10 +2800,10 @@ fn reference_trap(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::Trap, code, message)
 }
 
-fn reference_resource(code: &'static str, message: &'static str) -> ExecutionError {
+pub(super) fn reference_resource(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::resource(code, message)
 }
 
-fn reference_error(code: &'static str, message: impl Into<String>) -> ExecutionError {
+pub(super) fn reference_error(code: &'static str, message: impl Into<String>) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::Infrastructure, code, message)
 }

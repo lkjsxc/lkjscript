@@ -10,6 +10,7 @@ mod evidence;
 mod extraction_oracle;
 mod http_probe;
 mod measure;
+mod offline_packages;
 mod outbound_http;
 mod postgres;
 mod process;
@@ -48,6 +49,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("scale") => scale::command(arguments),
         Some("measure") => measure::command(arguments),
         Some("outbound-http") => outbound_http::command(arguments),
+        Some("offline-packages") => offline_packages::command(arguments),
         Some("release") => release::command(arguments),
         Some("service") => service::command(arguments),
         Some("stateful-http") => stateful_http::command(arguments),

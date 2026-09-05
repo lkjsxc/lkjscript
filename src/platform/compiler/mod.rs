@@ -2,16 +2,17 @@
 //!
 //! This boundary is intentionally separate from the predecessor recursive-AST compiler. It reads
 //! exact stable-ID records through the same revision-pinned surfaces as validation and emits
-//! typed dense operands. The public artifact and runtime still use the predecessor compiler until
-//! the dependency-closed direct cutover.
+//! typed dense operands. Root repositories and admitted immutable dependency views use this same
+//! compiler and strict artifact linker.
 
 #![allow(
     unused_imports,
-    reason = "private compiler exports become artifact and runtime consumers at the Graph 10 cutover"
+    reason = "compiler contract exports serve runtime, contributor, and test consumers"
 )]
 
 mod artifact;
 mod cache;
+mod immutable;
 mod link;
 mod lower;
 pub(crate) mod manifest;
@@ -33,6 +34,7 @@ pub use cache::{
     CompilationValidationReceipt, build_clean, build_incremental, load_current_compilation,
     validate_current_compilation,
 };
+pub(crate) use immutable::compile_immutable;
 pub use link::{ArtifactLinkReceipt, ArtifactLinkWork, link_artifact};
 pub use lower::{CompilationReceipt, CompilationWork, compile_unit};
 pub use manifest::{

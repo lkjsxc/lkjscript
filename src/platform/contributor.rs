@@ -32,6 +32,166 @@ const DEFINITION_RELATION_DIGEST_DOMAIN: &str =
     "lkjscript.contributor.function-definition.relations.v1";
 const EXTRACTION_MOVED_DIGEST_DOMAIN: &str = "lkjscript.function-extraction.moved-owners.v1";
 
+/// Implementation-disjoint complete package inventory. Only neutral container decoding and
+/// canonical records are shared with admission; neither production resolution nor projection runs.
+pub fn offline_package_inventory(
+    bytes: &[u8],
+    transport: &str,
+) -> Result<OfflinePackageInventory, Diagnostic> {
+    let container =
+        super::package_transport::source::PackageContainer::decode(bytes, transport.parse()?)?;
+    let oracle = super::package_transport::oracle::reconstruct(&container)?;
+    let mut packages = Vec::new();
+    for (package, snapshot) in &oracle.snapshots {
+        let revision = &oracle.revisions[package];
+        let owners = snapshot
+            .owners
+            .iter()
+            .map(|(key, record)| {
+                Ok((
+                    key.to_string(),
+                    record.kind().name().to_owned(),
+                    encode_owner(record)?.0.to_string(),
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        packages.push(OfflinePackageInventoryMember {
+            package: package.to_string(),
+            semantic_revision: revision.revision.revision_id()?.to_string(),
+            package_revision: revision.encode()?.0.to_string(),
+            interface: revision.interface.to_string(),
+            dependencies: revision
+                .dependencies
+                .iter()
+                .map(|dependency| {
+                    (
+                        dependency.package.to_string(),
+                        dependency.package_revision.to_string(),
+                    )
+                })
+                .collect(),
+            public_owners: oracle.interfaces[package]
+                .keys()
+                .map(ToString::to_string)
+                .collect(),
+            owners,
+            types: snapshot.types.keys().map(ToString::to_string).collect(),
+            retirements: snapshot
+                .retirements
+                .keys()
+                .map(ToString::to_string)
+                .collect(),
+        });
+    }
+    Ok(OfflinePackageInventory {
+        packages,
+        objects: oracle.objects,
+        edges: oracle.edges,
+        bytes: bytes.len(),
+        oracle_validation_visits: oracle.validation_visits,
+        oracle_validation_read_bytes: oracle.validation_read_bytes,
+    })
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OfflinePackageInventory {
+    pub packages: Vec<OfflinePackageInventoryMember>,
+    pub objects: usize,
+    pub edges: usize,
+    pub bytes: usize,
+    pub oracle_validation_visits: u64,
+    pub oracle_validation_read_bytes: u64,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OfflinePackageInventoryMember {
+    pub package: String,
+    pub semantic_revision: String,
+    pub package_revision: String,
+    pub interface: String,
+    pub dependencies: Vec<(String, String)>,
+    pub public_owners: Vec<String>,
+    pub owners: Vec<(String, String, String)>,
+    pub types: Vec<String>,
+    pub retirements: Vec<String>,
+}
+
+/// Independent current producer reconstruction, captured before transport or producer deletion.
+/// This is read-only evidence; it does not author, resolve, compile, or project an interface.
+pub fn offline_producer_inventory(project: &Path) -> Result<OfflineProducerInventory, Diagnostic> {
+    let repository = GraphRepository::open(project)?;
+    let view = repository.view_current()?;
+    let snapshot = view.reconstruct_full_oracle()?.value;
+    Ok(OfflineProducerInventory {
+        package: view.package().to_string(),
+        semantic_revision: view.revision().to_string(),
+        owners: snapshot
+            .owners
+            .iter()
+            .map(|(key, record)| {
+                Ok((
+                    key.to_string(),
+                    record.kind().name().to_owned(),
+                    encode_owner(record)?.0.to_string(),
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?,
+        types: snapshot.types.keys().map(ToString::to_string).collect(),
+        retirements: snapshot
+            .retirements
+            .keys()
+            .map(ToString::to_string)
+            .collect(),
+        dependencies: snapshot
+            .dependencies
+            .values()
+            .map(|dependency| {
+                (
+                    dependency.package.to_string(),
+                    dependency.package_revision.to_string(),
+                )
+            })
+            .collect(),
+    })
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OfflineProducerInventory {
+    pub package: String,
+    pub semantic_revision: String,
+    pub owners: Vec<(String, String, String)>,
+    pub types: Vec<String>,
+    pub retirements: Vec<String>,
+    pub dependencies: Vec<(String, String)>,
+}
+
+/// Neutral canonical object extraction for the first-party hostile storage fixture. This read-only
+/// helper neither constructs source nor admits meaning; the public binary still owns admission.
+pub fn offline_package_owner_bytes(
+    bytes: &[u8],
+    transport: &str,
+    owner_object: &str,
+) -> Result<Vec<u8>, Diagnostic> {
+    let container = crate::platform::package_transport::source::PackageContainer::decode(
+        bytes,
+        transport.parse()?,
+    )?;
+    let digest: crate::platform::kernel::OwnerObjectDigest = owner_object.parse()?;
+    let key = crate::platform::storage::object::ObjectKey::from_digest(
+        crate::platform::storage::object::ObjectDomain::Owner,
+        digest.bytes(),
+    );
+    container.objects.get(&key).cloned().ok_or_else(|| {
+        Diagnostic::new(
+            crate::platform::diagnostic::DiagnosticClass::Corrupt,
+            "offline_fixture_owner_missing",
+            "hostile fixture's exact canonical owner is absent",
+        )
+    })
+}
+
 /// Bounded typed reconstruction of one accepted current semantic revision.
 ///
 /// This operation opens a revision-pinned `GraphRepository` view and calls its complete typed

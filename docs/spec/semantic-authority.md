@@ -97,14 +97,19 @@ oracle remain derived evidence and cannot select or advance `HEAD`.
 ## Dependencies, compilation, and artifacts
 
 An accepted dependency binding names exact package, semantic revision, logical package revision,
-and public interface meaning. Package transport is strict immutable dependency transport, not an
-authoring language. The current released resolver accepts only the exact built-in standard
-dependency and rejects missing, foreign, stale, malformed, or additional dependency closure.
+and public interface meaning. A code-complete package transport carries the selected canonical
+current graphs, including private bodies and exact transitive edges, not an alternative authoring
+language or writable imported repository. The root accepted graph selects the complete logical
+program. Resolve one exact logical/semantic revision per package throughout the union before
+acceptance or execution; installed transitive availability grants no direct-import visibility.
+Staging and inspection may not advance semantic HEAD. No embedded identity, checkout, cache,
+transported bytecode, mutable name, or network registry supplies alternate executable meaning.
 
 Compiler manifests, compiler units, and cache heads are derived from exact accepted authority. A
 cache may be reused only when repository, accepted revision/state, compiler contract, options, unit
 map, and object closure match. Missing cache state clean-builds. Invalid cache state is reported and
-replaced by a clean build; it can never select semantics.
+clean-rebuilt; it can never select semantics. Corrupt canonical source is not disposable cache
+state and requires exact restaging before dependent execution.
 
 After an accepted `change apply`, an incremental cache update may use an exact base cache and the
 in-memory prepared compiler impact. Publication is complete first. Incremental failure is reported

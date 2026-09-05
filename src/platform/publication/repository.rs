@@ -18,16 +18,11 @@ use crate::platform::kernel::{
     KernelSnapshot, SemanticRoot, decode_root, encode_root, semantic_state_digest_from_root,
 };
 use crate::platform::package_transport::{
-    MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES, MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES,
     PackageRevision, PackageTransport, PackageTransportBinding, PackageTransportClosureValidation,
-    PackageTransportSelection, validate_package_revision_closure,
-    validate_package_transport_closure_admitted, validate_package_transport_local,
-    validate_package_transport_local_admitted,
+    validate_package_revision_closure, validate_package_transport_closure_admitted,
 };
 use crate::platform::persistent_map::{MapAdmission, MapWork, MemoryPageStore, OverlayPageStore};
-use crate::platform::storage::contract::{
-    MAXIMUM_PACK_BYTES, MAXIMUM_PACK_ENTRIES, TARGET_PACK_BYTES,
-};
+use crate::platform::storage::contract::TARGET_PACK_BYTES;
 #[cfg(test)]
 use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
@@ -35,7 +30,6 @@ use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
     StoreErrorClass, StoreWork,
 };
-use crate::platform::storage::pack::PackMetadata;
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{
     ValidationWitnessManifest, decode_witness_manifest, encode_witness_manifest,
@@ -54,10 +48,6 @@ const REPOSITORY_STAGE_PREFIX: &str = ".lkjscript-graph9-stage-";
 const PACKAGE_TRANSPORT_DIRECTORY: &str = "PACKAGE-TRANSPORTS";
 const PACKAGE_TRANSPORT_SELECTION_FILE: &str = "CURRENT";
 const PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX: &str = ".CURRENT-stage-";
-const PACKAGE_TRANSPORT_CANDIDATE_PREFIX: &str = "candidate-";
-const MAXIMUM_PACKAGE_TRANSPORT_PACKS: usize = 10_000;
-const MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES: usize = MAXIMUM_PACK_BYTES;
-const MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES: usize = MAXIMUM_PACK_ENTRIES;
 
 #[derive(Clone, Debug)]
 pub struct GraphRepository {
@@ -87,7 +77,18 @@ pub struct CreatedRepository {
 #[derive(Clone, Debug)]
 pub struct InitialPackageTransport {
     pub digest: crate::platform::kernel::PackageTransportDigest,
-    pub packs: Vec<Vec<u8>>,
+    pub container: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PackageStagePoint {
+    BeforeObjects,
+    AfterFirstObject,
+    ObjectsDurable,
+    ReadinessSynced,
+    ReadinessVisible,
+    #[cfg(test)]
+    Storage(SealCheckpoint),
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +102,13 @@ pub struct PackageTransportStageReceipt {
     pub seal: SealReceipt,
     pub current_revision: crate::platform::semantic_id::RevisionId,
     pub work: StoreWork,
+    pub closure_packages: usize,
+    pub closure_edges: usize,
+    pub closure_objects: usize,
+    pub container_bytes: usize,
+    pub container_commitment: String,
+    pub validation_visits: u64,
+    pub validation_read_bytes: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -249,11 +257,12 @@ impl GraphRepository {
             let mut preparation_store =
                 PackDirectoryStore::open(&stage).map_err(store_diagnostic)?;
             for package_transport in package_transports {
-                let _ = install_package_transport(
+                let _ = install_package_container(
                     &root_directory,
                     &mut preparation_store,
                     package_transport.digest,
-                    &package_transport.packs,
+                    &package_transport.container,
+                    None,
                 )?;
             }
             let initial = prepare_initial_publication(logical, &preparation_store, intent)
@@ -361,15 +370,59 @@ impl GraphRepository {
         self.view_current()?.export_package_transport()
     }
 
-    /// Stages one self-contained interface transport as unreachable operational data. Every pack
-    /// is verified before its objects enter the private stage, and the transport must contain
-    /// exactly one package revision, its semantic root, interface-map pages, interface records,
-    /// and reachable structural types. Logical dependency revisions and their independently
-    /// selected transports must already be staged.
+    pub(crate) fn export_package_container(
+        &self,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        self.view_current()?.export_package_container()
+    }
+
+    pub(crate) fn staged_package_source(
+        &self,
+        revision: crate::platform::kernel::PackageRevisionDigest,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        let store = self.object_store()?;
+        let closure = resolve_package_transport_closure(
+            &store,
+            &store,
+            revision,
+            None,
+            None,
+            &mut StoreWork::default(),
+        )?;
+        crate::platform::package_transport::source::collect(
+            &store,
+            PackageTransportBinding {
+                package_revision: revision,
+                transport: closure.root_transport_digest,
+            },
+            &closure.selections,
+        )
+    }
+
+    /// Admits and atomically stages one complete immutable source closure without changing HEAD.
     pub fn stage_package_transport(
         &self,
         digest: crate::platform::kernel::PackageTransportDigest,
-        packs: &[Vec<u8>],
+        container: &[u8],
+    ) -> Result<PackageTransportStageReceipt, Diagnostic> {
+        self.stage_package_transport_at(digest, container, None)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stage_package_transport_with_fault(
+        &self,
+        digest: crate::platform::kernel::PackageTransportDigest,
+        container: &[u8],
+        fault: PackageStagePoint,
+    ) -> Result<PackageTransportStageReceipt, Diagnostic> {
+        self.stage_package_transport_at(digest, container, Some(fault))
+    }
+
+    fn stage_package_transport_at(
+        &self,
+        digest: crate::platform::kernel::PackageTransportDigest,
+        container: &[u8],
+        fault: Option<PackageStagePoint>,
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
@@ -383,7 +436,8 @@ impl GraphRepository {
                 "Graph 10 repository has no accepted HEAD",
             )
         })?;
-        let installed = install_package_transport(&root_directory, &mut store, digest, packs)?;
+        let installed =
+            install_package_container(&root_directory, &mut store, digest, container, fault)?;
         let after = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Corrupt,
@@ -408,6 +462,13 @@ impl GraphRepository {
             seal: installed.seal,
             current_revision: after.head.revision,
             work: installed.work,
+            closure_packages: installed.closure_packages,
+            closure_edges: installed.closure_edges,
+            closure_objects: installed.closure_objects,
+            container_bytes: container.len(),
+            container_commitment: blake3::hash(container).to_hex().to_string(),
+            validation_visits: installed.validation_visits,
+            validation_read_bytes: installed.validation_read_bytes,
         })
     }
 
@@ -756,6 +817,7 @@ impl GraphRepository {
             &prepared.semantic_diff,
         )?;
         let mut store_work = StoreWork::default();
+        validate_prepared_dependency_sources(&store, prepared)?;
         validate_candidate_idempotency_transition(
             &store,
             prepared.revision.publication.idempotency_receipts,
@@ -1516,49 +1578,17 @@ pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore
     interface_map_admission: &mut MapAdmission,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
     let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
+    let readiness = read_package_readiness(catalog.root())?;
     let mut selections = Vec::with_capacity(logical.revisions.len());
-    for (revision_digest, revision) in &logical.revisions {
-        let transport = if let Some(binding) = root_override
-            && binding.package_revision == *revision_digest
-        {
-            binding.transport
-        } else if let Some(selection) =
-            read_package_transport_selection(catalog.root(), *revision_digest)?
-        {
-            let binding = selection.binding;
-            match validate_package_transport_local_admitted(
-                store,
-                binding,
-                revision,
-                work,
-                interface_map_admission,
-            ) {
-                Ok(_) => binding.transport,
-                Err(error) if package_resolution_admission_exhausted(&error) => return Err(error),
-                Err(error) if error.class != DiagnosticClass::Infrastructure => {
-                    find_valid_package_transport_admitted(
-                        store,
-                        catalog,
-                        *revision_digest,
-                        revision,
-                        work,
-                        interface_map_admission,
-                    )?
-                    .ok_or_else(|| missing_package_transport(*revision_digest))?
-                }
-                Err(error) => return Err(error),
-            }
-        } else {
-            find_valid_package_transport_admitted(
-                store,
-                catalog,
-                *revision_digest,
-                revision,
-                work,
-                interface_map_admission,
-            )?
-            .ok_or_else(|| missing_package_transport(*revision_digest))?
-        };
+    for revision_digest in logical.revisions.keys() {
+        let transport =
+            match root_override.filter(|binding| binding.package_revision == *revision_digest) {
+                Some(binding) => binding.transport,
+                None => *readiness
+                    .bindings
+                    .get(revision_digest)
+                    .ok_or_else(|| missing_package_transport(*revision_digest))?,
+            };
         selections.push(PackageTransportBinding {
             package_revision: *revision_digest,
             transport,
@@ -1574,180 +1604,471 @@ pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore
     )
 }
 
-fn read_package_transport_selection(
+pub(super) fn validate_prepared_dependency_sources(
+    store: &PackDirectoryStore,
+    prepared: &PreparedPublication,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
+    use crate::platform::package_transport::source::{
+        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, collect_with_budget, entries,
+        required,
+    };
+    let root = &prepared.authority.semantic.root;
+    if root.dependencies.entries() == 0 {
+        return Ok(());
+    }
+    let mut overlay = ObjectStage::new(store);
+    let mut work = StoreWork::default();
+    for (key, bytes) in &prepared.objects {
+        overlay
+            .stage(*key, bytes, &mut work)
+            .map_err(store_diagnostic)?;
+    }
+    let overlay = crate::platform::package_transport::source::CollectingStore::new(&overlay);
+    let mut direct = Vec::new();
+    for (key, bytes) in entries(&overlay, root.dependencies)? {
+        let package = key
+            .as_slice()
+            .try_into()
+            .ok()
+            .and_then(PackageId::from_bytes)
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_dependency_key",
+                    "candidate dependency key is invalid",
+                )
+            })?;
+        let binding = decode_dependency_binding(&bytes)?;
+        let bytes = required(
+            &overlay,
+            ObjectDomain::Dependency,
+            binding.object.bytes(),
+            &mut work,
+        )?;
+        direct.push(decode_dependency(&bytes, &package, binding.object)?);
+    }
+    let readiness = read_package_readiness(store.root())?;
+    let mut pending = std::collections::VecDeque::from(direct.clone());
+    let mut union = BTreeMap::new();
+    let mut edge_count = direct.len();
+    while let Some(dependency) = pending.pop_front() {
+        if dependency.package == root.package_id {
+            return Err(repository_error(
+                DiagnosticClass::Semantic,
+                "package_revision_closure_package_conflict",
+                "dependency closure refers back to the editable root package",
+            ));
+        }
+        if let Some(previous) = union.get(&dependency.package) {
+            if previous != &dependency {
+                return Err(repository_error(
+                    DiagnosticClass::Semantic,
+                    "package_revision_closure_package_conflict",
+                    format!(
+                        "conflicting exact revisions for package {}; choose one complete closure and replan",
+                        dependency.package
+                    ),
+                ));
+            }
+            continue;
+        }
+        if union.len() + 1 >= crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "package_revision_closure_count",
+                "candidate closure exceeds the package admission including its root",
+            ));
+        }
+        let bytes = required(
+            &overlay,
+            ObjectDomain::PackageRevision,
+            dependency.package_revision.bytes(),
+            &mut work,
+        )?;
+        let revision = PackageRevision::decode(&bytes, dependency.package_revision)?;
+        revision.matches_dependency(dependency.package_revision, &dependency)?;
+        if !readiness
+            .bindings
+            .contains_key(&dependency.package_revision)
+        {
+            return Err(missing_package_transport(dependency.package_revision));
+        }
+        edge_count = edge_count
+            .checked_add(revision.dependencies.len())
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "package_revision_closure_edge_count",
+                    "candidate closure edge count overflowed",
+                )
+            })?;
+        if edge_count > crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE_EDGES {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "package_revision_closure_edge_count",
+                "candidate closure exceeds dependency edge admission",
+            ));
+        }
+        pending.extend(revision.dependencies);
+        union.insert(dependency.package, dependency);
+    }
+    let mut semantic_visits = 0_u64;
+    let mut checked = BTreeSet::new();
+    for dependency in direct {
+        if checked.contains(&dependency.package_revision) {
+            continue;
+        }
+        let closure = resolve_package_transport_closure(
+            &overlay,
+            store,
+            dependency.package_revision,
+            None,
+            Some(&dependency),
+            &mut work,
+        )?;
+        let before_reads = overlay.visits();
+        let visits = MAXIMUM_VALIDATION_VISITS
+            .checked_sub(before_reads)
+            .and_then(|remaining| remaining.checked_sub(semantic_visits))
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "package_source_budget",
+                    "candidate closure exhausted aggregate validation visits",
+                )
+            })?;
+        let read_bytes = MAXIMUM_VALIDATION_READ_BYTES - overlay.read_bytes();
+        let admitted = collect_with_budget(
+            &overlay,
+            PackageTransportBinding {
+                package_revision: dependency.package_revision,
+                transport: closure.root_transport_digest,
+            },
+            &closure.selections,
+            visits,
+            read_bytes,
+        )?;
+        semantic_visits = semantic_visits
+            .checked_add(admitted.validation_visits - (overlay.visits() - before_reads))
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "package_source_budget",
+                    "candidate closure aggregate validation visits overflowed",
+                )
+            })?;
+        checked.extend(admitted.packages.keys().copied());
+    }
+    Ok(())
+}
+
+pub(super) fn logical_dependency_inventory<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    dependencies: crate::platform::persistent_map::MapRoot,
+) -> Result<BTreeMap<crate::platform::kernel::PackageId, PackageRevision>, Diagnostic> {
+    use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
+    use crate::platform::package_transport::source::{entries, required};
+    let mut work = StoreWork::default();
+    let mut pending = std::collections::VecDeque::new();
+    for (key, value) in entries(store, dependencies)? {
+        let package = PackageId::from_bytes(key.as_slice().try_into().map_err(|_| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "package_review_key",
+                "invalid dependency key",
+            )
+        })?)
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "package_review_key",
+                "zero dependency key",
+            )
+        })?;
+        let binding = decode_dependency_binding(&value)?;
+        pending.push_back(decode_dependency(
+            &required(
+                store,
+                ObjectDomain::Dependency,
+                binding.object.bytes(),
+                &mut work,
+            )?,
+            &package,
+            binding.object,
+        )?);
+    }
+    let mut result = BTreeMap::<PackageId, PackageRevision>::new();
+    let mut edges = pending.len();
+    while let Some(dependency) = pending.pop_front() {
+        if let Some(revision) = result.get(&dependency.package) {
+            revision.matches_dependency(revision.encode()?.0, &dependency)?;
+            continue;
+        }
+        if result.len() >= crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "package_review_count",
+                "package review exceeded exact closure package limit",
+            ));
+        }
+        let revision = PackageRevision::decode(
+            &required(
+                store,
+                ObjectDomain::PackageRevision,
+                dependency.package_revision.bytes(),
+                &mut work,
+            )?,
+            dependency.package_revision,
+        )?;
+        revision.matches_dependency(dependency.package_revision, &dependency)?;
+        edges = edges
+            .checked_add(revision.dependencies.len())
+            .filter(|edges| {
+                *edges <= crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE_EDGES
+            })
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "package_review_edges",
+                    "package review exceeded exact closure edge limit",
+                )
+            })?;
+        pending.extend(revision.dependencies.clone());
+        result.insert(dependency.package, revision);
+    }
+    Ok(result)
+}
+
+fn read_package_readiness(
     root: &Path,
-    revision: crate::platform::kernel::PackageRevisionDigest,
-) -> Result<Option<PackageTransportSelection>, Diagnostic> {
-    let root_directory = open_directory(root)?;
-    let Some(transport_directory) = open_optional_directory_at(
-        &root_directory,
+) -> Result<crate::platform::package_transport::source::PackageReadiness, Diagnostic> {
+    let root = open_directory(root)?;
+    let Some(directory) = open_optional_directory_at(
+        &root,
         PACKAGE_TRANSPORT_DIRECTORY,
         "publication_package_transport_directory_open",
     )?
     else {
-        return Ok(None);
+        return Ok(Default::default());
     };
-    let Some(revision_directory) = open_optional_directory_at(
-        &transport_directory,
-        &package_transport_revision_directory_name(revision),
-        "publication_package_transport_revision_directory_open",
-    )?
-    else {
-        return Ok(None);
-    };
-    read_package_transport_selection_at(&revision_directory, revision)
+    read_package_readiness_at(&directory)
 }
 
-fn read_package_transport_selection_at(
-    revision_directory: &File,
-    revision: crate::platform::kernel::PackageRevisionDigest,
-) -> Result<Option<PackageTransportSelection>, Diagnostic> {
-    let Some(bytes) = read_optional_regular_at(
-        revision_directory,
+fn read_package_readiness_at(
+    directory: &File,
+) -> Result<crate::platform::package_transport::source::PackageReadiness, Diagnostic> {
+    use crate::platform::package_transport::source::{MAXIMUM_READINESS_BYTES, PackageReadiness};
+    match read_optional_regular_at(
+        directory,
         PACKAGE_TRANSPORT_SELECTION_FILE,
-        MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES,
-        "publication_package_transport_selection_read",
-    )
-    .or_else(|error| {
-        if matches!(
-            error.class,
-            DiagnosticClass::Source | DiagnosticClass::Corrupt | DiagnosticClass::Resource
-        ) {
-            Ok(None)
-        } else {
-            Err(error)
-        }
-    })?
-    else {
-        return Ok(None);
-    };
-    match PackageTransportSelection::decode(&bytes) {
-        Ok(selection) if selection.binding.package_revision == revision => Ok(Some(selection)),
-        Ok(_) => Ok(None),
-        Err(error)
-            if matches!(
-                error.class,
-                DiagnosticClass::Corrupt | DiagnosticClass::Source | DiagnosticClass::Resource
-            ) =>
-        {
-            Ok(None)
-        }
-        Err(error) => Err(error),
+        MAXIMUM_READINESS_BYTES,
+        "publication_package_readiness_read",
+    )? {
+        Some(bytes) => PackageReadiness::decode(&bytes),
+        None => Ok(PackageReadiness::default()),
     }
 }
 
-fn find_valid_package_transport(
-    store: &PackDirectoryStore,
-    revision_digest: crate::platform::kernel::PackageRevisionDigest,
-    revision: &PackageRevision,
-    work: &mut StoreWork,
-) -> Result<Option<crate::platform::kernel::PackageTransportDigest>, Diagnostic> {
-    find_valid_package_transport_admitted(
-        store,
-        store,
-        revision_digest,
-        revision,
-        work,
-        &mut MapAdmission::unbounded(),
-    )
-}
-
-fn find_valid_package_transport_admitted<S: ImmutableObjectStore + ?Sized>(
-    store: &S,
-    catalog: &PackDirectoryStore,
-    revision_digest: crate::platform::kernel::PackageRevisionDigest,
-    revision: &PackageRevision,
-    work: &mut StoreWork,
-    interface_map_admission: &mut MapAdmission,
-) -> Result<Option<crate::platform::kernel::PackageTransportDigest>, Diagnostic> {
-    let Some(revision_directory) = open_package_transport_revision_directory(
-        catalog.root(),
-        revision_digest,
-        "publication_package_transport_candidate_directory_open",
-    )?
-    else {
-        return Ok(None);
-    };
-    let candidate_count = count_package_transport_candidates(&revision_directory)?;
-    validate_package_transport_candidate_count(candidate_count, "resolution")?;
-    let mut selected = None;
-    let entries = Dir::read_from(&revision_directory).map_err(|error| {
-        rustix_diagnostic(
-            "publication_package_transport_candidate_directory_read",
-            error,
-        )
-    })?;
-    let mut scanned_candidates = 0_usize;
-    for entry in entries {
-        let entry = entry.map_err(|error| {
-            rustix_diagnostic(
-                "publication_package_transport_candidate_directory_read",
-                error,
+fn install_package_container(
+    root: &File,
+    store: &mut PackDirectoryStore,
+    digest: crate::platform::kernel::PackageTransportDigest,
+    bytes: &[u8],
+    fault: Option<PackageStagePoint>,
+) -> Result<InstalledPackageTransport, Diagnostic> {
+    use crate::platform::package_transport::source::PackageContainer;
+    let container = PackageContainer::decode(bytes, digest)?;
+    // Reserve the owning store's possible existing-object comparison and final durable readback
+    // before semantic validation. Neither stage nor readback may reset the admission counters.
+    let reserved_reads = (container.encoded_size()? as u64)
+        .checked_mul(2)
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Resource,
+                "package_source_budget",
+                "staging validation-read reservation overflow; restage a smaller closure",
             )
         })?;
-        let name = entry.file_name().to_bytes();
-        if name.starts_with(PACKAGE_TRANSPORT_CANDIDATE_PREFIX.as_bytes()) {
-            scanned_candidates = scanned_candidates.checked_add(1).ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Resource,
-                    "publication_package_transport_candidate_count",
-                    "package transport candidate scan count overflowed",
-                )
-            })?;
-            validate_package_transport_candidate_count(scanned_candidates, "resolution")?;
-        }
-        let Some(digest) = decode_package_transport_candidate_name(name) else {
-            continue;
-        };
-        match read_optional_regular_at(
-            &revision_directory,
-            std::str::from_utf8(name).map_err(|_| {
-                repository_error(
-                    DiagnosticClass::Corrupt,
-                    "publication_package_transport_candidate_name",
-                    "package transport candidate name is not UTF-8",
-                )
-            })?,
-            0,
-            "publication_package_transport_candidate_marker_read",
-        ) {
-            Ok(Some(marker)) if marker.is_empty() => {}
-            Ok(_) => continue,
-            Err(error) if error.class != DiagnosticClass::Infrastructure => continue,
-            Err(error) => return Err(error),
-        }
-        let binding = PackageTransportBinding {
-            package_revision: revision_digest,
-            transport: digest,
-        };
-        match validate_package_transport_local_admitted(
-            store,
-            binding,
-            revision,
-            work,
-            interface_map_admission,
-        ) {
-            Ok(_) if selected.is_none_or(|previous| digest < previous) => {
-                selected = Some(digest);
-            }
-            Ok(_) => {}
-            Err(error) if package_resolution_admission_exhausted(&error) => return Err(error),
-            Err(error) if error.class != DiagnosticClass::Infrastructure => {}
-            Err(error) => return Err(error),
+    let reserved_visits = (container.objects.len() as u64)
+        .checked_mul(3)
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Resource,
+                "package_source_budget",
+                "staging validation-visit reservation overflow; restage a smaller closure",
+            )
+        })?;
+    let admitted = container.admit_with_budget(
+        crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS - reserved_visits,
+        crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES - reserved_reads,
+    )?;
+    let package = admitted
+        .packages
+        .get(&container.root.package_revision)
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_source_root",
+                "validated container lost its root",
+            )
+        })?;
+    let directory = ensure_child_directory_at(
+        root,
+        PACKAGE_TRANSPORT_DIRECTORY,
+        "publication_package_transport_directory_create",
+        "publication_package_transport_directory_open",
+    )?;
+    let mut readiness = read_package_readiness_at(&directory)?;
+    let previous_transport = readiness
+        .bindings
+        .get(&container.root.package_revision)
+        .copied();
+    for selection in &container.selections {
+        readiness
+            .bindings
+            .insert(selection.package_revision, selection.transport);
+    }
+    let ready_bytes = readiness.encode()?;
+    let mut work = StoreWork::default();
+    let stage_input_visits = container.objects.len() as u64;
+    let mut install_admission = crate::platform::storage::object::StoreReadAdmission::new(
+        crate::platform::storage::object::StoreReadLimits {
+            maximum_catalog_lookups: reserved_visits,
+            maximum_objects: crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
+                - admitted.validation_visits
+                - stage_input_visits,
+            maximum_bytes: crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
+                - admitted.validation_read_bytes,
+        },
+    );
+    package_stage_checkpoint(fault, PackageStagePoint::BeforeObjects)?;
+    for (index, (key, value)) in container.objects.iter().enumerate() {
+        store
+            .stage_admitted(*key, value, &mut install_admission, &mut work)
+            .map_err(store_diagnostic)?;
+        if index == 0 {
+            package_stage_checkpoint(fault, PackageStagePoint::AfterFirstObject)?;
         }
     }
-    Ok(selected)
+    #[cfg(test)]
+    let seal = if let Some(PackageStagePoint::Storage(checkpoint)) = fault {
+        store
+            .seal_staged_with_fault(TARGET_PACK_BYTES, &mut work, checkpoint)
+            .map_err(store_diagnostic)?
+    } else {
+        store
+            .seal_staged(TARGET_PACK_BYTES, &mut work)
+            .map_err(store_diagnostic)?
+    };
+    #[cfg(not(test))]
+    let seal = store
+        .seal_staged(TARGET_PACK_BYTES, &mut work)
+        .map_err(store_diagnostic)?;
+    package_stage_checkpoint(fault, PackageStagePoint::ObjectsDurable)?;
+    // Re-read immutable bytes before the sole readiness visibility point. No source falls back.
+    for (key, expected) in &container.objects {
+        let actual = store
+            .read_admitted(
+                *key,
+                key.domain.maximum_bytes(),
+                &mut install_admission,
+                &mut work,
+            )
+            .map_err(store_diagnostic)?;
+        if actual.as_ref() != Some(expected) {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_source_verify",
+                "installed canonical source differs from validated input; restage exact source",
+            ));
+        }
+    }
+    publish_package_readiness(&directory, &ready_bytes, fault)?;
+    Ok(InstalledPackageTransport {
+        revision: package.revision.clone(),
+        transport: package.transport.clone(),
+        previous_transport,
+        outcome: if previous_transport == Some(digest) {
+            StageOutcome::Reused
+        } else {
+            StageOutcome::Inserted
+        },
+        seal,
+        work,
+        closure_packages: admitted.packages.len(),
+        closure_edges: admitted.dependency_edges,
+        closure_objects: container.objects.len(),
+        validation_visits: admitted.validation_visits + stage_input_visits + work.objects_read,
+        validation_read_bytes: admitted.validation_read_bytes + work.bytes_read,
+    })
 }
 
-fn package_resolution_admission_exhausted(error: &Diagnostic) -> bool {
-    error.code.starts_with("change_budget_canonical_")
-        || error.code.starts_with("persistent_map_admission_")
-        || matches!(
-            error.code.as_str(),
-            "object_read_catalog_lookups_exhausted"
-                | "object_read_objects_exhausted"
-                | "object_read_bytes_exhausted"
+fn package_stage_checkpoint(
+    fault: Option<PackageStagePoint>,
+    point: PackageStagePoint,
+) -> Result<(), Diagnostic> {
+    if fault == Some(point) {
+        return Err(repository_error(
+            DiagnosticClass::Cancelled,
+            if point == PackageStagePoint::ReadinessVisible {
+                "package_stage_visible_ack_lost"
+            } else {
+                "package_stage_interrupted"
+            },
+            format!(
+                "package staging interrupted at {point:?}; inspect readiness and retry the exact source container"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn publish_package_readiness(
+    directory: &File,
+    bytes: &[u8],
+    fault: Option<PackageStagePoint>,
+) -> Result<(), Diagnostic> {
+    let temporary = format!(
+        "{PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX}{}",
+        random_hex("publication_package_readiness_random")?
+    );
+    let fd = rustix::fs::openat(
+        directory,
+        temporary.as_str(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    )
+    .map_err(|error| rustix_diagnostic("publication_package_readiness_stage", error))?;
+    let mut file = File::from(fd);
+    let result = (|| {
+        file.write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| {
+                io_diagnostic(
+                    "publication_package_readiness_write",
+                    Path::new(PACKAGE_TRANSPORT_SELECTION_FILE),
+                    error,
+                )
+            })?;
+        package_stage_checkpoint(fault, PackageStagePoint::ReadinessSynced)?;
+        rustix::fs::renameat(
+            directory,
+            temporary.as_str(),
+            directory,
+            PACKAGE_TRANSPORT_SELECTION_FILE,
         )
+        .map_err(|error| rustix_diagnostic("publication_package_readiness_publish", error))?;
+        directory.sync_all().map_err(|error| repository_error(DiagnosticClass::Infrastructure,
+            "publication_package_readiness_visible", format!("complete package readiness is visible; acknowledgement durability is indeterminate: {error}; inspect or retry staging")))?;
+        package_stage_checkpoint(fault, PackageStagePoint::ReadinessVisible)?;
+        Ok(())
+    })();
+    drop(file);
+    if result.is_err() {
+        let _ = rustix::fs::unlinkat(directory, temporary.as_str(), AtFlags::empty());
+    }
+    result
 }
 
 fn missing_package_transport(
@@ -1756,37 +2077,10 @@ fn missing_package_transport(
     repository_error(
         DiagnosticClass::Semantic,
         "package_transport_missing",
-        format!("no durable validated transport is staged for package revision {revision}"),
+        format!(
+            "no complete validated source is ready for package revision {revision}; export its exact closure, restage, and replan"
+        ),
     )
-}
-
-fn validate_package_transport_candidate_count(
-    candidate_count: usize,
-    operation: &'static str,
-) -> Result<(), Diagnostic> {
-    if candidate_count > MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES {
-        return Err(repository_error(
-            DiagnosticClass::Resource,
-            "publication_package_transport_candidate_count",
-            format!(
-                "package transport {operation} exceeds {MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES} candidate objects"
-            ),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_package_transport_candidate_capacity(candidate_count: usize) -> Result<(), Diagnostic> {
-    if candidate_count >= MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES {
-        return Err(repository_error(
-            DiagnosticClass::Resource,
-            "publication_package_transport_candidate_count",
-            format!(
-                "package transport staging cannot exceed {MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES} candidate objects per logical revision"
-            ),
-        ));
-    }
-    Ok(())
 }
 
 struct InstalledPackageTransport {
@@ -1796,491 +2090,11 @@ struct InstalledPackageTransport {
     outcome: StageOutcome,
     seal: SealReceipt,
     work: StoreWork,
-}
-
-fn install_package_transport(
-    root_directory: &File,
-    store: &mut PackDirectoryStore,
-    digest: crate::platform::kernel::PackageTransportDigest,
-    packs: &[Vec<u8>],
-) -> Result<InstalledPackageTransport, Diagnostic> {
-    if packs.is_empty() || packs.len() > MAXIMUM_PACKAGE_TRANSPORT_PACKS {
-        return Err(repository_error(
-            DiagnosticClass::Resource,
-            "publication_package_transport_pack_count",
-            format!(
-                "package transport must contain 1 through {MAXIMUM_PACKAGE_TRANSPORT_PACKS} immutable packs"
-            ),
-        ));
-    }
-    preflight_package_transport_packs(packs)?;
-    let mut work = StoreWork::default();
-    let root_key = ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes());
-    let outcome = if store
-        .contains(root_key, &mut work)
-        .map_err(store_diagnostic)?
-    {
-        StageOutcome::Reused
-    } else {
-        StageOutcome::Inserted
-    };
-    let mut input_keys = BTreeSet::new();
-    let mut stage = ObjectStage::new(&*store);
-    for pack in packs {
-        let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
-        metadata.verify_all(pack).map_err(|error| {
-            let mut diagnostic = store_diagnostic(error);
-            diagnostic
-                .notes
-                .push("failed while verifying one package-transport pack".to_owned());
-            diagnostic
-        })?;
-        for entry in &metadata.entries {
-            if !input_keys.insert(entry.key) {
-                return Err(repository_error(
-                    DiagnosticClass::Corrupt,
-                    "publication_package_transport_duplicate",
-                    "package transport repeats one immutable object key",
-                ));
-            }
-            let bytes = metadata
-                .read(pack, entry.key, entry.key.domain.maximum_bytes())
-                .map_err(store_diagnostic)?
-                .ok_or_else(|| {
-                    repository_error(
-                        DiagnosticClass::Corrupt,
-                        "publication_package_transport_entry",
-                        "verified package pack lost one indexed object",
-                    )
-                })?;
-            stage.stage(entry.key, &bytes, &mut work).map_err(|error| {
-                let mut diagnostic = store_diagnostic(error);
-                diagnostic.notes.push(format!(
-                    "failed while staging {} package-transport bytes",
-                    entry.key.domain.name()
-                ));
-                diagnostic
-            })?;
-        }
-    }
-    let root_bytes = stage
-        .read(
-            root_key,
-            ObjectDomain::PackageTransport.maximum_bytes(),
-            &mut work,
-        )
-        .map_err(store_diagnostic)?
-        .ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Semantic,
-                "publication_package_transport_root",
-                "package transport omits its exact root transport manifest",
-            )
-        })?;
-    let transport = PackageTransport::decode(&root_bytes, digest)?;
-    let revision_key = ObjectKey::from_digest(
-        ObjectDomain::PackageRevision,
-        transport.package_revision.bytes(),
-    );
-    let revision_bytes = stage
-        .read(
-            revision_key,
-            ObjectDomain::PackageRevision.maximum_bytes(),
-            &mut work,
-        )
-        .map_err(store_diagnostic)?
-        .ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Semantic,
-                "publication_package_transport_revision",
-                "package transport omits its exact logical package revision",
-            )
-        })?;
-    let revision = PackageRevision::decode(&revision_bytes, transport.package_revision)?;
-    let validated = resolve_package_transport_closure(
-        &stage,
-        &*store,
-        transport.package_revision,
-        Some(PackageTransportBinding {
-            package_revision: transport.package_revision,
-            transport: digest,
-        }),
-        None,
-        &mut work,
-    )?;
-    if validated.root_transport != transport || validated.root_revision != revision {
-        return Err(repository_error(
-            DiagnosticClass::Corrupt,
-            "publication_package_stage_validation",
-            "staged package revision or transport changed during closure validation",
-        ));
-    }
-    let mut expected_keys = validated.root_interface.reachable_objects;
-    expected_keys.insert(root_key);
-    expected_keys.insert(revision_key);
-    expected_keys.insert(ObjectKey::from_digest(
-        ObjectDomain::SemanticRoot,
-        transport.semantic_root.bytes(),
-    ));
-    if input_keys != expected_keys {
-        return Err(repository_error(
-            DiagnosticClass::Corrupt,
-            "publication_package_transport_reachability",
-            "package transport contains missing or unreachable immutable objects",
-        ));
-    }
-    for (key, bytes) in stage.into_objects() {
-        store
-            .stage(key, &bytes, &mut work)
-            .map_err(store_diagnostic)?;
-    }
-    let seal = store
-        .seal_staged(TARGET_PACK_BYTES, &mut work)
-        .map_err(store_diagnostic)?;
-    let verified = resolve_package_transport_closure(
-        &*store,
-        &*store,
-        transport.package_revision,
-        Some(PackageTransportBinding {
-            package_revision: transport.package_revision,
-            transport: digest,
-        }),
-        None,
-        &mut work,
-    )?;
-    if verified.root_transport != transport || verified.root_revision != revision {
-        return Err(repository_error(
-            DiagnosticClass::Corrupt,
-            "publication_package_stage_verify",
-            "sealed package revision or transport disagrees with validated staging bytes",
-        ));
-    }
-    let previous_transport = replace_package_transport_binding(
-        root_directory,
-        &*store,
-        transport.package_revision,
-        digest,
-        &mut work,
-    )?;
-    Ok(InstalledPackageTransport {
-        revision,
-        transport,
-        previous_transport,
-        outcome,
-        seal,
-        work,
-    })
-}
-
-fn replace_package_transport_binding(
-    root_directory: &File,
-    store: &PackDirectoryStore,
-    revision: crate::platform::kernel::PackageRevisionDigest,
-    transport: crate::platform::kernel::PackageTransportDigest,
-    work: &mut StoreWork,
-) -> Result<Option<crate::platform::kernel::PackageTransportDigest>, Diagnostic> {
-    let transport_directory = ensure_child_directory_at(
-        root_directory,
-        PACKAGE_TRANSPORT_DIRECTORY,
-        "publication_package_transport_directory_create",
-        "publication_package_transport_directory_open",
-    )?;
-    let revision_directory = ensure_child_directory_at(
-        &transport_directory,
-        &package_transport_revision_directory_name(revision),
-        "publication_package_transport_revision_directory_create",
-        "publication_package_transport_revision_directory_open",
-    )?;
-    let logical_revision = read_package_revision(store, revision, work)?;
-    let previous = match read_package_transport_selection_at(&revision_directory, revision)? {
-        Some(selection) => match validate_package_transport_local(
-            store,
-            selection.binding,
-            &logical_revision,
-            work,
-        ) {
-            Ok(_) => Some(selection.binding.transport),
-            Err(error) if error.class != DiagnosticClass::Infrastructure => {
-                find_valid_package_transport(store, revision, &logical_revision, work)?
-            }
-            Err(error) => return Err(error),
-        },
-        None => find_valid_package_transport(store, revision, &logical_revision, work)?,
-    };
-    publish_package_transport_candidate(&revision_directory, transport)?;
-    let bytes = PackageTransportSelection::new(PackageTransportBinding {
-        package_revision: revision,
-        transport,
-    })
-    .encode()?;
-    let temporary = format!(
-        "{PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX}{}",
-        random_hex("publication_package_transport_selection_random")?
-    );
-    let fd = rustix::fs::openat(
-        &revision_directory,
-        temporary.as_str(),
-        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-        Mode::from_raw_mode(0o600),
-    )
-    .map_err(|error| rustix_diagnostic("publication_package_transport_selection_stage", error))?;
-    let mut file = File::from(fd);
-    if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
-        drop(file);
-        let _ = rustix::fs::unlinkat(&revision_directory, temporary.as_str(), AtFlags::empty());
-        return Err(io_diagnostic(
-            "publication_package_transport_selection_write",
-            Path::new(PACKAGE_TRANSPORT_SELECTION_FILE),
-            error,
-        ));
-    }
-    drop(file);
-    if let Err(error) = rustix::fs::renameat(
-        &revision_directory,
-        temporary.as_str(),
-        &revision_directory,
-        PACKAGE_TRANSPORT_SELECTION_FILE,
-    ) {
-        let _ = rustix::fs::unlinkat(&revision_directory, temporary.as_str(), AtFlags::empty());
-        return Err(rustix_diagnostic(
-            "publication_package_transport_selection_publish",
-            error,
-        ));
-    }
-    revision_directory.sync_all().map_err(|error| {
-        repository_error(
-            DiagnosticClass::Infrastructure,
-            "publication_package_transport_selection_visibility",
-            format!(
-                "package transport selection rename succeeded but durability is indeterminate: {error}"
-            ),
-        )
-    })?;
-    Ok(previous)
-}
-
-fn read_package_revision(
-    store: &PackDirectoryStore,
-    revision: crate::platform::kernel::PackageRevisionDigest,
-    work: &mut StoreWork,
-) -> Result<PackageRevision, Diagnostic> {
-    let bytes = store
-        .read(
-            ObjectKey::from_digest(ObjectDomain::PackageRevision, revision.bytes()),
-            ObjectDomain::PackageRevision.maximum_bytes(),
-            work,
-        )
-        .map_err(store_diagnostic)?
-        .ok_or_else(|| missing_package_transport(revision))?;
-    PackageRevision::decode(&bytes, revision)
-}
-
-fn publish_package_transport_candidate(
-    revision_directory: &File,
-    transport: crate::platform::kernel::PackageTransportDigest,
-) -> Result<(), Diagnostic> {
-    let name = package_transport_candidate_name(transport);
-    match read_optional_regular_at(
-        revision_directory,
-        &name,
-        0,
-        "publication_package_transport_candidate_existing",
-    )? {
-        Some(marker) if marker.is_empty() => return Ok(()),
-        Some(_) => {
-            return Err(repository_error(
-                DiagnosticClass::Corrupt,
-                "publication_package_transport_candidate_existing",
-                "existing package transport candidate marker is not an empty regular file",
-            ));
-        }
-        None => {}
-    }
-    let candidate_count = count_package_transport_candidates(revision_directory)?;
-    validate_package_transport_candidate_capacity(candidate_count)?;
-    match rustix::fs::openat(
-        revision_directory,
-        name.as_str(),
-        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-        Mode::from_raw_mode(0o600),
-    ) {
-        Ok(fd) => {
-            File::from(fd).sync_all().map_err(|error| {
-                io_diagnostic(
-                    "publication_package_transport_candidate_sync",
-                    Path::new(&name),
-                    error,
-                )
-            })?;
-            revision_directory.sync_all().map_err(|error| {
-                io_diagnostic(
-                    "publication_package_transport_candidate_visibility",
-                    Path::new(PACKAGE_TRANSPORT_DIRECTORY),
-                    error,
-                )
-            })
-        }
-        Err(error) if error == rustix::io::Errno::EXIST => {
-            match read_optional_regular_at(
-                revision_directory,
-                &name,
-                0,
-                "publication_package_transport_candidate_existing",
-            )? {
-                Some(marker) if marker.is_empty() => Ok(()),
-                _ => Err(repository_error(
-                    DiagnosticClass::Corrupt,
-                    "publication_package_transport_candidate_existing",
-                    "existing package transport candidate marker is not an empty regular file",
-                )),
-            }
-        }
-        Err(error) => Err(rustix_diagnostic(
-            "publication_package_transport_candidate_create",
-            error,
-        )),
-    }
-}
-
-fn preflight_package_transport_packs(packs: &[Vec<u8>]) -> Result<(), Diagnostic> {
-    let mut total_bytes = 0_usize;
-    for pack in packs {
-        total_bytes = reserve_package_transport_total(
-            total_bytes,
-            pack.len(),
-            MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES,
-            "publication_package_transport_pack_bytes",
-            "bytes",
-        )?;
-    }
-    let mut total_entries = 0_usize;
-    for pack in packs {
-        let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
-        total_entries = reserve_package_transport_total(
-            total_entries,
-            metadata.entries.len(),
-            MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES,
-            "publication_package_transport_pack_entries",
-            "entries",
-        )?;
-    }
-    Ok(())
-}
-
-fn reserve_package_transport_total(
-    current: usize,
-    additional: usize,
-    maximum: usize,
-    code: &'static str,
-    unit: &'static str,
-) -> Result<usize, Diagnostic> {
-    let total = current.checked_add(additional).ok_or_else(|| {
-        repository_error(
-            DiagnosticClass::Resource,
-            code,
-            format!("package transport aggregate {unit} overflowed"),
-        )
-    })?;
-    if total > maximum {
-        return Err(repository_error(
-            DiagnosticClass::Resource,
-            code,
-            format!("package transport exceeds {maximum} aggregate {unit}"),
-        ));
-    }
-    Ok(total)
-}
-
-fn package_transport_revision_directory_name(
-    revision: crate::platform::kernel::PackageRevisionDigest,
-) -> String {
-    crate::platform::semantic_id::encode_hex(&revision.bytes())
-}
-
-fn package_transport_candidate_name(
-    transport: crate::platform::kernel::PackageTransportDigest,
-) -> String {
-    format!(
-        "{PACKAGE_TRANSPORT_CANDIDATE_PREFIX}{}",
-        crate::platform::semantic_id::encode_hex(&transport.bytes())
-    )
-}
-
-fn decode_package_transport_candidate_name(
-    name: &[u8],
-) -> Option<crate::platform::kernel::PackageTransportDigest> {
-    let encoded = name.strip_prefix(PACKAGE_TRANSPORT_CANDIDATE_PREFIX.as_bytes())?;
-    if encoded.len() != 64 {
-        return None;
-    }
-    let mut digest = [0_u8; 32];
-    for (index, pair) in encoded.as_chunks::<2>().0.iter().enumerate() {
-        let high = decode_lower_hex(pair[0])?;
-        let low = decode_lower_hex(pair[1])?;
-        digest[index] = (high << 4) | low;
-    }
-    Some(crate::platform::kernel::PackageTransportDigest::from_bytes(
-        digest,
-    ))
-}
-
-const fn decode_lower_hex(value: u8) -> Option<u8> {
-    match value {
-        b'0'..=b'9' => Some(value - b'0'),
-        b'a'..=b'f' => Some(value - b'a' + 10),
-        _ => None,
-    }
-}
-
-fn count_package_transport_candidates(directory: &File) -> Result<usize, Diagnostic> {
-    let entries = Dir::read_from(directory).map_err(|error| {
-        rustix_diagnostic(
-            "publication_package_transport_candidate_directory_read",
-            error,
-        )
-    })?;
-    let mut count = 0_usize;
-    for entry in entries {
-        let entry = entry.map_err(|error| {
-            rustix_diagnostic(
-                "publication_package_transport_candidate_directory_read",
-                error,
-            )
-        })?;
-        if entry
-            .file_name()
-            .to_bytes()
-            .starts_with(PACKAGE_TRANSPORT_CANDIDATE_PREFIX.as_bytes())
-        {
-            count = count.checked_add(1).ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Resource,
-                    "publication_package_transport_candidate_count",
-                    "package transport candidate count overflowed",
-                )
-            })?;
-            validate_package_transport_candidate_count(count, "resolution")?;
-        }
-    }
-    Ok(count)
-}
-
-fn open_package_transport_revision_directory(
-    root: &Path,
-    revision: crate::platform::kernel::PackageRevisionDigest,
-    code: &'static str,
-) -> Result<Option<File>, Diagnostic> {
-    let root_directory = open_directory(root)?;
-    let Some(transport_directory) =
-        open_optional_directory_at(&root_directory, PACKAGE_TRANSPORT_DIRECTORY, code)?
-    else {
-        return Ok(None);
-    };
-    open_optional_directory_at(
-        &transport_directory,
-        &package_transport_revision_directory_name(revision),
-        code,
-    )
+    closure_packages: usize,
+    closure_edges: usize,
+    closure_objects: usize,
+    validation_visits: u64,
+    validation_read_bytes: u64,
 }
 
 fn open_optional_directory_at(
@@ -2717,85 +2531,4 @@ fn repository_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
-}
-
-#[cfg(test)]
-mod package_transport_repository_tests {
-    use super::*;
-
-    #[test]
-    fn package_transport_candidate_budget_rejects_before_candidate_scan() {
-        validate_package_transport_candidate_count(
-            MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES,
-            "resolution",
-        )
-        .expect("exact candidate bound");
-        assert_eq!(
-            validate_package_transport_candidate_count(
-                MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES + 1,
-                "resolution",
-            )
-            .expect_err("excess candidates must reject before decoding")
-            .code,
-            "publication_package_transport_candidate_count"
-        );
-        validate_package_transport_candidate_capacity(MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES - 1)
-            .expect("one remaining candidate slot");
-        assert_eq!(
-            validate_package_transport_candidate_capacity(MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES)
-                .expect_err("staging must reject before creating an excess candidate")
-                .code,
-            "publication_package_transport_candidate_count"
-        );
-    }
-
-    #[test]
-    fn package_transport_pack_totals_have_independent_preallocation_bounds() {
-        assert_eq!(
-            reserve_package_transport_total(
-                0,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES,
-                "publication_package_transport_pack_bytes",
-                "bytes",
-            )
-            .unwrap(),
-            MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES
-        );
-        assert_eq!(
-            reserve_package_transport_total(
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES,
-                1,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_BYTES,
-                "publication_package_transport_pack_bytes",
-                "bytes",
-            )
-            .unwrap_err()
-            .code,
-            "publication_package_transport_pack_bytes"
-        );
-        assert_eq!(
-            reserve_package_transport_total(
-                0,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES,
-                "publication_package_transport_pack_entries",
-                "entries",
-            )
-            .unwrap(),
-            MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES
-        );
-        assert_eq!(
-            reserve_package_transport_total(
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES,
-                1,
-                MAXIMUM_PACKAGE_TRANSPORT_TOTAL_PACK_ENTRIES,
-                "publication_package_transport_pack_entries",
-                "entries",
-            )
-            .unwrap_err()
-            .code,
-            "publication_package_transport_pack_entries"
-        );
-    }
 }

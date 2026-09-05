@@ -62,6 +62,14 @@ pub fn rebuild_full_witness(snapshot: &KernelSnapshot) -> Result<FullWitness, Ve
     build_validated_witness(snapshot, full_validation).map_err(|diagnostic| vec![diagnostic])
 }
 
+pub(crate) fn rebuild_full_witness_with_limit(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+) -> Result<FullWitness, Vec<Diagnostic>> {
+    let validation = crate::platform::kernel::validate_full_with_limit(snapshot, maximum_work)?;
+    build_validated_witness(snapshot, validation).map_err(|diagnostic| vec![diagnostic])
+}
+
 fn build_validated_witness(
     snapshot: &KernelSnapshot,
     full_validation: FullValidationReport,

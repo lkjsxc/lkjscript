@@ -315,9 +315,10 @@ set.http-route route=HTTP_ROUTE method=METHOD path=EXACT_PATH port=PORT
 set.http-route route=HTTP_ROUTE method=METHOD pattern=PATH_PATTERN port=PORT
 ```
 
-`add.dependency` accepts only the exact current built-in binding after its immutable transport has
-been staged through public package export. It performs no network, registry, ambient-directory, or
-unchecked-file lookup; unavailable, duplicate, stale, foreign, and mismatched bindings reject.
+`add.dependency` accepts an exact package/semantic/logical binding after its complete immutable
+source closure has been validated and staged. It performs no network, registry, ambient-directory,
+or unchecked-file lookup; unavailable, duplicate, stale, foreign, conflicting, and mismatched
+bindings reject before publication.
 `create.component` creates an empty component. Requirements and function-backed ports are separate
 independently budgeted operations. An `add.port` explicit function type must exactly agree with its
 function implementation. `create.target` binds an exact component and requires one exact port for
@@ -369,7 +370,7 @@ When apply accepts, its semantic records are final before any compiler-cache han
 manifest/work or diagnostic data as applicable. `failed` still accompanies a successful accepted
 semantic result; it is never mapped to a failed change.
 
-## Built-in package
+## Offline packages and the embedded supplier
 
 ```text
 package builtin inspect
@@ -377,6 +378,11 @@ package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] \
   [--limit N] [--bytes N] [--continuation TOKEN]
 package builtin inspect owner KIND ID
 package builtin export --kind transport|artifact --output PATH
+package current export --kind transport --output PATH
+package dependency stage --transport DIGEST --input-file PATH
+package dependency inspect [owner KIND ID] --package-revision REVISION
+package dependency query owners --package-revision REVISION \
+  [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN]
 ```
 
 Inspection reports exact package, semantic revision, logical package revision, transport,
@@ -392,6 +398,23 @@ Results use deterministic owner-key order and bounded output. A `bcont_` continu
 exact package revision, normalized selector, order, and exclusive resume key. Malformed, oversized,
 foreign, selector-mismatched, or stale tokens reject. No private body, intrinsic implementation
 name, or artifact string scan is exposed or required.
+
+Current export creates one code-complete immutable source container for the root and its exact
+transitive closure. Dependency stage validates all canonical graphs, private bodies, interfaces,
+and closed intrinsic signatures, then atomically installs closure-ready operational material without
+changing semantic HEAD. Only reviewed `add.dependency` and `replace.dependency` install accepted
+bindings. The logical review contains ordered `package-before` and `package-after` inventories
+binding package, semantic revision, logical revision, and interface. Its bounded response summarizes
+added/removed/changed members and interface changes; the plan commitment binds the complete file.
+Apply rechecks the exact union, source availability, and validation contract under the publication lock.
+
+Dependency inspection requires the exact logical package revision, including for staged closure
+members. It uses the same public-interface projection, filters, budgets, ordering, and continuation
+rules as the embedded supplier. Root inspection exposes direct dependency identities and closure
+counts/commitment, not an unbounded catalog. Staging or inspecting a transitive member grants no
+ambient visibility. `--project` selects the importing/exporting repository under ordinary parsing;
+`package builtin` remains project-independent. Source containers include private implementations;
+interface-only inspection is not a source-confidentiality claim.
 
 `capabilities --section deployment` and
 [`deployment.md`](../generated/deployment.md) project the deployment descriptor from the same closed

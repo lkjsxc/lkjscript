@@ -292,6 +292,7 @@ pub struct NormalizedProgram {
     pub root_semantic_state: SemanticStateDigest,
     pub work: NormalizedPreparationWork,
     pub(crate) functions: Arc<[NormalizedFunction]>,
+    #[cfg(test)]
     pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
     pub(crate) records: Arc<[NormalizedRecordLayout]>,
     pub(crate) variants: Arc<[NormalizedVariantLayout]>,
@@ -381,6 +382,7 @@ impl NormalizedProgram {
             artifact,
             work,
             functions: functions.into(),
+            #[cfg(test)]
             function_by_declaration: indexes.functions,
             records: records.into(),
             variants: variants.into(),
@@ -401,6 +403,7 @@ impl NormalizedProgram {
         &self.artifact
     }
 
+    #[cfg(test)]
     pub fn function(&self, declaration: DeclarationReference) -> Option<FunctionIndex> {
         self.function_by_declaration.get(&declaration).copied()
     }

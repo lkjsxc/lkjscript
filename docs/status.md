@@ -36,7 +36,7 @@ Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | exact built-in package transport, 114,656 bytes | `12ba58397c04c5479ae3eae92d68d413826c30dbe14769be9f0748598453d485` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 231,436 bytes | `63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250` |
 | `packages/standard/generated/standard.lkja` | current standard artifact bundle, 328,738 bytes | `0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb` |
 | `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,062,638 bytes | `1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8` |
 
@@ -104,15 +104,16 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.22`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.23`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
-adds signature-indexed inbound HTTP path captures. Graph 10, validation witness 6, owner summary 5,
+adds signature-indexed inbound HTTP path captures and code-complete offline package composition.
+Graph 10, validation witness 6, owner summary 5,
 validator 10, package 3, package interface 6, compiler-unit 5, bytecode 3, Artifact 15, resident
 runtime 3, function-definition projection 2, service receipt 10, distributed-HTTP receipt 4,
 outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 14, authored change 11,
-logical change plan 4, query 6,
-project creation 5, registry 11, CLI 23, deployment 4, HTTP adapter 3, and structured-session 1 are
+logical change plan 5, query 6,
+project creation 5, registry 11, CLI 24, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
@@ -125,11 +126,11 @@ consolidated release performed no deployment, hosted-data mutation, or live-rela
 Graph, package, artifact, deployment, distribution, and operational-data identities remain
 separate. The source product retains the same closed
 operation names:
-`capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, normalized built-in
+`capabilities`, `new`, top-level `data`, `status`, `inspect`, `query`, `change`, exact offline
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`e1eb51f0a9b0e7dca8e6aae7a086766b7396f44c7c02cb9e6fd37eca49ec1ee3` in current source.
+`3f938b8992e41959806205e3304fed2652e441c2e17ab7e795a12ed92020f9bd` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -236,7 +237,7 @@ surface additionally exposes exact `add.dependency`, `create.component`, functio
 `add.port`, conditionally portless `create.target`, `add.http-route`, and `set.http-route` records
 alongside interface/external creation, operation parameters,
 dependency replacement, and requirement rebinding. Exact dependency addition is confined to an
-already-staged immutable built-in transport; it performs no lookup. The built-in standard exports
+already-staged complete immutable source closure; it performs no registry or ambient lookup. The built-in standard exports
 graph-owned generic
 `list-fold-left<Item, State>`, and the source BBS authors its content-type predicate with a named
 header reducer and that fold. Immutable predecessor releases remain unchanged.
@@ -358,7 +359,7 @@ reported separately as `updated`, `not-available`, `not-attempted-replay`, or `f
 failure cannot change the accepted semantic result.
 
 Predecessor project markers receive `project_predecessor_authority` before cache or output work.
-The removed project-scoped `draft`, `history`, general package staging, `review`, `backup`,
+The removed project-scoped `draft`, `history`, predecessor package commands, `review`, `backup`,
 `restore`, and `doctor` names are absent and fail with ordinary `cli_usage`; top-level
 `data backup|restore` are distinct operational-data operations. The old workspace/repository
 mutation stack and public check/build/run routing have been deleted. There is no legacy flag,
@@ -450,19 +451,20 @@ sandbox or multi-tenant isolation boundary.
 
 ## Current limits and unproved properties
 
-- The only released dependency resolver accepts the exact built-in standard package. There is no
-  general package manager, ambient filesystem lookup, mutable tag, network registry, or upgrade
-  resolver.
+- Unreleased source resolves exact immutable code-complete dependency closures, including ordinary
+  non-built-in packages. There is no ambient filesystem lookup, mutable tag, network registry,
+  package publication, or upgrade resolver. Public release behavior remains separately identified.
 - Public `run` is pure-command-only. Arbitrary outbound URLs/methods, request bodies, outbound
   WebSocket clients, redirects, private-network destinations, proxies, client certificates,
   NIP-01 event models/signing, reconnect/backoff, and additional effect families remain absent.
-- Whole-project source/export, recursive referenced-declaration bodies, dependency implementation
-  projection, generic impact query, fuzzy search, multiple-root context, and historical query are
-  absent. Definition detail is confined to one admitted live local function.
+- Source text, recursive referenced-declaration detail, dependency implementation detail queries,
+  generic impact query, fuzzy search, multiple-root context, and historical query are absent.
+  Definition detail is confined to one admitted live local function; code-complete transport
+  separately exports the entire selected current canonical source closure, including private bodies.
 - Removed draft/history/review/project-backup/project-restore/doctor workflows have not been
   reintroduced on typed meaning authority. Operational data backup/restore is separately public.
 - Public authored change covers the executable-discovered subset; additional typed engine forms
-  remain private until a complete public workflow exists. Exact staged built-in dependencies,
+  remain private until a complete public workflow exists. Exact staged code-complete dependencies,
   components, requirements, function-backed ports, and command/HTTP/interactive targets can be
   created. Existing
   function contracts can be changed, and one proper subtree of a nongeneric local function can be
@@ -498,6 +500,17 @@ sandbox or multi-tenant isolation boundary.
   direct telemetry exists.
 
 ## Verification
+
+The code-complete offline-package campaign remains incomplete pending authoritative product/full
+and exact-target proof. Its focused copied-binary diamond returns 11, stays 11 when D2 is staged,
+and returns 12 after one reviewed paired replacement. Producer directories are removed before
+execution; independently reconstructed producer and transported inventories agree. Public nominal
+types, rank-one generic calls, bounded staged-interface paging, cache recovery, and the standalone
+HTTP body pass at that boundary. Maintained semantic/package/transport and artifact identities
+above remain unchanged; only the public source container and operational readiness encoding move.
+The bounded standard/lkjournal/diamond admission preflight fits every fixed ceiling without a
+capacity claim. Current classifications and raw pointers are retained in
+[`202609050819-offline-packages.json`](evidence/202609050819-offline-packages.json).
 
 Exact identities, oracle boundaries, gate classifications, resource observations, deletion, and
 raw-evidence pointers for the current signature-indexed HTTP path-capture slice are owned by

@@ -37,6 +37,407 @@ use crate::platform::witness::{NamespaceKey, OwnershipParent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+fn non_builtin_source_with_standard() -> (ExportedPackageTransport, ExportedPackageTransport) {
+    let standard = GraphRepository::open(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),
+    )
+    .unwrap()
+    .export_package_transport()
+    .unwrap();
+    let producer_parent = tempfile::tempdir().unwrap();
+    let source = GraphRepository::create(
+        &producer_parent.path().join("non-builtin"),
+        &empty_snapshot(b"atomic-closure-source"),
+        None,
+    )
+    .unwrap();
+    source
+        .repository
+        .stage_package_transport(standard.transport_digest, &standard.container)
+        .unwrap();
+    let prepared = source
+        .repository
+        .prepare_authored_change(
+            &AuthoredChangeSet {
+                base: source.current.head.revision,
+                preconditions: Vec::new(),
+                budget: ChangeBudget::default(),
+                changes: vec![AuthoredChange::AddDependency {
+                    package: standard.revision.package,
+                    semantic_revision: standard.revision.revision.revision_id().unwrap(),
+                    package_revision: standard.revision_digest,
+                }],
+            },
+            PublicationOptions::default(),
+        )
+        .unwrap();
+    source.repository.publish(&prepared.publication).unwrap();
+    let exported = source.repository.export_package_transport().unwrap();
+    producer_parent.close().unwrap();
+    (standard, exported)
+}
+
+#[test]
+fn complete_package_stage_interruption_exposes_only_complete_readiness_and_retries() {
+    use super::repository::PackageStagePoint;
+    let (standard, exported) = non_builtin_source_with_standard();
+    let expected = crate::platform::package_transport::source::PackageContainer::decode(
+        &exported.container,
+        exported.transport_digest,
+    )
+    .unwrap()
+    .admit()
+    .unwrap();
+    for fault in [
+        PackageStagePoint::BeforeObjects,
+        PackageStagePoint::AfterFirstObject,
+        PackageStagePoint::ObjectsDurable,
+        PackageStagePoint::ReadinessSynced,
+        PackageStagePoint::ReadinessVisible,
+        PackageStagePoint::Storage(SealCheckpoint::PackDirectorySynced),
+    ] {
+        let temporary = tempfile::tempdir().unwrap();
+        let target = GraphRepository::create(
+            &temporary.path().join("consumer"),
+            &empty_snapshot(b"stage-fault-consumer"),
+            None,
+        )
+        .unwrap();
+        target
+            .repository
+            .stage_package_transport(standard.transport_digest, &standard.container)
+            .unwrap();
+        let ready_path = target.repository.root().join("PACKAGE-TRANSPORTS/CURRENT");
+        let previous_ready = std::fs::read(&ready_path).unwrap();
+        let previous_inventory = target
+            .repository
+            .staged_package_source(standard.revision_digest)
+            .unwrap()
+            .container
+            .objects;
+        let before = target.current.head;
+        let error = target
+            .repository
+            .stage_package_transport_with_fault(
+                exported.transport_digest,
+                &exported.container,
+                fault,
+            )
+            .unwrap_err();
+        assert_eq!(target.repository.current().unwrap().head, before);
+        let observed = target
+            .repository
+            .staged_package_source(exported.revision_digest);
+        if fault == PackageStagePoint::ReadinessVisible {
+            assert_eq!(error.code, "package_stage_visible_ack_lost");
+            assert_eq!(
+                observed.unwrap().container.objects,
+                expected.container.objects
+            );
+        } else {
+            assert!(observed.is_err());
+            assert_eq!(std::fs::read(&ready_path).unwrap(), previous_ready);
+        }
+        assert_eq!(
+            target
+                .repository
+                .staged_package_source(standard.revision_digest)
+                .unwrap()
+                .container
+                .objects,
+            previous_inventory
+        );
+        let retry = target
+            .repository
+            .stage_package_transport(exported.transport_digest, &exported.container)
+            .unwrap();
+        assert_eq!(
+            retry.outcome,
+            if fault == PackageStagePoint::ReadinessVisible {
+                StageOutcome::Reused
+            } else {
+                StageOutcome::Inserted
+            }
+        );
+        let ready = target
+            .repository
+            .staged_package_source(exported.revision_digest)
+            .unwrap();
+        assert_eq!(ready.container.objects, expected.container.objects);
+        assert_eq!(target.repository.current().unwrap().head, before);
+        assert!(
+            target
+                .repository
+                .object_store()
+                .unwrap()
+                .staging_leftovers()
+                .is_empty()
+        );
+        assert!(
+            std::fs::read_dir(target.repository.root().join("PACKAGE-TRANSPORTS"))
+                .unwrap()
+                .all(|entry| entry.unwrap().file_name() == "CURRENT")
+        );
+    }
+}
+
+#[test]
+fn dependency_publication_interruptions_recheck_readiness_and_reconcile_complete_closures() {
+    let (_, exported) = non_builtin_source_with_standard();
+    for (point, visible) in [
+        (PublicationPoint::BeforeObjectStage, false),
+        (PublicationPoint::AfterFirstObjectStage, false),
+        (PublicationPoint::AfterPacksSealed, false),
+        (PublicationPoint::AfterHeadFileSynced, false),
+        (PublicationPoint::AfterHeadRenamed, true),
+        (PublicationPoint::AfterHeadDirectorySynced, true),
+    ] {
+        let temporary = tempfile::tempdir().unwrap();
+        let destination = temporary.path().join("consumer");
+        let target = GraphRepository::create(
+            &destination,
+            &empty_snapshot(b"dependency-publication"),
+            None,
+        )
+        .unwrap();
+        target
+            .repository
+            .stage_package_transport(exported.transport_digest, &exported.container)
+            .unwrap();
+        let request = AuthoredChangeSet {
+            base: target.current.head.revision,
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::AddDependency {
+                package: exported.revision.package,
+                semantic_revision: exported.revision.revision.revision_id().unwrap(),
+                package_revision: exported.revision_digest,
+            }],
+        };
+        let prepared = target
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .unwrap();
+        let mut exhausted = request.clone();
+        exhausted.budget.canonical_reads.maximum_point_reads = 1;
+        assert!(
+            target
+                .repository
+                .prepare_authored_change(&exhausted, PublicationOptions::default())
+                .is_err()
+        );
+        assert_eq!(
+            target.repository.current().unwrap().head,
+            target.current.head
+        );
+        let ready_path = destination.join("PACKAGE-TRANSPORTS/CURRENT");
+        let ready = std::fs::read(&ready_path).unwrap();
+        let source = target
+            .repository
+            .staged_package_source(exported.revision_digest)
+            .unwrap()
+            .container
+            .objects;
+        // Availability changes after review: the publication lock must recheck it before any
+        // candidate object becomes durable, independently of the plan's original admission.
+        std::fs::remove_file(&ready_path).unwrap();
+        assert!(target.repository.publish(&prepared.publication).is_err());
+        assert_eq!(
+            target.repository.current().unwrap().head,
+            target.current.head
+        );
+        std::fs::write(&ready_path, &ready).unwrap();
+        assert_eq!(
+            target
+                .repository
+                .staged_package_source(exported.revision_digest)
+                .unwrap()
+                .container
+                .objects,
+            source
+        );
+        assert_eq!(
+            target
+                .repository
+                .publish_with_fault(&prepared.publication, point)
+                .unwrap_err()
+                .code,
+            "publication_repository_injected_interruption"
+        );
+        let reopened = GraphRepository::open(&destination).unwrap();
+        assert_eq!(
+            reopened.current().unwrap().head,
+            if visible {
+                prepared.publication.head
+            } else {
+                target.current.head
+            }
+        );
+        let oracle = reopened
+            .view_current()
+            .unwrap()
+            .reconstruct_full_oracle()
+            .unwrap()
+            .value;
+        assert_eq!(oracle.dependencies.len(), usize::from(visible));
+        assert_eq!(std::fs::read(&ready_path).unwrap(), ready);
+        let admitted = reopened.export_package_container().unwrap();
+        let independent =
+            crate::platform::package_transport::oracle::reconstruct(&admitted.container).unwrap();
+        assert_eq!(independent.snapshots.len(), if visible { 3 } else { 1 });
+        assert_eq!(
+            reopened
+                .staged_package_source(exported.revision_digest)
+                .unwrap()
+                .container
+                .objects,
+            source
+        );
+        let retry = reopened.publish(&prepared.publication).unwrap();
+        assert!(if visible {
+            matches!(retry, PublicationOutcome::AlreadyAccepted { .. })
+        } else {
+            matches!(retry, PublicationOutcome::Accepted { .. })
+        });
+        assert_eq!(reopened.current().unwrap().head, prepared.publication.head);
+        assert!(
+            reopened
+                .object_store()
+                .unwrap()
+                .staging_leftovers()
+                .is_empty()
+        );
+        // HEAD stages left by simulated process interruption are diagnosed independently;
+        // the existing publication owner removes only the stage it creates on a live retry.
+        assert_eq!(
+            reopened.head_staging_leftovers().unwrap().len(),
+            usize::from(point == PublicationPoint::AfterHeadFileSynced)
+        );
+    }
+}
+
+#[test]
+fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate() {
+    let (standard, exported) = non_builtin_source_with_standard();
+    let temporary = tempfile::tempdir().unwrap();
+    let destination = temporary.path().join("consumer");
+    let target = GraphRepository::create(
+        &destination,
+        &empty_snapshot(b"concurrent-package-bindings"),
+        None,
+    )
+    .unwrap();
+    target
+        .repository
+        .stage_package_transport(exported.transport_digest, &exported.container)
+        .unwrap();
+    let prepare = |source: &ExportedPackageTransport| {
+        target
+            .repository
+            .prepare_authored_change(
+                &AuthoredChangeSet {
+                    base: target.current.head.revision,
+                    preconditions: Vec::new(),
+                    budget: ChangeBudget::default(),
+                    changes: vec![AuthoredChange::AddDependency {
+                        package: source.revision.package,
+                        semantic_revision: source.revision.revision.revision_id().unwrap(),
+                        package_revision: source.revision_digest,
+                    }],
+                },
+                PublicationOptions::default(),
+            )
+            .unwrap()
+            .publication
+    };
+    let first = prepare(&exported);
+    let second = prepare(&standard);
+    let barrier = std::sync::Barrier::new(2);
+    let (first_outcome, second_outcome) = std::thread::scope(|scope| {
+        let a = scope.spawn(|| {
+            barrier.wait();
+            target.repository.publish(&first).unwrap()
+        });
+        let b = scope.spawn(|| {
+            barrier.wait();
+            target.repository.publish(&second).unwrap()
+        });
+        (a.join().unwrap(), b.join().unwrap())
+    });
+    let winner = match (&first_outcome, &second_outcome) {
+        (PublicationOutcome::Accepted { .. }, PublicationOutcome::Stale { .. }) => &first,
+        (PublicationOutcome::Stale { .. }, PublicationOutcome::Accepted { .. }) => &second,
+        outcomes => panic!("expected exactly one accepted and one stale candidate: {outcomes:?}"),
+    };
+    assert_eq!(target.repository.current().unwrap().head, winner.head);
+    let closure = target.repository.export_package_container().unwrap();
+    let oracle =
+        crate::platform::package_transport::oracle::reconstruct(&closure.container).unwrap();
+    assert_eq!(
+        oracle.snapshots.len(),
+        if winner.head == first.head { 3 } else { 2 }
+    );
+    assert_eq!(
+        target
+            .repository
+            .view_current()
+            .unwrap()
+            .reconstruct_full_oracle()
+            .unwrap()
+            .value
+            .dependencies
+            .len(),
+        1
+    );
+    assert!(
+        target
+            .repository
+            .object_store()
+            .unwrap()
+            .staging_leftovers()
+            .is_empty()
+    );
+    assert!(
+        target
+            .repository
+            .head_staging_leftovers()
+            .unwrap()
+            .is_empty()
+    );
+    let prepared =
+        crate::platform::normalized_lifecycle::prepare_repository(target.repository.clone())
+            .unwrap();
+    let canonical = prepared
+        .repository
+        .export_package_container()
+        .unwrap()
+        .container
+        .objects;
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    control.cancel();
+    assert_eq!(
+        prepared.check(&control).unwrap_err().code,
+        "execution_cancelled"
+    );
+    assert_eq!(prepared.repository.current().unwrap().head, winner.head);
+    assert_eq!(
+        prepared
+            .repository
+            .export_package_container()
+            .unwrap()
+            .container
+            .objects,
+        canonical
+    );
+    assert_eq!(
+        prepared
+            .check(&crate::platform::execution::ExecutionControl::uncancelled())
+            .unwrap()
+            .passed,
+        20
+    );
+}
+
 #[test]
 fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
@@ -122,7 +523,7 @@ fn repository_creation_installs_exact_dependency_transport_before_initial_public
         Some("dependency-bearing initial publication".to_owned()),
         &[InitialPackageTransport {
             digest: exported.transport_digest,
-            packs: exported.packs,
+            container: exported.container,
         }],
     )
     .expect("dependency-bearing repository creation");
@@ -153,7 +554,7 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
         .expect("source repository");
     let target = GraphRepository::create(
         &target_path,
-        &crate::platform::kernel::tests::witness_snapshot(),
+        &crate::platform::kernel::tests::transport_snapshot(),
         None,
     )
     .expect("target repository");
@@ -169,7 +570,7 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
     );
     assert_eq!(exported.interface_owner_count, 0);
     assert_eq!(exported.interface_type_count, 0);
-    assert!(!exported.packs.is_empty());
+    assert!(!exported.container.is_empty());
     let target_head = target.current.head;
 
     let unrelated_type = TypeObject::new(TypeForm::Option {
@@ -178,28 +579,28 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
     .expect("locally valid unrelated type");
     let (unrelated_digest, unrelated_bytes) =
         encode_type_object(&unrelated_type).expect("unrelated type encoding");
-    let mut unrelated_pack = PackBuilder::default();
-    unrelated_pack
-        .insert(
-            ObjectKey::from_digest(ObjectDomain::Type, unrelated_digest.bytes()),
-            &unrelated_bytes,
-        )
-        .unwrap();
-    let mut overcomplete = exported.packs.clone();
-    overcomplete.push(unrelated_pack.seal().unwrap().bytes);
+    let mut overcomplete = crate::platform::package_transport::source::PackageContainer::decode(
+        &exported.container,
+        exported.transport_digest,
+    )
+    .unwrap();
+    overcomplete.objects.insert(
+        ObjectKey::from_digest(ObjectDomain::Type, unrelated_digest.bytes()),
+        unrelated_bytes,
+    );
     assert_eq!(
         target
             .repository
-            .stage_package_transport(exported.transport_digest, &overcomplete)
+            .stage_package_transport(exported.transport_digest, &overcomplete.encode().unwrap())
             .expect_err("unreachable transport object must reject")
             .code,
-        "publication_package_transport_reachability"
+        "package_container_completeness"
     );
     assert_eq!(target.repository.current().unwrap().head, target_head);
 
     let staged = target
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage exact package transport");
     assert_eq!(staged.outcome, StageOutcome::Inserted);
     assert_eq!(staged.package_revision, exported.revision_digest);
@@ -208,7 +609,7 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
     assert_eq!(target.repository.current().unwrap().head, target_head);
     let repeated = target
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("idempotent package staging");
     assert_eq!(repeated.outcome, StageOutcome::Reused);
     assert!(repeated.seal.packs.is_empty());
@@ -406,115 +807,41 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
         exported.revision_digest
     );
 
-    let transport_selection = target
-        .repository
-        .root()
-        .join("PACKAGE-TRANSPORTS")
-        .join(crate::platform::semantic_id::encode_hex(
-            &exported.revision_digest.bytes(),
-        ))
-        .join("CURRENT");
-    std::fs::remove_file(&transport_selection).expect("remove derived transport selection");
-    let without_index = target
-        .repository
-        .export_package_transport()
-        .expect("bounded independent transport fallback without selection");
-    assert_eq!(without_index.revision.dependencies.len(), 1);
+    let transport_selection = target.repository.root().join("PACKAGE-TRANSPORTS/CURRENT");
+    let ready = std::fs::read(&transport_selection).unwrap();
+    std::fs::remove_file(&transport_selection).unwrap();
     assert_eq!(
-        without_index.revision.dependencies[0].package_revision,
-        exported.revision_digest
+        target
+            .repository
+            .export_package_transport()
+            .unwrap_err()
+            .code,
+        "package_transport_missing"
     );
-    std::fs::write(&transport_selection, b"corrupt derived transport selection")
-        .expect("write corrupt derived transport selection");
-    let with_corrupt_index = target
-        .repository
-        .export_package_transport()
-        .expect("bounded independent transport fallback with corrupt selection");
-    assert_eq!(with_corrupt_index.revision, without_index.revision);
-    let missing_binding_selection =
-        crate::platform::package_transport::PackageTransportSelection::new(
-            crate::platform::package_transport::PackageTransportBinding {
-                package_revision: exported.revision_digest,
-                transport: crate::platform::kernel::PackageTransportDigest::from_bytes([0xdd; 32]),
-            },
-        );
-    std::fs::write(
-        &transport_selection,
-        missing_binding_selection
-            .encode()
-            .expect("valid derived selection"),
-    )
-    .expect("write syntactically valid missing transport binding");
     target
         .repository
-        .export_package_transport()
-        .expect("valid selection with missing transport uses bounded independent fallback");
-    std::fs::write(
-        &transport_selection,
-        vec![
-            0_u8;
-            crate::platform::package_transport::MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES + 1
-        ],
-    )
-    .expect("write oversized derived selection");
-    target
-        .repository
-        .export_package_transport()
-        .expect("oversized derived selection uses bounded independent fallback");
-    std::fs::remove_file(&transport_selection).expect("remove derived transport selection");
+        .stage_package_transport(exported.transport_digest, &exported.container)
+        .unwrap();
+    assert_eq!(std::fs::read(&transport_selection).unwrap(), ready);
+    std::fs::write(&transport_selection, b"LKJPTS01predecessor").unwrap();
+    assert!(target.repository.export_package_transport().is_err());
+    assert_eq!(target.repository.current().unwrap().head, guarded.head);
+    std::fs::write(&transport_selection, &ready).unwrap();
     let outside = target.repository.root().join("outside-transport-selection");
-    std::fs::write(&outside, b"outside").expect("write outside selection target");
-    {
-        use std::os::unix::fs::symlink;
-        symlink(&outside, &transport_selection).expect("symlink derived transport selection");
-    }
-    let index_read_error = target
-        .repository
-        .export_package_transport()
-        .expect_err("transport selection infrastructure errors must not become cache misses");
-    assert_eq!(index_read_error.class, DiagnosticClass::Infrastructure);
+    std::fs::write(&outside, b"outside").unwrap();
+    std::fs::remove_file(&transport_selection).unwrap();
+    std::os::unix::fs::symlink(&outside, &transport_selection).unwrap();
     assert_eq!(
-        index_read_error.code,
-        "publication_package_transport_selection_read"
+        target
+            .repository
+            .export_package_transport()
+            .unwrap_err()
+            .code,
+        "publication_package_readiness_read"
     );
-    std::fs::remove_file(&transport_selection).expect("remove transport selection symlink");
-    let transport_candidate = transport_selection.parent().unwrap().join(format!(
-        "candidate-{}",
-        crate::platform::semantic_id::encode_hex(&exported.transport_digest.bytes())
-    ));
-    std::fs::remove_file(&transport_candidate).expect("remove package transport candidate marker");
-    {
-        use std::os::unix::fs::symlink;
-        symlink(&outside, &transport_candidate)
-            .expect("symlink package transport candidate marker");
-    }
-    let candidate_read_error = target
-        .repository
-        .export_package_transport()
-        .expect_err("candidate infrastructure errors must not become invalid-candidate skips");
-    assert_eq!(candidate_read_error.class, DiagnosticClass::Infrastructure);
-    assert_eq!(
-        candidate_read_error.code,
-        "publication_package_transport_candidate_marker_read"
-    );
-    std::fs::remove_file(&transport_candidate).expect("remove transport candidate symlink");
-    std::fs::File::create(&transport_candidate).expect("restore empty transport candidate marker");
-    let unrelated_revision_directory = target
-        .repository
-        .root()
-        .join("PACKAGE-TRANSPORTS")
-        .join(crate::platform::semantic_id::encode_hex(&[0xab; 32]));
-    std::fs::create_dir(&unrelated_revision_directory)
-        .expect("create unrelated retained revision bucket");
-    {
-        use std::os::unix::fs::symlink;
-        symlink(&outside, unrelated_revision_directory.join("CURRENT"))
-            .expect("symlink unrelated retained revision selection");
-    }
-    target
-        .repository
-        .export_package_transport()
-        .expect("unrelated retained revision bucket cannot disable exact dependency resolution");
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside");
+    std::fs::remove_file(&transport_selection).unwrap();
+    std::fs::write(&transport_selection, &ready).unwrap();
 
     let source_change = AuthoredChangeSet {
         base: source.current.head.revision,
@@ -543,26 +870,17 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
     assert_ne!(replacement.revision_digest, exported.revision_digest);
     target
         .repository
-        .stage_package_transport(replacement.transport_digest, &replacement.packs)
+        .stage_package_transport(replacement.transport_digest, &replacement.container)
         .expect("stage replacement package transport");
-    let invalid_binding_selection =
-        crate::platform::package_transport::PackageTransportSelection::new(
-            crate::platform::package_transport::PackageTransportBinding {
-                package_revision: exported.revision_digest,
-                transport: replacement.transport_digest,
-            },
-        );
-    std::fs::write(
-        &transport_selection,
-        invalid_binding_selection
-            .encode()
-            .expect("valid selection with foreign transport binding"),
-    )
-    .expect("write foreign transport binding");
-    target
-        .repository
-        .export_package_transport()
-        .expect("foreign indexed transport uses bounded independently validated fallback");
+    let ready = std::fs::read(&transport_selection).unwrap();
+    let mut invalid =
+        crate::platform::package_transport::source::PackageReadiness::decode(&ready).unwrap();
+    invalid
+        .bindings
+        .insert(exported.revision_digest, replacement.transport_digest);
+    std::fs::write(&transport_selection, invalid.encode().unwrap()).unwrap();
+    assert!(target.repository.export_package_transport().is_err());
+    std::fs::write(&transport_selection, &ready).unwrap();
 
     let replace = AuthoredChangeSet {
         base: guarded.head.revision,
@@ -682,24 +1000,18 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         .expect("export exact source interface");
     assert_eq!(exported.interface_owner_count, 1);
     assert_eq!(exported.interface_type_count, 1);
-    assert_eq!(exported.packs.len(), 1);
-    let transport = PackMetadata::decode(&exported.packs[0], true).unwrap();
-    assert_eq!(transport.entries.len(), 6);
-    assert_eq!(
+    let transport = crate::platform::package_transport::source::PackageContainer::decode(
+        &exported.container,
+        exported.transport_digest,
+    )
+    .unwrap();
+    assert!(
         transport
-            .entries
-            .iter()
-            .map(|entry| entry.key.domain)
-            .collect::<std::collections::BTreeSet<_>>(),
-        std::collections::BTreeSet::from([
-            ObjectDomain::MapPage,
-            ObjectDomain::PackageInterface,
-            ObjectDomain::PackageRevision,
-            ObjectDomain::PackageTransport,
-            ObjectDomain::SemanticRoot,
-            ObjectDomain::Type,
-        ])
+            .objects
+            .keys()
+            .any(|key| key.domain == ObjectDomain::Owner)
     );
+    assert!(transport.admit().is_ok());
 
     let target_path = temporary.path().join("target");
     let target =
@@ -707,7 +1019,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
             .expect("target repository");
     target
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage source interface closure");
     let package_view = target
         .repository
@@ -909,7 +1221,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
 #[test]
 fn staged_package_interface_validates_exact_cross_package_task_requirements() {
     let temporary = tempfile::tempdir().expect("temporary cross-package task repositories");
-    let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let source_snapshot = crate::platform::kernel::tests::transport_snapshot();
     let source_package = source_snapshot.root.package_id;
     let OwnerKey::Declaration(source_function) = owner_named(&source_snapshot, "caller") else {
         panic!("source task function identity domain")
@@ -941,7 +1253,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
     .expect("target task repository");
     target
         .repository
-        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.container)
         .expect("stage source task interface closure");
 
     let exact_requirement = AuthoredRequirementReference::Exact {

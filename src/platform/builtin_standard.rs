@@ -14,7 +14,7 @@ use super::kernel::{
     TypeObjectInterner,
 };
 use super::package_interface::PackageInterfaceOwner;
-use super::package_transport::{PackageTransportBinding, validate_package_transport_closure};
+use super::package_transport::validate_package_transport_closure;
 use super::persistent_map::MapWork;
 use super::publication::InitialPackageTransport;
 use super::semantic_id::{DeclarationId, RevisionId};
@@ -22,14 +22,12 @@ use super::session::{
     SESSION_CLOSE_NAME, SESSION_DECISION_KIND_NAME, SESSION_EVENT_NAME, SESSION_MESSAGE_KIND_NAME,
     SESSION_OUTBOUND_NAME, SESSION_REJECT_NAME, SessionStandardDeclarations,
 };
-use super::storage::memory::MemoryPackedStore;
-use super::storage::object::{StoreError, StoreErrorClass, StoreWork};
-use super::storage::pack::{PackId, PackMetadata, SealedPack};
+use super::storage::object::StoreWork;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-const STANDARD_TRANSPORT_PACK: &[u8] =
+const STANDARD_TRANSPORT_CONTAINER: &[u8] =
     include_bytes!("../../packages/standard/generated/standard.lkjp");
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
@@ -99,12 +97,12 @@ impl BuiltinStandard {
     pub fn transport(&self) -> InitialPackageTransport {
         InitialPackageTransport {
             digest: self.package_transport,
-            packs: vec![STANDARD_TRANSPORT_PACK.to_vec()],
+            container: STANDARD_TRANSPORT_CONTAINER.to_vec(),
         }
     }
 
     pub const fn transport_bytes(&self) -> &'static [u8] {
-        STANDARD_TRANSPORT_PACK
+        STANDARD_TRANSPORT_CONTAINER
     }
 
     pub const fn artifact_bytes(&self) -> &'static [u8] {
@@ -816,35 +814,34 @@ impl BuiltinStandard {
         let package_revision = PackageRevisionDigest::from_str(STANDARD_PACKAGE_REVISION)?;
         let package_transport = PackageTransportDigest::from_str(STANDARD_PACKAGE_TRANSPORT)?;
 
-        let metadata =
-            PackMetadata::decode(STANDARD_TRANSPORT_PACK, true).map_err(store_diagnostic)?;
-        let mut store = MemoryPackedStore::default();
-        store
-            .install(SealedPack {
-                id: PackId::of(STANDARD_TRANSPORT_PACK),
-                bytes: STANDARD_TRANSPORT_PACK.to_vec(),
-                metadata,
-            })
-            .map_err(store_diagnostic)?;
-        let duplicates = store.rebuild_catalog().map_err(store_diagnostic)?;
-        if !duplicates.is_empty() {
-            return Err(builtin_error(
-                DiagnosticClass::Corrupt,
-                "builtin_standard_transport_duplicate",
-                "built-in standard transport repeats an immutable object",
-            ));
-        }
+        let container = crate::platform::package_transport::source::PackageContainer::decode(
+            STANDARD_TRANSPORT_CONTAINER,
+            package_transport,
+        )?;
+        let admitted = container.admit()?;
         let mut work = StoreWork::default();
         let validated = validate_package_transport_closure(
-            &store,
+            &container.objects,
             package_revision,
-            &[PackageTransportBinding {
-                package_revision,
-                transport: package_transport,
-            }],
+            &container.selections,
             None,
             &mut work,
         )?;
+        let source = admitted.packages.get(&package_revision).ok_or_else(|| {
+            builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_source",
+                "embedded source omits its selected package",
+            )
+        })?;
+        let clean = super::compiler::compile_immutable(source, &container.objects, &[])?;
+        if clean.artifact.bytes != STANDARD_ARTIFACT {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_source_artifact",
+                "embedded derived artifact differs from clean compilation of its exact canonical source",
+            ));
+        }
         let revision = validated.root_revision;
         if validated.root_transport_digest != package_transport
             || revision.package != package
@@ -904,16 +901,6 @@ struct ByteStreamContract {
 struct HttpClientContract {
     interface: DeclarationReference,
     get: OperationReference,
-}
-
-fn store_diagnostic(error: StoreError) -> Diagnostic {
-    let class = match error.class {
-        StoreErrorClass::Input => DiagnosticClass::Source,
-        StoreErrorClass::Resource => DiagnosticClass::Resource,
-        StoreErrorClass::Corrupt => DiagnosticClass::Corrupt,
-        StoreErrorClass::Io => DiagnosticClass::Infrastructure,
-    };
-    builtin_error(class, error.code, error.message)
 }
 
 fn builtin_error(
@@ -1022,10 +1009,7 @@ mod tests {
         let exported = repository
             .export_package_transport()
             .expect("export maintained standard transport");
-        let [pack] = exported.packs.as_slice() else {
-            panic!("maintained standard transport must contain one exact bounded pack");
-        };
-        assert_eq!(pack.as_slice(), STANDARD_TRANSPORT_PACK);
+        assert_eq!(exported.container.as_slice(), STANDARD_TRANSPORT_CONTAINER);
         assert_eq!(
             exported.transport_digest.to_string(),
             STANDARD_PACKAGE_TRANSPORT

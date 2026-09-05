@@ -584,6 +584,29 @@ pub(crate) fn witness_snapshot() -> KernelSnapshot {
     prototype_snapshot().0
 }
 
+/// Package-admission fixture: the frozen kernel/host-dispatch fixture above deliberately has a
+/// test-only host name. A transported source must use the real closed intrinsic registry.
+pub(crate) fn transport_snapshot() -> KernelSnapshot {
+    let mut snapshot = witness_snapshot();
+    for owner in snapshot.owners.values_mut() {
+        if let OwnerRecord::Declaration(DeclarationRecord {
+            payload: DeclarationPayload::External(external),
+            ..
+        }) = owner
+        {
+            let ty = TypeObject::new(TypeForm::Option {
+                item: external.result,
+            })
+            .unwrap();
+            let digest = encode_type_object(&ty).unwrap().0;
+            snapshot.types.insert(digest, ty);
+            external.result = digest;
+            external.implementation = ImplementationName::new("core.option.none").unwrap();
+        }
+    }
+    snapshot
+}
+
 fn encoded_owner(snapshot: &KernelSnapshot, owner: OwnerKey) -> (OwnerObjectDigest, Vec<u8>) {
     encode_owner(snapshot.owners.get(&owner).expect("test owner must exist"))
         .expect("test owner must encode")

@@ -15,8 +15,8 @@ move operations. Exact references bind package and typed owner identities, never
 physical object locations.
 
 An accepted dependency records exact package ID, semantic revision, logical package revision, and
-public interface binding. The dependency's package transport carries the complete validated public
-meaning and exact transitive selection required to install that binding. It is immutable transport,
+public interface binding. The dependency's package transport carries the complete validated current
+graph, including private implementations, and exact transitive selection required to install that binding. It is immutable transport,
 not editable source or an alternate package repository.
 
 Public package interfaces retain exact-interface capability-resource types and operation parameter
@@ -24,11 +24,52 @@ use modes. Resource interface references must resolve inside the exact dependenc
 participate in interface identity. A missing, foreign, wrong-kind, or predecessor resource/use
 shape rejects before a dependent graph can be accepted.
 
-Dependency resolution is closed and deterministic. The current released application lifecycle
-accepts either no dependencies or the one exact built-in standard dependency. Missing, extra,
-foreign, stale, truncated, duplicate, noncanonical, or interface-inconsistent closure rejects
-before compilation or execution. There is no current general package registry, mutable tag,
-ambient directory lookup, network resolution, or implicit upgrade.
+Dependency resolution unifies the entire exact closure by package identity before acceptance or
+execution. Shared dependencies are checked and compiled once in deterministic dependency order.
+Missing edges, cycles, self-dependencies, conflicting logical or semantic revisions, foreign
+references, and interface/body disagreement reject. Equal display names do not unify identities.
+Only direct dependencies expose their public interface to a package; transitive availability grants
+no ambient visibility. There is no registry, mutable tag, ambient directory lookup, network
+resolution, or implicit upgrade.
+
+## Offline transport and readiness
+
+The public transport is one strict versioned deterministic uncompressed container binding a root
+transport, an ordered exact transitive selection, and unique ordered canonical objects. Its bytes
+are independent of original pack partitioning and directory order. It contains exactly the current
+owner, type, blob, dependency, retirement, semantic-root, logical-revision, transport, and public
+interface closure. Historical bodies, operational data, host paths, grants, caches, and executable
+artifacts are excluded. Ancestor identities do not require historical bodies. Bare interface packs,
+predecessor selections, missing/extra/duplicate objects, malformed/noncanonical/trailing input,
+forged bindings, and executable artifacts reject before readiness.
+
+Admission reconstructs every graph and public interface and runs complete canonical semantic
+validation, including private bodies. Transported witnesses do not prove validity. Externals obey
+the existing exact intrinsic signature/effect contract and cannot install host implementations or
+grant capabilities. Integrity proves content agreement, not publisher identity, original acceptance
+provenance, or source confidentiality.
+
+One admission allows at most 268,435,456 container bytes, 1,000,000 distinct objects, 10,000 packages
+including the root, 100,000 dependency edges, 16,000,000 aggregate owner/type/expression/relation
+validation visits, and 4,294,967,296 cumulative validation-read bytes. Existing narrower object,
+depth, authoring, output, and execution limits also apply. Counts and lengths are charged with
+checked arithmetic before allocation or work, without resetting aggregate budgets per package.
+Traversal is bounded and iterative with visited sets. There is no compression or public override;
+these are safety ceilings, not demonstrated capacities.
+
+`PACKAGE-TRANSPORTS` owns operational readiness. Private staging validates the complete container,
+durably installs immutable material, then publishes one atomic closure-ready selection binding the
+validation contract and all exact inputs. Readers see a complete old or new selection. Failure
+before visibility preserves previous readiness and semantic HEADs and removes owned stages;
+interruption may leave unreachable immutable objects. Retry after lost acknowledgement identifies
+the complete staged result. Identical restaging is idempotent. Another revision is only a candidate;
+physical reselection for one logical revision cannot change meaning.
+
+Reviewed add/replace binds old/new exact dependencies, transitive changes, interface effects,
+affected owners/tests, and the plan commitment. Apply rechecks the base, immutable source
+availability, validation identity, and logical closure under the publication lock before accepted
+visibility. Stale/altered plans, incompatible replacements, missing source, cancellation, and
+exhaustion publish nothing. Post-publication derived failure reports acceptance separately.
 
 ## Built-in standard material
 
@@ -36,7 +77,7 @@ ambient directory lookup, network resolution, or implicit upgrade.
 
 - an exact package transport used to create and validate dependent typed meaning graph repositories;
   and
-- an exact artifact bundle used to link and execute the dependency.
+- an exact derived artifact bundle whose equivalence to compilation from that graph is verified.
 
 The executable embeds both. Initialization strictly decodes each asset and verifies agreement on
 package identity, semantic revision/state, logical package revision, public interface, compiler
@@ -44,8 +85,9 @@ contracts, artifact identity, and closure. Public inspect/export can observe or 
 bytes but cannot replace them. Product verification regenerates the maintained files and compares
 them byte for byte.
 
-Public `add.dependency` accepts only this exact built-in package, semantic revision, and logical
-package revision after its immutable transport has been staged through public export. It performs
+Public `add.dependency` accepts an exact fully validated staged package, semantic revision, and logical
+package revision. The embedded standard is a convenient source supplier using the same admission
+and compilation mechanisms as any other package. It performs
 no network, registry, ambient-directory, or unchecked-file lookup. The command, HTTP, and
 relay-information recipes resolve their public declarations and interfaces from the same validated
 inventory and install the same exact transport through authored change lowering. They retain no
@@ -91,7 +133,18 @@ manifest binds repository, exact revision/state, compiler and bytecode contracts
 optimization policy, and the complete unit map. Exact-current cache reuse requires every binding;
 cache state is disposable and never enters semantic or package identity.
 
-The artifact bundle links the root compilation with strictly loaded dependency artifacts. Its
+Admitted dependencies compile from read-only immutable package views through the ordinary compiler
+and linker, without writable shadow projects. Missing or invalid derived caches rebuild; absent or
+corrupt canonical source rejects with an exact restage diagnostic. No checkout, ambient directory,
+embedded-revision substitution, or transported compiled-unit fallback is allowed. The canonical
+reference interpreter independently evaluates dependency owners, without consulting production
+bytecode, callable resolution, value layouts, or closure selection. Its disposable callable, nominal
+layout, type, target, and test indexes come from the reconstructed canonical owner inventory; strict
+boundary codecs share only neutral value-schema access. Blob values also come from canonical source.
+Every package's graph tests execute once, with the compiler test inventory checked against the
+canonical inventory; command target selection remains root-scoped.
+
+The artifact bundle links the root compilation with graph-derived dependency artifacts. Its
 manifest binds:
 
 - root repository, package, accepted revision, and semantic state;

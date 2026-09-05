@@ -120,7 +120,7 @@ impl RepositoryReadWork {
             .saturating_add(other.entries_skipped);
     }
 
-    fn add_canonical(&mut self, other: CanonicalReadWork) {
+    pub(crate) fn add_canonical(&mut self, other: CanonicalReadWork) {
         self.map.pages_read = self.map.pages_read.saturating_add(other.map_pages_read);
         self.map.entries_visited = self
             .map
@@ -466,7 +466,7 @@ pub struct ExportedPackageTransport {
     pub revision_bytes: Vec<u8>,
     pub transport: PackageTransport,
     pub transport_digest: PackageTransportDigest,
-    pub packs: Vec<Vec<u8>>,
+    pub container: Vec<u8>,
     pub(crate) interface_owners: BTreeMap<OwnerKey, PackageInterfaceOwner>,
     pub(crate) interface_types: BTreeMap<TypeObjectDigest, Vec<u8>>,
     pub interface_owner_count: u64,
@@ -755,6 +755,8 @@ fn logical_plan_evidence(
         reasons: std::mem::take(&mut analysis.summaries.plan.reasons),
         extraction,
         http_routes,
+        package_closure_before: BTreeMap::new(),
+        package_closure_after: BTreeMap::new(),
     })
 }
 
@@ -864,13 +866,32 @@ impl RepositoryView {
         } = lowering;
         let prepared =
             self.prepare_change_with_prior_work(edits, options, lowering_work, request.budget)?;
-        let logical_plan = logical_plan_evidence(
+        let mut logical_plan = logical_plan_evidence(
             prepared.analysis,
             allocations,
             dependency_befores,
             http_route_befores,
             extraction,
         )?;
+        if !logical_plan.dependencies.is_empty() {
+            let mut overlay = ObjectStage::new(&self.store);
+            for (key, bytes) in &prepared.publication.objects {
+                overlay
+                    .stage(*key, bytes, &mut StoreWork::default())
+                    .map_err(|error| vec![store_diagnostic(error)])?;
+            }
+            let source = crate::platform::package_transport::source::CollectingStore::new(&overlay);
+            logical_plan.package_closure_before = super::repository::logical_dependency_inventory(
+                &source,
+                self.current.semantic_root.dependencies,
+            )
+            .map_err(|error| vec![error])?;
+            logical_plan.package_closure_after = super::repository::logical_dependency_inventory(
+                &source,
+                prepared.publication.authority.semantic.root.dependencies,
+            )
+            .map_err(|error| vec![error])?;
+        }
         Ok(PreparedAuthoredPublication {
             publication: prepared.publication,
             allocated,
@@ -931,6 +952,8 @@ impl RepositoryView {
             &self.store,
             options,
         )?;
+        super::repository::validate_prepared_dependency_sources(&self.store, &publication)
+            .map_err(|diagnostic| vec![diagnostic])?;
         Ok(PreparedChangeWithAnalysis {
             publication,
             analysis,
@@ -984,6 +1007,19 @@ impl RepositoryView {
         digest: TypeObjectDigest,
     ) -> Result<RevisionRead<Option<TypeObject>>, Diagnostic> {
         self.type_object_admitted(digest, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    pub(crate) fn reference_blob(
+        &self,
+        digest: crate::platform::kernel::BlobObjectDigest,
+    ) -> Result<Vec<u8>, Diagnostic> {
+        self.read_required_object_admitted(
+            ObjectDomain::Blob,
+            digest.bytes(),
+            "canonical reference text blob is missing; restore exact source",
+            &mut RepositoryReadWork::default(),
+            &mut RepositoryReadAdmission::unbounded(),
+        )
     }
 
     fn type_object_admitted(
@@ -1542,6 +1578,17 @@ impl RepositoryView {
         })
     }
 
+    pub(crate) fn export_package_container(
+        &self,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        let exported = self.export_package_transport()?;
+        crate::platform::package_transport::source::PackageContainer::decode(
+            &exported.container,
+            exported.transport_digest,
+        )?
+        .admit()
+    }
+
     /// Builds one logical package revision and its separate physical acceptance transport.
     pub fn export_package_transport(&self) -> Result<ExportedPackageTransport, Diagnostic> {
         let BuiltPackageRevision {
@@ -1620,41 +1667,22 @@ impl RepositoryView {
                 "exported package revision or transport changed during closure validation",
             ));
         }
-        let mut builder = PackBuilder::default();
-        for (key, value) in &interface.objects {
-            builder.insert(*key, value).map_err(store_diagnostic)?;
-        }
-        builder
-            .insert(
-                ObjectKey::from_digest(ObjectDomain::PackageRevision, revision_digest.bytes()),
-                &revision_bytes,
-            )
-            .map_err(store_diagnostic)?;
-        builder
-            .insert(
-                ObjectKey::from_digest(ObjectDomain::SemanticRoot, semantic_root_digest.bytes()),
-                &semantic_root_bytes,
-            )
-            .map_err(store_diagnostic)?;
-        builder
-            .insert(
-                ObjectKey::from_digest(ObjectDomain::PackageTransport, transport_digest.bytes()),
-                &transport_bytes,
-            )
-            .map_err(store_diagnostic)?;
-        let packs = builder
-            .seal_targeted(TARGET_PACK_BYTES)
-            .map_err(store_diagnostic)?
-            .into_iter()
-            .map(|pack| pack.bytes)
-            .collect();
+        let admitted = crate::platform::package_transport::source::collect(
+            &stage,
+            crate::platform::package_transport::PackageTransportBinding {
+                package_revision: revision_digest,
+                transport: transport_digest,
+            },
+            &validated.selections,
+        )?;
+        let container = admitted.container.encode()?;
         Ok(ExportedPackageTransport {
             revision,
             revision_digest,
             revision_bytes,
             transport,
             transport_digest,
-            packs,
+            container,
             interface_owners,
             interface_types,
             interface_owner_count: interface.owner_count,

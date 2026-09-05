@@ -729,8 +729,13 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "change.plan-record")
             .count(),
-        36
+        38
     );
+    for name in ["logical-plan.package-before", "logical-plan.package-after"] {
+        assert!(change_section.iter().any(|record| {
+            record.operation == "change.plan-record" && compact_field(record, "name") == Some(name)
+        }));
+    }
     assert!(change_section.iter().any(|record| {
         record.operation == "change.plan-record-field"
             && compact_field(record, "record") == Some("logical-plan.digest")

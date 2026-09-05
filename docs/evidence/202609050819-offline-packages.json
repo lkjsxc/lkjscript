@@ -1,0 +1,71 @@
+{
+  "schema": {"identity": "lkjscript-offline-package-campaign-evidence", "version": 1},
+  "campaign": "202609050819-offline-packages",
+  "status": "incomplete",
+  "repository": {
+    "branch": "main",
+    "start_head": "fc73db46268a4a73e681d106f9aab14a2ad087ab",
+    "start_tree": "70ee351bdd2a1c456a3a3197767fa9135b8188e0",
+    "archive_commit": "dced3c4a28469696baca9686b6923e59f13c6347",
+    "agent_policy_blob_unchanged": "57a9241e23cd355c7a2272621c679d2955f24e73",
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "latest_fetched_origin_main": "fc73db46268a4a73e681d106f9aab14a2ad087ab",
+    "unrelated_work": "Initial supplied mandate archived without body changes; pre-existing ignored evidence, operational caches and stash preserved. No unknown project converted or deleted."
+  },
+  "product": {"source": "0.1.23", "publication": "not run", "release_actions_authorized": false},
+  "changed_contracts": {"public_cli": 24, "logical_change_plan": 5, "package_container": 1, "package_readiness": 2, "target_admission_receipt": 3, "offline_package_oracle_receipt": 1},
+  "stable_contracts": {"graph": 10, "witness": 6, "validator": 10, "package_interface": 6, "logical_package_revision": 1, "physical_package_transport": 1, "artifact": 15},
+  "obligations": {
+    "OPG-1": "not run", "OPG-2": "not run", "OPG-3": "not run", "OPG-4": "not run", "OPG-5": "not run", "OPG-6": "not run", "OPG-7": "not run",
+    "note": "Final campaign dispositions await the fresh authoritative profile and exact candidate. Focused observations below are at their declared boundaries, not final gate substitutes."
+  },
+  "focused_observations": {
+    "baseline": {"classification": "fresh passed", "evidence": ".artifacts/campaign/202609050819/reconciliation.json", "expected_rejection": "change_dependency_binding_unsupported", "boundary": "Public-authored non-built-in binding rejects before preparation; the later built-in-only lifecycle conditional was separately inspected."},
+    "copied_workflow": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609050819/diamond-15/receipt.json",
+      "receipt_digest": "verification_bbecbdf35c5ffe60590e7a63e3f8820096f938ba82a9e212ddf47c706909c845",
+      "receipt_sha256": "7cffe12ec62b18786c95746f950609782884e441c84e06e42fdc02601ebd4f97",
+      "candidate_sha256": "d0341e0a8ffcc26aa5ceb764b25f19a358ce3707febb5e39b86162bb7b12169e",
+      "verifier_sha256": "c386380bd47db4fdc7b660a6987d66da164cad612da9178217f5080636a2c309",
+      "commands": 90, "producer_inventories": 9, "packages": 5, "edges": 8, "tests_once": 24,
+      "fixed_results": [11, 11, 12],
+      "post_replacement_root_units": {"compiled": 1, "reused": 3, "removed": 0},
+      "artifact_a1_sha256": "354a4e546ba32029559db5fe9461753da76f652b427df64953f3925abdf9b6b0",
+      "artifact_a2_sha256": "f2972e7a1e84a400448e997ec9ee38dbedfba5da4428983f7b8733c59d7b421c",
+      "cache_modes_byte_equal": ["exact-current", "missing-cache clean", "corrupt-cache recovery"],
+      "standalone_http_body": "offline-package-closure",
+      "producer_directories_absent_before_execution": true, "cleanup_complete": true
+    },
+    "admission_preflight": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/admission-preflight.json", "sha256": "a3191d5a1e47b575d2b92232f49983ef3ab30280cf0bbf7a8a0c2f946443b777"},
+    "library_iteration": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/library-iteration-03.log", "sha256": "9a8f80475d92ec793a571418afa51146bd8b973fcffd07939092554a8fc94b69", "passed": 491, "ignored": 2, "boundary": "Canonical reference and independent test-inventory corrections included; not reused as final source proof."},
+    "canonical_reference_independence": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/reference-canonical-tests-02.log", "sha256": "665ec62eb16438ccd5afee07cdfa58a071f1763ae129cce74e484fa0aadaac84", "passed": 3},
+    "decoder_exact_fit": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/decoder-exact-fit-02.log", "boundary": "Valid complete source at internally lowered byte/object/package bounds; full integer ceiling guards, not maximum-capacity execution."},
+    "public_cli_iteration": {"classification": "failed", "path": ".artifacts/campaign/202609050819/public-cli-iteration-01.log", "passed": 29, "failed": 2, "ignored": 1, "diagnosis": "Two added review-record descriptors changed discovery count; an overbroad read-only cache fallback failed to repair a corrupt pointer."},
+    "discovery_correction": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/discovery-failure-02.log"},
+    "extraction_recovery_correction": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/extraction-failure-02.log"},
+    "corrupt_immutable_unit": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/corrupt-derived-unit-02.log"},
+    "concurrent_apply_and_cancellation": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/concurrent-dependency-02.log"},
+    "omitted_transitive_source": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/omitted-transitive-01.log"},
+    "logical_closure_faults": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/closure-faults-02.log"},
+    "verifier_registry_correction": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/registry-profile-02.log"},
+    "clippy": {"classification": "fresh passed", "path": ".artifacts/campaign/202609050819/clippy-iteration-07.log", "sha256": "20669e9b95c683a38606d603b4a5517f7c76b93374295439a55bbf1a58205ab4", "boundary": "Focused workspace/all-targets lint; final profile remains required."}
+  },
+  "maintained_migration": {
+    "backup": ".artifacts/campaign/202609050819/maintained-before.tar",
+    "backup_sha256": "fda7fcfc072a498f90698581bffcdb1ec7677dccaab3a69e21ba7acbb95810c6",
+    "backup_mode": "0444",
+    "generation_neutral_inventory": ".artifacts/campaign/202609050819/maintained-source-preflight.json",
+    "standard_semantic_revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
+    "lkjournal_semantic_revision": "rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9",
+    "standard_source_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
+    "standard_artifact_sha256_unchanged": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
+    "lkjournal_artifact_sha256_unchanged": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
+    "predecessor_selection_files_removed": 2,
+    "temporary_migration_tool_removed": true,
+    "operational_data_migration": "not run"
+  },
+  "required_final_gates": {"product": "not run", "full": "not run", "exact_musl_target_admission": "not run"},
+  "external_actions": {"read_only_fetch": "fresh passed", "source_push": "not run", "workflow_dispatch": "not run", "tags_releases_publication": "not run", "deployment_or_hosted_data": "not run"},
+  "nonclaims": ["maximum-capacity execution", "speed", "hostile-code sandboxing", "source confidentiality", "signing or provenance", "reproducible builds", "general portability", "production or release admission"]
+}

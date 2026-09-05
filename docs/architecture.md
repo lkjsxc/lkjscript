@@ -65,7 +65,7 @@ The command lifecycle continues from the same exact repository view:
 ```text
 GraphRepository / exact accepted revision
           │
-          ├─ exact built-in transport selection and interface validation
+          ├─ exact immutable source closure admission and interface validation
           │
           ├─ exact-current compiler cache ──┐
           │                                 ├─ compilation manifest + units
@@ -116,7 +116,8 @@ locked source + typed target policy
 `tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
 preparation, strict archive/static verification, and application-verifier handoff. Target admission
 binds source and candidate identities to direct ELF inspection, two pinned networkless userland
-command lifecycles, and the distributed HTTP, stateful HTTP, outbound HTTP, and standalone service oracles. A host
+command lifecycles, transferable offline package composition, and the distributed HTTP, stateful HTTP,
+outbound HTTP, and standalone service oracles. A host
 build and the source-wide full receipt remain distinct from this exact-candidate evidence.
 
 The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
@@ -233,7 +234,7 @@ derived and cannot select or advance semantic authority.
 | Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed meaning graph, exact-interface resource/use meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, runtime handles, artifacts, deployment |
 | Authored change | `platform/change`, logical-plan control | typed intent, deterministic allocation, bounded extraction/capture/effect closure, impact/test selection, reviewed semantic effects | publication visibility, source text, stored refactor recipes, or derived cache identity |
 | Inspection and query | `platform/cli.rs`, `platform/normalized_query`, publication read views | exact-owner summary, complete bounded local-function definition projection, namespace, relation, and bounded local-context reads with stateless logical continuations | mutable cursors, body/query indexes, repair, dependency bodies, source export, or authoring authority |
-| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded owner query/detail, closure transport, one validated embedded standard dependency, and exact offline export/staging | package implementation bodies, a general registry, or ambient resolver |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard`, `platform/builtin_discovery` | exact public interfaces and references, bounded staged owner query/detail, code-complete immutable closure transport, canonical private-body admission, and exact offline export/staging | editable imported repositories, trusted transported bytecode, a general registry, or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact bundle | accepted semantic identity |
 | Normalized execution | `platform/execution/normalized` | dense runtime indexes, affine local movement, scope/interface/requirement-bound resource entries, VM, canonical reference interpreter, tests, commands, resident HTTP/interactive/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
@@ -280,9 +281,12 @@ under the exclusive repository lock. That independent recovery path does not cal
 segment lookup or merge implementation. Missing or inconsistent accepted packs, objects, or
 `HEAD` bindings remain canonical corruption and cannot be repaired by catalog bytes.
 
-Package transports stored under `PACKAGE-TRANSPORTS` are exact immutable dependency inputs selected
-by accepted dependency records. They are not a second package authoring format. The maintained
-standard and `lkjournal` roots contain only this typed meaning graph layout.
+`PACKAGE-TRANSPORTS/CURRENT` atomically exposes complete validated source selections over the ordinary
+immutable object store. Accepted dependencies select one exact logical/semantic revision per package
+across the full transitive union. Names and locations never select meaning. Imported sources include
+private bodies and current retirements but no editable repository, history bodies, grants, operational
+data, or independently trusted compiler units. Direct-dependency/public-interface visibility remains
+separate from closure availability. The maintained standard and `lkjournal` use this common path.
 
 ## Affine capability-resource path
 
@@ -381,17 +385,25 @@ already accepted response. No compiler-impact journal is durable semantic state.
 
 Lifecycle preparation accepts a cache only when repository, revision, semantic state, compiler
 contract, optimization policy, unit closure, and object digests agree. A missing cache clean-builds.
-A malformed or inconsistent cache is reported, then clean-built and replaced. Clean and
-incremental manifests and artifacts are compared in tests.
+A malformed or inconsistent cache is reported and clean-rebuilt. If damaged immutable derived
+objects already occupy clean keys, lifecycle recovery compiles the admitted source read-only without
+overwriting those packs; future preparation may rebuild again. Canonical source corruption cannot
+enter this cache-recovery branch. Clean, incremental, and recovered artifact bytes are compared.
 
-## Built-in dependency and project recipes
+## Immutable package composition and project recipes
 
-`packages/standard` owns two generated assets: a package transport for dependency installation and
-an artifact bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
-and checks package, semantic revision, logical package revision, interface, and artifact identities
-for agreement. Public bounded query/detail exposes the implementation-free interface and exact
-compact references; inspection/export exposes identities and exact bytes without permitting
-replacement.
+`packages/standard` owns a code-complete source container and a derived artifact bundle.
+`builtin_standard` is an embedded exact source supplier using common admission. It verifies the
+derived asset against clean compilation of that exact graph; package identity grants no execution
+privilege. All dependencies compile bottom-up from immutable package views through the existing
+compiler/linker, without writable shadow projects. A separate closure oracle reconstructs owners,
+edges, and interfaces for canonical reference evaluation, independently of production selection and
+bytecode. Canonical owners independently supply reference callable/signature, nominal-layout, type,
+target, test, and blob access; only neutral value-schema access is shared with boundary codecs.
+The compiler test inventory must equal the canonical inventory, and each selected package's tests
+run once; target selection stays root-scoped.
+Public bounded staged/builtin query and detail expose only public interfaces and exact references;
+transport export includes complete private implementations and is not source confidentiality.
 
 Every nonempty recipe is a typed list of operations from the same authored model exposed by compact
 change grammar. It resolves declarations and interfaces through the validated built-in inventory,
