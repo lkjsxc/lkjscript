@@ -761,6 +761,14 @@ The transactional helper retains its ancestor task and transaction frames, inclu
 empty-requirement task. Cancellation after 37 closed host calls observes ten transfers and zero
 remaining frames, operands, locals, substitutions, or transactions; subsequent execution succeeds.
 
+At implementation commit `848346ea187734046ec39ec81f90e5608bcba3d3`, the release-binary oracle
+completed 71 commands in 33.112 seconds on the host and 44.829 seconds on the exact musl target.
+Their maximum sampled child RSS values were 16,828 and 19,152 KiB; peak owned experiment files
+were 25,104,757 and 25,252,397 bytes. Each ran 44 bounded-stack cases and cleaned up completely.
+These runs fit the 900-second and 1,073,741,824-byte experiment bounds; builds and existing target
+tooling are excluded. Scheduling and system load were uncontrolled, so these are not comparative
+speed or memory-efficiency claims.
+
 These finite observations prove constant control space for the tested tail chains. They do not
 prove constant heap, unlimited input, termination, throughput, latency, or sandboxing. Exact
 executable/source identities, elapsed time, sampled RSS, artifact equality, failure classes, and

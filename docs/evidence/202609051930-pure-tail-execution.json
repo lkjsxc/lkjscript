@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-campaign-evidence-1",
   "campaign": "202609051930-pure-tail-execution",
-  "lifecycle": "incomplete",
+  "lifecycle": "complete",
   "starting_boundary": {
     "branch": "main",
     "head": "8c2e7723e0fbc2bf82597fc7fbe3f39bc40879ec",
@@ -16,22 +16,40 @@
       "docs/campaigns/202609051930.md"
     ],
     "agent_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
-    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb"
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "reconciliation": ".artifacts/campaign/202609051930/reconciliation.txt",
+    "reconciliation_sha256": "82b04e5630417a0f0f5b465fb7fded7e405fe81753d095c22c5a8d2d18620c9f"
   },
   "initial_mandate": {
     "archive": "docs/campaigns/202609051930.md",
     "raw": ".artifacts/campaign/202609051930/initial-mandate.md",
     "sha256": "eb615f75f1d1033baaa806fa48649c46ec0c49f8b57106e915f6e5f24c137788",
-    "archive_commit": "11050254"
+    "archive_commit": "110502540583abd219273c23b6c370871326ec31"
   },
   "raw_root": ".artifacts/campaign/202609051930/",
+  "proved_implementation_boundary": {
+    "commit": "848346ea187734046ec39ec81f90e5608bcba3d3",
+    "tree": "b5d3c4797fa7bbac53e3cf3ebe40de43ae2f66a0",
+    "subject": "Execute pure graph tail calls in constant control space",
+    "worktree_input_digest": "verification_7ef43244d9086403294d532ce9edaee64a8b245c221aa3bde3489f3a2f22b498",
+    "final_worktree_input_digest": "verification_7ef43244d9086403294d532ce9edaee64a8b245c221aa3bde3489f3a2f22b498",
+    "input_stable": true,
+    "index_worktree_clean": true,
+    "input_files": 404,
+    "input_bytes": 20516940,
+    "scope": "All implementation, generated and normative inputs; terminal metadata is assembled after these fresh proofs and requires another final bound run."
+  },
   "maintained_before": {
     "archive": ".artifacts/campaign/202609051930/maintained-before.tar",
     "sha256": "a0deabb821381f9af3c5c2f27a9394f2674177e9ec347db86ee9db2b5c68c5f7",
     "inventory": ".artifacts/campaign/202609051930/maintained-tracked-inventory.txt",
     "standard_artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
     "standard_transport_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
-    "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8"
+    "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
+    "standard_revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
+    "lkjournal_revision": "rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9",
+    "classification": "fresh passed",
+    "preservation": "No tracked standard/lkjournal file or root agent policy changed. Full-profile executable regeneration and byte comparisons agree with these exact pre-campaign assets. The unchanged standard artifact is also strictly loaded and executed without compilation or conversion by a dedicated workspace test."
   },
   "changed_identities": {
     "product_snapshot": "0.1.24 (unreleased)",
@@ -127,42 +145,250 @@
   },
   "resources": {
     "default_budgets_unchanged": true,
+    "default_vm": {
+      "instruction_steps": 10000000,
+      "live_call_frames": 4096,
+      "operand_values": 1000000,
+      "cumulative_allocated_bytes": 268435456,
+      "collection_items": 1000000,
+      "capability_calls": 100000
+    },
     "stack_bytes": 2097152,
     "injected_call_frames": 8,
     "infinite_loop_work_units": 1000,
     "oracle_wall_seconds": 900,
     "oracle_owned_file_bytes": 1073741824,
+    "owned_file_exclusions": "Builds and existing target tooling; each oracle includes its owned experiment files and copied candidate.",
+    "allocation_exact_fit_bytes": {
+      "production": 4312,
+      "canonical_reference": 2816
+    },
+    "allocation_one_over": "The same workload fails with one fewer admitted byte in each tier; every admitted VM graph call still charges locals, without refunds.",
+    "operand_exact_fit_values": 2,
+    "operand_one_over": "The same VM workload fails with one admitted operand value.",
     "reference_operand_note": "Reference retains canonical expression/value accounting and has no VM operand stack.",
     "claim": "constant control space for eligible pure tail chains; no constant heap, unlimited scale, termination, throughput, latency or sandbox claim"
   },
-  "final_acceptance": {
-    "classification": "not run",
-    "obligations": [
-      "PTX-1",
-      "PTX-2",
-      "PTX-3",
-      "PTX-4",
-      "PTX-5",
-      "PTX-6",
-      "PTX-7"
+  "acceptance": {
+    "classification": "fresh passed",
+    "source_boundary": "proved_implementation_boundary",
+    "PTX-1": {
+      "classification": "fresh passed",
+      "proof": "Host and transferred exact-target pure_tail receipts; copied_binary_tail_fold_crosses_the_former_frame_boundary in workspace_tests.",
+      "result": "Copied discovery/standard inspection/new/compact plan/apply/definition/check/build/run; runtime lists 0, 1, 256, 4096, 8192 give fixed arithmetic sums in both tiers. Long per-tier frame peaks are equal and below eight. Complete accepted inventories remain unchanged across plan, reads and execution failures; only reviewed apply advances meaning."
+    },
+    "PTX-2": {
+      "classification": "fresh passed",
+      "proof": "Pure-tail outcomes run-29 through run-35 and bounded_stack cases in both candidate receipts.",
+      "result": "Self countdown returns zero at 8192; named-invoke mutual parity returns true/false at 8192/8191. Removed non-built-in producer supplies cross-package rank-one generic recursion through if/let/sequence/match, preserving ordered i64/bool instantiations with results -17 and true. Ordered subtraction folds return 5 and -5."
+    },
+    "PTX-3": {
+      "classification": "fresh passed",
+      "proof": "Each pure-tail receipt retains 44 bounded-stack cases with actual owned call/control/local/type peaks and zero post-execution state.",
+      "result": "Both tiers run in subprocess-contained 2 MiB evaluator threads with frame admission eight: unchanged positive sizes, genuine non-tail depth errors, infinite recursion fuel exhaustion at 1000 units, cancellation after 37 host calls, exact-fit/one-over allocation and VM operand limits, and healthy subsequent invocations discriminate resource behavior."
+    },
+    "PTX-4": {
+      "classification": "fresh passed",
+      "proof": "Pure-tail order/fault cases plus workspace terminal_only_analysis_* and pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority / pure_tail_fault_cannot_discard_an_owned_transaction.",
+      "result": "Unselected traps stay unselected; selected early argument and invoke-callee traps prevent later work. Pending record/projection/sequence work retains calls. Invalid targets, jump cycles, operand residue, foreign callable/type identity, task/transaction authority and forced ordinary-frame growth are rejected or detected. The independent canonical reference ignores the production-dispatch fault."
+    },
+    "PTX-5": {
+      "classification": "fresh passed",
+      "proof": "standalone_http and transaction_cancellation in both pure-tail receipts; service_acceptance and inherited stateful/outbound/worker/interactive/data/queue/object protection gates.",
+      "result": "After every project/dependency directory is removed, raw HTTP receives 33558528 and an independent state read sees one committed change. Helper overflow returns HTTP 500 and leaves one change; healthy HTTP adds the second. Deterministic cancellation after staging leaves the cancelled key absent and zero live transaction/control state; the same resident and grants then commit the third change. Effects execute once through production only."
+    },
+    "PTX-6": {
+      "classification": "fresh passed",
+      "proof": "Each pure-tail receipt binds its original/reviewed artifact and authority inventories; full maintained generation/comparison gates; pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact.",
+      "result": "Clean, exact-current, missing/corrupt-cache recovery and post-reviewed-change incremental/clean artifacts agree for equal inputs. Canonical damage remains pack_entry_checksum and preserves the damaged inventory before exact private-fixture restoration. Pre-campaign same-format standard bytes execute the new guarantee without conversion. Maintained graph, dependency and asset bytes are unchanged; generated discovery and current consumers agree."
+    },
+    "PTX-7": {
+      "classification": "fresh passed",
+      "proof": "full_profile and target_admission below.",
+      "result": "26 fresh full gates, zero reuse, every product gate, and nine fresh exact x86_64-unknown-linux-musl admission classifications, including the transferred public pure-tail workflow. Staticness is direct ELF inspection plus the two exact pinned userland executions."
+    }
+  },
+  "full_profile": {
+    "classification": "fresh passed",
+    "command": "target/release/lkjscript-dev check full --fresh --machine --jobs 4",
+    "receipt": ".artifacts/lkjscript-dev/check/1788611112300892011-3744795-0/receipt.json",
+    "receipt_copy": ".artifacts/campaign/202609051930/full-01-receipt.json",
+    "receipt_sha256": "642bf95c25924b783ca8166b9bb147bbf53876a1a3bdb40431c8af1b179d241c",
+    "receipt_digest": "verification_154b98109f14c219d8e7428921670cb4a9c4e4dd52226e0ebf3495bcb22a0906",
+    "input_manifest_copy": ".artifacts/campaign/202609051930/full-01-inputs.json",
+    "input_manifest_sha256": "b7633640f33705a5108e5de0992d6e62a071ceee6ee6a2772f2f60802eeb1f08",
+    "archive": ".artifacts/campaign/202609051930/full-01.tar",
+    "archive_sha256": "0ff74ae12c554624fed74b41f25c35330ed3ac29f39759425f3fb6696029b3c2",
+    "elapsed_nanoseconds": 316332587844,
+    "fresh": 26,
+    "reused": 0,
+    "product_gates": 21,
+    "product_classification": "fresh passed",
+    "gates": {
+      "fmt": "fresh passed",
+      "clippy": "fresh passed",
+      "workspace_tests": "fresh passed",
+      "release_build": "fresh passed",
+      "release_command_lifecycle": "fresh passed",
+      "distributed_http_application": "fresh passed",
+      "outbound_http_application": "fresh passed",
+      "offline_packages": "fresh passed",
+      "pure_tail": "fresh passed",
+      "stateful_http_application": "fresh passed",
+      "checker_self_test": "fresh passed",
+      "rust_only_tooling": "fresh passed",
+      "generated_public_guides": "fresh passed",
+      "product_surface_audit": "fresh passed",
+      "standard_package_test": "fresh passed",
+      "application_package_test": "fresh passed",
+      "standard_artifact_build": "fresh passed",
+      "standard_artifact_compare": "fresh passed",
+      "builtin_package_export": "fresh passed",
+      "builtin_package_compare": "fresh passed",
+      "builtin_transport_export": "fresh passed",
+      "builtin_transport_compare": "fresh passed",
+      "application_artifact_build": "fresh passed",
+      "application_artifact_compare": "fresh passed",
+      "service_acceptance": "fresh passed",
+      "diff_check": "fresh passed"
+    },
+    "workspace_tests": {
+      "library_passed": 496,
+      "general_service_passed": 9,
+      "public_cli_passed": 31,
+      "contributor_passed": 91,
+      "stdout_sha256": "7270909e418b9862b3ae80ab4f4afce26b6cad7f062bf2174c308a223caf42e4",
+      "cross_process_writer_helper": "fresh passed",
+      "helper_note": "The parent harness marks this helper ignored; the owning test executes it twice as controlled subprocesses and both pass.",
+      "optional_scale_cases": {
+        "authored_owned_closure_scale_emits_complete_plan_under_default_admission": "skipped",
+        "reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope": "skipped"
+      },
+      "required_PTX_cases_skipped": 0
+    },
+    "service_receipt": ".artifacts/lkjscript-dev/service/1788611382800217032-3751001-0/receipt.json",
+    "service_receipt_sha256": "a4c119ff9faf6ce126dc559dca8628a8a51333a9af0737d418b6cd1a2ab0c9dc"
+  },
+  "target_admission": {
+    "classification": "fresh passed",
+    "target": "x86_64-unknown-linux-musl",
+    "candidate": ".artifacts/campaign/202609051930/target-01/lkjscript",
+    "candidate_bytes": 19802336,
+    "candidate_sha256": "06bf57aaa0f9c180f4603a28bf266ea296428818a7de7e05e084c3b890c723c2",
+    "build_receipt": ".artifacts/campaign/202609051930/target-01/build-receipt.json",
+    "build_receipt_sha256": "f412b6637e14f34c08637f90c871f3e29d86218931bf52a8e4acc982f96a914a",
+    "receipt": ".artifacts/campaign/202609051930/target-01/admission/receipt.json",
+    "receipt_sha256": "6286fc093d644d3cf48c55001061f270f3b1a36972b10ea4f030800167ba1660",
+    "receipt_digest": "verification_0bc8073f8dad6293f60615914d99ebe846a8c77b81496487aca67d443740eed5",
+    "archive": ".artifacts/campaign/202609051930/target-01.tar",
+    "archive_sha256": "e30f7fc35242a4dc014c4b94f26902ee5262ebb31fb37ac3e177498fe17c9768",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "elapsed_nanoseconds": 176435864042,
+    "gates": {
+      "static_linkage": "fresh passed",
+      "musl_userland": "fresh passed",
+      "older_glibc_userland": "fresh passed",
+      "distributed_http": "fresh passed",
+      "outbound_http": "fresh passed",
+      "offline_packages": "fresh passed",
+      "pure_tail": "fresh passed",
+      "stateful_http": "fresh passed",
+      "service_acceptance": "fresh passed"
+    },
+    "elf": {
+      "class": "ELF64",
+      "machine": "x86-64",
+      "linkage": "static-musl",
+      "interpreter_headers": 0,
+      "needed_libraries": 0,
+      "glibc_version_requirements": 0
+    },
+    "userlands": [
+      "Alpine 3.22.5/musl 1.2: alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+      "Debian 11/glibc 2.31: debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
     ],
-    "required": "fresh authoritative full profile and fresh exact musl admission after final bound content; final self-referential identities and receipts are recorded out of band"
+    "cleanup_complete": true
+  },
+  "pure_tail_oracles": {
+    "host": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788611112300892011-3744795-0/outputs/pure-tail/receipt.json",
+      "receipt_sha256": "7ad2e2c13ef856dcf789d8d35767ec25f8e136d7210c675bc914e638a50f3f19",
+      "receipt_digest": "verification_f91d3e9718ae9568181c7951e624a11cf4ddd790e8dda10af0f2eab28407d867",
+      "candidate_sha256": "602b4084223262c48618f23b7f0e5c70325b34daa721a6d5b50951b011d92d2d",
+      "elapsed_nanoseconds": 33112041562,
+      "maximum_sampled_child_rss_kib": 16828,
+      "sampled_child_cpu_nanoseconds": 29410000000,
+      "peak_owned_file_bytes": 25104757,
+      "artifact_sha256": "f692119a2c5eb24b23a25cc9a45121974284aa9c69437e696658c9836fc85c5e",
+      "reviewed_artifact_sha256": "29abe97d559957da0dc4255b7f54814e818a1dc399fa313ec0681dc5046f4dce",
+      "standalone_artifact_sha256": "1056af35abd0d4b2b2dbf3f20c8844e97ea90b1e5f4db45efba7604b6843dd19"
+    },
+    "transferred_target": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609051930/target-01/admission/pure-tail/receipt.json",
+      "receipt_sha256": "2f118566cfbeede6ae0c34b94a4166d0caa12ff9692a172423e7751f8325b1fd",
+      "candidate_sha256": "06bf57aaa0f9c180f4603a28bf266ea296428818a7de7e05e084c3b890c723c2",
+      "elapsed_nanoseconds": 44828888413,
+      "maximum_sampled_child_rss_kib": 19152,
+      "sampled_child_cpu_nanoseconds": 41860000000,
+      "peak_owned_file_bytes": 25252397,
+      "artifact_sha256": "d7f0ca7cf0b26e3b9616af4f4db86db8467e52817d411b73a1c840e291d52aa9",
+      "reviewed_artifact_sha256": "e10d5975d91a1c715f2ff02cc57cb634d95f6a6dea556a7ffd39c414b8452884",
+      "standalone_artifact_sha256": "b69ce45de2d39e3107b3917bb9ab2d155a8b4ba0fbddf9068b7925c7d9f938ee"
+    },
+    "commands_each": 71,
+    "bounded_stack_cases_each": 44,
+    "cleanup_complete_each": true,
+    "identity_note": "Independently authored runs allocate distinct semantic identities. Artifact equality is proved within each exact input set, not across independently authored runs."
+  },
+  "environment": {
+    "platform": "Linux x86_64, local trusted host",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "locked_dependencies": true,
+    "native_packages": [
+      "musl=1.2.4-2:amd64",
+      "musl-dev=1.2.4-2:amd64",
+      "musl-tools=1.2.4-2:amd64"
+    ],
+    "verifier_sha256": "05578aabc6cbbe2efc2fb91ad31ce28918c72d608913f6550d623e3ce9d01227",
+    "runtime_digest": "verification_e746685fa1f8bcfb8f5cfe18509cf6907a77fdcee54085579a832a3327a96626"
+  },
+  "final_bound_revalidation": {
+    "classification_at_terminal_metadata_assembly": "not run",
+    "required": "Another fresh full profile and exact musl build/admission after committing this terminal metadata. These completed implementation receipts are not reused as final proof.",
+    "out_of_band_record": ".artifacts/campaign/202609051930/final-boundaries.json",
+    "record_owns": "Final commit/tree/worktree fingerprints, final fresh receipts/digests, evidence/campaign blob identities, preserved work, cleanup and actual source push state. No evidence-only commit follows those final runs."
   },
   "deviations": [
     "No selected execution mechanism was replaced.",
     "The HTTP proof compares complete canonical inventories and preserves every existing immutable file across check/build; compiler preparation may append derived compiler packs. Exact file differences are retained.",
     "Debug verifier symbols exceeded the existing executable evidence bound; iteration used a stripped private verifier copy without raising that bound. Final admission uses release binaries."
   ],
+  "iteration_failures": {
+    "classification": "failed",
+    "scope": "Retained earlier iterations, superseded by the fresh implementation-bound full/target results above.",
+    "raw": "Numbered vertical, workspace-iteration, clippy and focused logs under raw_root.",
+    "corrections": "Public fixture spelling/type and adapter requirements, bounded debug-verifier packaging, generated-guide freshness, and the inherited registry test's gate count were corrected. No default budget or required admission was relaxed."
+  },
   "external_actions": {
     "fetch": "read-only origin fetch at reconciliation",
-    "push": "not run",
+    "push_at_terminal_metadata_assembly": "not run",
     "tags_releases_workflow_mutations": "not run",
     "deployment_migration_hosted_mutations": "not run",
-    "effects": "isolated loopback HTTP and campaign-owned data only"
+    "effects": "isolated loopback HTTP, campaign-owned data and pinned local userland containers only",
+    "source_push_policy": "Optional normal source push only after final proof, fresh fetch, safe divergence and refreshed trigger inspection; actual disposition is recorded out of band."
   },
   "cleanup": {
-    "iteration_services": "stopped and joined; zero live execution state after failure/cancellation",
+    "services": "stopped and joined; zero live execution state after failure/cancellation; host and target owners report complete cleanup",
     "temporary_projects": "removed",
     "preserved": "original stash, pre-existing ignored target/.artifacts state and maintained operational/derived state; campaign raw receipts remain ignored"
-  }
+  },
+  "newly_evidenced_limitations": [
+    "Eligible tail chains keep bounded control state while cumulative VM local-allocation charges continue growing; finite fuel/allocation/input admissions still apply.",
+    "Pending non-tail work and task/affine/owned-transaction frames remain ordinary admitted activations; this campaign adds no task-tail transfer.",
+    "Measurements are finite local observations and the exact two admitted userlands, not constant heap, maximum capacity, generic portability, latency or throughput claims."
+  ],
+  "newly_evidenced_next_candidates": []
 }

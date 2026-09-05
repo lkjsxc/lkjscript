@@ -516,6 +516,11 @@ cancellation, then succeeds again with the same grants. Empty-requirement task f
 ordinary frames. Default budgets, maintained semantic/package/artifact identities, and stored
 encodings are unchanged. Exact campaign classifications and source/target boundaries are owned by
 [`202609051930-pure-tail-execution.json`](evidence/202609051930-pure-tail-execution.json).
+The implementation boundary passed all 26 full-profile gates fresh with zero reuse, including
+every product gate; exact static-musl admission passed nine fresh classifications, including the
+transferred pure-tail workflow and both pinned userlands. Terminal metadata is assembled before
+the final fresh revalidation; its self-referential commit and receipt identities remain in the
+campaign's ignored final-boundary record.
 
 The code-complete offline-package campaign is complete at the copied executable, immutable source,
 compiler/reference, maintained consumer, and exact musl candidate boundaries. Its diamond returns
