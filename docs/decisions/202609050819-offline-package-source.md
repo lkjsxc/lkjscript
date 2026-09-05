@@ -38,6 +38,15 @@ target tables and omit a compiled test: canonical execution must survive the for
 test-inventory comparison must reject the latter. Production compilation and live-effect grant
 binding remain unchanged; live adapters are never replayed for differential proof.
 
+The first full profile exposed a verification-ordering race: the release workspace build selected
+candidate `a5efcb80f1343ba93c2e5c3d5d480f57066f78a6b2552299c49daaf17ce17d9a`,
+then the concurrent release CLI test selected feature-unified candidate
+`452ed604efe0136eef12f920a11c6fe3b0e60a9c6a6c718abfed39de0bdc60c0` at the same
+path. The offline workflow and cleanup passed on its private copy, but the exact-source-candidate
+receipt check correctly rejected the changed path. Bind the final executable output to the release
+CLI lifecycle gate and order every copied application oracle after it. Keep every inherited gate,
+exact fingerprint input, and candidate-equality check; this is dependency ordering, not evidence reuse.
+
 Reconsider only with maintained workload evidence that this model cannot meet its stated bounded
 public workflow, independent closure/reference proof, or dependency-closed migration. Registry
 resolution, signatures, operational migration, and publication remain separate decisions.

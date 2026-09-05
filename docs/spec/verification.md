@@ -372,6 +372,9 @@ The harness owns gate dependencies, exact fingerprints, bounded child logs, requ
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
 harness proves every semantic and operational input identical and the profile permits it. Final
 product and full verification run after final code, generated assets, evidence, and documentation.
+The release CLI lifecycle gate binds the final release executable output after Cargo test-feature
+unification. Copied application oracles depend on that gate, so no concurrent release build can
+replace their selected candidate path while they verify exact candidate and private-copy equality.
 
 Receipts and logs are derived evidence. They bind command, exact inputs, toolchain/platform,
 dependencies, classification, output paths/digests, and limitations. They never enter semantic

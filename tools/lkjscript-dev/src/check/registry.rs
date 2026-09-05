@@ -321,7 +321,7 @@ pub(crate) fn base_registry(
     );
     release.required_outputs.push(binary.clone());
     gates.push(release);
-    gates.push(cargo_gate(
+    let mut release_lifecycle = cargo_gate(
         "release_command_lifecycle",
         &[
             "test",
@@ -334,7 +334,11 @@ pub(crate) fn base_registry(
             "--exact",
         ],
         &["release_build"],
-    ));
+    );
+    // Cargo's release test build can select a different feature-unified executable at the
+    // same output path. Bind that last producer before any copied-candidate oracle starts.
+    release_lifecycle.required_outputs.push(binary.clone());
+    gates.push(release_lifecycle);
     let mut distributed_http = gate(
         "distributed_http_application",
         vec![
@@ -344,7 +348,7 @@ pub(crate) fn base_registry(
             path_string(&binary),
             "--machine".to_owned(),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     );
     distributed_http.identity_command = Some(vec![
         "$HARNESS".to_owned(),
@@ -364,7 +368,7 @@ pub(crate) fn base_registry(
             path_string(&binary),
             "--machine".to_owned(),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     );
     outbound_http.identity_command = Some(vec![
         "$HARNESS".to_owned(),
@@ -384,7 +388,7 @@ pub(crate) fn base_registry(
             path_string(&binary),
             "--machine".to_owned(),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     );
     offline_packages.identity_command = Some(vec![
         "$HARNESS".to_owned(),
@@ -404,7 +408,7 @@ pub(crate) fn base_registry(
             path_string(&binary),
             "--machine".to_owned(),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     );
     stateful_http.identity_command = Some(vec![
         "$HARNESS".to_owned(),
@@ -875,7 +879,7 @@ mod tests {
                 .gate("offline_packages")
                 .expect("offline package oracle");
             assert!(!offline.cacheable);
-            assert_eq!(offline.dependencies, ["release_build"]);
+            assert_eq!(offline.dependencies, ["release_command_lifecycle"]);
             assert!(
                 !first
                     .closure(&requested)
@@ -890,6 +894,31 @@ mod tests {
                     .profile_digest(profile_name, &requested)
                     .expect("second profile digest")
             );
+        }
+    }
+
+    #[test]
+    fn copied_candidate_oracles_wait_for_the_last_release_binary_producer() {
+        let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
+            .expect("maintained registry");
+        let lifecycle = registry
+            .gate("release_command_lifecycle")
+            .expect("release lifecycle");
+        assert_eq!(
+            lifecycle.required_outputs,
+            [temporary.path().join("target/release/lkjscript")]
+        );
+        for name in [
+            "distributed_http_application",
+            "outbound_http_application",
+            "offline_packages",
+            "stateful_http_application",
+            "service_acceptance",
+        ] {
+            let oracle = registry.gate(name).expect("copied candidate oracle");
+            assert_eq!(oracle.dependencies, ["release_command_lifecycle"], "{name}");
+            assert!(!oracle.cacheable, "{name}");
         }
     }
 }
