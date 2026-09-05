@@ -1,6 +1,6 @@
 # Immutable source for offline package composition
 
-Status: selected by campaign `202609050819-offline-packages`; implementation incomplete.
+Status: accepted by completed campaign `202609050819-offline-packages`.
 
 The public-authored baseline can export and stage a non-standard interface, but reviewed
 `add.dependency` rejects it with `change_dependency_binding_unsupported`. Lifecycle preparation also
@@ -46,6 +46,11 @@ path. The offline workflow and cleanup passed on its private copy, but the exact
 receipt check correctly rejected the changed path. Bind the final executable output to the release
 CLI lifecycle gate and order every copied application oracle after it. Keep every inherited gate,
 exact fingerprint input, and candidate-equality check; this is dependency ordering, not evidence reuse.
+
+Final retained-output review also found that a missing transitive pack could fail during logical
+resolution before source admission added its corrective context. Keep `pack_file_missing` and the
+physical pack identity, but bind the message to the exact logical package revision and require
+restage/replan guidance. The copied workflow and transferred raw-output validator both check it.
 
 Reconsider only with maintained workload evidence that this model cannot meet its stated bounded
 public workflow, independent closure/reference proof, or dependency-closed migration. Registry

@@ -591,15 +591,29 @@ fn read_revision<S: ImmutableObjectStore + ?Sized>(
     let key = ObjectKey::from_digest(ObjectDomain::PackageRevision, digest.bytes());
     let bytes = store
         .read(key, MAXIMUM_PACKAGE_REVISION_BYTES, work)
-        .map_err(store_diagnostic)?
+        .map_err(|error| source_revision_diagnostic(store_diagnostic(error), digest))?
         .ok_or_else(|| {
-            package_error(
-                DiagnosticClass::Semantic,
-                "package_revision_missing",
-                format!("required exact package revision {digest} is not staged"),
+            source_revision_diagnostic(
+                package_error(
+                    DiagnosticClass::Semantic,
+                    "package_revision_missing",
+                    format!("required exact package revision {digest} is not staged"),
+                ),
+                digest,
             )
         })?;
     PackageRevision::decode(&bytes, digest)
+}
+
+pub(crate) fn source_revision_diagnostic(
+    mut diagnostic: Diagnostic,
+    revision: PackageRevisionDigest,
+) -> Diagnostic {
+    diagnostic.message = format!(
+        "exact dependency source {revision}: {}; restore original canonical material or restage this exact code-complete closure, then replan",
+        diagnostic.message
+    );
+    diagnostic
 }
 
 fn read_transport<S: ImmutableObjectStore + ?Sized>(

@@ -501,15 +501,20 @@ sandbox or multi-tenant isolation boundary.
 
 ## Verification
 
-The code-complete offline-package campaign remains incomplete pending authoritative product/full
-and exact-target proof. Its focused copied-binary diamond returns 11, stays 11 when D2 is staged,
-and returns 12 after one reviewed paired replacement. Producer directories are removed before
-execution; independently reconstructed producer and transported inventories agree. Public nominal
-types, rank-one generic calls, bounded staged-interface paging, cache recovery, and the standalone
-HTTP body pass at that boundary. Maintained semantic/package/transport and artifact identities
-above remain unchanged; only the public source container and operational readiness encoding move.
-The bounded standard/lkjournal/diamond admission preflight fits every fixed ceiling without a
-capacity claim. Current classifications and raw pointers are retained in
+The code-complete offline-package campaign is complete at the copied executable, immutable source,
+compiler/reference, maintained consumer, and exact musl candidate boundaries. Its diamond returns
+11, stays 11 when D2 is staged, and returns 12 after one reviewed paired replacement. Producer
+directories are removed before execution; independently reconstructed producer and transported
+inventories agree. Public nominal types, rank-one generic calls, bounded staged-interface paging,
+cache recovery, and standalone HTTP pass. Full verification has 25 fresh gates, including every
+product gate; exact-target admission has eight fresh classifications, including the transferred
+no-checkout package workflow. The first full run exposed and rejected a concurrent candidate-path
+replacement; the corrected dependency ordering retains all gates and exact fingerprints.
+Maintained semantic/package/transport and artifact identities above remain unchanged; only the
+public source container and operational readiness encoding move. The bounded standard/lkjournal/
+diamond admission preflight fits every fixed ceiling without a capacity claim. The terminal record
+is assembled before its final fresh revalidation, so no subsequent evidence commit changes those
+bound inputs. Current classifications, exact boundaries, deviations and raw pointers are retained in
 [`202609050819-offline-packages.json`](evidence/202609050819-offline-packages.json).
 
 Exact identities, oracle boundaries, gate classifications, resource observations, deletion, and

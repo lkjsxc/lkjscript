@@ -967,6 +967,13 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             && digest_file(&a.path.join("HEAD"), 1024 * 1024)? == head,
         "missing transitive source published a partial replacement",
     )?;
+    let missing_message = field(&missing, "diagnostic", "message")?;
+    require(
+        missing_message.contains(&d.logical)
+            && missing_message.contains("restage")
+            && missing_message.contains("replan"),
+        "missing transitive source must identify its exact revision and restage/replan action",
+    )?;
     context.receipt.observations.insert(
         "unavailable_transitive_source".to_owned(),
         field(&missing, "diagnostic", "code")?,
@@ -1578,6 +1585,22 @@ pub(crate) fn read_transferred_receipt(
         !receipt.commands.is_empty(),
         "offline command evidence missing",
     )?;
+    let d2_producer = receipt
+        .producer_inventories
+        .get(4)
+        .ok_or_else(|| DevError::corrupt("D2 producer inventory missing"))?;
+    let d2_revision = receipt
+        .inventories
+        .get(4)
+        .and_then(|inventory| {
+            inventory
+                .packages
+                .iter()
+                .find(|package| package.package == d2_producer.package)
+        })
+        .map(|package| package.package_revision.as_str())
+        .ok_or_else(|| DevError::corrupt("D2 source revision missing"))?;
+    let mut missing_source_diagnostic = false;
     for (index, command) in receipt.commands.iter().enumerate() {
         require(
             command.cwd == receipt.isolated_root
@@ -1619,8 +1642,22 @@ pub(crate) fn read_transferred_receipt(
                     .any(|record| record.operation == "diagnostic"),
                 "transferred rejection omitted its diagnostic",
             )?;
+            if field(&records, "diagnostic", "code")? == "pack_file_missing" {
+                let message = field(&records, "diagnostic", "message")?;
+                require(
+                    message.contains(d2_revision)
+                        && message.contains("restage")
+                        && message.contains("replan"),
+                    "transferred missing-source diagnostic lost its exact revision or correction",
+                )?;
+                missing_source_diagnostic = true;
+            }
         }
     }
+    require(
+        missing_source_diagnostic,
+        "transferred missing-source failure was not observed",
+    )?;
     verify_observation_files(&receipt.runners[0], &receipt.files, "standalone")?;
     require(
         process::read_bounded(&root.join("standalone-response.body"), MAXIMUM_OUTPUT_BYTES)?

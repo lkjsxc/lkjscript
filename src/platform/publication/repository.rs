@@ -1685,7 +1685,13 @@ pub(super) fn validate_prepared_dependency_sources(
             ObjectDomain::PackageRevision,
             dependency.package_revision.bytes(),
             &mut work,
-        )?;
+        )
+        .map_err(|error| {
+            crate::platform::package_transport::source_revision_diagnostic(
+                error,
+                dependency.package_revision,
+            )
+        })?;
         let revision = PackageRevision::decode(&bytes, dependency.package_revision)?;
         revision.matches_dependency(dependency.package_revision, &dependency)?;
         if !readiness
@@ -1818,7 +1824,13 @@ pub(super) fn logical_dependency_inventory<S: ImmutableObjectStore + ?Sized>(
                 ObjectDomain::PackageRevision,
                 dependency.package_revision.bytes(),
                 &mut work,
-            )?,
+            )
+            .map_err(|error| {
+                crate::platform::package_transport::source_revision_diagnostic(
+                    error,
+                    dependency.package_revision,
+                )
+            })?,
             dependency.package_revision,
         )?;
         revision.matches_dependency(dependency.package_revision, &dependency)?;
