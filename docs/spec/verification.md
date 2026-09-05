@@ -19,6 +19,35 @@ Every pure command and graph-owned test used for acceptance requires production/
 before comparing the expected value. Skipped, unavailable, cancelled, exhausted, or unrun work is
 not a pass. Live effects are not duplicated for differential evidence.
 
+Pure tail execution additionally requires `lkjscript-dev pure-tail --binary PATH
+--evidence-root ABSENT_ABSOLUTE_PATH --machine` in product/full and exact-target admission.
+The copied executable alone authors, reviews, applies, inspects, checks, builds, exports, stages,
+and executes its programs. Fixed results include runtime-list sums through 8,192 items, ordered
+folds 5 and -5, self and mutual recursion, and two ordered generic instantiations across a removed
+non-built-in producer. Both tiers must retain at most eight call frames, with equal per-tier
+peaks at 256, 4,096, and 8,192 items.
+
+The separate canonical trampoline derives tail context from owner records; it cannot read
+production terminal-continuation analysis or dispatch bits. Contributor subprocesses contain
+2,097,152-byte evaluator threads, lower frame admission to eight, and retain actual call,
+continuation, locals, and substitution ownership peaks and failure/cancellation cleanup.
+Genuine pending non-tail work must exhaust frames; an infinite tail chain under 1,000 work units
+must exhaust fuel. Deterministic cancellation after progress, cumulative allocation exact-fit and
+one-over, VM operand exact-fit and one-over, and healthy subsequent invocations discriminate
+accounting resets and leaks. Reference allocation/expression units remain independent; the
+canonical evaluator has no VM operand stack. Safe malformed preparation/runtime fixtures and
+forced ordinary frame growth must be detected. The unchanged maintained pre-campaign artifact
+is strictly prepared and its graph fold invoked with long runtime lists without conversion.
+
+One standalone loopback HTTP bundle stages a data write in a lexical transaction and calls the
+same long pure fold through an empty-requirement task frame. A raw client and independent data
+read prove exactly one commit. Helper overflow and deterministic helper cancellation must release
+the transaction and hide their staged writes; healthy subsequent invocations commit once.
+Production executes each effect once. Project and dependency directories are absent. Every oracle
+invocation is limited to 900 wall seconds and 1,073,741,824 owned file bytes, excluding builds;
+receipts retain elapsed time, sampled RSS, work units, peaks, exact inputs, and cleanup. These
+prove constant control space for eligible tail chains, not constant heap or throughput.
+
 Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
 share bounded snapshot decoding but cannot share production provenance, transfer, consume,
 resource-call graph, or branch-merge logic or encoded expected results. It must agree on both
@@ -220,7 +249,7 @@ inputs without using `ldd` or trusting the target name.
 
 The candidate must complete the command lifecycle in two independently pinned Linux/amd64
 userlands: one musl-based and one older-glibc-based. Candidate execution has no network and no host
-library bind mount. Admission also requires the same bytes to pass the transferable offline-package
+library bind mount. Admission also requires the same bytes to pass the transferable pure-tail and offline-package
 composition oracle and the maintained distributed HTTP,
 stateful HTTP, outbound HTTP, and standalone service oracles using isolated authorities. The receipt records distinct userland, application,
 static-inspection, cleanup, and resource classifications. Static linkage and those two userlands do

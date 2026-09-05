@@ -44,7 +44,7 @@ impl Default for NormalizedRunPolicy {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedRunObservation {
     pub instructions: u64,
     pub calls: u64,
@@ -55,6 +55,17 @@ pub struct NormalizedRunObservation {
     pub maximum_call_depth: usize,
     pub maximum_value_stack: usize,
     pub production_tier: &'static str,
+    pub tail_transfers: u64,
+    /// Each live VM frame owns exactly one instruction continuation.
+    pub maximum_control_frames: usize,
+    pub maximum_live_locals: usize,
+    pub maximum_live_type_bindings: usize,
+    pub maximum_live_transactions: usize,
+    pub live_call_frames_after: usize,
+    pub live_locals_after: usize,
+    pub live_type_bindings_after: usize,
+    pub live_operands_after: usize,
+    pub live_transactions_after: usize,
 }
 
 pub type NormalizedInvocation = (NormalizedValue, NormalizedRunObservation);
@@ -102,6 +113,7 @@ pub struct NormalizedVm<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedHost,
+    observer: Option<&'a std::sync::Mutex<Option<NormalizedRunObservation>>>,
 }
 
 impl<'a> NormalizedVm<'a> {
@@ -110,7 +122,18 @@ impl<'a> NormalizedVm<'a> {
             program,
             policy,
             host: &CORE_HOST,
+            observer: None,
         }
+    }
+
+    pub(super) fn observing(
+        mut self,
+        observer: &'a std::sync::Mutex<Option<NormalizedRunObservation>>,
+        host: &'a dyn NormalizedHost,
+    ) -> Self {
+        self.observer = Some(observer);
+        self.host = host;
+        self
     }
 
     #[cfg(test)]
@@ -244,7 +267,7 @@ impl<'a> NormalizedVm<'a> {
         Ok((actual, expected))
     }
 
-    fn invoke_entry(
+    pub(super) fn invoke_entry(
         &self,
         entry: NormalizedEntryPoint,
         arguments: Vec<NormalizedValue>,
@@ -288,7 +311,17 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph8_dense_bytecode_3",
+                production_tier: "graph8_dense_bytecode_4",
+                tail_transfers: 0,
+                maximum_control_frames: 0,
+                maximum_live_locals: 0,
+                maximum_live_type_bindings: 0,
+                maximum_live_transactions: 0,
+                live_call_frames_after: 0,
+                live_locals_after: 0,
+                live_type_bindings_after: 0,
+                live_operands_after: 0,
+                live_transactions_after: 0,
             },
         };
         let result = (|| {
@@ -297,12 +330,17 @@ impl<'a> NormalizedVm<'a> {
                     machine.call(function, Arc::from([]), arguments)?;
                     None
                 }
+                #[cfg(test)]
+                NormalizedEntryPoint::InstantiatedFunction(function, types) => {
+                    machine.call(function, types, arguments)?;
+                    None
+                }
                 NormalizedEntryPoint::Code(code) => {
-                    machine.call_code(code, arguments, BTreeMap::new())?;
+                    machine.call_code(code, arguments, BTreeMap::new(), None, false)?;
                     None
                 }
                 NormalizedEntryPoint::PortExpression(code) => {
-                    machine.call_code(code, Vec::new(), BTreeMap::new())?;
+                    machine.call_code(code, Vec::new(), BTreeMap::new(), None, false)?;
                     Some(arguments)
                 }
             };
@@ -322,13 +360,31 @@ impl<'a> NormalizedVm<'a> {
             machine.call(function, type_arguments, arguments)?;
             finish_admitted(&mut machine)
         })();
-        match result {
-            Ok(value) => Ok((value, machine.observation)),
-            Err(error) => {
-                machine.rollback_all();
-                Err(error)
-            }
+        if result.is_err() {
+            machine.rollback_all();
+            machine.frames.clear();
+            machine.stack.clear();
         }
+        machine.observation.live_call_frames_after = machine.frames.len();
+        machine.observation.live_locals_after =
+            machine.frames.iter().map(|frame| frame.locals.len()).sum();
+        machine.observation.live_type_bindings_after = machine
+            .frames
+            .iter()
+            .map(|frame| frame.type_arguments.len())
+            .sum();
+        machine.observation.live_operands_after = machine.stack.len();
+        machine.observation.live_transactions_after = machine.transactions.len();
+        if let Some(observer) = self.observer {
+            let mut observed = observer.lock().map_err(|_| {
+                runtime_error(
+                    "normalized_observation_lock",
+                    "execution observation lock is poisoned",
+                )
+            })?;
+            *observed = Some(machine.observation.clone());
+        }
+        result.map(|value| (value, machine.observation))
     }
 }
 
@@ -348,6 +404,7 @@ fn finish_admitted(machine: &mut Machine<'_>) -> Result<NormalizedValue, Executi
 
 struct Frame {
     id: u64,
+    function: Option<FunctionIndex>,
     code: NormalizedCode,
     instruction: usize,
     locals: Vec<Option<NormalizedValue>>,
@@ -480,6 +537,15 @@ impl Machine<'_> {
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                     self.call(function, type_arguments, arguments)?;
                 }
+                NormalizedInstruction::TailCall {
+                    function,
+                    type_arguments,
+                    arguments,
+                } => {
+                    let arguments = self.pop_many(arguments as usize)?;
+                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    self.dispatch_call(function, type_arguments, arguments, true)?;
+                }
                 NormalizedInstruction::FunctionValue {
                     function,
                     type_arguments,
@@ -500,6 +566,23 @@ impl Machine<'_> {
                         return Err(type_error("invoke callee is not a function"));
                     };
                     self.call(function, type_arguments, arguments)?;
+                }
+                NormalizedInstruction::TailInvoke { arguments } => {
+                    let arguments = self.pop_many(arguments as usize)?;
+                    let NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    } = self.pop()?
+                    else {
+                        return Err(type_error("invoke callee is not a function"));
+                    };
+                    self.validate_tail_caller()?;
+                    let tail = self
+                        .program
+                        .functions
+                        .get(function.0 as usize)
+                        .is_some_and(|function| function.pure_graph);
+                    self.dispatch_call(function, type_arguments, arguments, tail)?;
                 }
                 NormalizedInstruction::Record { layout, fields } => {
                     let values = self.pop_many(fields.len())?;
@@ -683,6 +766,10 @@ impl Machine<'_> {
                             transaction,
                         },
                     );
+                    self.observation.maximum_live_transactions = self
+                        .observation
+                        .maximum_live_transactions
+                        .max(self.transactions.len());
                 }
                 NormalizedInstruction::CommitTransaction {
                     requirement,
@@ -813,10 +900,21 @@ impl Machine<'_> {
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: Vec<NormalizedValue>,
     ) -> Result<(), ExecutionError> {
+        self.dispatch_call(function, type_arguments, arguments, false)
+    }
+
+    fn dispatch_call(
+        &mut self,
+        function_index: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
+        arguments: Vec<NormalizedValue>,
+        tail: bool,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
         let function = self
             .program
             .functions
-            .get(function.0 as usize)
+            .get(function_index.0 as usize)
             .ok_or_else(|| {
                 runtime_error(
                     "normalized_function_index",
@@ -853,11 +951,24 @@ impl Machine<'_> {
             return Err(capabilities_unbound());
         }
         self.validate_call_resources(function, &arguments)?;
+        if tail {
+            self.validate_tail_caller()?;
+            if !function.pure_graph {
+                return Err(runtime_error(
+                    "normalized_tail_callee",
+                    "tail transfer requires an exact pure graph callee",
+                ));
+            }
+        }
         self.observation.calls = self.observation.calls.saturating_add(1);
         match &function.body {
-            NormalizedFunctionBody::Code(code) => {
-                self.call_code(code.clone(), arguments, type_arguments_by_parameter)
-            }
+            NormalizedFunctionBody::Code(code) => self.call_code(
+                code.clone(),
+                arguments,
+                type_arguments_by_parameter,
+                Some(function_index),
+                tail,
+            ),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
                 let value = self.host.call(
@@ -934,11 +1045,13 @@ impl Machine<'_> {
         code: NormalizedCode,
         arguments: Vec<NormalizedValue>,
         type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
+        function: Option<FunctionIndex>,
+        tail: bool,
     ) -> Result<(), ExecutionError> {
         if arguments.len() != code.parameter_count as usize {
             return Err(type_error("code argument count is foreign"));
         }
-        if self.frames.len() >= self.policy.maximum_call_depth {
+        if !tail && self.frames.len() >= self.policy.maximum_call_depth {
             return Err(resource_error(
                 "normalized_call_depth",
                 "normalized execution exceeded its call-depth budget",
@@ -953,6 +1066,11 @@ impl Machine<'_> {
                 )
             })?;
         self.charge_allocation(locals_bytes)?;
+        // Arguments and concrete substitutions are complete; the previous continuation is
+        // already the last frame's caller and the validated operand base is unchanged.
+        if tail {
+            self.frames.pop();
+        }
         let mut locals = vec![None; code.local_count as usize];
         for (index, argument) in arguments.into_iter().enumerate() {
             locals[index] = Some(argument);
@@ -966,6 +1084,7 @@ impl Machine<'_> {
         })?;
         self.frames.push(Frame {
             id,
+            function,
             code,
             instruction: 0,
             locals,
@@ -974,6 +1093,66 @@ impl Machine<'_> {
         });
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.frames.len());
+        self.observation.maximum_control_frames = self
+            .observation
+            .maximum_control_frames
+            .max(self.frames.len());
+        self.observation.maximum_live_type_bindings =
+            self.observation.maximum_live_type_bindings.max(
+                self.frames
+                    .iter()
+                    .map(|frame| frame.type_arguments.len())
+                    .sum(),
+            );
+        self.observation.maximum_live_locals = self
+            .observation
+            .maximum_live_locals
+            .max(self.frames.iter().map(|frame| frame.locals.len()).sum());
+        if tail {
+            self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
+        }
+        Ok(())
+    }
+
+    fn validate_tail_caller(&self) -> Result<(), ExecutionError> {
+        let frame = self.current_frame()?;
+        if !frame
+            .function
+            .and_then(|function| self.program.functions.get(function.0 as usize))
+            .is_some_and(|function| function.pure_graph)
+        {
+            return Err(runtime_error(
+                "normalized_tail_caller",
+                "tail transfer requires an exact pure graph caller",
+            ));
+        }
+        if self.stack.len() != frame.stack_base {
+            return Err(runtime_error(
+                "normalized_stack_residue",
+                "tail transfer has pending operand values; preserve the non-tail continuation",
+            ));
+        }
+        if self
+            .transactions
+            .values()
+            .any(|transaction| transaction.owner_frame == frame.id)
+        {
+            return Err(runtime_error(
+                "normalized_transaction_leak",
+                "tail transfer cannot discard an owned transaction",
+            ));
+        }
+        if frame
+            .locals
+            .iter()
+            .flatten()
+            .any(|value| self.affine_value_shape(value).is_some())
+        {
+            return Err(runtime_error(
+                "normalized_tail_resource",
+                "tail transfer cannot discard affine authority",
+            ));
+        }
         Ok(())
     }
 

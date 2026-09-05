@@ -104,16 +104,17 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.23`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.24`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
-adds signature-indexed inbound HTTP path captures and code-complete offline package composition.
+adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
+and constant control space for eligible pure tail execution.
 Graph 10, validation witness 6, owner summary 5,
 validator 10, package 3, package interface 6, compiler-unit 5, bytecode 3, Artifact 15, resident
 runtime 3, function-definition projection 2, service receipt 10, distributed-HTTP receipt 4,
 outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 14, authored change 11,
 logical change plan 5, query 6,
-project creation 5, registry 11, CLI 24, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 11, CLI 25, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
@@ -501,13 +502,28 @@ sandbox or multi-tenant isolation boundary.
 
 ## Verification
 
+Eligible pure graph calls now replace their activation in production and in the independent
+canonical reference trampoline. Copied-public runtime-list folds at 0, 1, 256, 4,096, and 8,192
+items return the fixed sums; the last three retain peaks of two production and three reference
+call frames. Self/mutual recursion, ordered generic instantiation across a removed producer, and
+if/let/sequence/match tail contexts use this same mechanism. The unchanged maintained standard
+artifact receives the guarantee through current strict preparation.
+
+Bounded-stack probes retain actual continuation, locals, and substitution peaks, reject genuine
+non-tail depth and fuel exhaustion, and release execution state after deterministic cancellation.
+The standalone transactional HTTP fold commits once, hides a staged write on helper overflow and
+cancellation, then succeeds again with the same grants. Empty-requirement task frames remain
+ordinary frames. Default budgets, maintained semantic/package/artifact identities, and stored
+encodings are unchanged. Exact campaign classifications and source/target boundaries are owned by
+[`202609051930-pure-tail-execution.json`](evidence/202609051930-pure-tail-execution.json).
+
 The code-complete offline-package campaign is complete at the copied executable, immutable source,
 compiler/reference, maintained consumer, and exact musl candidate boundaries. Its diamond returns
 11, stays 11 when D2 is staged, and returns 12 after one reviewed paired replacement. Producer
 directories are removed before execution; independently reconstructed producer and transported
 inventories agree. Public nominal types, rank-one generic calls, bounded staged-interface paging,
-cache recovery, and standalone HTTP pass. Full verification has 25 fresh gates, including every
-product gate; exact-target admission has eight fresh classifications, including the transferred
+cache recovery, and standalone HTTP passed. That campaign's full verification had 25 fresh gates,
+including every product gate; exact-target admission had eight fresh classifications, including the transferred
 no-checkout package workflow. The first full run exposed and rejected a concurrent candidate-path
 replacement; the corrected dependency ordering retains all gates and exact fingerprints.
 Maintained semantic/package/transport and artifact identities above remain unchanged; only the

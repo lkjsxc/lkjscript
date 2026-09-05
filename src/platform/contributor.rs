@@ -32,6 +32,20 @@ const DEFINITION_RELATION_DIGEST_DOMAIN: &str =
     "lkjscript.contributor.function-definition.relations.v1";
 const EXTRACTION_MOVED_DIGEST_DOMAIN: &str = "lkjscript.function-extraction.moved-owners.v1";
 
+/// Executes already accepted public fixtures on a bounded evaluator stack. Call only in an
+/// isolated contributor subprocess so a native-stack regression cannot abort its parent oracle.
+pub fn pure_tail_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::pure_tail_probe::observe(project)
+}
+
+/// Bounded cancellation observation over an exact publicly authored standalone bundle.
+pub fn pure_tail_transaction_probe(
+    deployment: &Path,
+    function: &str,
+) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::pure_tail_probe::observe_transaction(deployment, function)
+}
+
 /// Implementation-disjoint complete package inventory. Only neutral container decoding and
 /// canonical records are shared with admission; neither production resolution nor projection runs.
 pub fn offline_package_inventory(

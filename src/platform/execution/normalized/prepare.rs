@@ -103,11 +103,19 @@ pub enum NormalizedInstruction {
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
+    TailCall {
+        function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
+        arguments: u32,
+    },
     FunctionValue {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
     },
     Invoke {
+        arguments: u32,
+    },
+    TailInvoke {
         arguments: u32,
     },
     Record {
@@ -169,6 +177,8 @@ pub enum NormalizedFunctionBody {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
     pub declaration: DeclarationReference,
+    /// Derived from the exact canonical declaration, never from an empty requirement list.
+    pub pure_graph: bool,
     pub type_parameters: Arc<[TypeParameterId]>,
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
@@ -234,6 +244,9 @@ pub struct NormalizedOperation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedEntryPoint {
     Function(FunctionIndex),
+    /// Test admission supplies runtime type arguments to an existing maintained function.
+    #[cfg(test)]
+    InstantiatedFunction(FunctionIndex, Arc<[TypeObjectDigest]>),
     Code(NormalizedCode),
     PortExpression(NormalizedCode),
 }
@@ -332,7 +345,7 @@ impl NormalizedProgram {
             types: &types,
             requirements: &requirements,
         };
-        let functions = prepare_functions(
+        let mut functions = prepare_functions(
             &artifact,
             &units,
             &indexes,
@@ -342,6 +355,7 @@ impl NormalizedProgram {
             &mut work,
         )?;
         validate_resource_call_graph(&functions)?;
+        derive_tail_dispatch(&mut functions)?;
         let (components, ports) = prepare_components(
             &artifact,
             &units,
@@ -1030,8 +1044,57 @@ fn prepare_functions(
             validation.types,
             validation.requirements,
         )?;
+        let canonical = artifact.reference_owner(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+            &mut work.map,
+            &mut work.store,
+        )?;
+        let Some(OwnerRecord::Declaration(canonical)) = canonical else {
+            return Err(runtime_corrupt(
+                "normalized_callable_authority",
+                "prepared callable has no exact canonical declaration",
+            ));
+        };
+        let pure_graph = match (&canonical.payload, &unit.payload) {
+            (DeclarationPayload::Function(function), CompilationPayload::Function { .. }) => {
+                let canonical_requirements = match &function.effect {
+                    FunctionEffect::Pure => Vec::new(),
+                    FunctionEffect::Task { requirements } => requirements
+                        .iter()
+                        .map(|requirement| {
+                            required_index(&indexes.requirements, *requirement, "task requirement")
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                };
+                if function.type_parameters != type_parameters
+                    || function.parameters
+                        != parameters
+                            .iter()
+                            .map(|parameter| parameter.parameter)
+                            .collect::<Vec<_>>()
+                    || function.result != result
+                    || canonical_requirements != task_requirements
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_callable_signature",
+                        "compiled function signature disagrees with exact canonical authority",
+                    ));
+                }
+                matches!(function.effect, FunctionEffect::Pure)
+            }
+            (DeclarationPayload::External(_), CompilationPayload::External { .. })
+            | (DeclarationPayload::Constant { .. }, CompilationPayload::Constant { .. }) => false,
+            _ => {
+                return Err(runtime_corrupt(
+                    "normalized_callable_kind",
+                    "compiled callable kind disagrees with exact canonical authority",
+                ));
+            }
+        };
         functions[index.0 as usize] = Some(NormalizedFunction {
             declaration: *declaration,
+            pure_graph,
             type_parameters: type_parameters.into(),
             parameter_count,
             parameters: parameters.into(),
@@ -1041,6 +1104,80 @@ fn prepare_functions(
         });
     }
     finish_dense(functions, "function")
+}
+
+/// Reverse only unconditional edges, starting at returns. Each instruction and edge is
+/// visited at most once; cycles have no terminal seed and can never become certified.
+fn terminal_continuations(code: &[NormalizedInstruction]) -> Result<Vec<bool>, Diagnostic> {
+    let mut predecessors = vec![Vec::new(); code.len()];
+    let mut terminal = vec![false; code.len()];
+    let mut pending = Vec::new();
+    for (index, instruction) in code.iter().enumerate() {
+        match instruction {
+            NormalizedInstruction::Return => {
+                terminal[index] = true;
+                pending.push(index);
+            }
+            NormalizedInstruction::Jump(target) => {
+                let edges = predecessors.get_mut(*target as usize).ok_or_else(|| {
+                    runtime_corrupt(
+                        "normalized_tail_destination",
+                        "tail analysis encountered a foreign jump destination",
+                    )
+                })?;
+                edges.push(index);
+            }
+            _ => {}
+        }
+    }
+    while let Some(target) = pending.pop() {
+        for &index in &predecessors[target] {
+            if !terminal[index] {
+                terminal[index] = true;
+                pending.push(index);
+            }
+        }
+    }
+    Ok(terminal)
+}
+
+fn derive_tail_dispatch(functions: &mut [NormalizedFunction]) -> Result<(), Diagnostic> {
+    let pure = functions
+        .iter()
+        .map(|function| function.pure_graph)
+        .collect::<Vec<_>>();
+    for function in functions.iter_mut().filter(|function| function.pure_graph) {
+        let NormalizedFunctionBody::Code(code) = &mut function.body else {
+            return Err(runtime_corrupt(
+                "normalized_tail_kind",
+                "pure graph function has no graph code",
+            ));
+        };
+        let terminal = terminal_continuations(&code.instructions)?;
+        for (index, instruction) in Arc::make_mut(&mut code.instructions).iter_mut().enumerate() {
+            if !terminal.get(index + 1).copied().unwrap_or(false) {
+                continue;
+            }
+            *instruction = match instruction {
+                NormalizedInstruction::Call {
+                    function,
+                    type_arguments,
+                    arguments,
+                } if pure.get(function.0 as usize).copied() == Some(true) => {
+                    NormalizedInstruction::TailCall {
+                        function: *function,
+                        type_arguments: type_arguments.clone(),
+                        arguments: *arguments,
+                    }
+                }
+                NormalizedInstruction::Invoke { arguments } => NormalizedInstruction::TailInvoke {
+                    arguments: *arguments,
+                },
+                _ => continue,
+            };
+        }
+    }
+    Ok(())
 }
 
 #[allow(
@@ -2449,4 +2586,45 @@ fn runtime_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod tail_analysis_tests {
+    use super::{NormalizedInstruction as I, terminal_continuations};
+
+    #[test]
+    fn terminal_only_analysis_rejects_cycles_decisions_pending_work_and_foreign_edges() {
+        let code = [
+            I::Jump(3),
+            I::Jump(2),
+            I::Jump(1),
+            I::Jump(8),
+            I::Drop,
+            I::JumpIfFalse(8),
+            I::StoreLocal(0),
+            I::Unit,
+            I::Return,
+        ];
+        assert_eq!(
+            terminal_continuations(&code).ok(),
+            Some(vec![
+                true, false, false, true, false, false, false, false, true
+            ])
+        );
+        assert!(terminal_continuations(&[I::Jump(u32::MAX), I::Return]).is_err());
+        assert_eq!(
+            terminal_continuations(&[I::Jump(0), I::Return]).ok(),
+            Some(vec![false, true])
+        );
+    }
+
+    #[test]
+    fn terminal_only_analysis_handles_a_long_reverse_chain_iteratively() {
+        let mut code = (1..32_768).map(I::Jump).collect::<Vec<_>>();
+        code.push(I::Return);
+        assert!(
+            terminal_continuations(&code)
+                .is_ok_and(|terminal| terminal.into_iter().all(|value| value))
+        );
+    }
 }

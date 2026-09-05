@@ -10,6 +10,7 @@ use crate::evidence;
 use crate::offline_packages;
 use crate::outbound_http;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
+use crate::pure_tail;
 use crate::service;
 use crate::stateful_http;
 use lkjscript::platform::control::{CompactRecord, parse_records};
@@ -23,7 +24,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ADMISSION_SCHEMA: &str = "lkjscript-target-admission-receipt";
-const ADMISSION_SCHEMA_VERSION: u32 = 3;
+const ADMISSION_SCHEMA_VERSION: u32 = 4;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -230,6 +231,10 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             "transferred public-authored offline package closure and standalone HTTP oracle passed",
         ),
         fresh(
+            "pure_tail",
+            "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed",
+        ),
+        fresh(
             "stateful_http",
             "transferred first-party-data BBS oracle passed",
         ),
@@ -370,6 +375,7 @@ fn validate_receipt(
         "distributed_http",
         "outbound_http",
         "offline_packages",
+        "pure_tail",
         "stateful_http",
         "service_acceptance",
     ];
@@ -385,6 +391,7 @@ fn validate_receipt(
         "distributed_http",
         "outbound_http",
         "offline_packages",
+        "pure_tail",
         "stateful_http",
         "service_acceptance",
     ];
@@ -916,6 +923,26 @@ fn run_oracles(
     let offline =
         offline_packages::read_transferred_receipt(&offline_receipt, candidate, verifier)?;
 
+    let tail_root = context.evidence_root.join("pure-tail");
+    let tail_output = context.invoke(
+        "pure-tail-oracle",
+        vec![
+            verifier.display().to_string(),
+            "pure-tail".to_owned(),
+            "--binary".to_owned(),
+            candidate.display().to_string(),
+            "--evidence-root".to_owned(),
+            tail_root.display().to_string(),
+            "--machine".to_owned(),
+        ],
+        Expected::Passed,
+        Duration::from_secs(900),
+        false,
+    )?;
+    require_machine_passed("pure tail", &tail_output)?;
+    let tail_receipt = tail_root.join("receipt.json");
+    let tail = pure_tail::read_transferred_receipt(&tail_receipt, candidate, verifier)?;
+
     let stateful_root = context.evidence_root.join("stateful-http");
     let stateful_output = context.invoke(
         "stateful-http-oracle",
@@ -967,6 +994,7 @@ fn run_oracles(
     let service_receipt = repository.join(service_receipt_relative);
     let service = service::read_receipt(&service_receipt, candidate)?;
     let candidate_sha256 = target::observe_candidate(candidate)?.sha256;
+    let tail_commands = tail.command_count();
     Ok(vec![
         OracleObservation {
             name: "distributed_http".to_owned(),
@@ -1006,6 +1034,19 @@ fn run_oracles(
             requests: 1,
             cleanup_complete: offline.cleanup_complete,
             prerequisite: "code_complete_package_container_1".to_owned(),
+        },
+        OracleObservation {
+            name: "pure_tail".to_owned(),
+            status: AdmissionStatus::Passed,
+            receipt: external_evidence(&tail_receipt)?,
+            verifier_sha256: tail.verifier_sha256,
+            candidate_sha256: tail.candidate_sha256,
+            elapsed_nanoseconds: tail.elapsed_nanoseconds,
+            commands: tail_commands,
+            runners: 1,
+            requests: 3,
+            cleanup_complete: tail.cleanup_complete,
+            prerequisite: "pure-tail-execution".to_owned(),
         },
         OracleObservation {
             name: "stateful_http".to_owned(),
@@ -1488,7 +1529,7 @@ mod tests {
     #[test]
     fn admission_schema_and_required_classifications_are_stable() {
         assert_eq!(ADMISSION_SCHEMA, "lkjscript-target-admission-receipt");
-        assert_eq!(ADMISSION_SCHEMA_VERSION, 3);
+        assert_eq!(ADMISSION_SCHEMA_VERSION, 4);
         assert_eq!(
             [
                 "static_linkage",
@@ -1497,11 +1538,12 @@ mod tests {
                 "distributed_http",
                 "outbound_http",
                 "offline_packages",
+                "pure_tail",
                 "stateful_http",
                 "service_acceptance",
             ]
             .len(),
-            8
+            9
         );
     }
 

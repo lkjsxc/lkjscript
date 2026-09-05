@@ -460,6 +460,14 @@ artifact and preserves existing data. Build does not alter accepted authority.
 run TARGET [--arguments JSON]
 ```
 
+Pure `run` execution records include `production-peak-call-frames`,
+`reference-peak-call-frames`, `production-tail-transfers`, and `reference-tail-transfers` as
+bounded unsigned integer scalars. Discovery's runners section describes their units, bounds, and
+the derived pure-tail guarantee. Eligible pure graph calls retain constant control space under
+the existing budgets; task bodies and pending non-tail work retain ordinary call admission.
+Fuel, allocation, cancellation, and argument order remain binding. Failed execution emits a
+diagnostic without a successful value record or semantic `HEAD` change.
+
 The argument adapter accepts one strict bounded JSON array and converts it to typed runtime values.
 Run selects an exact root target by current public name, requires command runner kind and a pure
 entry, executes once in the normalized VM and once in the canonical reference interpreter, and

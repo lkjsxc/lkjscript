@@ -515,6 +515,15 @@ the standard dependency at runtime without reversing package dependency directio
 records lower through the same authored-intent codec, validator, compiler, VM, and reference path
 as direct graph construction.
 
+Pure graph tail calls replace the current activation in both execution tiers. Preparation derives
+terminal-only continuations once by an iterative linear traversal of strictly loaded Return/Jump
+edges, then combines them with exact canonical pure-function signatures. Only process-local
+dispatch changes; stored bytecode, compiler units, package meaning, and artifact bytes do not.
+The canonical reference separately follows if/let/sequence/match tail contexts and unwinds lexical
+maps and substitutions before its activation loop installs the next callee. Neither tier retains
+a per-transfer continuation. Arguments retain their evaluation order and cumulative work/allocation
+charges. Task frames, including empty-requirement tasks, and ancestor transactions remain live.
+
 ## Artifact and execution boundaries
 
 The artifact bundle binds the root repository/package/revision/state, every dependency package

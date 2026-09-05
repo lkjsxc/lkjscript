@@ -28,7 +28,7 @@ use crate::platform::semantic_id::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedReferenceObservation {
     pub expressions: u64,
     pub calls: u64,
@@ -42,6 +42,15 @@ pub struct NormalizedReferenceObservation {
     pub canonical_objects_read: u64,
     pub canonical_bytes_read: u64,
     pub production_tier: &'static str,
+    pub tail_transfers: u64,
+    pub maximum_control_frames: usize,
+    pub maximum_live_locals: usize,
+    pub maximum_live_type_bindings: usize,
+    pub live_call_frames_after: usize,
+    pub live_control_frames_after: usize,
+    pub live_local_scopes_after: usize,
+    pub live_type_scopes_after: usize,
+    pub live_transactions_after: usize,
 }
 
 pub type NormalizedReferenceInvocation = (NormalizedValue, NormalizedReferenceObservation);
@@ -189,6 +198,7 @@ pub struct NormalizedReferenceInterpreter<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
+    observer: Option<&'a std::sync::Mutex<Option<NormalizedReferenceObservation>>>,
 }
 
 impl<'a> NormalizedReferenceInterpreter<'a> {
@@ -211,7 +221,18 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             program,
             policy,
             host: &CORE_REFERENCE_HOST,
+            observer: None,
         }
+    }
+
+    pub(super) fn observing(
+        mut self,
+        observer: &'a std::sync::Mutex<Option<NormalizedReferenceObservation>>,
+        host: &'a dyn NormalizedReferenceHost,
+    ) -> Self {
+        self.observer = Some(observer);
+        self.host = host;
+        self
     }
 
     #[cfg(test)]
@@ -224,6 +245,19 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         self.execute(capabilities, control, |state| {
             state.call_declaration(declaration, &[], arguments)
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn invoke_instantiated(
+        &self,
+        declaration: DeclarationReference,
+        types: &[TypeObjectDigest],
+        arguments: Vec<NormalizedValue>,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        self.execute(None, control, |state| {
+            state.call_declaration(declaration, types, arguments)
         })
     }
 
@@ -388,6 +422,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             control,
             remaining_expressions: self.policy.instruction_steps,
             call_depth: 0,
+            control_frames: 0,
+            local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
@@ -404,11 +440,20 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph8_reference_records_2",
+                production_tier: "graph8_reference_records_3",
+                tail_transfers: 0,
+                maximum_control_frames: 0,
+                maximum_live_locals: 0,
+                maximum_live_type_bindings: 0,
+                live_call_frames_after: 0,
+                live_control_frames_after: 0,
+                live_local_scopes_after: 0,
+                live_type_scopes_after: 0,
+                live_transactions_after: 0,
             },
         };
-        match operation(&mut state) {
-            Ok(value) if state.transactions.is_empty() => Ok((value, state.observation)),
+        let result = match operation(&mut state) {
+            Ok(value) if state.transactions.is_empty() => Ok(value),
             Ok(_) => {
                 state.rollback_all();
                 Err(reference_error(
@@ -420,7 +465,22 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 state.rollback_all();
                 Err(error)
             }
+        };
+        state.observation.live_call_frames_after = state.call_depth;
+        state.observation.live_control_frames_after = state.control_frames;
+        state.observation.live_local_scopes_after = state.local_counts.len();
+        state.observation.live_type_scopes_after = state.type_scopes.len();
+        state.observation.live_transactions_after = state.transactions.len();
+        if let Some(observer) = self.observer {
+            let mut observed = observer.lock().map_err(|_| {
+                reference_error(
+                    "normalized_reference_observation_lock",
+                    "execution observation lock is poisoned",
+                )
+            })?;
+            *observed = Some(state.observation.clone());
         }
+        result.map(|value| (value, state.observation))
     }
 }
 
@@ -443,11 +503,22 @@ struct ReferenceState<'a> {
     control: &'a ExecutionControl,
     remaining_expressions: u64,
     call_depth: usize,
+    control_frames: usize,
+    local_counts: Vec<usize>,
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
     calls_by_requirement: BTreeMap<RequirementReference, u64>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     observation: NormalizedReferenceObservation,
+}
+
+enum ReferenceStep {
+    Value(NormalizedValue),
+    Tail {
+        declaration: DeclarationReference,
+        types: Vec<TypeObjectDigest>,
+        arguments: Vec<NormalizedValue>,
+    },
 }
 
 impl ReferenceState<'_> {
@@ -504,12 +575,12 @@ impl ReferenceState<'_> {
 
     fn call_declaration(
         &mut self,
-        reference: DeclarationReference,
+        mut reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
-        arguments: Vec<NormalizedValue>,
+        mut arguments: Vec<NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.control.check()?;
-        let type_arguments = self.resolve_type_arguments(type_arguments)?;
+        let mut type_arguments = self.resolve_type_arguments(type_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -517,13 +588,52 @@ impl ReferenceState<'_> {
             ));
         }
         self.call_depth += 1;
-        self.observation.calls = self.observation.calls.saturating_add(1);
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.call_depth);
         let previous_package = self.active_package;
-        self.active_package = reference.package;
-        let result = (|| {
+        let mut tail = false;
+        let result = loop {
+            self.active_package = reference.package;
+            match self.call_activation(reference, &type_arguments, arguments, tail) {
+                Ok(ReferenceStep::Value(value)) => break Ok(value),
+                Ok(ReferenceStep::Tail {
+                    declaration,
+                    types,
+                    arguments: outgoing,
+                }) => {
+                    // call_activation and all lexical evaluation have returned. No activation,
+                    // lexical map, substitution scope or native return address survives transfer.
+                    reference = declaration;
+                    type_arguments = types;
+                    arguments = outgoing;
+                    tail = true;
+                }
+                Err(error) => break Err(error),
+            }
+        };
+        self.active_package = previous_package;
+        self.call_depth -= 1;
+        result
+    }
+
+    fn call_activation(
+        &mut self,
+        reference: DeclarationReference,
+        type_arguments: &[TypeObjectDigest],
+        arguments: Vec<NormalizedValue>,
+        tail: bool,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        self.control.check()?;
+        self.observation.calls = self.observation.calls.saturating_add(1);
+        (|| {
             let declaration = self.declaration(reference)?;
+            if tail
+                && !matches!(&declaration.payload, DeclarationPayload::Function(function) if matches!(function.effect, FunctionEffect::Pure))
+            {
+                return Err(reference_type_error(
+                    "tail transfer requires an exact canonical pure graph function",
+                ));
+            }
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
                     let parameters = self.parameters(reference.package, &function.parameters)?;
@@ -560,7 +670,7 @@ impl ReferenceState<'_> {
                                 "function type parameters are not unique",
                             ))
                         } else {
-                            let mut locals = function
+                            let mut locals: BTreeMap<_, _> = function
                                 .parameters
                                 .into_iter()
                                 .zip(arguments)
@@ -569,7 +679,19 @@ impl ReferenceState<'_> {
                                 })
                                 .collect();
                             self.type_scopes.push(type_scope);
-                            let result = self.evaluate(function.body, &mut locals);
+                            self.local_counts.push(locals.len());
+                            self.observe_locals(&locals);
+                            if tail {
+                                self.observation.tail_transfers =
+                                    self.observation.tail_transfers.saturating_add(1);
+                            }
+                            let result = if matches!(function.effect, FunctionEffect::Pure) {
+                                self.evaluate_tail(function.body, &mut locals)
+                            } else {
+                                self.evaluate(function.body, &mut locals)
+                                    .map(ReferenceStep::Value)
+                            };
+                            self.local_counts.pop();
                             self.type_scopes.pop();
                             result
                         }
@@ -600,13 +722,13 @@ impl ReferenceState<'_> {
                                 self.schema.as_ref(),
                                 &signature,
                                 &external.implementation,
-                                &type_arguments,
+                                type_arguments,
                                 arguments,
                                 self.control,
                             )
                             .and_then(|value| {
                                 self.charge_value(&value)?;
-                                Ok(value)
+                                Ok(ReferenceStep::Value(value))
                             })
                     }
                 }
@@ -616,7 +738,12 @@ impl ReferenceState<'_> {
                             "constant call received type arguments",
                         ))
                     } else if arguments.is_empty() {
-                        self.evaluate(value, &mut BTreeMap::new())
+                        self.local_counts.push(0);
+                        let result = self
+                            .evaluate(value, &mut BTreeMap::new())
+                            .map(ReferenceStep::Value);
+                        self.local_counts.pop();
+                        result
                     } else {
                         Err(reference_type_error("constant call received arguments"))
                     }
@@ -625,10 +752,7 @@ impl ReferenceState<'_> {
                     "exact callable reference names a non-callable declaration",
                 )),
             }
-        })();
-        self.active_package = previous_package;
-        self.call_depth -= 1;
-        result
+        })()
     }
 
     fn validate_call_resources(
@@ -685,11 +809,212 @@ impl ReferenceState<'_> {
         Ok(())
     }
 
+    /// Tail context is derived from canonical syntax, independently of compiler control flow.
+    /// Lexical maps belong to this activation and are dropped when this method returns a tail
+    /// step. Non-tail children still use ordinary evaluation and retain their pending work.
+    fn evaluate_tail(
+        &mut self,
+        mut expression: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        self.control_frames += 1;
+        self.observation.maximum_control_frames = self
+            .observation
+            .maximum_control_frames
+            .max(self.control_frames);
+        let result = (|| loop {
+            self.observe_locals(locals);
+            match self.read_expression(expression)? {
+                ExpressionOperation::If {
+                    condition,
+                    when_true,
+                    when_false,
+                } => {
+                    expression = match self.evaluate(condition, locals)? {
+                        NormalizedValue::Bool(true) => when_true,
+                        NormalizedValue::Bool(false) => when_false,
+                        _ => return Err(reference_type_error("if condition is not boolean")),
+                    };
+                }
+                ExpressionOperation::Let { bindings, body } => {
+                    for binding in bindings {
+                        let record = self.binding(binding, BindingKind::Let)?;
+                        let value = record.value.ok_or_else(|| {
+                            reference_error(
+                                "normalized_reference_let_value",
+                                "canonical let binding has no value expression",
+                            )
+                        })?;
+                        let value = self.evaluate(value, locals)?;
+                        if locals
+                            .insert(LocalValueReference::LexicalBinding(binding), value)
+                            .is_some()
+                        {
+                            return Err(reference_error(
+                                "normalized_reference_local_duplicate",
+                                "canonical local identity was bound twice in one scope",
+                            ));
+                        }
+                    }
+                    expression = body;
+                }
+                ExpressionOperation::Sequence { items } => {
+                    let (last, preceding) = items.split_last().ok_or_else(|| {
+                        reference_error(
+                            "normalized_reference_sequence_empty",
+                            "canonical sequence has no result expression",
+                        )
+                    })?;
+                    for item in preceding {
+                        self.evaluate(*item, locals)?;
+                    }
+                    expression = *last;
+                }
+                ExpressionOperation::Match { value, arms } => {
+                    let NormalizedValue::Variant {
+                        layout,
+                        case,
+                        payload,
+                    } = self.evaluate_match_value(value, locals)?
+                    else {
+                        return Err(reference_type_error("match value is not a variant"));
+                    };
+                    let mut selected = None;
+                    for arm in arms {
+                        if self.case_layout(arm.case)? == (layout, case) {
+                            selected = Some(arm);
+                            break;
+                        }
+                    }
+                    let arm = selected.ok_or_else(|| {
+                        reference_error(
+                            "normalized_reference_match_case",
+                            "verified exhaustive match omitted the runtime case tag",
+                        )
+                    })?;
+                    match (arm.payload_binding, payload) {
+                        (Some(binding), Some(payload)) => {
+                            self.binding(binding, BindingKind::MatchPayload)?;
+                            if locals
+                                .insert(LocalValueReference::MatchPayload(binding), *payload)
+                                .is_some()
+                            {
+                                return Err(reference_error(
+                                    "normalized_reference_local_duplicate",
+                                    "match payload identity was already bound",
+                                ));
+                            }
+                        }
+                        (None, None) => {}
+                        _ => {
+                            return Err(reference_error(
+                                "normalized_reference_match_payload",
+                                "runtime variant payload disagrees with its exact match arm",
+                            ));
+                        }
+                    }
+                    expression = arm.body;
+                }
+                ExpressionOperation::Call {
+                    function,
+                    type_arguments,
+                    arguments,
+                } => {
+                    let uses = self.function_parameter_uses(function)?;
+                    let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
+                    return self.tail_step(function, &type_arguments, arguments);
+                }
+                ExpressionOperation::Invoke { callee, arguments } => {
+                    let NormalizedValue::Function {
+                        function,
+                        type_arguments,
+                    } = self.evaluate(callee, locals)?
+                    else {
+                        return Err(reference_type_error("invoke callee is not a function"));
+                    };
+                    let declaration = self.function_reference(function)?;
+                    let arguments = self.evaluate_many(&arguments, locals)?;
+                    return self.tail_step(declaration, &type_arguments, arguments);
+                }
+                operation => {
+                    return self
+                        .evaluate_operation(operation, locals)
+                        .map(ReferenceStep::Value);
+                }
+            }
+        })();
+        self.control_frames -= 1;
+        result
+    }
+
+    fn tail_step(
+        &mut self,
+        declaration: DeclarationReference,
+        types: &[TypeObjectDigest],
+        arguments: Vec<NormalizedValue>,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        let callable = self.declaration(declaration)?;
+        if let DeclarationPayload::Function(function) = callable.payload
+            && matches!(function.effect, FunctionEffect::Pure)
+        {
+            let types = self.resolve_type_arguments(types)?;
+            if arguments.len() != function.parameters.len()
+                || (!types.is_empty() && types.len() != function.type_parameters.len())
+            {
+                return Err(reference_type_error(
+                    "tail call argument count disagrees with its canonical signature",
+                ));
+            }
+            let parameters = self.parameters(declaration.package, &function.parameters)?;
+            self.validate_call_resources(&parameters, &arguments)?;
+            Ok(ReferenceStep::Tail {
+                declaration,
+                types,
+                arguments,
+            })
+        } else {
+            self.call_declaration(declaration, types, arguments)
+                .map(ReferenceStep::Value)
+        }
+    }
+
     fn evaluate(
         &mut self,
         expression: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
+        self.control_frames += 1;
+        self.observation.maximum_control_frames = self
+            .observation
+            .maximum_control_frames
+            .max(self.control_frames);
+        self.observe_locals(locals);
+        let result = self
+            .read_expression(expression)
+            .and_then(|operation| self.evaluate_operation(operation, locals));
+        self.observe_locals(locals);
+        self.control_frames -= 1;
+        result
+    }
+
+    fn observe_locals(&mut self, locals: &BTreeMap<LocalValueReference, NormalizedValue>) {
+        if let Some(count) = self.local_counts.last_mut() {
+            *count = locals.len();
+        }
+        self.observation.maximum_live_locals = self
+            .observation
+            .maximum_live_locals
+            .max(self.local_counts.iter().sum());
+        self.observation.maximum_live_type_bindings = self
+            .observation
+            .maximum_live_type_bindings
+            .max(self.type_scopes.iter().map(BTreeMap::len).sum());
+    }
+
+    fn read_expression(
+        &mut self,
+        expression: ExpressionId,
+    ) -> Result<ExpressionOperation, ExecutionError> {
         self.control.check()?;
         if self.remaining_expressions == 0 {
             return Err(reference_resource(
@@ -699,21 +1024,24 @@ impl ReferenceState<'_> {
         }
         self.remaining_expressions -= 1;
         self.observation.expressions = self.observation.expressions.saturating_add(1);
-        let operation = match self.owner(OwnerKey::Expression(expression))? {
-            Some(OwnerRecord::Expression(record)) => record.operation,
-            Some(_) => {
-                return Err(reference_error(
-                    "normalized_reference_expression_kind",
-                    "exact expression identity names another owner kind",
-                ));
-            }
-            None => {
-                return Err(reference_error(
-                    "normalized_reference_expression_missing",
-                    "exact expression is missing from canonical authority",
-                ));
-            }
-        };
+        match self.owner(OwnerKey::Expression(expression))? {
+            Some(OwnerRecord::Expression(record)) => Ok(record.operation),
+            Some(_) => Err(reference_error(
+                "normalized_reference_expression_kind",
+                "exact expression identity names another owner kind",
+            )),
+            None => Err(reference_error(
+                "normalized_reference_expression_missing",
+                "exact expression is missing from canonical authority",
+            )),
+        }
+    }
+
+    fn evaluate_operation(
+        &mut self,
+        operation: ExpressionOperation,
+        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+    ) -> Result<NormalizedValue, ExecutionError> {
         match operation {
             ExpressionOperation::Unit {} => Ok(NormalizedValue::Unit),
             ExpressionOperation::Bool { value } => Ok(NormalizedValue::Bool(value)),

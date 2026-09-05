@@ -143,8 +143,9 @@ pub struct ArtifactPackage {
     pub interface_owners: MapRoot,
     pub compilation: CompilationManifestDigest,
     pub runtime_owners: Vec<ArtifactRuntimeOwner>,
-    /// Exact canonical declarations, expressions, and bindings used only by the independent
-    /// reference tier. The Merkle map is cold artifact data and is not a runtime identity table.
+    /// Exact canonical declarations, expressions, and bindings. Preparation reads exact callable
+    /// kind/signatures; the independent reference evaluates these owners directly. This Merkle
+    /// map is cold artifact data and is not a runtime identity table.
     pub reference_owners: MapRoot,
 }
 

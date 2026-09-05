@@ -13,6 +13,36 @@ Evaluation is strict and left-to-right except `if` and variant `match`, which ev
 selected branch. `let` bindings and `do` expressions evaluate in declared order. Capability
 operations and lexical transactions preserve that order.
 
+Pure graph function bodies are tail contexts. The selected `if` branch, `let` body after
+ordered bindings, last sequence item, and selected `match` arm inherit that context. A direct
+call or named `invoke` there transfers to an exact pure graph function without retaining the
+outgoing activation, in both production and canonical reference execution. This includes self
+and mutual recursion, explicit rank-one instantiation, and admitted package boundaries.
+
+The invoke callee is evaluated first, then arguments once in left-to-right order. Concrete type
+arguments are resolved in the outgoing scope and existing call validation completes before
+transfer. Outgoing locals and substitutions are discarded; the original return continuation
+and operand-stack base are preserved. Arguments, conditions, binding initializers, preceding
+sequence items, scrutinees, constructors, and projections do not inherit tail context.
+Constants, tests, port expressions, task bodies (including empty-requirement tasks), and closed
+externals are not eligible outgoing frames. Pure functions called from them retain the internal
+guarantee. An ancestor's transaction and affine ownership are never elided by a pure helper.
+
+Tail eligibility is derived from accepted meaning and strict loaded code, never stored meaning
+or an authoring option. Transfers check cancellation and consume execution work without resetting
+fuel, allocation, collection, operand, or capability accounting. Every admitted VM graph call,
+including a transfer, incurs its existing cumulative local-allocation charge without refunds.
+Non-tail calls retain call-frame admission. The unchanged defaults are 10,000,000 VM instructions,
+4,096 live call frames, 1,000,000 operand values, 268,435,456 allocated bytes, 1,000,000 collection
+items, and 100,000 capability calls. Reference work remains independently counted in expression
+and value units. Removed return/jump instructions are not counted as executed work.
+
+This is constant control space for a tail chain, not constant application heap or a termination
+or latency guarantee. Infinite tail recursion exhausts work or cancels. Failure releases owned
+execution state and produces no successful value receipt; pure execution never advances semantic
+HEAD or changes operational data. Residual operands, impure transfer authority, or an outgoing
+owned transaction must reject at the owning validation or runtime boundary.
+
 ## Types and values
 
 The closed current type surface is:

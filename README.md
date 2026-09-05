@@ -14,7 +14,7 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.23`; immutable supported release `v0.1.21` remains at exact
+Current product source is unreleased `0.1.24`; immutable supported release `v0.1.21` remains at exact
 release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
@@ -423,7 +423,13 @@ Run focused discovery for exhaustive current grammar, limits, and response field
 
 ## Offline packages and the standard supplier
 
-Unreleased 0.1.23 source adds code-complete offline package composition. A copied executable can
+Pure graph tail calls use constant control space in both execution tiers, including the standard
+fold and named generic recursion across admitted packages. `run` reports each tier's peak call
+frames and successful tail transfers under unchanged budgets; task frames retain their ordinary
+resource ownership. Discovery and the [generated operation guide](docs/generated/operations.md)
+describe the observations.
+
+Unreleased source includes code-complete offline package composition. A copied executable can
 export the current immutable graph and its exact transitive closure, including private bodies;
 stage it without changing HEAD; inspect staged public signatures; and review/apply exact dependency
 bindings. Check/build/run compile the admitted canonical code without producer directories. Public

@@ -4386,10 +4386,8 @@ effect.requirement parent=$bad_right index=0 requirement={requirement}"#
 }
 
 #[test]
-fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
-    const ITEMS: usize = 4_096;
-
-    let temporary = tempfile::TempDir::new().expect("isolated fold exhaustion workspace");
+fn copied_binary_tail_fold_crosses_the_former_frame_boundary() {
+    let temporary = tempfile::TempDir::new().expect("isolated tail fold workspace");
     let copied_binary = temporary.path().join("lkjscript");
     copy_executable(&binary(), &copied_binary);
     let project = temporary.path().join("app");
@@ -4402,7 +4400,7 @@ fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
             "--template",
             "command",
             "--name",
-            "fold-exhaustion",
+            "tail-fold",
         ],
     );
     let initial_revision = compact_field(compact_record(&created, "revision"), "id")
@@ -4423,23 +4421,6 @@ fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
     let application = compact_field(compact_record(&application, "owner"), "id")
         .expect("application module")
         .to_owned();
-    let greet = compact_success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "query",
-            "find",
-            "declaration",
-            "greet",
-            "--parent",
-            &application,
-        ],
-    );
-    let greet = compact_field(compact_record(&greet, "owner"), "id")
-        .expect("greet function")
-        .to_owned();
     let fold = compact_success_at(
         &copied_binary,
         temporary.path(),
@@ -4456,34 +4437,43 @@ fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
         .expect("built-in fold reference")
         .to_owned();
 
-    let mut request = format!(
-        "request base={initial_revision} idempotency=fold-exhaustion-1 intent=prove-typed-fold-call-depth-admission\n\
-         expression.local as=$step_body value=$step_state\n\
-         create.function as=$step module={application} name=retain-fold-state visibility=private result=text effect=pure body=$step_body\n\
-         add.parameter as=$step_state function=$step name=state type=text\n\
+    let add = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["package", "builtin", "query", "owners", "--name", "add"],
+    );
+    let add = compact_field(compact_record(&add, "owner"), "reference").expect("addition");
+    let request = format!(
+        "request base={initial_revision} idempotency=tail-fold-1 intent=prove-runtime-list-tail-execution\n\
+         type.list as=@items item=i64\n\
+         expression.local as=$state value=$step_state\n\
+         expression.local as=$item value=$step_item\n\
+         expression.call as=$step_body function={add}\n\
+         expression.argument parent=$step_body index=0 expression=$state\n\
+         expression.argument parent=$step_body index=1 expression=$item\n\
+         create.function as=$step module={application} name=sum-step visibility=private result=i64 effect=pure body=$step_body\n\
+         add.parameter as=$step_state function=$step name=state type=i64\n\
          add.parameter as=$step_item function=$step name=item type=i64\n\
          expression.function-value as=$step_value function=$step\n\
-         expression.text as=$initial value=hello\n\
-         expression.list as=$items item=i64\n"
-    );
-    for index in 0..ITEMS {
-        request.push_str(&format!(
-            "expression.i64 as=$item{index:04} value={index}\n\
-             expression.argument parent=$items index={index} expression=$item{index:04}\n"
-        ));
-    }
-    request.push_str(&format!(
-        "expression.call as=$greet_body function={fold}\n\
+         expression.i64 as=$initial value=0\n\
+         expression.local as=$items value=$input\n\
+         expression.call as=$greet_body function={fold}\n\
          type.argument parent=$greet_body index=0 type=i64\n\
-         type.argument parent=$greet_body index=1 type=text\n\
+         type.argument parent=$greet_body index=1 type=i64\n\
          expression.argument parent=$greet_body index=0 expression=$items\n\
          expression.argument parent=$greet_body index=1 expression=$initial\n\
          expression.argument parent=$greet_body index=2 expression=$step_value\n\
-         replace.body function={greet} body=$greet_body\n"
-    ));
-    let request_path = temporary.path().join("fold-exhaustion.lkjc");
-    std::fs::write(&request_path, request).expect("write fold exhaustion request");
-    let logical_plan = temporary.path().join("fold-exhaustion.logical-plan");
+         create.function as=$sum module={application} name=sum visibility=private result=i64 effect=pure body=$greet_body\n\
+         add.parameter as=$input function=$sum name=items type=@items\n\
+         type.function as=@entry result=i64\n\
+         type.argument parent=@entry index=0 type=@items\n\
+         create.component as=$component module={application} name=fold visibility=private\n\
+         add.port as=$port component=$component name=sum type=@entry function=$sum\n\
+         create.target as=$target name=sum component=$component port=$port runner=command\n"
+    );
+    let request_path = temporary.path().join("tail-fold.lkjc");
+    std::fs::write(&request_path, request).expect("write tail fold request");
+    let logical_plan = temporary.path().join("tail-fold.logical-plan");
     let planned_output = command_at(
         &copied_binary,
         temporary.path(),
@@ -4505,17 +4495,17 @@ fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
     );
     assert!(planned_output.stderr.is_empty());
     assert!(planned_output.stdout.len() < 2 * 1_048_576);
-    let planned = parse_records("fold exhaustion plan", &planned_output.stdout)
-        .expect("fold exhaustion plan records");
+    let planned =
+        parse_records("tail fold plan", &planned_output.stdout).expect("tail fold plan records");
     let plan = compact_field(compact_record(&planned, "plan"), "token")
-        .expect("fold exhaustion plan token")
+        .expect("tail fold plan token")
         .to_owned();
     let decoded = decode_logical_change_plan(BufReader::new(
-        File::open(&logical_plan).expect("open fold exhaustion logical plan"),
+        File::open(&logical_plan).expect("open tail fold logical plan"),
     ))
-    .expect("decode fold exhaustion logical plan");
+    .expect("decode tail fold logical plan");
     assert_eq!(decoded.token, plan);
-    assert!(decoded.counts.allocations > ITEMS as u64);
+    assert!(decoded.counts.allocations < 100);
 
     let applied_output = command_at(
         &copied_binary,
@@ -4538,32 +4528,69 @@ fn copied_binary_fold_exhaustion_is_typed_and_preserves_authority() {
     );
     assert!(applied_output.stderr.is_empty());
     assert!(applied_output.stdout.len() < 2 * 1_048_576);
-    let applied = parse_records("fold exhaustion apply", &applied_output.stdout)
-        .expect("fold exhaustion apply records");
+    let applied =
+        parse_records("tail fold apply", &applied_output.stdout).expect("tail fold apply records");
     assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
     let accepted = compact_field(compact_record(&applied, "revision"), "result")
-        .expect("accepted fold exhaustion revision")
+        .expect("accepted tail fold revision")
         .to_owned();
-    let before_run_head = std::fs::read(project.join("HEAD")).expect("HEAD before fold exhaustion");
+    let before_run_head = std::fs::read(project.join("HEAD")).expect("HEAD before tail fold");
 
-    let exhausted = compact_failure_output_with_status(
-        command_at(
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "check"],
+    );
+    let artifact = temporary.path().join("tail-fold.lkja");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&artifact),
+        ],
+    );
+    let inventory = content_inventory(&project);
+    let mut peak = None;
+    for count in [0_i64, 1, 256, 4096, 8192] {
+        let arguments =
+            serde_json::to_string(&vec![(1..=count).collect::<Vec<_>>()]).expect("runtime list");
+        let result = compact_success_at(
             &copied_binary,
             temporary.path(),
-            &["--project", path(&project), "run", "main"],
-        ),
-        4,
-    );
+            &[
+                "--project",
+                path(&project),
+                "run",
+                "sum",
+                "--arguments",
+                &arguments,
+            ],
+        );
+        let execution = compact_record(&result, "execution");
+        assert_eq!(
+            compact_field(execution, "value"),
+            Some((count * (count + 1) / 2).to_string().as_str())
+        );
+        assert_eq!(compact_field(execution, "differential"), Some("equal"));
+        let peaks = ["production-peak-call-frames", "reference-peak-call-frames"].map(|name| {
+            compact_field(execution, name)
+                .expect("peak")
+                .parse::<u64>()
+                .expect("integer peak")
+        });
+        assert!(peaks.into_iter().all(|frames| frames <= 8));
+        if count >= 256 {
+            assert!(peak.is_none_or(|previous| previous == peaks));
+            peak = Some(peaks);
+        }
+        assert_eq!(content_inventory(&project), inventory);
+    }
     assert_eq!(
-        compact_field(compact_record(&exhausted, "diagnostic"), "class"),
-        Some("resource")
-    );
-    assert_eq!(
-        compact_field(compact_record(&exhausted, "diagnostic"), "code"),
-        Some("normalized_call_depth")
-    );
-    assert_eq!(
-        std::fs::read(project.join("HEAD")).expect("HEAD after fold exhaustion"),
+        std::fs::read(project.join("HEAD")).expect("HEAD after tail fold"),
         before_run_head
     );
     assert_eq!(

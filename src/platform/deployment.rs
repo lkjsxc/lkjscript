@@ -1624,7 +1624,7 @@ impl PreparedDeployment {
         self.descriptor.listen.as_deref()
     }
 
-    fn resident(&self) -> Result<NormalizedResidentDeployment, Diagnostic> {
+    pub(crate) fn resident(&self) -> Result<NormalizedResidentDeployment, Diagnostic> {
         NormalizedResidentDeployment::prepare(
             Arc::clone(&self.program),
             self.deployment.clone(),

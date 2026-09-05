@@ -14,6 +14,8 @@ mod offline_packages;
 mod outbound_http;
 mod postgres;
 mod process;
+mod pure_tail;
+mod pure_tail_program;
 mod raw_websocket;
 mod release;
 mod scale;
@@ -50,11 +52,17 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("measure") => measure::command(arguments),
         Some("outbound-http") => outbound_http::command(arguments),
         Some("offline-packages") => offline_packages::command(arguments),
+        Some("pure-tail") => pure_tail::command(arguments),
+        Some("pure-tail-probe") => pure_tail::probe_command(arguments),
+        Some("pure-tail-transaction-probe") => pure_tail::transaction_probe_command(arguments),
         Some("release") => release::command(arguments),
         Some("service") => service::command(arguments),
         Some("stateful-http") => stateful_http::command(arguments),
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
+            println!(
+                "usage: lkjscript-dev pure-tail --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH [--machine] | lkjscript-dev pure-tail-probe PROJECT (bounded resource evidence subprocess)"
+            );
             println!(
                 "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev function-extraction-oracle --project PATH --function DECL --expression EXPR [--output ABSENT_PATH] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|verifier|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
             );

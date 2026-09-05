@@ -22,7 +22,7 @@ pub fn generated_documents() -> Result<Vec<GeneratedDocument>, String> {
     Ok(vec![
         GeneratedDocument {
             relative_path: "operations.md",
-            bytes: operations_markdown(&snapshot).into_bytes(),
+            bytes: operations_markdown(&snapshot)?.into_bytes(),
         },
         GeneratedDocument {
             relative_path: "diagnostics.md",
@@ -81,7 +81,7 @@ fn generated_header(snapshot: &CapabilitiesSnapshot) -> String {
     )
 }
 
-fn operations_markdown(snapshot: &CapabilitiesSnapshot) -> String {
+fn operations_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
     let mut output = generated_header(snapshot);
     output.push_str("# Public operations\n\n");
     output.push_str("| Operation | Request model | Response model | Authority effect | Usage |\n");
@@ -113,7 +113,16 @@ fn operations_markdown(snapshot: &CapabilitiesSnapshot) -> String {
             template.recommended_artifact_output().unwrap_or("none")
         );
     }
-    output
+    let execution = snapshot
+        .section(RegistrySection::Runners)
+        .ok_or_else(|| "generated operations lack runner observations".to_owned())?;
+    output.push_str("\n## Execution observations\n\n```text\n");
+    output.push_str(
+        std::str::from_utf8(&execution.bytes)
+            .map_err(|_| "runner observations are not UTF-8".to_owned())?,
+    );
+    output.push_str("```\n");
+    Ok(output)
 }
 
 fn diagnostics_markdown(snapshot: &CapabilitiesSnapshot) -> String {

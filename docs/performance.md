@@ -730,7 +730,9 @@ accepted authority across rollback and two runner restarts.
 A copied binary also authored a 4,096-item fold program. The default 4,096-frame runtime admission
 returned resource diagnostic `normalized_call_depth` with exit class 4; the process did not abort
 and accepted `HEAD` remained unchanged. This establishes the first existing admission boundary,
-not a fold-specific item limit or a claim about universal list scale.
+not a fold-specific item limit or a claim about universal list scale. This is a historical
+predecessor measurement: the 2026-09-05 pure-tail campaign removes that frame-growth path without
+raising the default frame limit. Its current resource observations are recorded separately below.
 
 The fresh `lkjournal` service/worker/backup-restore observation took 4.045 seconds across 15 child
 commands, accumulated 0.440 seconds sampled CPU, and observed 21,548 KiB maximum child RSS. It
@@ -741,6 +743,29 @@ PostgreSQL root was active; unavailability was not counted as a pass.
 
 Exact receipts, byte digests, source identities, and evidence classifications are recorded in
 [`202608290721-public-higher-order-generic.json`](evidence/202608290721-public-higher-order-generic.json).
+
+## Pure tail execution observation, 2026-09-05
+
+The copied pure-tail oracle crosses the historical fold-depth boundary using runtime lists and
+the unchanged standard graph. At 256, 4,096, and 8,192 items, production retains two call/control
+frames and canonical reference retains three; each retains at most seven live local slots/values
+and two concrete type bindings. Both report 258, 4,098, and 8,194 successful transfers respectively.
+The 8,192-item result is 33,558,528, with 172,049 VM instructions and 81,929 reference expressions.
+VM cumulative local allocation is 5,047,064 bytes; reference allocation remains independently
+charged in expression/value units and this numeric fold creates no charged reference collection.
+
+The subprocess probe repeats these cases on 2,097,152-byte evaluator threads with eight admitted
+call frames. Genuine pending work still fails depth admission. Fuel, cancellation, cumulative
+allocation, operand limits, and a forced ordinary-frame-growth fault discriminate the old path.
+The transactional helper retains its ancestor task and transaction frames, including an
+empty-requirement task. Cancellation after 37 closed host calls observes ten transfers and zero
+remaining frames, operands, locals, substitutions, or transactions; subsequent execution succeeds.
+
+These finite observations prove constant control space for the tested tail chains. They do not
+prove constant heap, unlimited input, termination, throughput, latency, or sandboxing. Exact
+executable/source identities, elapsed time, sampled RSS, artifact equality, failure classes, and
+cleanup are retained in
+[`202609051930-pure-tail-execution.json`](evidence/202609051930-pure-tail-execution.json).
 
 ## Product identity surface contraction
 

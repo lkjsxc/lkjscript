@@ -1,0 +1,168 @@
+{
+  "schema": "lkjscript-campaign-evidence-1",
+  "campaign": "202609051930-pure-tail-execution",
+  "lifecycle": "incomplete",
+  "starting_boundary": {
+    "branch": "main",
+    "head": "8c2e7723e0fbc2bf82597fc7fbe3f39bc40879ec",
+    "tree": "bdd4cd26ad5e8c042c369599ff93e676f7baa4b0",
+    "upstream": "origin/main",
+    "initial_divergence": [
+      0,
+      0
+    ],
+    "tracked_worktree": "clean",
+    "supplied_untracked": [
+      "docs/campaigns/202609051930.md"
+    ],
+    "agent_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb"
+  },
+  "initial_mandate": {
+    "archive": "docs/campaigns/202609051930.md",
+    "raw": ".artifacts/campaign/202609051930/initial-mandate.md",
+    "sha256": "eb615f75f1d1033baaa806fa48649c46ec0c49f8b57106e915f6e5f24c137788",
+    "archive_commit": "11050254"
+  },
+  "raw_root": ".artifacts/campaign/202609051930/",
+  "maintained_before": {
+    "archive": ".artifacts/campaign/202609051930/maintained-before.tar",
+    "sha256": "a0deabb821381f9af3c5c2f27a9394f2674177e9ec347db86ee9db2b5c68c5f7",
+    "inventory": ".artifacts/campaign/202609051930/maintained-tracked-inventory.txt",
+    "standard_artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
+    "standard_transport_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
+    "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8"
+  },
+  "changed_identities": {
+    "product_snapshot": "0.1.24 (unreleased)",
+    "cli": 25,
+    "production_execution": "graph8_dense_bytecode_4",
+    "reference_execution": "graph8_reference_records_3",
+    "target_admission_receipt": 4,
+    "pure_tail_receipt": "lkjscript-pure-tail-acceptance-1"
+  },
+  "preserved_identity_domains": [
+    "accepted maintained revisions, owners, interfaces and exact dependencies",
+    "graph, compiler-unit, bytecode and artifact encodings",
+    "maintained generated artifact and transport bytes",
+    "deployment, data, queue and object schemas"
+  ],
+  "mechanism": {
+    "production": "strict canonical purity plus one iterative linear reverse Jump/Return traversal; runtime frame replacement with operand-base and transaction/resource rechecks",
+    "reference": "canonical expression tail context plus activation trampoline; lexical and type scopes unwind before the next activation",
+    "oracle_independence": [
+      "fixed arithmetic and parity expectations do not use evaluators",
+      "canonical reference does not read production dispatch or terminal analysis",
+      "2 MiB subprocess-contained evaluator threads and actual live ownership observations",
+      "forced ordinary-frame growth fails while canonical execution remains correct",
+      "raw TCP client plus independent state reads; each effect runs once"
+    ]
+  },
+  "predecessor": {
+    "classification": "fresh passed",
+    "meaning": "Expected predecessor failure is discrimination, not successor success.",
+    "command": "cargo test --locked --test public_cli copied_binary_fold_exhaustion_is_typed_and_preserves_authority -- --exact --nocapture",
+    "raw": ".artifacts/campaign/202609051930/baseline/fold-exhaustion.log",
+    "binary_sha256": "ce421d87bc4e4cd2b3cfc9552fcfd7e35bd454d205b08afc7463814b361787b1",
+    "result": "4096-item fold: normalized_call_depth; exit class 4; unchanged HEAD"
+  },
+  "iteration": {
+    "classification": "fresh passed",
+    "scope": "Iteration executable proof, not final source/target admission; later source changes require fresh bound profile.",
+    "receipt": ".artifacts/campaign/202609051930/vertical-15/receipt.json",
+    "receipt_digest": "verification_6713fb5b6904698299dfc002629bb2e80e547bb260ceee8301d9fb1be6207733",
+    "candidate_sha256": "2d5b2e385fa8ff2f667b82e9b0476bf3824f742c1af24f290d0897150c494bcb",
+    "verifier_sha256": "f67ca041c01864d1782d5b9f96fa5fde8371b89ad27ead7d3f7230ecad652706",
+    "environment": "Linux x86-64; Rust/Cargo 1.98.0; debug candidate and stripped debug verifier; concurrent workspace verification",
+    "commands": 71,
+    "elapsed_nanoseconds": 123896640244,
+    "maximum_sampled_child_rss_kib": 36820,
+    "peak_owned_file_bytes": 376987105,
+    "cleanup_complete": true
+  },
+  "fixed_observations": {
+    "sums": [
+      0,
+      1,
+      32896,
+      8390656,
+      33558528
+    ],
+    "ordered_folds": [
+      5,
+      -5
+    ],
+    "stable_long_fold_peaks": {
+      "production": {
+        "call_frames": 2,
+        "control_frames": 2,
+        "local_slots": 7,
+        "type_bindings": 2
+      },
+      "reference": {
+        "call_frames": 3,
+        "expression_continuations": 3,
+        "local_values": 7,
+        "type_bindings": 2
+      }
+    },
+    "at_8192": {
+      "vm_instructions": 172049,
+      "reference_expressions": 81929,
+      "transfers_each_tier": 8194,
+      "vm_cumulative_allocated_bytes": 5047064
+    },
+    "transaction_cancellation": {
+      "host_calls": 37,
+      "tail_transfers": 10,
+      "live_transaction_peak": 1,
+      "capability_calls": 2,
+      "remaining_frames": 0,
+      "remaining_locals": 0,
+      "remaining_operands": 0,
+      "remaining_type_bindings": 0,
+      "remaining_transactions": 0,
+      "healthy_subsequent_value": 33558528
+    }
+  },
+  "resources": {
+    "default_budgets_unchanged": true,
+    "stack_bytes": 2097152,
+    "injected_call_frames": 8,
+    "infinite_loop_work_units": 1000,
+    "oracle_wall_seconds": 900,
+    "oracle_owned_file_bytes": 1073741824,
+    "reference_operand_note": "Reference retains canonical expression/value accounting and has no VM operand stack.",
+    "claim": "constant control space for eligible pure tail chains; no constant heap, unlimited scale, termination, throughput, latency or sandbox claim"
+  },
+  "final_acceptance": {
+    "classification": "not run",
+    "obligations": [
+      "PTX-1",
+      "PTX-2",
+      "PTX-3",
+      "PTX-4",
+      "PTX-5",
+      "PTX-6",
+      "PTX-7"
+    ],
+    "required": "fresh authoritative full profile and fresh exact musl admission after final bound content; final self-referential identities and receipts are recorded out of band"
+  },
+  "deviations": [
+    "No selected execution mechanism was replaced.",
+    "The HTTP proof compares complete canonical inventories and preserves every existing immutable file across check/build; compiler preparation may append derived compiler packs. Exact file differences are retained.",
+    "Debug verifier symbols exceeded the existing executable evidence bound; iteration used a stripped private verifier copy without raising that bound. Final admission uses release binaries."
+  ],
+  "external_actions": {
+    "fetch": "read-only origin fetch at reconciliation",
+    "push": "not run",
+    "tags_releases_workflow_mutations": "not run",
+    "deployment_migration_hosted_mutations": "not run",
+    "effects": "isolated loopback HTTP and campaign-owned data only"
+  },
+  "cleanup": {
+    "iteration_services": "stopped and joined; zero live execution state after failure/cancellation",
+    "temporary_projects": "removed",
+    "preserved": "original stash, pre-existing ignored target/.artifacts state and maintained operational/derived state; campaign raw receipts remain ignored"
+  }
+}

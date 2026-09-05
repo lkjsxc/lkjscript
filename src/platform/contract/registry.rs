@@ -101,7 +101,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-11";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 11;
-pub const CLI_CONTRACT_VERSION: u16 = 24;
+pub const CLI_CONTRACT_VERSION: u16 = 25;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1404,7 +1404,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Run,
-            "Run a pure command target through production and independent execution.",
+            "Run a pure command target through production and independent execution with constant control space for pure graph tail calls and bounded per-tier peak call frames and tail-transfer observations.",
             "run TARGET [--arguments JSON]",
             (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::None,
@@ -3611,6 +3611,96 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce concurrent live handles or raise the deployment-owned task resource limit where supported.",
         ),
         diagnostic(
+            "normalized_call_depth",
+            DiagnosticClass::Resource,
+            "Non-tail execution exceeded admitted live call frames.",
+            "Reduce pending non-tail recursion or express the loop with pure graph tail calls.",
+        ),
+        diagnostic(
+            "normalized_reference_call_depth",
+            DiagnosticClass::Resource,
+            "Canonical non-tail execution exceeded admitted live call frames.",
+            "Reduce pending non-tail recursion or express the loop with pure graph tail calls.",
+        ),
+        diagnostic(
+            "normalized_instruction_steps",
+            DiagnosticClass::Resource,
+            "Production execution exhausted instruction steps; tail transfer preserves fuel.",
+            "Reduce the input or execution work, or correct a nonterminating loop.",
+        ),
+        diagnostic(
+            "normalized_reference_expression_steps",
+            DiagnosticClass::Resource,
+            "Canonical execution exhausted expression work; tail transfer preserves fuel.",
+            "Reduce the input or expression work, or correct a nonterminating loop.",
+        ),
+        diagnostic(
+            "normalized_tail_caller",
+            DiagnosticClass::Infrastructure,
+            "Attempted transfer lacks an exact pure graph caller.",
+            "Retain the exact artifact identity and use a verified executable; task frames cannot transfer.",
+        ),
+        diagnostic(
+            "execution_cancelled",
+            DiagnosticClass::Cancelled,
+            "Execution observed cancellation and released its owned activation state.",
+            "Start a fresh invocation when execution is wanted; cancellation never resets work accounting.",
+        ),
+        diagnostic(
+            "normalized_tail_callee",
+            DiagnosticClass::Infrastructure,
+            "Attempted transfer lacks an exact pure graph callee.",
+            "Retain the exact artifact identity and use a verified executable.",
+        ),
+        diagnostic(
+            "normalized_tail_resource",
+            DiagnosticClass::Infrastructure,
+            "Attempted transfer would discard affine authority.",
+            "Retain the exact artifact identity and use a verified executable; preserve the owning task frame.",
+        ),
+        diagnostic(
+            "normalized_stack_residue",
+            DiagnosticClass::Infrastructure,
+            "Return or transfer has pending operands.",
+            "Retain the exact artifact identity and use a verified executable; pending work requires its continuation.",
+        ),
+        diagnostic(
+            "normalized_transaction_leak",
+            DiagnosticClass::Infrastructure,
+            "Return or transfer would discard an owned transaction.",
+            "Retain the exact artifact identity and use a verified executable; preserve the owning transaction frame.",
+        ),
+        diagnostic(
+            "normalized_tail_destination",
+            DiagnosticClass::Corrupt,
+            "Preparation encountered an invalid tail-continuation destination.",
+            "Rebuild from intact canonical authority with a verified executable.",
+        ),
+        diagnostic(
+            "normalized_tail_kind",
+            DiagnosticClass::Corrupt,
+            "A derived pure graph callable lacks graph code.",
+            "Rebuild from intact canonical authority with a verified executable.",
+        ),
+        diagnostic(
+            "normalized_callable_authority",
+            DiagnosticClass::Corrupt,
+            "Compiled callable lacks its exact canonical declaration.",
+            "Rebuild from intact canonical authority with a verified executable.",
+        ),
+        diagnostic(
+            "normalized_callable_signature",
+            DiagnosticClass::Corrupt,
+            "Compiled callable signature disagrees with canonical meaning.",
+            "Rebuild from intact canonical authority with a verified executable.",
+        ),
+        diagnostic(
+            "normalized_callable_kind",
+            DiagnosticClass::Corrupt,
+            "Compiled callable kind disagrees with canonical meaning.",
+            "Rebuild from intact canonical authority with a verified executable.",
+        ),
+        diagnostic(
             "normalized_resource_foreign_scope",
             DiagnosticClass::Capability,
             "A runtime resource handle belongs to another task scope.",
@@ -5796,6 +5886,56 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "runner.kind",
                     &[("name", kind.name().to_owned())],
+                )?);
+            }
+            records.push(compact_record(
+                "execution.tail",
+                &[
+                    (
+                        "authority",
+                        "derived-from-exact-pure-graph-meaning".to_owned(),
+                    ),
+                    (
+                        "contexts",
+                        "function-body,if-branch,let-body,last-sequence-item,match-arm".to_owned(),
+                    ),
+                    (
+                        "callees",
+                        "direct-or-invoke-exact-pure-graph-function".to_owned(),
+                    ),
+                    (
+                        "space",
+                        "constant-live-control-space-per-tail-chain".to_owned(),
+                    ),
+                    ("budgets", "cumulative-unchanged".to_owned()),
+                    (
+                        "tasks",
+                        "ordinary-frames-including-empty-requirements".to_owned(),
+                    ),
+                ],
+            )?);
+            for name in [
+                "production-peak-call-frames",
+                "reference-peak-call-frames",
+                "production-tail-transfers",
+                "reference-tail-transfers",
+            ] {
+                records.push(compact_record(
+                    "execution.observation",
+                    &[
+                        ("record", "execution".to_owned()),
+                        ("field", name.to_owned()),
+                        ("scalar", "nonnegative-integer".to_owned()),
+                        (
+                            "maximum",
+                            if name.ends_with("frames") {
+                                "4096"
+                            } else {
+                                "10000000"
+                            }
+                            .to_owned(),
+                        ),
+                    ],
                 )?);
             }
         }

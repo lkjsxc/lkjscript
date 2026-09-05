@@ -13,6 +13,7 @@ mod http_client;
 mod object;
 mod password;
 mod prepare;
+pub(crate) mod pure_tail_probe;
 mod queue;
 mod reference;
 mod reference_schema;

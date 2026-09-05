@@ -399,6 +399,32 @@ pub(crate) fn base_registry(
     ]);
     offline_packages.cacheable = false;
     gates.push(offline_packages);
+    let mut pure_tail = gate(
+        "pure_tail",
+        vec![
+            path_string(self_test_executable),
+            "pure-tail".to_owned(),
+            "--binary".to_owned(),
+            path_string(&binary),
+            "--evidence-root".to_owned(),
+            path_string(&outputs.join("pure-tail")),
+            "--machine".to_owned(),
+        ],
+        &["release_command_lifecycle"],
+    );
+    pure_tail.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "pure-tail".to_owned(),
+        "--binary".to_owned(),
+        path_string(&binary),
+        "--evidence-root".to_owned(),
+        "$OUTPUT/pure-tail".to_owned(),
+        "--machine".to_owned(),
+    ]);
+    pure_tail.cacheable = false;
+    pure_tail.timeout = std::time::Duration::from_secs(900);
+    pure_tail.required_outputs = vec![outputs.join("pure-tail/receipt.json")];
+    gates.push(pure_tail);
     let mut stateful_http = gate(
         "stateful_http_application",
         vec![
@@ -664,6 +690,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "distributed_http_application",
             "outbound_http_application",
             "offline_packages",
+            "pure_tail",
             "generated_public_guides",
             "product_surface_audit",
             "standard_package_test",
@@ -700,6 +727,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "distributed_http_application",
             "outbound_http_application",
             "offline_packages",
+            "pure_tail",
             "stateful_http_application",
             "generated_public_guides",
             "product_surface_audit",
@@ -840,7 +868,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 28);
+        assert_eq!(first.gates.len(), 29);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
@@ -880,6 +908,10 @@ mod tests {
                 .expect("offline package oracle");
             assert!(!offline.cacheable);
             assert_eq!(offline.dependencies, ["release_command_lifecycle"]);
+            assert_eq!(
+                requested.iter().any(|name| name == "pure_tail"),
+                matches!(profile_name, "product" | "full")
+            );
             assert!(
                 !first
                     .closure(&requested)
@@ -913,6 +945,7 @@ mod tests {
             "distributed_http_application",
             "outbound_http_application",
             "offline_packages",
+            "pure_tail",
             "stateful_http_application",
             "service_acceptance",
         ] {

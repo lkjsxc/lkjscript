@@ -550,6 +550,22 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 "reference-expressions",
                 run.reference.expressions.to_string(),
             ),
+            (
+                "production-peak-call-frames",
+                run.production.maximum_call_depth.to_string(),
+            ),
+            (
+                "reference-peak-call-frames",
+                run.reference.maximum_call_depth.to_string(),
+            ),
+            (
+                "production-tail-transfers",
+                run.production.tail_transfers.to_string(),
+            ),
+            (
+                "reference-tail-transfers",
+                run.reference.tail_transfers.to_string(),
+            ),
         ],
     )?;
     Ok(output.finish())

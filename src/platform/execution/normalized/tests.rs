@@ -3200,7 +3200,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph8_dense_bytecode_3");
+    assert_eq!(observation.production_tier, "graph8_dense_bytecode_4");
 }
 
 #[test]
@@ -3496,7 +3496,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph8_reference_records_2"
+        "graph8_reference_records_3"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -3541,7 +3541,10 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     assert_eq!(production.0, NormalizedValue::Unit);
     assert_eq!(production.0, reference.0);
     assert_eq!(reference.1.calls, 2);
-    assert_eq!(reference.1.maximum_call_depth, 2);
+    assert_eq!(reference.1.maximum_call_depth, 1);
+    assert_eq!(reference.1.tail_transfers, 1);
+    assert_eq!(production.1.maximum_call_depth, 1);
+    assert_eq!(production.1.tail_transfers, 1);
     assert!(reference.1.canonical_owner_reads > 0);
     // Source decoding is charged by admission; execution reads the independently reconstructed
     // immutable owners, not artifact reference-owner maps or production bytecode.
@@ -3568,16 +3571,14 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
         maximum_call_depth: 1,
         ..policy
     };
-    let production_error = NormalizedVm::new(&program, bounded)
+    let production_bounded = NormalizedVm::new(&program, bounded)
         .invoke(caller, Vec::new(), None, &control)
-        .expect_err("dense linked call depth must be shared");
-    let reference_error = NormalizedReferenceInterpreter::from_reader(&view, &program, bounded)
+        .expect("dense linked tail call replaces its caller");
+    let reference_bounded = NormalizedReferenceInterpreter::from_reader(&view, &program, bounded)
         .invoke(caller, Vec::new(), None, &control)
-        .expect_err("reference linked call depth must be shared");
-    assert_eq!(production_error.code, "normalized_call_depth");
-    assert_eq!(reference_error.code, "normalized_reference_call_depth");
-    assert_eq!(production_error.class, ExecutionFailureClass::Resource);
-    assert_eq!(reference_error.class, ExecutionFailureClass::Resource);
+        .expect("reference linked tail call replaces its caller");
+    assert_eq!(production_bounded.0, NormalizedValue::Unit);
+    assert_eq!(production_bounded.0, reference_bounded.0);
 
     // Safe fault sensitivity: compiled call selection and units are unavailable to the oracle.
     // The independent canonical dependency call remains evaluable, while production cannot run.
@@ -3596,6 +3597,240 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
             .invoke(caller, Vec::new(), None, &control)
             .is_err()
     );
+}
+
+#[test]
+fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() {
+    let (_temporary, _source, _target, program, _source_reference, caller) = linked_pure_program();
+    let caller_index = program.function(caller).expect("caller index");
+    let NormalizedFunctionBody::Code(original) = &program.functions[caller_index.0 as usize].body
+    else {
+        panic!("graph code")
+    };
+    let call = original
+        .instructions
+        .iter()
+        .find(|instruction| matches!(instruction, NormalizedInstruction::TailCall { .. }))
+        .expect("derived tail call")
+        .clone();
+    let NormalizedInstruction::TailCall {
+        function: callee_index,
+        ..
+    } = call
+    else {
+        panic!("tail call")
+    };
+    for (instructions, pure, expected) in [
+        (
+            vec![
+                NormalizedInstruction::I64(99),
+                call.clone(),
+                NormalizedInstruction::Return,
+            ],
+            true,
+            "normalized_stack_residue",
+        ),
+        (
+            vec![call.clone(), NormalizedInstruction::Return],
+            false,
+            "normalized_tail_caller",
+        ),
+        (
+            vec![
+                NormalizedInstruction::TailCall {
+                    function: super::value::FunctionIndex(u32::MAX),
+                    type_arguments: Arc::from([]),
+                    arguments: 0,
+                },
+                NormalizedInstruction::Return,
+            ],
+            true,
+            "normalized_function_index",
+        ),
+        (
+            vec![
+                NormalizedInstruction::TailCall {
+                    function: callee_index,
+                    type_arguments: Arc::from([TypeObjectDigest::from_bytes([0xff; 32])]),
+                    arguments: 0,
+                },
+                NormalizedInstruction::Return,
+            ],
+            true,
+            "normalized_runtime_type",
+        ),
+    ] {
+        let mut faulty = program.clone();
+        let function = &mut Arc::make_mut(&mut faulty.functions)[caller_index.0 as usize];
+        function.pure_graph = pure;
+        let NormalizedFunctionBody::Code(code) = &mut function.body else {
+            panic!("graph code")
+        };
+        code.instructions = instructions.into();
+        let error = NormalizedVm::new(&faulty, NormalizedRunPolicy::default())
+            .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
+            .expect_err("unsafe transfer rejected");
+        assert_eq!(error.code, expected);
+    }
+    let mut impure = program.clone();
+    Arc::make_mut(&mut impure.functions)[callee_index.0 as usize].pure_graph = false;
+    assert_eq!(
+        NormalizedVm::new(&impure, NormalizedRunPolicy::default())
+            .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
+            .expect_err("exact impure callee rejects forced transfer")
+            .code,
+        "normalized_tail_callee"
+    );
+    let mut cyclic = program.clone();
+    let NormalizedFunctionBody::Code(code) =
+        &mut Arc::make_mut(&mut cyclic.functions)[caller_index.0 as usize].body
+    else {
+        panic!("caller code")
+    };
+    code.instructions = Arc::from([
+        NormalizedInstruction::Jump(0),
+        NormalizedInstruction::Return,
+    ]);
+    let sink = Mutex::new(None);
+    let error = NormalizedVm::new(
+        &cyclic,
+        NormalizedRunPolicy {
+            instruction_steps: 1000,
+            ..Default::default()
+        },
+    )
+    .observing(&sink, &super::vm::CoreNormalizedHost)
+    .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
+    .expect_err("cyclic control flow exhausts fuel");
+    assert_eq!(error.code, "normalized_instruction_steps");
+    let observation = sink
+        .into_inner()
+        .expect("observer lock")
+        .expect("cleanup observation");
+    assert_eq!(observation.instructions, 1000);
+    assert_eq!(observation.tail_transfers, 0);
+    assert_eq!(observation.live_call_frames_after, 0);
+}
+
+#[test]
+fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
+    // This maintained same-format artifact predates the campaign. No compiler or conversion
+    // participates: both calls enter its existing graph-owned fold with runtime values.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+    let bytes = std::fs::read(root.join("generated/standard.lkja")).expect("maintained artifact");
+    let program =
+        NormalizedProgram::prepare(load_artifact(&bytes).expect("strict existing artifact"))
+            .expect("current preparation");
+    let repository = GraphRepository::open(&root).expect("maintained authority");
+    let view = repository.view_current().expect("exact revision");
+    let snapshot = view
+        .reconstruct_full_oracle()
+        .expect("canonical reconstruction")
+        .value;
+    let fold = declaration_named(&snapshot, "list-fold-left");
+    let add = declaration_named(&snapshot, "add");
+    let i64_type = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
+        .expect("i64 type");
+    let schema =
+        super::NormalizedReferenceSchema::reconstruct([&snapshot]).expect("canonical schema");
+    let policy = NormalizedRunPolicy {
+        maximum_call_depth: 8,
+        ..Default::default()
+    };
+    for n in [256_i64, 4096, 8192] {
+        let list = NormalizedValue::List(Arc::new((1..=n).map(NormalizedValue::I64).collect()));
+        let arguments = |index| {
+            vec![
+                list.clone(),
+                NormalizedValue::I64(0),
+                NormalizedValue::Function {
+                    function: index,
+                    type_arguments: Arc::from([]),
+                },
+            ]
+        };
+        let production = NormalizedVm::new(&program, policy)
+            .invoke_entry(
+                super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                    program.function(fold).expect("fold index"),
+                    Arc::from([i64_type, i64_type]),
+                ),
+                arguments(program.function(add).expect("add index")),
+                None,
+                &ExecutionControl::uncancelled(),
+            )
+            .expect("old artifact receives tail execution");
+        let canonical_add = super::value::FunctionIndex(
+            u32::try_from(schema.functions.binary_search(&add).expect("canonical add"))
+                .expect("bounded index"),
+        );
+        let reference = NormalizedReferenceInterpreter::from_reader(&snapshot, &program, policy)
+            .invoke_instantiated(
+                fold,
+                &[i64_type, i64_type],
+                arguments(canonical_add),
+                &ExecutionControl::uncancelled(),
+            )
+            .expect("independent old canonical fold");
+        assert_eq!(production.0, NormalizedValue::I64(n * (n + 1) / 2));
+        assert_eq!(production.0, reference.0);
+        assert!(production.1.maximum_call_depth <= 8 && reference.1.maximum_call_depth <= 8);
+        assert!(production.1.tail_transfers >= n as u64 && reference.1.tail_transfers >= n as u64);
+    }
+    assert_eq!(
+        std::fs::read(root.join("generated/standard.lkja")).expect("artifact after"),
+        bytes
+    );
+}
+
+#[test]
+fn pure_tail_fault_cannot_discard_an_owned_transaction() {
+    let snapshot = transaction_result_snapshot();
+    let mut program = prepare_snapshot(&snapshot);
+    let caller = declaration_named(&snapshot, "caller");
+    let caller_index = program.function(caller).expect("task caller");
+    assert!(!program.functions[caller_index.0 as usize].pure_graph);
+    let callee = program
+        .functions
+        .iter()
+        .position(|function| function.pure_graph && function.parameter_count == 0)
+        .expect("pure graph callee");
+    let task = &mut Arc::make_mut(&mut program.functions)[caller_index.0 as usize];
+    task.pure_graph = true; // Safe malformed prepared-code fault, never accepted authority.
+    let NormalizedFunctionBody::Code(code) = &mut task.body else {
+        panic!("task code")
+    };
+    let begin = code
+        .instructions
+        .iter()
+        .position(|instruction| {
+            matches!(instruction, NormalizedInstruction::BeginTransaction { .. })
+        })
+        .expect("transaction instruction");
+    let mut instructions = code.instructions[..=begin].to_vec();
+    instructions.push(NormalizedInstruction::TailCall {
+        function: super::value::FunctionIndex(u32::try_from(callee).expect("callee index")),
+        type_arguments: Arc::from([]),
+        arguments: 0,
+    });
+    instructions.push(NormalizedInstruction::Return);
+    code.instructions = instructions.into();
+    let (capabilities, stats) = bind_tracking_capability(&program, 10, false);
+    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+        .invoke(
+            caller,
+            Vec::new(),
+            Some(&capabilities),
+            &ExecutionControl::uncancelled(),
+        )
+        .expect_err("owned transaction forbids transfer");
+    assert_eq!(error.code, "normalized_transaction_leak");
+    assert_eq!(stats.begins.load(Ordering::Relaxed), 1);
+    assert_eq!(stats.commits.load(Ordering::Relaxed), 0);
+    assert_eq!(stats.rollbacks.load(Ordering::Relaxed), 1);
 }
 
 #[test]
