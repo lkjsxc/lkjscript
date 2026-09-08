@@ -1,309 +1,182 @@
-# Repository Agent Instructions
+# Repository guidance
 
-## Scope and precedence
+## Mission and authority
 
-This file applies to the repository root and all descendants unless a nearer `AGENTS.md` or
-`AGENTS.override.md` is more specific.
+Build an agent-first programming language and application platform whose capabilities compose.
+Agents must be able to discover, author, inspect, change, validate, execute, and operate meaningful
+programs through the distributed product. Human-familiar syntax and manual editing are not primary
+constraints; precise semantics, bounded context, useful diagnostics, and predictable behavior are.
+Applications, including `lkjournal`, are consumers and proving workloads, not automatic owners of
+platform priorities. Prefer reusable language, library, runtime, and operational mechanisms over
+host-implemented application policy. A representative public-path witness may justify a foundation
+that existing limitations prevent consumers from expressing. Do not impose an arbitrary count of
+pre-existing applications. Prove usefulness and composition, and distinguish a new witness from
+existing adoption.
 
-Apply instructions in this order:
+One accepted revision of the typed semantic graph is the sole editable authority for program
+meaning. Text, requests, projections, indexes, caches, compiler structures, package transports,
+artifacts, receipts, and host objects are not parallel editable programs. Names locate; semantic
+identities preserve continuity. Generic runtime mechanisms and necessary host adapters are
+legitimate, but metadata around application-specific Rust behavior is not graph-owned behavior.
+Operational data, queues, object bytes, deployment policy, credentials, and running services have
+separate explicit authorities. Live effects never silently advance semantic `HEAD`.
 
-1. active user instructions;
-2. a campaign explicitly named by the user;
-3. one implementation mandate reconciled as active against its complete file, the active checkout,
-   and relevant external state;
-4. the nearest applicable agent instruction file;
-5. executable public contracts, black-box tests, and first-party verification policy;
-6. normative specifications under `docs/spec/`;
-7. current proved facts in `docs/status.md` and `docs/architecture.md`;
-8. current implementation and executable-generated documentation;
-9. completed or terminated campaigns, decisions, historical prompts, comments, and older commits.
+Follow the applicable instruction hierarchy and current explicit user decisions. This file applies
+repository-wide; inspect more specific guidance before working in its scope. A supplied campaign
+may explicitly revise an engineering rule with rationale and an affected-owner cutover; neither an
+old campaign nor the newest filename automatically establishes current authority.
 
-Do not select a campaign by filename recency. Read its top-level status and terminal record, then
-reconcile commits, worktree, consumers, releases, workflows, and user instructions. A baseline SHA
-is orientation. A remote branch, local `HEAD`, tag, workflow candidate, public release, installed
-binary, and running service are distinct states.
+Keep instructions, normative contracts, observations, decisions, and proof distinct. Specifications
+state intended behavior; code and execution establish implemented behavior; tests can expose a
+bug or a deliberately changed contract. Explain discrepancies rather than ranking all these as
+interchangeable instructions. Historical preferences, limitations, roadmaps, and measured results
+are not permanent user policy.
 
-## Mission and enduring authority
+## Repository owners
 
-`lkjscript` is an AI-first programming language and application platform.
+- `src/platform/` owns semantic authority, public control, publication, compiler/runtime, and host
+  adapters. `src/bin/lkjscript.rs` owns process entry. `tests/` owns public black-box acceptance.
+- `packages/standard/` owns maintained standard graph meaning and its generated consumer assets.
+  `applications/lkjournal/` owns the maintained application, not language policy.
+- `tools/lkjscript-dev/` owns contributor verification, independent application oracles, scale,
+  target admission, release preparation, and evidence. Workflows orchestrate those owners rather
+  than duplicating their policy.
+- `docs/spec/` owns normative behavior; `docs/architecture.md` maps authority and dependencies;
+  `docs/status.md` records current proved state; `docs/roadmap.md` holds contingent hypotheses;
+  `docs/decisions/` holds rationale and reversal conditions. `docs/performance.md` and
+  `docs/evidence/` retain bounded evidence. `docs/release.md` owns distribution procedure.
+  `docs/generated/` is generated through its executable owners. `docs/campaigns/` archives initial
+  mandates and appended lifecycle records; do not introduce a competing status ledger.
 
-- One accepted revision of the typed semantic graph is the sole editable authority for program
-  meaning.
-- Source text, compact requests, projections, indexes, caches, artifacts, runtime handles,
-  deployment data, receipts, release archives, and checksums are derived, operational, or
-  evidentiary; none is a second editable program authority.
-- Operational application data, durable queues, and object bytes are deployment-selected effect
-  authorities distinct from program meaning and from one another; live effects must never select
-  or advance semantic `HEAD`.
-- Ordinary application development must work through the distributed `lkjscript` executable.
-- Application policy belongs in graph meaning. Rust owns generic semantic, compiler, runtime,
-  adapter, verification, and distribution mechanisms.
-- Maintained applications, protocol integrations, and recipes are evidence-bearing consumers of the
-  platform, not product-priority authorities. Use them to prove reusable graph and runtime semantics;
-  do not let enthusiasm for a protocol or demonstration justify application-private host semantics,
-  roadmap priority, or a parallel authoring path.
-- Choose the strongest graph-native semantic model that materially contracts authority or makes
-  maintained-application invariants machine-checkable. Human familiarity, conventional syntax, and
-  unaided manual authoring convenience are not design constraints.
-- Unfamiliar abstractions are welcome when a maintained workload, bounded public authoring and
-  failure behavior, dependency-closed migration and deletion, and independent proof justify them.
-  Ambition does not relax determinism, resource, security, or evidence obligations.
-- Accepted writes validate an exact-base complete candidate, make immutable canonical data durable,
-  and expose one atomic visibility point.
-- Failed, stale, cancelled, exhausted, corrupt, or interrupted work must not partially advance
-  accepted authority.
-- Backward compatibility is not the default. Move every maintained consumer, reject predecessor
-  inputs, and delete predecessor paths in one dependency-closed cutover.
-- AI-first public surfaces are deterministic, bounded, discoverable, actionable, and independently
-  verifiable. AI-first does not justify ambiguous contracts, hidden mutable state, excessive
-  vocabulary, or reduced readability.
+## Startup and work safety
 
-Do not elevate current Rust types, module layout, schema, artifact encoding, target, packaging
-format, CI provider, release service, or storage provider into language semantics.
+Read the complete supplied mandate and applicable global, root, scoped, and override guidance.
+Check actual instruction discovery and configured size limits when relevant; do not assume all
+nested files were automatically loaded. Editing guidance does not reload a running agent session.
+Apply consequential reconciled instructions explicitly, without changing global configuration.
 
-## Version and identity authority
+Establish actual branch, commit/tree, index/worktree, relevant untracked files, remotes/divergence,
+toolchain, preserved work, and in-flight external actions. A historical baseline is orientation,
+not permission to rewind. Read complete lifecycle records of potentially active campaigns and
+reconcile real unfinished work before selecting an unrelated objective. Source, tag, workflow,
+downloaded binary, and running service are different states. A source/public version difference,
+an optional unperformed push, or unavailable ignored historical logs alone does not create an
+active release obligation. Give actual irreversible external work an explicit safe disposition.
 
-- The root `lkjscript` package version is the human-facing product release snapshot and owns its
-  matching annotated tag. It is not a universal language, graph, CLI, repository, artifact,
-  deployment, runtime, package, or tooling version.
-- Each public or stored contract has one canonical owner and advances only when its own encoding or
-  behavior requires it. Do not synchronize unrelated contract numbers.
-- Semantic revisions, package revisions, content identities, target triples, commit SHAs, and
-  digests remain separate identity domains.
-- Release manifests and receipts bind exact distribution inputs; they do not select meaning.
-- Do not add a duplicate `VERSION` file, edition ladder, workspace-wide version table, or
-  handwritten current contract catalog. Use the executable owner or generated projection.
+Preserve unrelated changes, stashes, unknown projects, and user data. Stage explicit paths and
+inspect the staged diff; do not use broad `git add .` or `git add -A`. Make coherent scoped commits.
+Avoid unrelated formatting, dependency changes, and generated-file churn. Do not commit secrets,
+private deployments, large logs, temporary resources, or `.artifacts/` contents.
 
-## Repository and information ownership
+Local edits, local commits, normal pushes, workflow dispatch, publication, deployment, settings,
+credentials, and operational-data mutation require distinct authorization. Permissions and older
+campaigns do not supply it. Before an authorized normal push, refresh the remote and check safe
+fast-forward state and automatic effects. Never rewrite shared history, force-push, retag published
+identities, delete unfamiliar work, or bypass execution safeguards. Do not reset, clean, restore,
+rebase, or remove stashes to manufacture a clean checkout.
 
-- `src/platform/`: semantic authority, publication, compiler, runtime, adapters, and public control.
-- `src/bin/lkjscript.rs`: distributed process boundary.
-- `tools/lkjscript-dev/`: contributor-only verification, release, service, scale, and evidence
-  tooling.
-- `tests/`: black-box public CLI and service acceptance.
-- `packages/standard/`: maintained standard-package authority and generated consumer assets.
-- `applications/lkjournal/`: maintained application authority and deployment material.
-- `.github/workflows/`: hosted orchestration; reusable policy belongs in first-party tooling.
-- `docs/spec/`: normative behavior.
-- `docs/status.md`: current proved facts and limitations.
-- `docs/architecture.md`: current authority, dependency direction, and boundaries.
-- `docs/roadmap.md`: deferred evidence-gated work, not an automatic queue.
-- `docs/decisions/`: durable decisions and reversal conditions.
-- `docs/performance.md` and `docs/evidence/`: measurements and structured proof.
-- `docs/generated/`: executable-generated public projections; never hand-edit.
-- `docs/campaigns/`: timestamped implementation mandates and concise terminal history.
-- `docs/release.md`: release preparation, publication, verification, and recovery procedure.
+Use disposable isolated resources for destructive tests. Bound and clean up owned services, files,
+processes, ports, and containers. Resource shortages do not authorize host, production, credential,
+or paid-infrastructure changes. Diagnose an unchanged failure rather than repeatedly rerunning it;
+one failed build does not establish a universal minimum resource requirement.
 
-Project-local `generated/` directories contain replaceable artifacts, not generated documentation or
-program authority. Do not turn `AGENTS.md` into a campaign, status report, roadmap, contract catalog,
-command catalog, release ledger, or evidence log.
+## Engineering invariants
 
-## Start-of-work reconciliation
+Use the pinned toolchain, workspace manifests, and lockfile. Production Rust is safe; preserve the
+repository's unsafe-code and panic/unwrap/expect/todo/unimplemented lint boundaries and narrowly
+scoped test allowances. Keep contributor tooling in the first-party Rust owner; do not add Python
+or a shell-based semantic implementation. Pin and verify external inputs where the owner requires
+version and digest admission.
 
-Before editing, capture branch, `HEAD`, worktree, remotes/upstream, recent history, applicable agent
-files, toolchain, and relevant external state. Identify:
+Use checked arithmetic and explicit limits before allocation, traversal, growth, and output.
+Keep canonical serialization and identity deterministic. Do not derive stable identity from enum
+order, incidental Serde/layout choices, host paths, wall time, or hash iteration. Regenerate through
+the canonical producer, never by hand-editing generated contracts or application assets.
 
-- the uniquely active mandate or implicit in-flight work;
-- pre-existing, later, and unrelated work;
-- semantic, operational, distribution, and external authorities;
-- maintained consumers and unsupported examples;
-- migration and deletion targets;
-- independent oracles;
-- irreversible effects and recovery branches; and
-- the smallest authoritative path and symbol set needed to begin.
+Typed requests converge on `GraphRepository`, the normal accepted-authority writer. Plan and apply
+share normalization, allocation, impact, validation, selected tests, and logical review meaning.
+Validate the exact complete candidate, recheck its base under publication ownership, durably prepare
+canonical content, then expose accepted meaning atomically. Stale, malformed, cancelled, exhausted,
+corrupt, or interrupted preparation never partially publishes. Failure of post-acceptance derived
+work must not be reported as a failed semantic write.
 
-The active checkout outranks an orientation baseline. Preserve supplied and unfamiliar work. Prefer
-exact symbol, owner, consumer, and history searches over broad rescans. Inspect volatile external
-state only when the objective depends on it, and refresh it immediately before mutation. If coherent
-active or externally committed work remains incomplete, close, recover, or terminate it before
-stacking an independent objective.
+Caches, summaries, and compiled outputs are disposable derivations with explicit input witnesses.
+Bind reuse to the relevant repository/revision, contracts, options, targets, dependencies, and
+policies. Clean recomputation must detect invalid reuse; never repair canonical corruption by
+trusting a cache. Strictly validate transported and loaded artifacts before use. Keep normal
+production paths singular; references and test-only oracles may be implementation-disjoint without
+becoming alternate editable authority.
 
-A source/public version split is a fact, not automatically active publication work. Treat
-publication as active closure only when an applicable mandate, explicit user instruction,
-deliberate release train, or current justified repository contract requires it. Once publication
-or another irreversible external campaign has begun, finish, recover, block, or terminate it before
-unrelated work. Do not let version movement alone create a recurring feature-to-release ratchet.
+Preserve exact type, effect, capability, lifetime, and resource provenance boundaries through
+optimization. Retain cancellation, accounting, deterministic evaluation where promised, and cleanup.
+Distinguish ordinary expected results, traps, exhaustion, corruption, infrastructure failure, and
+possible external visibility. A committed external effect is not undone by a later language error.
+Transactions only promise rollback within their actual authority. Never replay live effects through
+the reference evaluator to obtain comparison evidence.
 
-## Campaign design and cutover discipline
+Backward compatibility is not the default goal, but breaking changes require a complete affected-
+consumer cutover, appropriate rejection and recovery, and deletion of replaced production paths.
+Preserve unchanged supported behavior, formats, and identities; do not create gratuitous identity
+churn. Transitional mechanisms need a removal condition. Separate semantic revisions, package
+identities, encodings, source versions, executable versions, targets, and artifact digests. Version
+movement does not authorize tagging, publication, or deployment.
 
-Each substantial campaign has one primary objective and one dependency-closed final state. Before
-broad editing, define authority, public value, consumers, ordering, failure behavior, deletion,
-proof, external effects, and stopping conditions.
+## Public product and operational boundaries
 
-Prefer completing an existing typed/public workflow over adding a parallel representation. Preserve
-unrelated data and behavior, implement the new authority, migrate every maintained consumer, switch
-once, reject predecessor inputs, and delete predecessor readers, writers, adapters, fixtures,
-generated assets, flags, aliases, and documentation after their last consumer. Compatibility
-requires a named external need, owner, removal condition, and proof; it is not a default.
+The public registry must exhaustively describe supported operations, records, types, errors, limits,
+and recovery. Use one precise public mechanism rather than aliases, silent fallback, or checkout-
+only generators. Adapters are transports to typed operations, not alternate authoring authorities.
+Bound output explicitly; revision-pin queries and continuations and reject stale or invalid ones
+rather than silently truncating or mixing revisions. Generated discovery must match executable
+behavior, including negative cases.
 
-A typed semantic form unavailable through the distributed authoring surface is incomplete public
-capability. Prefer the strongest reusable graph meaning and `packages/standard/` over host
-intrinsics, special opcodes, generators, macros, or a second authoring format. New abstractions must
-define types, effects, evaluation order, identity, failure, resources, consumers, oracle, migration,
-and reversal. Treat affine or linear ownership, typestate and session protocols, richer effects,
-refinement or dependent evidence, inference, capture, dynamic dispatch, specialization, JIT, AOT,
-SIMD, allocation, and broad caching as evidence-gated options, not exclusions based on unfamiliarity.
-Add them only from a measured maintained workload with independent proof.
+Prove the complete public path. An internal builder or frozen fixture is not general authoring;
+a host test is not copied-binary operation. Ordinary application development must not depend on a
+private checkout. Prefer self-contained static distribution where exact-target inspection and
+execution support it; linker flags do not establish portability. Additional targets need independent
+admission. Do not infer sandboxing, multi-tenant isolation, inbound transport security, signing,
+reproducibility, or general portability from unrelated tests.
 
-## Git, worktree, and external safety
+Deployment grants and live-state ownership stay explicit. Validate configuration before readiness;
+redact secrets and clean partial startup. Operational effects cannot rewrite graph meaning. Public
+release identities are immutable; recovery must be additive and follow the distribution owner and
+the current authorization.
 
-Do not rewrite history or destroy unfamiliar work. Unless the user explicitly requires and
-understands the exact action, do not use destructive reset/clean/restore, rebase, force push, retag,
-or published-object deletion.
+## Verification and completion
 
-- Preserve unrelated and pre-existing work.
-- Stage explicit paths; do not use `git add .` or `git add -A`.
-- Inspect the staged diff before every commit.
-- Keep commits coherent and pair behavior with proving tests.
-- Avoid unrelated formatting, renames, dependency updates, and cleanup.
-- Do not commit `.artifacts/`, transient release/migration output, downloaded tools, private data,
-  secrets, or large logs.
-- Fetch before a normal push; push only as a safe fast-forward when the active campaign authorizes
-  it.
-- Never move, replace, force-update, unpublish, or delete a published tag, release, or asset.
-- End clean unless preserved work is named exactly.
+Use `tools/lkjscript-dev/src/check/` and `docs/spec/verification.md` for gate selection, dependency
+closure, fingerprints, reuse, and receipts. The verified workspace entry is
+`cargo run --locked -p lkjscript-dev -- check`; its profiles include `focused`, `changed`, `product`,
+`service`, `full`, and `self-test`. Discover their arguments from the owner. Iterate with the
+narrowest useful checks. After relevant inputs stabilize, run the applicable authoritative full
+profile freshly, plus independently required exact-candidate, target, or service admission. A host
+full receipt does not substitute for target evidence. Do not rerun unchanged full checks without
+an invalidation reason, lower gates to obtain a pass, or require every historical suite indiscriminately.
 
-Permission to edit or commit does not authorize a push, workflow dispatch, tag, release, package
-publication, deployment, migration, settings change, credential change, or destructive data action.
-Each external mutation must be explicitly authorized by the active campaign with named
-preconditions. Recover published state additively.
+Acceptance must be able to disprove the claim. Use independent fixed expectations, disjoint
+reference behavior, algebraic properties, invalid programs, and relevant failure/recovery cases.
+Identify shared machinery and demonstrate fault sensitivity where agreement could be tautological.
+Graph-owned behavior cannot be a hardcoded consumer identity; optimized execution cannot hide a
+fallback, moved scan, changed semantics, or unaccounted work. Measurements retain units, workloads,
+configuration, failures, and trade-offs; synthetic observations are not production measurements.
 
-## Rust, tooling, and generated output
+Classify work as `fresh passed`, `reused passed`, `skipped`, `unavailable`, `failed`, or `not run`
+using the harness's equivalent owned states. Required unavailable or failed proof blocks completion.
+Bind evidence to actual source/candidate inputs, toolchain, environment, workload, verifier, and
+policy. Inspect receipts and outcomes, not only exit status. Later changes invalidate the checks
+whose inputs they alter; calling a change documentation-only does not exempt it.
 
-Rust is the default implementation and repository-tooling language. Do not add Python or replace
-typed validation with shell-only logic. Shell and workflows may orchestrate explicit first-party
-commands and standard tools; they must not duplicate product semantics or acceptance logic.
+Keep large raw evidence outside tracked narrative. Retain bounded reproducible summaries and exact
+input identities in the established evidence owner; ignored paths alone are insufficient for a fresh
+session. Avoid self-referential evidence hashes. A tracked report may bind independently identifiable
+implementation inputs, with final containing-commit and receipt identities reported out of band.
+Do not label unexecuted final checks passed.
 
-Use stable Rust 2024, the locked dependency graph, and the exact toolchain/targets owned by
-`rust-toolchain.toml` when present. Keep `Cargo.lock` authoritative. Production Rust remains safe;
-repository lint policy forbids `unsafe`, `unwrap`, `expect`, `panic`, `todo`, and `unimplemented`.
-Tests may use narrow documented allowances.
-
-Prefer typed objects, checked conversions, deterministic collections, explicit ownership, bounded
-decoding, and canonical serialization. Reject malformed, foreign, duplicate, noncanonical,
-overflowing, trailing, exhausted, or path-traversing input at the owning boundary. Do not couple
-contract bytes or digest identity to Rust enum order, serde shape, memory layout, filesystem paths,
-wall clock, or hash iteration.
-
-Regenerate owned assets only through their executable or typed owner. Prefer existing dependencies
-or checked platform tools; pin downloaded tools and test images by exact version and cryptographic
-digest. Delete temporary migration, feasibility, packaging, and predecessor tooling after its last
-consumer.
-
-## Semantic, compiler, and runtime boundaries
-
-Lower public mutations to typed semantic intent before validation or publication.
-`GraphRepository` publication is the sole normal accepted-authority writer. Plan and apply share
-normalization, allocation, impact analysis, validation, selected tests, and logical-result
-construction. Recheck repository-dependent facts and the exact base under the publication lock;
-durable canonical data precedes the single visibility change.
-
-Witnesses, compiler state, indexes, caches, artifacts, plans, deployment data, receipts, and release
-files are derived. Missing disposable state may rebuild; inconsistent canonical authority is
-corruption. Reuse derived state only when repository, revision, semantic state, contracts, options,
-target, and dependency closure match. Clean and incremental compilation must agree. Strictly
-validate artifacts before execution or publication.
-
-Keep production and implementation-disjoint reference oracles for pure behavior. Live effects run
-once through production and must not be replayed merely for comparison. A derived failure after
-accepted publication must not be reported as a failed semantic write. Release resources on
-cancellation, exhaustion, failure, and shutdown.
-
-## Public CLI, deployment, and distribution
-
-The executable registry exhaustively owns finite public operations, grammar, request/response
-models, limits, diagnostics, authority effects, and security nonclaims. One behavior has one public
-name. Reject unknown commands and options; do not add fallback routing or compatibility aliases.
-
-Public transports adapt into typed requests. Raw JSON, storage bytes, generated schemas, source
-text, and review projections are not required authoring authorities. JSON may be a strict bounded
-runtime, deployment, evidence, or release-metadata adapter.
-
-Finite output is deterministic, bounded, machine-readable where required, and identifies the
-observed revision when reading meaning. Growing output requires explicit budgets and continuations
-or bounded files; never silently truncate. Keep large payloads and logs in files referenced by path
-and digest.
-
-A public operation is complete only when discovery, valid and failure behavior, bounds,
-copied-binary use, current/generated documentation, and predecessor rejection are proved. Do not
-advertise checkout-only helpers, frozen artifacts, or internal builders as public capability.
-
-Deployment descriptors are separate operator authority. They may select derived artifacts, grants,
-secrets, adapters, coordinates, and resource limits, but never edit accepted meaning. Preparation
-must validate completely before readiness or live effects and must clean up partial resources.
-
-Releases are derived distribution. Follow `docs/release.md` and first-party release tooling. Admit
-each target independently through exact candidate inspection and maintained copied-binary oracles.
-Prefer one self-contained static public binary when it passes the same product and service
-boundaries. A target triple or linker flag is not proof of staticness. Published releases use exact
-annotated tags matching the root product version, immutable assets, isolated write authority, and
-anonymous exact/latest verification. Recovery uses a new patch identity, never mutation. Claim only
-the exact tested target, environments, integrity, and behavior.
-
-## Verification and evidence truthfulness
-
-Use the first-party `lkjscript-dev check` and release/service owners. Run the narrowest relevant
-checks while iterating, product verification after maintained consumer or generated-asset changes,
-service verification after resident/deployment changes, and one fresh full profile after final
-content is assembled. Release or target work additionally requires exact-candidate admission and
-the public boundaries owned by `docs/release.md`.
-
-The harness owns gate dependencies, fingerprints, runtime identity, bounded logs, outputs, evidence
-reuse, classifications, and receipts. Report every check as exactly one of `fresh passed`, `reused
-passed`, `skipped`, `unavailable`, `failed`, or `not run`. Never present stale, reused, skipped,
-unavailable, failed, or unrun evidence as fresh proof. A required unavailable gate prevents
-completion; do not weaken it.
-
-Distinguish source verification, target admission, packaging, workflow handoff, publication,
-deployment, operator observation, protocol-client observation, and production observation. A host
-build does not prove a distributed target. A workflow artifact or draft release is not a public
-release. Large logs belong under `.artifacts/`; tracked evidence contains bounded summaries,
-identities, digests, classifications, and pointers.
-
-An evidence-only closure commit must not change inputs bound by final implementation or release
-receipts. Rerun invalidated proof whenever source, workflow, target, policy, generated, normative, or
-verification inputs change.
-
-## Errors, resources, security, and recovery
-
-Diagnostics need stable class/code, failed boundary, safe exact identity, and actionable
-correction. Preserve useful locations without leaking secrets or large payloads.
-
-Keep resource dimensions separate: input records/bytes, semantic work, affected owners/relations,
-output bytes, execution stack/instructions, wall/CPU/RSS, filesystem/synchronization, runtime
-resources, network/database work, archive/upload/download bytes, jobs, retries, and publications.
-Each bound needs a unit, owner, classification, override policy, and rationale. Do not collapse the
-model into one scalar or infer cost or service levels without telemetry.
-
-Treat paths, request files, artifacts, continuations, deployment data, network input, tags, archives,
-manifests, checksums, images, and downloaded tools as hostile or mutable boundaries. Validate before
-allocation, execution, or external effect; reject symlink and non-regular surprises; use private
-staging and atomic visibility; redact secrets from output and evidence.
-
-Do not claim hostile-code sandboxing, multi-tenant isolation, encrypted graph storage, binary
-signing, reproducible builds, general provenance, distributed consensus, generic Linux
-portability, or untested platform support. Validate completely before irreversible publication and
-recover through new identities.
-
-## Documentation and completion
-
-Normative behavior belongs in `docs/spec/`; current facts in `docs/status.md`; boundaries in
-`docs/architecture.md`; deferred work in `docs/roadmap.md`; durable rationale in
-`docs/decisions/`; proof in `docs/evidence/` and `docs/performance.md`; generated projections in
-`docs/generated/`; release procedure in `docs/release.md`; and public downloads/examples in
-`README.md`.
-
-A timestamped campaign records its initial mandate. Do not silently rewrite that body to match the
-outcome. Update only the minimal lifecycle field required by repository convention and append a
-concise terminal record; current truth and large evidence belong in their owners.
-
-Work is complete only when the selected public workflow succeeds at its real supported boundary,
-maintained consumers and deletion obligations are closed, independent oracles agree, generated and
-current documentation match behavior, evidence is fresh or accurately classified, commits are
-coherent, external actions are explicit, the tree is clean or preserved work is named, and the
-campaign is terminal.
-
-The final report gives exact starting and final identities, commits, checks and classifications,
-receipt/artifact paths and digests, deviations, limitations, irreversible actions, push/external
-state, preserved work, and the smallest next candidates. Never claim completion from a prototype,
-internal test, stale receipt, target name, documentation, or unavailable required gate.
+Completion requires the fixed outcome, full public path, affected-consumer migration and predecessor
+removal, accurate current/generated documentation, required passing proof, and accounted worktree
+and external state. Preserve the archived initial mandate; update only allowed lifecycle metadata
+and append terminal or resumption records. Report complete, blocked/incomplete, terminated, or
+explicitly superseded with exact start/final identities, commits, acceptance/check dispositions,
+durable evidence, deviations, limitations, preserved work, cleanup, and external actions actually
+taken. A partial prototype is not completion. Preserve safe useful work when blocked and state the
+smallest concrete condition for resumption, without silently selecting another objective.
