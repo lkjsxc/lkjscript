@@ -86,7 +86,8 @@ Unreleased 0.1.26 adds explicit `bind` expressions with immutable runtime prefix
 pure callables after their own frame ends. Stored bare type parameters, secrets, streams, and
 resources remain outside the capture-safe subset. Graph 11 preserves unchanged TypeObject 10 bytes
 and persisted typed-data layouts; the maintained application retains its existing semantic owners.
-The [binding campaign](docs/campaigns/202609090021.md) tracks verification and exact-target admission.
+The [binding evidence](docs/evidence/202609090021-pure-function-binding.json) records public-path
+verification, retained-value costs, migration equivalence, and exact-target admission.
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
@@ -272,10 +273,9 @@ artifact construction/loading, and deployment preparation. `serve` selects eithe
 interactive topology; public `run` remains pure-command-only. See the normative
 [structured-session contract](docs/spec/structured-sessions.md).
 
-The public
-vocabulary also includes exactly
-`add.type-parameter`, `expression.function-value`, and `expression.invoke`; there is no lambda,
-lexical-closure, partial-application, or inference alias. The generated
+The public vocabulary also includes `add.type-parameter`, `expression.function-value`,
+`expression.bind`, and `expression.invoke`. Binding supplies an explicitly ordered prefix;
+anonymous bodies and automatic free-variable capture remain unavailable. The generated
 [change grammar](docs/generated/change-grammar.md),
 [function-definition projection](docs/generated/function-definition.md),
 [built-in interface](docs/generated/builtin-standard.md),

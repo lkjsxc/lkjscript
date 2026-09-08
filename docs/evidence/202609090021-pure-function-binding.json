@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-pure-function-binding-evidence-1",
   "campaign": "202609090021-pure-function-binding",
-  "status": "incomplete",
+  "status": "complete at implementation boundary",
   "start": {
     "branch": "main",
     "commit": "bd58aebafe88c4222ac13307526eaa426650b838",
@@ -19,7 +19,7 @@
       "applications/lkjournal/state/data and predecessor maintained ignored derivations"
     ]
   },
-  "implementation_commit": null,
+  "implementation_commit": "42e16666f41ce7776764701a2fc5141ae10dfffa",
   "contracts": {
     "changed": {
       "product": "0.1.26",
@@ -66,7 +66,11 @@
       "compiler_units": 113,
       "graph_tests": 24,
       "composition": "decl_304414b1711babc16d4c4904bcf01587",
-      "private_helper": "decl_1762bf0981a15aed5a37a12a50b2df28"
+      "private_helper": "decl_1762bf0981a15aed5a37a12a50b2df28",
+      "state": "semantic_state_d926cd106e6bafef668aa16d9906757127da06eaf2d0f534e334a4ab6ebd6b81",
+      "artifact_manifest": "artifact_manifest_c53e75fecf545a896031e6b29fddb890490b01a7352c10b9e8d6b21a58834cd7",
+      "artifact_sha256": "eb8595aac1cba0c1642cfcc283d4c0cb071bc5f285ec8ff07903d2c2a36b1cb9",
+      "transport_sha256": "07d62d211e64ada35b836369fdb7bab0b10c57328cfa8dae012e37d839302c46"
     },
     "lkjournal": {
       "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
@@ -78,7 +82,11 @@
       "added_owners": 0,
       "unchanged_retirements": 1058,
       "compiler_units": 203,
-      "graph_tests": 31
+      "graph_tests": 31,
+      "state": "semantic_state_d4021e79731eb17b0d1eb752aa297f040c7b831588920e27c4851b133c234bce",
+      "transport": "package_transport_cc6d659e355c847ff5073aff614f3b549a4babb09af1e46d59540aa7f65c603c",
+      "artifact_manifest": "artifact_manifest_aaf801f7dadd254e4e416f085f037f10745b289e99ad1aa416c75f6b8376627c",
+      "artifact_sha256": "f97a029cad60dff52604c22f511c9b1fdf6d37b6de1c8b513f0bff02fca443f0"
     }
   },
   "migration": {
@@ -97,32 +105,91 @@
     "composition_request_sha256": "ccb56f6644417535d65ff66f9e80fba97670f6a1520fa8b40baa0c152fa7a657",
     "temporary_worktrees": "removed after retaining patches and additive-tool sources in raw provenance archives",
     "predecessor_production_readers": "none retained",
-    "operational_data_rewritten": false
+    "operational_data_rewritten": false,
+    "typed_data_case_counts": [
+      32,
+      57
+    ],
+    "typed_data_proof": "Both evaluators decode 89 independently predecessor-generated nominal/nested typed-data cases to fixed values, then re-encode exactly; 234 retained type-object byte/digest witnesses match the single current TypeObject 10 codec.",
+    "temporary_tooling_provenance": {
+      "predecessor_patch_sha256": "8863bc9fa2a0f50bc00a62cc7c47d212ea1c85fe8528c2824afa476820c5c7fc",
+      "successor_patch_sha256": "b3a4e9aed553ea0b19db6390f2b379fe9939f33ca441ba329327240e909b4684",
+      "predecessor_additions_tar_sha256": "d30a0643d3500b4ed5876d195a65bbb9d86b97341caf01ff2730bdaa5c6c2c94",
+      "successor_additions_tar_sha256": "32239092cbd246400691919a28458835d4cb729ba692d9d35029e665e8dde4a9"
+    },
+    "inventory_delta": {
+      "standard": {
+        "functions": 3,
+        "graph_tests": 4,
+        "owners": 68,
+        "type_objects": 11,
+        "compiler_units": 7
+      },
+      "lkjournal": {
+        "owners": 0
+      },
+      "existing_owner_identities": "all preserved",
+      "existing_retirements": "all preserved",
+      "old_generation_inputs": "explicit corruption/contract rejection; no permanent predecessor semantic reader"
+    }
   },
   "acceptance": {
     "BND-1": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tests/public_cli.rs",
+        "tools/lkjscript-dev/src/pure_tail.rs"
+      ],
+      "proof": "Copied-executable discovery, review/apply/stale rejection, complete inspection, relations and extraction; two retained runtime factory results 36 and -11; both composition orders 17 and 27; I64 -> Bool -> Text true/false; empty/partial/repeated/complete binding and callable capture."
     },
     "BND-2": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tests/public_cli.rs",
+        "src/platform/execution/normalized/vm_checked_tests.rs",
+        "src/platform/execution/normalized/tests.rs",
+        "src/platform/compiler/tests.rs",
+        "src/platform/compiler/unit.rs",
+        "src/platform/kernel/tests.rs"
+      ],
+      "proof": "Ordered one-time callee/captures, no target execution while binding, frame-independent lifetime, exact substitutions/visibility; task and unsafe capture rejection before publication; malformed raw environments and independently repacked artifacts reject; fixed wrong-prefix mutation changes production 9 to 11 while canonical reference remains 9."
     },
     "BND-3": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tools/lkjscript-dev/src/pure_tail.rs",
+        "tools/lkjscript-dev/src/offline_packages.rs",
+        "tools/lkjscript-dev/src/service.rs",
+        "src/platform/execution/normalized/tests.rs"
+      ],
+      "proof": "Non-built-in factory over private helper remains callable after producer removal; standalone HTTP request-configured reducer returns 36 and commits once; target trap and cancellation roll back only staged transaction work, then recovery succeeds; worker/session/data and maintained consumers pass; predecessor nominal/nested typed-data bytes and layouts remain exact."
     },
     "BND-4": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tools/lkjscript-dev/src/pure_tail.rs",
+        "src/platform/execution/normalized/tests.rs",
+        "src/platform/execution/normalized/vm_checked_tests.rs"
+      ],
+      "proof": "Both tiers satisfy all nine N/K bound-forward cells, eight-frame ceiling, W separability and zero eligibility descendant visits. Source-bound real restored scanning fails the cost oracle; exact-fit/one-over depth, item/allocation, origin, cancellation and nested callable rejection preserve cleanup and healthy reuse. Inherited pure-tail and checked-value matrices remain passing."
     },
     "BND-5": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tests/public_cli.rs",
+        "src/platform/execution/normalized/tests.rs",
+        "tools/lkjscript-dev/src/extraction_oracle.rs",
+        "tools/lkjscript-dev/src/offline_packages.rs"
+      ],
+      "proof": "Independent full reconstruction and generation-neutral inventories preserve every prior owner and retirement; only selected standard composition added. Bind ownership appears in complete definition, relations, reviewed changes and eligible extraction. Clean/current/post-edit incremental agreement, disposable-cache recovery and canonical corruption rejection pass. TypeObject 10 bytes/digests and typed-data layouts are compared separately and exactly."
     },
     "BND-6": {
-      "classification": "not run",
-      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+      "classification": "fresh passed",
+      "owners": [
+        "tools/lkjscript-dev/src/check/",
+        "tools/lkjscript-dev/src/release/"
+      ],
+      "proof": "Fresh full profile and exact local x86_64-unknown-linux-musl build/admission bind the implementation candidate, verifier and target policy. No release, tag, workflow dispatch or deployment is involved."
     }
   },
   "iterations": [
@@ -148,7 +215,7 @@
         "maintained-inventory-type-data-test.log",
         "public-binding-extraction.log"
       ],
-      "note": "Iteration runs; final full profile not yet executed."
+      "note": "At that iteration, final full verification had not yet executed; later final-source proof is recorded separately."
     },
     {
       "owner": "offline-packages",
@@ -188,6 +255,33 @@
       "classification": "fresh passed",
       "log": ".artifacts/campaign/202609090021/clippy-cutover.log",
       "note": "Factored invocation return aliases and fixed fixture decoding; no lint exemption or runtime behavior change."
+    },
+    {
+      "owner": "product",
+      "classification": "failed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788894870357404609-330416-0/receipt.json",
+      "digest": "verification_6a5d5b9722e5438d826dd66de58dfdceb6a935953d22b0478bdde38d3259dcdd",
+      "fresh_passed_gates": 20,
+      "reason": "A second independent inherited projection-version expectation still selected 2. The existing HTTP and service oracles were corrected to fixed projection 3/domain v3 and Artifact 16 expectations."
+    },
+    {
+      "owner": "full",
+      "classification": "fresh passed",
+      "source_commit": "82cb8f0f34e82a026c8ddf8fb7f9f8feeed9cff5",
+      "fresh_gates": 26,
+      "reused_gates": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788895884692983926-344498-0/receipt.json",
+      "digest": "verification_2a639e81ea87347bde205b79c0d1148bfc38d6f1740d095b8d62fd396601a64a",
+      "note": "Precedes the transferred-request count correction; final full refresh is recorded separately."
+    },
+    {
+      "owner": "musl target admission",
+      "classification": "fresh passed",
+      "source_commit": "82cb8f0f34e82a026c8ddf8fb7f9f8feeed9cff5",
+      "fresh_classifications": 9,
+      "receipt": ".artifacts/campaign/202609090021/musl/admission/receipt.json",
+      "digest": "verification_91a333edb48aec2934f525997f2d45537fff243b0d176411e4b19b8969153b69",
+      "note": "All behavior passed, but the transferred pure-tail summary reported three requests after the oracle had grown to four. Corrected in 42e16666 and refreshed; the original receipt remains unchanged."
     }
   ],
   "workloads": {
@@ -230,7 +324,51 @@
         "constructor-child-visits",
         "guard-descendants"
       ],
-      "required_internal_guard_descendants": 0
+      "required_internal_guard_descendants": 0,
+      "observed_public_work": {
+        "input_admission_nodes": "N + 2",
+        "capture_admission_nodes": "2*N + 3",
+        "raw_result_admission_nodes": 0,
+        "constructor_child_visits": 0,
+        "internal_guard_descendant_visits": 0,
+        "W": "3*N + 5",
+        "maximum_call_frames": {
+          "production": 2,
+          "reference": 3
+        },
+        "instrumented_host_fixture": "Closed-external host instrumentation adds 3*K + 2 raw-result visits, independent of N; the same W difference equation still holds."
+      },
+      "allocated_accounting_bytes_at_n_4096": {
+        "k": [
+          1,
+          64,
+          1024
+        ],
+        "production": [
+          1804962,
+          1856874,
+          2647914
+        ],
+        "reference": [
+          1320238,
+          1340902,
+          1655782
+        ],
+        "scope": "Public bound-forward execution observations; cumulative accounting, not retained heap bytes."
+      },
+      "advisory_timing": {
+        "source": "bound-rescan-fault-candidate.log",
+        "n": 4096,
+        "k": [
+          1,
+          1024
+        ],
+        "reference_elapsed_nanoseconds": [
+          9754675,
+          41018583
+        ],
+        "scope": "Single source-bound debug observations; no speedup or production timing claim."
+      }
     },
     "bounds": {
       "depth_exact_fit": 256,
@@ -250,22 +388,432 @@
       "real restored environment scan preserves values but fails N/K separability",
       "independently packed wrong-order, missing-admission and oversized binding units reject as corruption"
     ],
-    "effects": "Production live effects execute once; only enclosing staged data transaction rolls back; reference never replays live effects."
+    "effects": "Production live effects execute once; only enclosing staged data transaction rolls back; reference never replays live effects.",
+    "restored_scan_fault": {
+      "test": "bound_environment_cost_oracle_detects_real_per_invoke_rescanning",
+      "classification": "fresh passed",
+      "log": ".artifacts/campaign/202609090021/bound-rescan-fault-candidate.log",
+      "log_sha256": "038b1e3007d086b9b5803475abe45f63329612a0679ec9159c568c2f77dc6a2a",
+      "n": 4096,
+      "k": 1024,
+      "normal_guard_visits": 0,
+      "restored_guard_visits": {
+        "production": 33612805,
+        "reference": 33608709
+      },
+      "values_remain_correct": true,
+      "normal_W_separable": true,
+      "restored_scan_W_separable": false,
+      "note": "This detailed observation log precedes the receipt-only correction. The same source-bound test also executes freshly inside the final workspace-tests gate."
+    },
+    "http": {
+      "raw_requests": 4,
+      "runtime_request": {
+        "scale": 3,
+        "bias": 5,
+        "items": [
+          1,
+          2,
+          4
+        ]
+      },
+      "configured_response": "36",
+      "fixed_large_sum_response": "33558528",
+      "commits_after_success_trap_recovery_configured": [
+        1,
+        1,
+        2,
+        3
+      ],
+      "cancelled_staged_key_absent": true,
+      "commits_after_cancel_then_healthy_recovery": 4,
+      "maximum_live_transactions": 1,
+      "project_dependency_directories_absent": true,
+      "live_effects_replayed": false
+    }
   },
   "environment": {
     "toolchain": "Rust/Cargo 1.98.0",
     "development_build_environment": {
       "CARGO_PROFILE_DEV_STRIP": "debuginfo"
     },
-    "reason": "Unstripped contributor executable exceeded the unchanged 384 MiB file-admission bound. Removed debug metadata; no resource limit or global configuration changed."
+    "reason": "Unstripped contributor executable exceeded the unchanged 384 MiB file-admission bound. Removed debug metadata; no resource limit or global configuration changed.",
+    "rustc_commit": "88d9e12ae178fab0fb5cc050a94da85685d449ea",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "cgroup_memory_limit_bytes": 8589934592,
+    "host_swap_bytes": 4294967296,
+    "observation_scope": "Available local environment, not a minimum resource requirement."
   },
   "final_checks": {
-    "focused": "not run",
-    "product": "not run",
-    "service": "not run",
-    "full_fresh": "not run",
-    "musl_target_build": "not run",
-    "musl_target_admission": "not run"
+    "focused": {
+      "classification": "fresh passed",
+      "fresh_gates": 6,
+      "receipt": ".artifacts/lkjscript-dev/check/1788893961720190640-319741-0/receipt.json",
+      "digest": "verification_7bdc05f0bb8efe1905bc6ee437b892832cd9c9d214390c6ed8b631bbcc08cc75",
+      "scope": "Iteration boundary; all included gates are freshly covered again by final full."
+    },
+    "product": {
+      "classification": "fresh passed",
+      "source_commit": "82cb8f0f34e82a026c8ddf8fb7f9f8feeed9cff5",
+      "fresh_gates": 21,
+      "reused_gates": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788895569919398041-339103-0/receipt.json",
+      "digest": "verification_2880c9498c90dbee0902f3d89dcb4a8cd05a47953f3102f83f0acc797ae89dec",
+      "scope": "Dedicated integrated product profile; all product gates freshly passed again in implementation full after the contributor receipt-count correction."
+    },
+    "service": {
+      "classification": "fresh passed",
+      "source_commit": "82cb8f0f34e82a026c8ddf8fb7f9f8feeed9cff5",
+      "fresh_gates": 9,
+      "reused_gates": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1788895795054484510-342030-0/receipt.json",
+      "digest": "verification_673427b7ea62ba8c60e6e1fc716bc7bb7cdb1c991a4684d29421641258dc8e69",
+      "scope": "Dedicated integrated service profile; service gates freshly passed again in implementation full after the contributor receipt-count correction."
+    },
+    "full_fresh": {
+      "classification": "fresh passed",
+      "command": "CARGO_PROFILE_DEV_STRIP=debuginfo cargo run --locked -p lkjscript-dev -- check full --fresh --machine",
+      "source_commit": "42e16666f41ce7776764701a2fc5141ae10dfffa",
+      "source_tree": "a867e5e1515df593b3ca23fa5584910c896cc255",
+      "fresh_gates": 26,
+      "reused_gates": 0,
+      "unrun_gates": [],
+      "receipt": ".artifacts/lkjscript-dev/check/1788896983455252343-359588-0/receipt.json",
+      "receipt_digest": "verification_233db4e275f6e93e59611c3313dbf53516a5017d2f88a9c168ca10f80b6cf176",
+      "receipt_sha256": "daeae3f7f49c50e498947a40dd84eda4233f0374fef096fbf9f1f23a8d605202",
+      "elapsed_nanoseconds": 293789181582,
+      "input_stable": true,
+      "worktree_input_digest": "verification_208cba983c952b03a385dd0670e08f50ca1ca6879889817a8f97480cd70134d0",
+      "profile_definition_digest": "verification_49a5aec0e0cfcd881d0adc567adf5c1629023b600dec09e134ed1f84aeba0687",
+      "runtime_digest": "verification_5556ff2f424e6c35d32e3c237f0229817c96197a991b45ade38343da0fb171f8",
+      "environment_digest": "verification_5c69b604a0cd2a0edefab1198a677291c8a45f5c76f392778bcbc2989fffac1f",
+      "verifier_sha256": "8d010555f14b1529e54b11b98161d5d621190c338d70f3dffee6eaf35148b8ae",
+      "gates": [
+        {
+          "name": "fmt",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_5063a4a48cd53814f2359f348823847e623ece61dd13503d888e9f9e040961b8",
+          "evidence_digest": "verification_796e33bc77003f96edb069d8b892b8225f06025e6949a09c62e0b4b6c33920a9"
+        },
+        {
+          "name": "clippy",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_6bbaea4a3e67200e974e5499d6e22a960725ae12b4bfead943cc8e9cbafb9c2e",
+          "evidence_digest": "verification_d8bb2d020ebd4cc3f4f601f973b8edacb026b3e939b5eebea3ee35923cc1ad3b"
+        },
+        {
+          "name": "workspace_tests",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_de77a2eb20c2ffb77c9bf857596d3798c9397ef00b9271e20b8d72804fa616ee",
+          "evidence_digest": "verification_0d2819cfebf9754d6c07cba3c3bb6935a826a3f2b5598f654be42fb375f199d4"
+        },
+        {
+          "name": "release_build",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_66fe919e418e4787f91f53b61cc91a48ecc66c8e8b5037f6d8538e223980c120",
+          "evidence_digest": "verification_e1ddb6ccf35cff3120dcc538a09c5563479e275ab3a231c76a75d16745b69338"
+        },
+        {
+          "name": "release_command_lifecycle",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_6d951764169b681eed00bb6fc69bc2d405c79840351aed183dc961341f68ba58",
+          "evidence_digest": "verification_6b5cec4aa8b1e913f10ab06d6351d557119aa113d14f6905905793a91faf17a2"
+        },
+        {
+          "name": "distributed_http_application",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_b12f3e4e4f7962e29653a528bbc6db1c4ab85350c010c2cbbb1a5bcf91c43433",
+          "evidence_digest": "verification_0f039d21a06dcc68d8d43a2ce2d70405dabef83e094b9c59638f6f4722b2a795"
+        },
+        {
+          "name": "outbound_http_application",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_617e6d30b3cd3091cac3c2c183e571b250948e10b65eb1e273c6877b0b2bd0f1",
+          "evidence_digest": "verification_e6c9d4a67e5642faae5d77603247ebceda75acf5dae4e31ec7d31f0bd015fd06"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_6d5fa9d1ee2cc06072bb1c40d52ce893825129192e016f9804a62df3ffdd4928",
+          "evidence_digest": "verification_a60f90d2b39a55de1452ecdecea952a0487e071985dfe87846af361a5a0be7bc"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_2f3806008f3c397e7e97341369195cd947be8ae97da569ba049c53b96625c036",
+          "evidence_digest": "verification_1fb48cde6ec629bce3a9cf03d944925ceada0d965977370b84061b4a65befcdc"
+        },
+        {
+          "name": "stateful_http_application",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_a2082f91b5c5775df80de104fa07a4568df38059e07ffeb7a1f827a3d0f38eda",
+          "evidence_digest": "verification_608bcf1576c3d510626bf41e89acea1f5560da09b5da5aab3e95b85b61f17737"
+        },
+        {
+          "name": "checker_self_test",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_c362dc1d694108c24fe1a15c8b3ee3e0627ba975a0af82465af5144b3b600eb0",
+          "evidence_digest": "verification_ae07366586d856be0ab45ca68b2b44bf734fb8740dd89fd653c1858b4fb7a85b"
+        },
+        {
+          "name": "rust_only_tooling",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_51d0c903d410956fc4bb5ad043df0075c7c3c229766b8ab14f14dafade953499",
+          "evidence_digest": "verification_d74c261ea23ecc12653435b737d77c364f1a36f17d043cdf141623e25bc97e51"
+        },
+        {
+          "name": "generated_public_guides",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_8818644dae589fb13fac99d14faae657f9f51bb2b652552cee5eae370e46f67f",
+          "evidence_digest": "verification_89e064138ee015200602d8d5a79fe944abfe24ed90131de9556f806746db5783"
+        },
+        {
+          "name": "product_surface_audit",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_5092ea85dd6a7638e42a10e966289745b0459545693b21dab08ee93f93782f6c",
+          "evidence_digest": "verification_17e5dca5b201e9278c6a7b6b9ad6e9d6625dd9227d9415500f73252d61aa1186"
+        },
+        {
+          "name": "standard_package_test",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_a7b8a659db31e910c8fc86ff1cf302e87157becb98f1b2bd84f6d3742f21d709",
+          "evidence_digest": "verification_1823e58a49663f4dd878c34aa24d65e685fc895e00f360704441005f39a6b8f0"
+        },
+        {
+          "name": "application_package_test",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_54ded371e4460b68ef2a7a05790ad666822188cba4e523b2c687ddab4f2b3822",
+          "evidence_digest": "verification_d82fb2bebfc519cfafc797b986aa163f0359476dd6d859af2a125e15645b4f14"
+        },
+        {
+          "name": "standard_artifact_build",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_fbad61dfaf0a25c8a8c0a2a8e0456664b433ba77c7516e3004237db23a7c8fdd",
+          "evidence_digest": "verification_09dde3ec3d2f5538c394bce66dcfa861d39cf97006fcb614f50980de246a5333"
+        },
+        {
+          "name": "standard_artifact_compare",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_9ae702e375e23afdb91a2b0ebd24d7c98ef5f1dbfc4a54ff12ad70caf0966ebb",
+          "evidence_digest": "verification_bd5ff37718644e164b452296d6ce693ba5a811d82f3051834407644242b63ab9"
+        },
+        {
+          "name": "builtin_package_export",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_fd883c065dcca08876d4a71518617c95edfa32108456df99b78b1a0348ca7e24",
+          "evidence_digest": "verification_6337cdf03133163cdce63532168d622eb6afd09a92a7c8c028eeae6669baaef3"
+        },
+        {
+          "name": "builtin_package_compare",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_38d1f416769471dbc1812212c9e913449eaa0f741ec05694ce45c5383bb03bf2",
+          "evidence_digest": "verification_3f02eb53f4b2bf12b9ce7b8d40fcc43d198c728ae1ffbb9737939503b7defb33"
+        },
+        {
+          "name": "builtin_transport_export",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_ae2a0ddf8b2b3496f545fea7654a601f6e2034d159a0bad96dbd7cda756fd539",
+          "evidence_digest": "verification_249c491f26a9da696c870edc221c21c07480b609b2714b6ccd6dbb97292a1504"
+        },
+        {
+          "name": "builtin_transport_compare",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_2d7f541d403756ecbe4db7453e21fa8a24bf7e9bd74d32319b8c8631ea74b85e",
+          "evidence_digest": "verification_ab3d724473a3251c2029e3eb9367417d91d83d16dda1c4dc1fff3fc67def4572"
+        },
+        {
+          "name": "application_artifact_build",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_0d2769878601cc374fa3386f989173e9b9069297d4c2ca4d0a7f7f6b41112c44",
+          "evidence_digest": "verification_e218c38205173b4c858d692a408bee3da7294c8a6f5087d4982e71b10b5c8223"
+        },
+        {
+          "name": "application_artifact_compare",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_6618e0481e59696bb905e5c673d8178d89da4ca44731c7d3f6e0901c85f26bfb",
+          "evidence_digest": "verification_1d40ec7622668e816828c07a9f6a9076708d2d6afe5aa4ae02eeba4508e99834"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_6f9a6e6e35f1b01efbad0eeedcc9020e6b4502f69b0169836077d5d5999644d4",
+          "evidence_digest": "verification_70c5755fe80116d799c7c58d670bf40ebbd49d14e8971d768470815270db26f2"
+        },
+        {
+          "name": "diff_check",
+          "classification": "fresh passed",
+          "input_fingerprint": "verification_a3b8982cfd4895145f6073f72cbd0bd119ca18317f90cac45cd92dd85b2e557e",
+          "evidence_digest": "verification_7b42b1184b0af0451e13be88c684ede845c8c56eabf38ac4cf83deea5b97ad0a"
+        }
+      ]
+    },
+    "musl_target_build": {
+      "classification": "fresh passed",
+      "source_commit": "42e16666f41ce7776764701a2fc5141ae10dfffa",
+      "target": "x86_64-unknown-linux-musl",
+      "command": "cargo run --locked -p lkjscript-dev -- release build --output /home/coder/workspace/lkjscript/.artifacts/campaign/202609090021/musl-implementation/lkjscript --receipt /home/coder/workspace/lkjscript/.artifacts/campaign/202609090021/musl-implementation/build.json",
+      "receipt": ".artifacts/campaign/202609090021/musl-implementation/build.json",
+      "receipt_sha256": "f3bbfc1b10a9f685805abaf79a374ae2e2a8a61204611e7d794902b01579d79e",
+      "elapsed_nanoseconds": 727992804,
+      "cargo_build": "Fresh owner invocation with unchanged-source Cargo build reuse; no clean rebuild or reproducibility claim.",
+      "candidate_sha256": "cdaf5aed2b9711edc9abbca034cd4e692e2437201fa551af7fedba6e62fcff74",
+      "candidate_bytes": 20175104,
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "elf": {
+        "class": "ELF64",
+        "machine": "x86-64",
+        "object_type": "position-independent-executable",
+        "program_headers": 9,
+        "load_headers": 4,
+        "dynamic_entries": 21,
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0,
+        "runtime_linkage": "static-musl"
+      }
+    },
+    "musl_target_admission": {
+      "classification": "fresh passed",
+      "source_commit": "42e16666f41ce7776764701a2fc5141ae10dfffa",
+      "target": "x86_64-unknown-linux-musl",
+      "command": "cargo run --locked -p lkjscript-dev -- release admit --candidate /home/coder/workspace/lkjscript/.artifacts/campaign/202609090021/musl-implementation/lkjscript --build-receipt /home/coder/workspace/lkjscript/.artifacts/campaign/202609090021/musl-implementation/build.json --evidence-root /home/coder/workspace/lkjscript/.artifacts/campaign/202609090021/musl-implementation/admission",
+      "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/receipt.json",
+      "receipt_digest": "verification_ff1d0c141524d3251dff7f7988a626ec49aa91c69a34941693df8cf0eb4402b6",
+      "receipt_sha256": "553857ea953992e923ed3414b1aa8edb6b70047520a7eb1d801dfe7cac3ec948",
+      "elapsed_nanoseconds": 265877803965,
+      "candidate_sha256": "cdaf5aed2b9711edc9abbca034cd4e692e2437201fa551af7fedba6e62fcff74",
+      "verifier_sha256": "8d010555f14b1529e54b11b98161d5d621190c338d70f3dffee6eaf35148b8ae",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "classifications": [
+        {
+          "name": "static_linkage",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "musl_userland",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "older_glibc_userland",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "distributed_http",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "outbound_http",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "stateful_http",
+          "classification": "fresh_passed"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh_passed"
+        }
+      ],
+      "userlands": [
+        {
+          "role": "musl",
+          "status": "passed",
+          "expected_libc": "musl-1.2",
+          "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        },
+        {
+          "role": "older-glibc",
+          "status": "passed",
+          "expected_libc": "glibc-2.31",
+          "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        }
+      ],
+      "oracles": [
+        {
+          "name": "distributed_http",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/distributed-http/receipt.json",
+          "receipt_sha256": "3a91d31d6b6c100422e377356651979c7814dd7cbf2580d189f92967b85f3af4",
+          "commands": 46,
+          "runners": 2,
+          "requests": 14,
+          "elapsed_nanoseconds": 6635786278,
+          "cleanup_complete": true
+        },
+        {
+          "name": "outbound_http",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/outbound-http/receipt.json",
+          "receipt_sha256": "2bd47156dd37627499efb7341916792b8856a9b4d974922f3f60ef53f877e006",
+          "commands": 18,
+          "runners": 8,
+          "requests": 17,
+          "elapsed_nanoseconds": 15712095423,
+          "cleanup_complete": true
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/offline-packages/receipt.json",
+          "receipt_sha256": "1ab0dae61dba928390202f461fab62d2a986f65fbc57c7c61d5a1951d9462e6a",
+          "commands": 92,
+          "runners": 1,
+          "requests": 1,
+          "elapsed_nanoseconds": 29597354497,
+          "cleanup_complete": true
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/pure-tail/receipt.json",
+          "receipt_sha256": "7658220101c8993dad593ca41a4984d890ab1746f5e012e33ecd472ce51c7726",
+          "commands": 131,
+          "runners": 1,
+          "requests": 4,
+          "elapsed_nanoseconds": 109188600972,
+          "cleanup_complete": true
+        },
+        {
+          "name": "stateful_http",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/stateful-http/receipt.json",
+          "receipt_sha256": "15f1b1e45ca60bbd32d11ccd359eb375b5bdd8f777f77540bd44146434623689",
+          "commands": 235,
+          "runners": 3,
+          "requests": 26,
+          "elapsed_nanoseconds": 51735929823,
+          "cleanup_complete": true
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh passed",
+          "receipt": ".artifacts/lkjscript-dev/service/1788897584755195014-371762-0/receipt.json",
+          "receipt_sha256": "d21b3f7d85201386e04c6ce6fc5de745b3cf412093634b327c8e983c9a7aab60",
+          "commands": 69,
+          "runners": 8,
+          "requests": 26,
+          "elapsed_nanoseconds": 20304952544,
+          "cleanup_complete": true
+        }
+      ],
+      "cleanup_complete": true
+    }
   },
   "limitations": [
     "Bare unconstrained stored type parameters cannot be captured; function signatures remain callable leaves.",
@@ -278,7 +826,8 @@
     "push": "not performed",
     "publication": "not performed",
     "deployment": "not performed",
-    "workflow_dispatch": "not performed"
+    "workflow_dispatch": "not performed",
+    "as_of": "2026-09-08T20:00:43Z"
   },
   "predecessor_rejection": {
     "source_commit": "bd58aebafe88c4222ac13307526eaa426650b838",
@@ -290,5 +839,126 @@
     "output_sha256": "1c5475dfaa94c9c8a27e5a5d83892994bac19796e0b797e0633d51c39588fe9e",
     "raw": ".artifacts/campaign/202609090021/predecessor-public-rejection",
     "cleanup": "isolated source copy and executable removed; bounded records retained"
+  },
+  "implementation_tree": "a867e5e1515df593b3ca23fa5584910c896cc255",
+  "commits": [
+    {
+      "commit": "4417f41303fd50cda7cb4cb7da512ac7db803314",
+      "purpose": "Archive the supplied mandate and install reconciled root guidance."
+    },
+    {
+      "commit": "1620fa2992fd85cb2bde35cffa25743a7b518edb",
+      "purpose": "Implement binding, independent checked execution, public and package paths, graph-owned composition, maintained generation cutover, tests and documentation."
+    },
+    {
+      "commit": "82cb8f0f34e82a026c8ddf8fb7f9f8feeed9cff5",
+      "purpose": "Retarget inherited HTTP/service projection and artifact expectations to the selected generation."
+    },
+    {
+      "commit": "42e16666f41ce7776764701a2fc5141ae10dfffa",
+      "purpose": "Correct transferred pure-tail HTTP request count from three to four."
+    }
+  ],
+  "final_record_policy": {
+    "tracked_boundary": "Implementation commit and independently identifiable receipt/candidate/verifier/policy inputs; this report does not hash or name its own containing commit.",
+    "containing_commit_revalidation": "not run when assembling this record; final fresh revalidation classifications and exact containing identities must be reported out of band before terminal completion."
+  },
+  "test_counts": {
+    "workspace_library": {
+      "passed": 510,
+      "ignored": 2
+    },
+    "public_cli": {
+      "passed": 33,
+      "ignored": 1
+    },
+    "general_service": {
+      "passed": 9
+    },
+    "contributor": {
+      "passed": 92
+    },
+    "ignored_scope": "Existing explicitly ignored scale/fixture tests; no required full-profile gate skipped."
+  },
+  "deviations": [
+    "Retargeted inherited fixed generation expectations and recipe goldens to the selected successor; preserved independent semantic, failure, tail-space and no-rescan assertions.",
+    "Stripped development debug metadata through a per-command Cargo environment variable to meet the unchanged contributor file-admission limit; no global configuration, dependency or execution-limit change.",
+    "Corrected the transferred target-admission request total to account for the added configured-reducer request.",
+    "Closed Result runtime carriers support existing raw-value type admission only; no new public Result constructor, codec or alternate semantic writer was introduced."
+  ],
+  "current_proof": {
+    "workspace_log": {
+      "path": ".artifacts/lkjscript-dev/check/1788896983455252343-359588-0/workspace_tests.stdout.log",
+      "digest": "verification_6146330bdac10c1e3a06ec547a4de65524d0418fd466142f42168e7f03b06f45"
+    },
+    "pure_tail": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788896983455252343-359588-0/outputs/pure-tail/receipt.json",
+      "digest": "verification_d350d742cad135387059bd09c375e679205e5cf6928689b45ab7e284228cd1ac",
+      "commands": 131,
+      "bounded_stack_cases": 90,
+      "elapsed_nanoseconds": 86455972543,
+      "peak_owned_file_bytes": 28279776,
+      "peak_command_rss_kib": 123764,
+      "producer_removed": true,
+      "cleanup_complete": true,
+      "artifact_sha256": "127677fa53bb309c7590720c8e96fbc183d1bf5fd61bdd671491c4d228384cdd",
+      "reviewed_artifact_sha256": "1652ae5f450cb7562593d4046fd2fecfc72a4d7b5d58f0a5175b3f23379a634e",
+      "retained_request_and_inventory_digests": {
+        "producer-inventory.json": "verification_0a8d1da97b0ee53db5ec6f84e8465fbde76204a890ba9a93cf7ed73d1cebb1cd",
+        "consumer-inventory.json": "verification_42e6ecea4d9183776e5e595f02cab6990f8477c7d6cb92dc3608fbf890d61adb",
+        "http-inventory.json": "verification_ed9b39d6246381ec3f5e2b0fc302586a1b2c4dfaba288e6c91330dc2302324c9",
+        "request-13.lkjc": "verification_5b98194a4bbb12135b42e0f45ea4190d8ba1c73286c3725a77442ba268e54ab6",
+        "request-19.lkjc": "verification_3ec5dcfc36981f6c076b474a72dc49ddf78c75fe4f447a6df04eef4d65ed1e70",
+        "request-95.lkjc": "verification_700a10541923cd1544e790138f9aea184c17b19c4070e5a9c019f651665f7116",
+        "request-125.lkjc": "verification_c164382ab20862d13a444630a453360d6ee9f8303aaa23e5ae1b49494f81323b"
+      }
+    },
+    "offline_packages": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/offline-packages/run-SJw7xQ/receipt.json",
+      "digest": "verification_8ade1112df452100bac4a60c310d0ba18d7e09171ec0dab0c41228dcb0220ddd",
+      "commands": 92,
+      "packages": 5,
+      "graph_tests": 28,
+      "cleanup_complete": true
+    },
+    "service": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1788897144607702575-364001-0/receipt.json",
+      "digest": "verification_a527006da18254c3098078c81c4aac5a1f6e702efcce3f58672c1e128f1c137d",
+      "commands": 69,
+      "runners": 8,
+      "requests": 26,
+      "cleanup_complete": true
+    },
+    "target_pure_tail": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609090021/musl-implementation/admission/pure-tail/receipt.json",
+      "receipt_sha256": "7658220101c8993dad593ca41a4984d890ab1746f5e012e33ecd472ce51c7726",
+      "commands": 131,
+      "raw_http_requests": 4,
+      "bounded_stack_cases": 90,
+      "matrix_cells": 9,
+      "elapsed_nanoseconds": 109188600972,
+      "peak_owned_file_bytes": 28420280,
+      "peak_command_rss_kib": 53640,
+      "cleanup_complete": true
+    }
+  },
+  "recorded_utc": "2026-09-08T20:00:43Z",
+  "cleanup": {
+    "scope": "Owned isolated acceptance and migration resources only; raw receipts, bounded logs, candidates and preserved prior maintained derivations retained.",
+    "all_oracle_cleanup_receipts_passed": true,
+    "product_processes_observed_after_proof": 0,
+    "containers_observed_after_proof": 0,
+    "temporary_migration_worktrees_removed": true,
+    "remaining_worktrees": [
+      "/home/coder/workspace/lkjscript"
+    ],
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "operational_data": "applications/lkjournal/state/data untouched; no operational migration, reset or rewrite",
+    "worktree_at_implementation_proof": "clean main at 42e16666f41ce7776764701a2fc5141ae10dfffa",
+    "external_state": "No publication, deployment, workflow dispatch or push as of this record. Any final optional fast-forward push is reported out of band."
   }
 }

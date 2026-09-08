@@ -86,10 +86,10 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.
-11. **Further language abstraction from public composition needs.** Campaign 202609090021 selects
-   explicit pure prefix binding and graph-owned function composition; its remaining acceptance is
-   recorded in that campaign. Generic capture constraints, automatic lexical capture, component
-   composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
+11. **Further language abstraction from public composition needs.** Campaign 202609090021 proves
+   explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
+   recorded in that campaign's evidence owner. Generic capture constraints, automatic lexical
+   capture, component composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
    witness, independent semantic/reference behavior, measurements where relevant, and reversal
    conditions. Explicit prefix binding does not imply anonymous bodies or free-variable inference.
 

@@ -120,12 +120,12 @@ project creation 5, registry 13, CLI 27, deployment 4, HTTP adapter 3, and struc
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
-The pure-function binding campaign is implementing immutable runtime prefixes and graph-owned
-standard composition. Focused public witnesses exercise returned reducers, nested callable capture,
-composition, extraction, and request-configured transactional folding; final BND-1–BND-6 acceptance
-and exact-target proof remain pending. The maintained Graph 11 materialization keeps existing
-semantic owner identities and unchanged TypeObject 10 bytes and typed-data layouts. Stored bare
-type parameters remain outside the capture-safe subset. See the
+Pure-function binding provides immutable runtime prefixes and graph-owned standard composition.
+BND-1–BND-6 pass at the implementation boundary, including copied-public returned reducers,
+nested callable capture, composition, extraction, request-configured transactional folding, and
+exact musl target admission. The maintained Graph 11 materialization keeps existing semantic owner
+identities and unchanged TypeObject 10 bytes and typed-data layouts. Stored bare type parameters
+remain outside the capture-safe subset. See the
 [campaign](campaigns/202609090021.md) and
 [decision](decisions/20260909-explicit-pure-function-binding.md).
 
@@ -241,10 +241,11 @@ address. The graph's editable response text is changed only through reviewed `ch
 
 The closed HTTP recipe remains public behavior. Public `v0.1.21` rejects predecessor PostgreSQL
 deployment input and uses first-party data. Immutable `v0.1.10` remains unchanged as the historical
-PostgreSQL-backed predecessor generation. The higher-order slice includes the exact
-`add.type-parameter`, `expression.function-value`, and `expression.invoke` vocabulary. Function
-values are explicit monomorphic references to pure named functions; generic task functions,
-lexical closures, partial application, inference, and maps remain unavailable. The current public compact
+PostgreSQL-backed predecessor generation. The current higher-order slice includes the exact
+`add.type-parameter`, `expression.function-value`, `expression.bind`, and `expression.invoke`
+vocabulary. Function values carry exact pure named targets, resolved explicit type arguments, and
+immutable bound prefixes. Generic task functions, anonymous bodies, automatic free-variable capture,
+generic inference, and map authoring remain unavailable. The current public compact
 surface additionally exposes exact `add.dependency`, `create.component`, function-backed
 `add.port`, conditionally portless `create.target`, `add.http-route`, and `set.http-route` records
 alongside interface/external creation, operation parameters,
@@ -513,13 +514,33 @@ sandbox or multi-tenant isolation boundary.
 
 ## Verification
 
-Checked-value execution is implemented in both evaluators. The copied-public direct and named
-generic forwarding matrices retain input admission proportional to list length, zero internal
+Pure-function binding and graph-owned standard composition pass all six BND obligations at
+implementation commit `42e16666f41ce7776764701a2fc5141ae10dfffa`: 26/26 fresh full gates with zero
+reuse and nine fresh exact static-musl target classifications. Copied-public factories retain both
+configured reducers after their creator returns, yielding 36 and -11. Composition order yields 17
+and 27, with separate heterogeneous instantiation. Offline private helpers, reviewed extraction,
+strict malformed environments/artifacts, staged transaction rollback, and healthy recovery pass.
+
+For the retained-list matrix, both tiers admit input and captures once: `N + 2` input visits and
+`2*N + 3` capture visits, independent of `K`, with zero internal eligibility descendant visits.
+Production uses at most two frames and reference three across the nine cells. Restoring real
+environment scans preserves output but fails the independent cost equation. Existing pure-tail and
+checked-value matrices remain passing. All 234 retained type-object byte witnesses and 89
+predecessor-generated nominal/nested typed-data cases compare exactly without data migration.
+Bounded source/candidate/verifier/policy identities, fixed expectations, measurements, failed
+iterations, and cleanup are in
+[`202609090021-pure-function-binding.json`](evidence/202609090021-pure-function-binding.json).
+Final containing-commit identities and fresh revalidation are reported out of band, avoiding a
+self-referential evidence hash; no unexecuted terminal rerun is recorded as passed here.
+
+The preceding checked-value campaign implemented both evaluators' checked-value path. Its copied-public
+direct and named generic forwarding matrices retain input admission proportional to list length, zero internal
 affinity descendant visits, and root-classification counts independent of payload size at fixed
 call count. The graph fold sums 8,192 runtime items to 33,558,528 within the existing frame and
 execution defaults. Independent raw-boundary negatives, corrupted-class and restored-scan faults,
 admission/tail cancellation, allocation bounds, and standalone transactional recovery pass.
-Maintained meaning, exact dependencies and regenerated artifact/transport bytes are unchanged.
+At that predecessor boundary, maintained meaning, exact dependencies and regenerated artifact/transport
+bytes were unchanged.
 
 The clean implementation boundary passed 26/26 full gates fresh with zero reuse, including all
 product and service gates, followed by nine fresh exact static-musl target classifications.
