@@ -2302,6 +2302,7 @@
     "logs": "Bounded copied candidates, exact patches and immutable receipt/log bytes remain under the campaign raw root; no large or private logs are tracked."
   },
   "deviations": [
+    "Final documentation reconciliation found stale current-source snapshot numbers in README, release, roadmap and product-surface owners. Their source-only labels were corrected to 0.1.25 without changing public release claims or runtime bytes. The terminal metadata commit c8ad5f465ed4ecc9d06cc5aefd9003cad3b3db8e had already passed 26 fresh full gates; these documentation inputs require the subsequent final full and target revalidation recorded out of band.",
     "The initial attempt was blocked by a 2 GiB release-build OOM. After the user's resource increase, unchanged locked release profiles succeed with an 8 GiB limit; the historical failed attempt is retained below.",
     "The first successful baseline lacked allocation-charge events and explicit sample labels. A supplemental measurement-only baseline adds those observations and reruns the fixed warm-up/three-sample schedule. No timeout was retried and no favorable timing was selected.",
     "Candidate acceptance 01 completed its workflow but its old schema-1 receipt reader rejected the schema-2 receipt. The whole command is classified failed; the corrected reader passed in later source-bound acceptance.",
