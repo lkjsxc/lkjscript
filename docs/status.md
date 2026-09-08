@@ -504,6 +504,22 @@ sandbox or multi-tenant isolation boundary.
 
 ## Verification
 
+Checked-value execution is implemented in both evaluators. The copied-public direct and named
+generic forwarding matrices retain input admission proportional to list length, zero internal
+affinity descendant visits, and root-classification counts independent of payload size at fixed
+call count. The graph fold sums 8,192 runtime items to 33,558,528 within the existing frame and
+execution defaults. Independent raw-boundary negatives, corrupted-class and restored-scan faults,
+admission/tail cancellation, allocation bounds, and standalone transactional recovery pass.
+Maintained meaning, exact dependencies and regenerated artifact/transport bytes are unchanged.
+
+The clean implementation boundary passed 26/26 full gates fresh with zero reuse, including all
+product and service gates, followed by nine fresh exact static-musl target classifications.
+The target ran the same public checked-value cases, both pinned userlands and all inherited
+application oracles. Terminal metadata is assembled before final fresh source and target
+revalidation; self-referential final identities remain in the ignored final-boundary record.
+Exact source/candidate bindings, all fixed measurements, failure visibility and cleanup are in
+[`202609081540-checked-value-execution.json`](evidence/202609081540-checked-value-execution.json).
+
 Eligible pure graph calls now replace their activation in production and in the independent
 canonical reference trampoline. Copied-public runtime-list folds at 0, 1, 256, 4,096, and 8,192
 items return the fixed sums; the last three retain peaks of two production and three reference

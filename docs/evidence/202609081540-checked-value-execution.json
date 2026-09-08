@@ -1,9 +1,8 @@
 {
   "schema": "lkjscript-checked-value-campaign-evidence-1",
   "campaign": "202609081540-checked-value-execution",
-  "status": "blocked",
-  "observed_utc": "2026-09-08",
-  "raw_root": ".artifacts/campaign/202609081540",
+  "status": "complete",
+  "raw_root": ".artifacts/campaign/202609081540/resume-01/",
   "start": {
     "branch": "main",
     "head": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
@@ -26,122 +25,1770 @@
     "initial_mandate_blob": "5d0580ec8bde58eb3a512f70fe633ffb85235705",
     "initial_mandate_sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
   },
-  "reconciliation": {
-    "mandate": "Only the explicitly selected checked-value campaign is active. Prior pure-tail and offline-package campaigns have terminal records and present implementation commits.",
-    "prior_proof": "The retained pure-tail final full and exact-target receipt hashes match its final-boundaries record. These historical receipts are not fresh or reused proof of this campaign.",
-    "prior_full_receipt_sha256": "098873c948cb4b202cb9e647e6080a8a2b74dbc7e724b3815b5daadbd7f38ee7",
-    "prior_target_receipt_sha256": "b5102a47c7d0e5a905bdb1d9663412d0231fc87b9be789889480889c1cb38938",
-    "production_authority": "Accepted typed graph meaning and exact immutable package closures remain unchanged.",
-    "operational_authority": "Existing deployment, application data, queue and object state remain separate and were not opened for mutation.",
-    "publication": "Source/public version divergence does not create publication work; no public release state was refreshed."
-  },
-  "finding": {
-    "classification": "not run",
-    "source_inspection": "Both VM local/call guards and reference local/call guards still recursively inspect raw immutable values for affine resources. The VM also inspects nominal cases during local affinity classification.",
-    "owners": [
-      "src/platform/execution/normalized/vm.rs:481",
-      "src/platform/execution/normalized/vm.rs:844",
-      "src/platform/execution/normalized/vm.rs:988",
-      "src/platform/execution/normalized/vm.rs:2326",
-      "src/platform/execution/normalized/reference.rs:758",
-      "src/platform/execution/normalized/reference.rs:1043",
-      "src/platform/execution/normalized/reference.rs:3072"
-    ],
-    "dynamic_evidence": "No instrumented candidate was built, so descendant counts, forwarding matrix results and fold samples were not collected. Source inspection is not the required empirical baseline.",
-    "ingress_inventory": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
-    "invariant_gained": "None. Production checked values and the removal of repeated scans have not been implemented."
-  },
-  "blocker": {
-    "boundary": "Required release-mode empirical baseline; consequently no candidate for CVA-1 through CVA-6",
-    "classification": "failed",
-    "reason": "Two builds of the isolated measurement-only baseline ended with Cargo exit 101 and rustc SIGKILL. The serial retry ran under the unchanged release profile and increased the cgroup OOM-kill count from 1 to 2.",
-    "memory_limit_bytes": 2147483648,
+  "resumption": {
+    "trigger": "User increased CPU and memory and resumed the same fixed mandate.",
+    "observed_utc": "2026-09-08 10:21:39 UTC",
+    "branch": "main",
+    "head": "84ccf1b516da1a1c0b11210001eaf63c30e7ee68",
+    "tree": "6c1a3b7e0d8f1833e20e78375c9adc7004770faa",
+    "upstream": "origin/main",
+    "ahead": 0,
+    "behind": 0,
+    "index": "clean",
+    "worktree": "clean",
+    "cpus": 8,
+    "memory_limit_bytes": 8589934592,
     "swap_limit_bytes": 0,
-    "release_profile": {
-      "optimization_level": 3,
-      "codegen_units": 1,
-      "lto": true,
-      "strip": "symbols"
-    },
-    "attempts": [
-      {
-        "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace",
-        "classification": "failed",
-        "cargo_exit_code": 101,
-        "rustc_signal": 9,
-        "stderr": ".artifacts/campaign/202609081540/baseline-build.stderr"
-      },
-      {
-        "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace --jobs 1",
-        "classification": "failed",
-        "cargo_exit_code": 101,
-        "rustc_signal": 9,
-        "stderr": ".artifacts/campaign/202609081540/baseline-serial-01.stderr"
-      }
-    ],
-    "diagnostic_limits": "The kernel journal query yielded no matching records. The failure diagnosis binds compiler termination plus retained cgroup memory events, including the serial retry's increment; it is not a sampled compiler peak or a measured minimum build-memory requirement.",
-    "tooling_iterations": "An unavailable /usr/bin/time wrapper exited 127 before Cargo, and a shell time syntax attempt did not execute Cargo. Both preceded the actual serial retry and are not additional builds or measurements.",
-    "resumption": "Provide a workspace with enough memory for the unchanged locked release build, rerun the retained baseline instrumentation and mandatory measurements, then resume implementation and all CVA obligations. The minimum sufficient memory was not measured.",
-    "secondary_prerequisite": "The Rust musl target is installed, but musl, musl-dev and musl-tools native packages are absent. Their exact installation inputs are owned by lkjscript-dev release target; installation and target admission were not run.",
-    "stop_authority": "Campaign sections 1, 5 and 6 require the empirical baseline, prohibit weakening mandatory proof, and direct stopping after bounded meaningful diagnosis when required proof is unavailable."
-  },
-  "outcomes": {
-    "CVA-1": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    },
-    "CVA-2": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    },
-    "CVA-3": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    },
-    "CVA-4": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    },
-    "CVA-5": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    },
-    "CVA-6": {
-      "classification": "not run",
-      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
-    }
-  },
-  "checks": {
-    "baseline_release_build": "failed",
-    "serial_baseline_release_build": "failed",
-    "baseline_forwarding_matrix": "not run",
-    "baseline_fold_warmup_and_measurements": "not run",
-    "focused_execution_checks": "not run",
-    "public_vertical_acceptance": "not run",
-    "negative_and_recovery_acceptance": "not run",
-    "owned_regeneration": "not run",
-    "fresh_full_profile": "not run",
-    "exact_musl_target_admission": "not run",
-    "maintained_tracked_inventory_comparison": "fresh passed",
-    "maintained_asset_hash_comparison": "fresh passed",
-    "prior_receipt_hash_comparison": "fresh passed",
-    "isolated_instrumentation_diff_check": "fresh passed"
+    "oom_kills_before": 2,
+    "policy": "Root AGENTS is unchanged and remains the only scoped or override guidance; no parallel active mandate, publication obligation or new work ledger.",
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "reconciliation": ".artifacts/campaign/202609081540/resume-01/reconciliation.txt"
   },
   "implementation": {
-    "archive_commit": "3ad4eeb8d787dbef86a1fa47a203e4e16da81dd9",
-    "production_source_changed": false,
-    "tests_or_verification_policy_changed": false,
-    "changed_tracked_paths": [
-      "docs/campaigns/202609081540.md",
-      "docs/evidence/202609081540-checked-value-execution.json"
+    "commit": "6b36c5052866fd31c963907e941d23f3c0598ea1",
+    "tree": "df2f14b434b9bf6c00d6b2e076dccb62159ae600",
+    "worktree": "clean",
+    "invariant": "Each evaluator admits raw values into private preparation-bound checked values. Local, call and intrinsic eligibility reads a construction-controlled root classification without visiting admitted descendants; affine ownership boundaries and arbitrary raw ingress remain checked.",
+    "production_tier": "graph8_dense_bytecode_5",
+    "reference_tier": "graph8_reference_records_4",
+    "product_snapshot": "0.1.25 (unreleased)",
+    "cli_identity": 26,
+    "discovery_identity": 12,
+    "pure_tail_receipt": "lkjscript-pure-tail-acceptance-2",
+    "stored_identity_changes": [],
+    "rationale": "docs/decisions/20260908-checked-value-execution.md",
+    "representation": "Containment disallows affine descendants in ordinary aggregates. A private root proof is therefore sufficient for ordinary projections and immutable sharing, while an affine nominal payload inherits its canonical case classification. No subtree proof cache is allocated or serialized.",
+    "independence": "Production derives nominal affinity from strictly prepared layouts. The canonical evaluator separately reconstructs accepted owners and its NormalizedReferenceSchema, and owns separate admission, constructors, propagation, type instantiation and eligibility logic. A bounded test-only structural oracle ignores cached classifications.",
+    "raw_boundary_inventory": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
+    "cutover_inventory": [
+      ".artifacts/campaign/202609081540/resume-01/raw-execution-paths-after.txt",
+      ".artifacts/campaign/202609081540/resume-01/checked-boundary-paths-after.txt"
     ],
-    "product_snapshot": "0.1.24 (unchanged, unreleased)",
-    "identity_changes": "No execution, discovery, receipt, graph, compiler-unit, bytecode, artifact, package or operational contract identity changed.",
-    "instrumentation": "A measurement-only patch adds real descendant/guard counters in each predecessor evaluator and extends the existing pure-tail fixture with direct/generic forwarding matrices and one warm-up plus three measured folds. It did not compile to a candidate and has no successful acceptance status.",
-    "instrumentation_patch": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
-    "instrumentation_sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc",
-    "final_boundaries": ".artifacts/campaign/202609081540/final-boundaries.json",
-    "proof_note": "Final self-referential commit/tree/worktree boundaries and metadata integrity checks are reported out of band. No full or target rerun is claimed or scheduled as already passed."
+    "staged_review_sha256": "05c3b9d21e7c7efa526cc49105c4abdc9dda83159926740de31a5e60299e6973"
+  },
+  "baseline": {
+    "classification": "fresh passed",
+    "source_commit": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
+    "source_tree": "906942697bebdcd9dc3717712473b53da352d8e3",
+    "patch": ".artifacts/campaign/202609081540/resume-01/baseline-instrumentation-02.patch",
+    "patch_sha256": "684c6d827f857631cc7af772ab01a91ca62b3aecfc47c7d7eabbcb8b57622528",
+    "candidate_sha256": "130c53408f788942a1053933daae5b5d65b81fe5fcb2f5a1e6e89d5fb307f990",
+    "verifier_sha256": "a1c2645a8463450d1c2779b4a00bc2a2dae36e2948283a3b24ed565e01b542d6",
+    "receipt": ".artifacts/campaign/202609081540/resume-01/baseline-acceptance-02/receipt.json",
+    "receipt_sha256": "fa440c8d1e070698b628d28083f5be060d316f1847d97b3f1e7177c87bcbcdb5",
+    "elapsed_nanoseconds": 49751692732,
+    "peak_owned_file_bytes": 25374014,
+    "cleanup_complete": true,
+    "admission_observations": "Unavailable in the predecessor because it had no checked admission boundary; null is retained rather than fabricated zero.",
+    "direct": [
+      {
+        "receipt_key": "run-25-forward",
+        "n": 1,
+        "k": 1,
+        "result": 1,
+        "production_guard_descendants": 5,
+        "reference_guard_descendants": 6,
+        "production_classification_decisions": 16,
+        "reference_classification_decisions": 22
+      },
+      {
+        "receipt_key": "run-26-forward",
+        "n": 1,
+        "k": 64,
+        "result": 1,
+        "production_guard_descendants": 131,
+        "reference_guard_descendants": 195,
+        "production_classification_decisions": 583,
+        "reference_classification_decisions": 904
+      },
+      {
+        "receipt_key": "run-27-forward",
+        "n": 1,
+        "k": 1024,
+        "result": 1,
+        "production_guard_descendants": 2051,
+        "reference_guard_descendants": 3075,
+        "production_classification_decisions": 9223,
+        "reference_classification_decisions": 14344
+      },
+      {
+        "receipt_key": "run-28-forward",
+        "n": 256,
+        "k": 1,
+        "result": 256,
+        "production_guard_descendants": 1280,
+        "reference_guard_descendants": 1536,
+        "production_classification_decisions": 16,
+        "reference_classification_decisions": 22
+      },
+      {
+        "receipt_key": "run-29-forward",
+        "n": 256,
+        "k": 64,
+        "result": 256,
+        "production_guard_descendants": 33536,
+        "reference_guard_descendants": 49920,
+        "production_classification_decisions": 583,
+        "reference_classification_decisions": 904
+      },
+      {
+        "receipt_key": "run-30-forward",
+        "n": 256,
+        "k": 1024,
+        "result": 256,
+        "production_guard_descendants": 525056,
+        "reference_guard_descendants": 787200,
+        "production_classification_decisions": 9223,
+        "reference_classification_decisions": 14344
+      },
+      {
+        "receipt_key": "run-31-forward",
+        "n": 4096,
+        "k": 1,
+        "result": 4096,
+        "production_guard_descendants": 20480,
+        "reference_guard_descendants": 24576,
+        "production_classification_decisions": 16,
+        "reference_classification_decisions": 22
+      },
+      {
+        "receipt_key": "run-32-forward",
+        "n": 4096,
+        "k": 64,
+        "result": 4096,
+        "production_guard_descendants": 536576,
+        "reference_guard_descendants": 798720,
+        "production_classification_decisions": 583,
+        "reference_classification_decisions": 904
+      },
+      {
+        "receipt_key": "run-33-forward",
+        "n": 4096,
+        "k": 1024,
+        "result": 4096,
+        "production_guard_descendants": 8400896,
+        "reference_guard_descendants": 12595200,
+        "production_classification_decisions": 9223,
+        "reference_classification_decisions": 14344
+      }
+    ],
+    "named_generic": [
+      {
+        "receipt_key": "run-34-forward-generic",
+        "n": 1,
+        "k": 1,
+        "result": 1,
+        "production_guard_descendants": 9,
+        "reference_guard_descendants": 11,
+        "production_classification_decisions": 25,
+        "reference_classification_decisions": 33
+      },
+      {
+        "receipt_key": "run-35-forward-generic",
+        "n": 1,
+        "k": 64,
+        "result": 1,
+        "production_guard_descendants": 198,
+        "reference_guard_descendants": 263,
+        "production_classification_decisions": 781,
+        "reference_classification_decisions": 1167
+      },
+      {
+        "receipt_key": "run-36-forward-generic",
+        "n": 1,
+        "k": 1024,
+        "result": 1,
+        "production_guard_descendants": 3078,
+        "reference_guard_descendants": 4103,
+        "production_classification_decisions": 12301,
+        "reference_classification_decisions": 18447
+      },
+      {
+        "receipt_key": "run-37-forward-generic",
+        "n": 256,
+        "k": 1,
+        "result": 256,
+        "production_guard_descendants": 2304,
+        "reference_guard_descendants": 2816,
+        "production_classification_decisions": 25,
+        "reference_classification_decisions": 33
+      },
+      {
+        "receipt_key": "run-38-forward-generic",
+        "n": 256,
+        "k": 64,
+        "result": 256,
+        "production_guard_descendants": 50688,
+        "reference_guard_descendants": 67328,
+        "production_classification_decisions": 781,
+        "reference_classification_decisions": 1167
+      },
+      {
+        "receipt_key": "run-39-forward-generic",
+        "n": 256,
+        "k": 1024,
+        "result": 256,
+        "production_guard_descendants": 787968,
+        "reference_guard_descendants": 1050368,
+        "production_classification_decisions": 12301,
+        "reference_classification_decisions": 18447
+      },
+      {
+        "receipt_key": "run-40-forward-generic",
+        "n": 4096,
+        "k": 1,
+        "result": 4096,
+        "production_guard_descendants": 36864,
+        "reference_guard_descendants": 45056,
+        "production_classification_decisions": 25,
+        "reference_classification_decisions": 33
+      },
+      {
+        "receipt_key": "run-41-forward-generic",
+        "n": 4096,
+        "k": 64,
+        "result": 4096,
+        "production_guard_descendants": 811008,
+        "reference_guard_descendants": 1077248,
+        "production_classification_decisions": 781,
+        "reference_classification_decisions": 1167
+      },
+      {
+        "receipt_key": "run-42-forward-generic",
+        "n": 4096,
+        "k": 1024,
+        "result": 4096,
+        "production_guard_descendants": 12607488,
+        "reference_guard_descendants": 16805888,
+        "production_classification_decisions": 12301,
+        "reference_classification_decisions": 18447
+      }
+    ]
+  },
+  "candidate": {
+    "classification": "fresh passed",
+    "candidate_sha256": "6e7ffe921c692f39eeee797718975685154c0f713b19843d58a844080b993a3f",
+    "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+    "receipt": ".artifacts/campaign/202609081540/resume-01/candidate-acceptance-06/receipt.json",
+    "receipt_sha256": "1abe793dc8c946d990efa060d5f79e62b766bb1a530e39843e3d68bbc3ef1ec1",
+    "source_head_at_measurement": "84ccf1b516da1a1c0b11210001eaf63c30e7ee68",
+    "source_patch": ".artifacts/campaign/202609081540/resume-01/candidate-06.source.patch",
+    "source_patch_sha256": "418cb94bcda2728ffbf86fab86b3e213b403df575528f3925ba5b0ffb2b1b4d9",
+    "binding_note": "The measured Rust and generated inputs became implementation commit 6b36c505; only performance and rationale documentation was assembled after this copied candidate. The authoritative full and target receipts separately bind the clean implementation commit.",
+    "elapsed_nanoseconds": 42758722531,
+    "peak_owned_file_bytes": 25632825,
+    "cleanup_complete": true,
+    "discovery_fields": 16,
+    "public_fold_results": [
+      { "items": 0, "value": 0 },
+      { "items": 1, "value": 1 },
+      { "items": 256, "value": 32896 },
+      { "items": 1024, "value": 524800 },
+      { "items": 4096, "value": 8390656 },
+      { "items": 8192, "value": 33558528 }
+    ],
+    "ordered_fold_results": [5, -5],
+    "observed_long_fold_frames": { "production": 2, "reference": 3 },
+    "producer_removed": true,
+    "artifact_sha256": "5f76eae93d50016fe3b18d4993598f4b0a9a79089fe5b795c3b87f3b74cad17c",
+    "reviewed_artifact_sha256": "be8474c29c90bb61eb2f0160c1301d7157cdf506ae6d3461493b7d1424d5b731",
+    "direct": [
+      {
+        "k": 1,
+        "n": 1,
+        "production": {
+          "classification_decisions": 18,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 22,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 1,
+        "production": {
+          "classification_decisions": 711,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 904,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 1,
+        "production": {
+          "classification_decisions": 11271,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 14344,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1,
+        "n": 256,
+        "production": {
+          "classification_decisions": 18,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 22,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 256,
+        "production": {
+          "classification_decisions": 711,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 904,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 256,
+        "production": {
+          "classification_decisions": 11271,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 14344,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 18,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 22,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 711,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 904,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 11271,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 14344,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      }
+    ],
+    "named_generic": [
+      {
+        "k": 1,
+        "n": 1,
+        "production": {
+          "classification_decisions": 29,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 33,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 1,
+        "production": {
+          "classification_decisions": 1037,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 1167,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 1,
+        "production": {
+          "classification_decisions": 16397,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 18447,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 3,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1,
+        "n": 256,
+        "production": {
+          "classification_decisions": 29,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 33,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 256,
+        "production": {
+          "classification_decisions": 1037,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 1167,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 256,
+        "production": {
+          "classification_decisions": 16397,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 18447,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 258,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 29,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 33,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 64,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 1037,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 1167,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "k": 1024,
+        "n": 4096,
+        "production": {
+          "classification_decisions": 16397,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 18447,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4098,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      }
+    ],
+    "program_identities": {
+      "repository": "repo_08e2e79578d081863be9ba462271d29c",
+      "package": "pkg_733565b4a7d8899b590fd8e9a5ff8696",
+      "revision": "rev_fd1e7024ae26af4422b0ff287a8482910151a201417e9be8b6c24cb828bef0f5",
+      "semantic_state": "semantic_state_9586e93e597050ce7f1fd89531a687e5c47406d5126239738546939fbbfc4cb2",
+      "artifact_manifest": "artifact_manifest_4f4752d4909be163ba29f78de9f6467b463bdf759c9a6794b616deaddd28b4ad",
+      "artifact_bundle": "artifact_bundle_d4f128a3e9e0709ae83ed36e08c160064d039bc805dac665a37a1dda090599b6",
+      "transported_library": {
+        "repository": "repo_48664e97820bfd3c1440273981108c17",
+        "package": "pkg_e5ca6b9440960ce6dffede84420f4985",
+        "revision": "rev_027c5132b065240bb05cae3e68201f3f5817ad80dc069d14399841b4ddf56dd0",
+        "package_revision": "package_revision_eef201ff9be84a4de270142a0284f86b3c7d54e442535099e7b26ffa351d9cac",
+        "transport": "package_transport_7a28f03e5b33e1804a5a3d2dad0f95e4fe3aa17317a396d3fecd0cc5e4620b7a",
+        "producer_removed_before_runs": true
+      },
+      "evidence": [
+        "candidate-acceptance-06/command-0012.stdout",
+        "candidate-acceptance-06/command-0013.stdout",
+        "candidate-acceptance-06/command-0024.stdout"
+      ]
+    }
+  },
+  "cost_oracle": {
+    "classification": "fresh passed",
+    "owner": "tools/lkjscript-dev/src/pure_tail.rs",
+    "W_units": "Sum of input-admission nodes, raw-result-admission nodes, immediate constructor-child visits and internal-guard descendant visits, separately in each tier.",
+    "required_equation": "W(N,K)-W(1,K) = W(N,1)-W(1,1)",
+    "observed": "In each candidate matrix W=N+2 for all K. Both internal descendant counters are zero; each tier's root decisions depend on K and invocation form, not N.",
+    "forced_rescan": {
+      "classification": "fresh passed",
+      "raw_acceptance_classification": "failed",
+      "expected_exit_code": 1,
+      "failure": "corrupt: internal affinity guard rescanned descendants",
+      "arithmetic_cases": 9,
+      "arithmetic": "All nine direct forwarding runs return independently expected N before the unchanged acceptance validator rejects actual descendant visits.",
+      "source_commit": "6b36c5052866fd31c963907e941d23f3c0598ea1",
+      "patch": ".artifacts/campaign/202609081540/resume-01/forced-rescan.patch",
+      "patch_sha256": "1c639f9aaf32a25e58bed8adaa8c4765a179d1ef5525c80292330a69cac7cb67",
+      "candidate_sha256": "fd0842f55075d69ec8ed300abb62a8e03d840d8e48af0596c176f79fb2491bef",
+      "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+      "receipt": ".artifacts/campaign/202609081540/resume-01/forced-rescan-acceptance/receipt.json",
+      "receipt_sha256": "39678c75c1068c7638b2413d0b472052d38c5190d2dc5e8d8a268250f8bb7a85",
+      "cleanup_complete": true,
+      "peak_owned_file_bytes": 23025820,
+      "rows": [
+        {
+          "receipt_key": "run-25-forward",
+          "n": 1,
+          "k": 1,
+          "result": 1,
+          "production_guard_descendants": 6,
+          "reference_guard_descendants": 6,
+          "production_classification_decisions": 18,
+          "reference_classification_decisions": 22
+        },
+        {
+          "receipt_key": "run-26-forward",
+          "n": 1,
+          "k": 64,
+          "result": 1,
+          "production_guard_descendants": 195,
+          "reference_guard_descendants": 195,
+          "production_classification_decisions": 711,
+          "reference_classification_decisions": 904
+        },
+        {
+          "receipt_key": "run-27-forward",
+          "n": 1,
+          "k": 1024,
+          "result": 1,
+          "production_guard_descendants": 3075,
+          "reference_guard_descendants": 3075,
+          "production_classification_decisions": 11271,
+          "reference_classification_decisions": 14344
+        },
+        {
+          "receipt_key": "run-28-forward",
+          "n": 256,
+          "k": 1,
+          "result": 256,
+          "production_guard_descendants": 1536,
+          "reference_guard_descendants": 1536,
+          "production_classification_decisions": 18,
+          "reference_classification_decisions": 22
+        },
+        {
+          "receipt_key": "run-29-forward",
+          "n": 256,
+          "k": 64,
+          "result": 256,
+          "production_guard_descendants": 49920,
+          "reference_guard_descendants": 49920,
+          "production_classification_decisions": 711,
+          "reference_classification_decisions": 904
+        },
+        {
+          "receipt_key": "run-30-forward",
+          "n": 256,
+          "k": 1024,
+          "result": 256,
+          "production_guard_descendants": 787200,
+          "reference_guard_descendants": 787200,
+          "production_classification_decisions": 11271,
+          "reference_classification_decisions": 14344
+        },
+        {
+          "receipt_key": "run-31-forward",
+          "n": 4096,
+          "k": 1,
+          "result": 4096,
+          "production_guard_descendants": 24576,
+          "reference_guard_descendants": 24576,
+          "production_classification_decisions": 18,
+          "reference_classification_decisions": 22
+        },
+        {
+          "receipt_key": "run-32-forward",
+          "n": 4096,
+          "k": 64,
+          "result": 4096,
+          "production_guard_descendants": 798720,
+          "reference_guard_descendants": 798720,
+          "production_classification_decisions": 711,
+          "reference_classification_decisions": 904
+        },
+        {
+          "receipt_key": "run-33-forward",
+          "n": 4096,
+          "k": 1024,
+          "result": 4096,
+          "production_guard_descendants": 12595200,
+          "reference_guard_descendants": 12595200,
+          "production_classification_decisions": 11271,
+          "reference_classification_decisions": 14344
+        }
+      ]
+    },
+    "equivalent_path_faults": "First-party cost-oracle tests independently restore production or reference guard work and equivalent raw-result work proportional to N*K, and suppress input observations. The real matrix validator rejects each mutant; arithmetic remains N.",
+    "equivalent_fault_log": ".artifacts/campaign/202609081540/resume-01/check-cost-oracle-06.stdout",
+    "equivalent_fault_log_sha256": "97ec7dd149afdd01a1528561a778293ff3b5ccacafe18281979df28ad900e989"
+  },
+  "performance": {
+    "classification": "fresh passed",
+    "sample_policy": "One warm-up followed by three measured release-mode folds at each of 256, 1024 and 4096 input items, for both predecessor and candidate. Each invocation has a 120-second wall bound. No timeout occurred; no run was repeated to improve a timing.",
+    "units": "Wall seconds; sampled process-tree peak RSS bytes; VM instructions / independent reference expressions; cumulative logical allocation bytes and successful nonzero allocation-accounting charges (not global heap allocator events); separate admission, constructor and guard visits.",
+    "raw_projection": ".artifacts/campaign/202609081540/resume-01/performance-06.json",
+    "raw_projection_sha256": "34473382cae1a610c9a31f94b488ac2e5cb48b973122470b1b5f2c3d7c817e87",
+    "samples": {
+      "baseline_candidate_sha256": "130c53408f788942a1053933daae5b5d65b81fe5fcb2f5a1e6e89d5fb307f990",
+      "measured_candidate_sha256": "6e7ffe921c692f39eeee797718975685154c0f713b19843d58a844080b993a3f",
+      "baseline": [
+        {
+          "items": 256,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.499415344,
+          "sampled_peak_rss_bytes": 19255296,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 158488,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 515,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 263936,
+          "reference_guard_descendants": 329984,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0042.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.500930034,
+          "sampled_peak_rss_bytes": 19066880,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 158488,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 515,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 263936,
+          "reference_guard_descendants": 329984,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0043.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.498808902,
+          "sampled_peak_rss_bytes": 19243008,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 158488,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 515,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 263936,
+          "reference_guard_descendants": 329984,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0044.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.500244033,
+          "sampled_peak_rss_bytes": 19431424,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 158488,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 515,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 263936,
+          "reference_guard_descendants": 329984,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0045.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.522503711,
+          "sampled_peak_rss_bytes": 19415040,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 631576,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 2051,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 4201472,
+          "reference_guard_descendants": 5252096,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0046.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.520592584,
+          "sampled_peak_rss_bytes": 19046400,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 631576,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 2051,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 4201472,
+          "reference_guard_descendants": 5252096,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0047.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.549697934,
+          "sampled_peak_rss_bytes": 19595264,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 631576,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 2051,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 4201472,
+          "reference_guard_descendants": 5252096,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0048.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.523964228,
+          "sampled_peak_rss_bytes": 19132416,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 631576,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 2051,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 4201472,
+          "reference_guard_descendants": 5252096,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0049.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.814597262,
+          "sampled_peak_rss_bytes": 19664896,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 2523928,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 8195,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 67137536,
+          "reference_guard_descendants": 83922944,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0050.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.807139186,
+          "sampled_peak_rss_bytes": 19673088,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 2523928,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 8195,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 67137536,
+          "reference_guard_descendants": 83922944,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0051.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.782917375,
+          "sampled_peak_rss_bytes": 19820544,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 2523928,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 8195,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 67137536,
+          "reference_guard_descendants": 83922944,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0052.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.800039354,
+          "sampled_peak_rss_bytes": 19943424,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 2523928,
+          "reference_allocated_bytes": 0,
+          "production_allocation_charges": 8195,
+          "reference_allocation_charges": 0,
+          "production_collection_items": 0,
+          "reference_collection_items": 0,
+          "production_guard_descendants": 67137536,
+          "reference_guard_descendants": 83922944,
+          "production_value_work": null,
+          "reference_value_work": null,
+          "command_stdout": "command-0053.stdout"
+        }
+      ],
+      "candidate": [
+        {
+          "items": 256,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.482689591,
+          "sampled_peak_rss_bytes": 23035904,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 310474,
+          "reference_allocated_bytes": 125306,
+          "production_allocation_charges": 5140,
+          "reference_allocation_charges": 3343,
+          "production_collection_items": 256,
+          "reference_collection_items": 256,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 8216,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 8992,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0042.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.498716554,
+          "sampled_peak_rss_bytes": 22999040,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 310474,
+          "reference_allocated_bytes": 125306,
+          "production_allocation_charges": 5140,
+          "reference_allocation_charges": 3343,
+          "production_collection_items": 256,
+          "reference_collection_items": 256,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 8216,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 8992,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0043.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.519623547,
+          "sampled_peak_rss_bytes": 23527424,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 310474,
+          "reference_allocated_bytes": 125306,
+          "production_allocation_charges": 5140,
+          "reference_allocation_charges": 3343,
+          "production_collection_items": 256,
+          "reference_collection_items": 256,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 8216,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 8992,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0044.stdout"
+        },
+        {
+          "items": 256,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.488873865,
+          "sampled_peak_rss_bytes": 23171072,
+          "production_instructions": 5393,
+          "reference_expressions": 2569,
+          "production_allocated_bytes": 310474,
+          "reference_allocated_bytes": 125306,
+          "production_allocation_charges": 5140,
+          "reference_allocation_charges": 3343,
+          "production_collection_items": 256,
+          "reference_collection_items": 256,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 8216,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 8992,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 257,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0045.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.499945345,
+          "sampled_peak_rss_bytes": 23240704,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 1238218,
+          "reference_allocated_bytes": 500090,
+          "production_allocation_charges": 20500,
+          "reference_allocation_charges": 13327,
+          "production_collection_items": 1024,
+          "reference_collection_items": 1024,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 32792,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 35872,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0046.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.499390311,
+          "sampled_peak_rss_bytes": 23003136,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 1238218,
+          "reference_allocated_bytes": 500090,
+          "production_allocation_charges": 20500,
+          "reference_allocation_charges": 13327,
+          "production_collection_items": 1024,
+          "reference_collection_items": 1024,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 32792,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 35872,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0047.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.499778211,
+          "sampled_peak_rss_bytes": 23277568,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 1238218,
+          "reference_allocated_bytes": 500090,
+          "production_allocation_charges": 20500,
+          "reference_allocation_charges": 13327,
+          "production_collection_items": 1024,
+          "reference_collection_items": 1024,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 32792,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 35872,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0048.stdout"
+        },
+        {
+          "items": 1024,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.488125818,
+          "sampled_peak_rss_bytes": 22933504,
+          "production_instructions": 21521,
+          "reference_expressions": 10249,
+          "production_allocated_bytes": 1238218,
+          "reference_allocated_bytes": 500090,
+          "production_allocation_charges": 20500,
+          "reference_allocation_charges": 13327,
+          "production_collection_items": 1024,
+          "reference_collection_items": 1024,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 32792,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 35872,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 1025,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0049.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 0,
+          "warmup": true,
+          "wall_seconds": 0.529013834,
+          "sampled_peak_rss_bytes": 23687168,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 4949194,
+          "reference_allocated_bytes": 1999226,
+          "production_allocation_charges": 81940,
+          "reference_allocation_charges": 53263,
+          "production_collection_items": 4096,
+          "reference_collection_items": 4096,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 131096,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 143392,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0050.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 1,
+          "warmup": false,
+          "wall_seconds": 0.514987995,
+          "sampled_peak_rss_bytes": 23879680,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 4949194,
+          "reference_allocated_bytes": 1999226,
+          "production_allocation_charges": 81940,
+          "reference_allocation_charges": 53263,
+          "production_collection_items": 4096,
+          "reference_collection_items": 4096,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 131096,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 143392,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0051.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 2,
+          "warmup": false,
+          "wall_seconds": 0.529439435,
+          "sampled_peak_rss_bytes": 23461888,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 4949194,
+          "reference_allocated_bytes": 1999226,
+          "production_allocation_charges": 81940,
+          "reference_allocation_charges": 53263,
+          "production_collection_items": 4096,
+          "reference_collection_items": 4096,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 131096,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 143392,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0052.stdout"
+        },
+        {
+          "items": 4096,
+          "sample": 3,
+          "warmup": false,
+          "wall_seconds": 0.52991553,
+          "sampled_peak_rss_bytes": 23920640,
+          "production_instructions": 86033,
+          "reference_expressions": 40969,
+          "production_allocated_bytes": 4949194,
+          "reference_allocated_bytes": 1999226,
+          "production_allocation_charges": 81940,
+          "reference_allocation_charges": 53263,
+          "production_collection_items": 4096,
+          "reference_collection_items": 4096,
+          "production_guard_descendants": 0,
+          "reference_guard_descendants": 0,
+          "production_value_work": {
+            "classification_decisions": 131096,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "reference_value_work": {
+            "classification_decisions": 143392,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 4097,
+            "internal_guard_descendant_visits": 0,
+            "raw_result_admission_nodes": 0
+          },
+          "command_stdout": "command-0053.stdout"
+        }
+      ]
+    },
+    "nonclaims": "The decisive proof is the cost matrix and fault sensitivity. Serialization, ordinary collection copying, actual algorithmic work and existing allocation accounting are not claimed eliminated; no universal speedup or allocation reduction is claimed."
+  },
+  "source_fixtures": {
+    "classification": "fresh passed",
+    "normalized_test_count": 60,
+    "normalized_log": ".artifacts/campaign/202609081540/resume-01/check-normalized-06.stdout",
+    "normalized_log_sha256": "7fd13e1f41e4d5b820ef058f724501ee19f67ea4d4eb1461ad9725ef84cb807c",
+    "observations": [
+      {
+        "case": "admission-cancellation",
+        "cleanup_owned": 0,
+        "exact_fit_bytes": 1753,
+        "exact_fit_depth": 256,
+        "exact_fit_items": 8,
+        "one_over_depth": 257,
+        "one_over_items": 9,
+        "reference": false,
+        "work": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 35,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "case": "admission-cancellation",
+        "cleanup_owned": 0,
+        "exact_fit_bytes": 1305,
+        "exact_fit_depth": 256,
+        "exact_fit_items": 8,
+        "one_over_depth": 257,
+        "one_over_items": 9,
+        "reference": true,
+        "work": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 35,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "case": "raw-adapter-result",
+        "cleanup_owned": 0,
+        "downstream_calls": 0,
+        "failure": {
+          "class": "possible_visibility",
+          "code": "normalized_value_admission",
+          "message": "adapter result failed value admission after a possibly visible operation; inspect the operation outcome before retrying",
+          "possibly_visible": true,
+          "retryable": false
+        },
+        "healthy_reuse_calls": 2,
+        "prior_effects": 1,
+        "reference": false,
+        "work": {
+          "classification_decisions": 10,
+          "constructor_child_visits": 5,
+          "input_admission_nodes": 0,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 1
+        }
+      },
+      {
+        "case": "raw-adapter-result",
+        "cleanup_owned": 0,
+        "downstream_calls": 0,
+        "failure": {
+          "class": "possible_visibility",
+          "code": "normalized_reference_value_admission",
+          "message": "reference adapter result failed admission after a possibly visible operation; inspect the outcome before retrying",
+          "possibly_visible": true,
+          "retryable": false
+        },
+        "healthy_reuse_calls": 2,
+        "prior_effects": 1,
+        "reference": true,
+        "work": {
+          "classification_decisions": 11,
+          "constructor_child_visits": 5,
+          "input_admission_nodes": 0,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 1
+        }
+      },
+      {
+        "case": "production-classification-corruption",
+        "independent_oracle": "affine-variant",
+        "production_wrongly_accepted": true,
+        "reference_failure": {
+          "class": "infrastructure",
+          "code": "normalized_reference_value_admission",
+          "message": "invocation input reference value admission: raw container conceals affine ownership; remove the nested owner before invocation",
+          "possibly_visible": false,
+          "retryable": false
+        }
+      },
+      {
+        "case": "independent-oracle-shapes",
+        "foreign_callbacks_rejected_tiers": 2,
+        "nominal_record": true,
+        "ordinary_variant": true,
+        "scalar_kinds": 6
+      },
+      {
+        "callback_calls": 0,
+        "case": "raw-last-element",
+        "production": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "callback_calls": 0,
+        "case": "raw-last-element",
+        "production": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "callback_calls": 0,
+        "case": "raw-last-element",
+        "production": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      },
+      {
+        "callback_calls": 0,
+        "case": "raw-last-element",
+        "production": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        },
+        "reference": {
+          "classification_decisions": 0,
+          "constructor_child_visits": 0,
+          "input_admission_nodes": 4097,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 0
+        }
+      }
+    ],
+    "coverage": "Scalars, nominal/structural records, ordinary/affine variants including empty affine cases, options, lists, internal maps, nested/shared children, rejected ordinary-clone assertions, foreign program/layout/callback identity, malformed raw host and adapter results, direct ownership scope/interface/requirement/generation/use checks, exact borrow/final consume and post-failure reuse.",
+    "last_element_cases_in_log_order": [
+      "live queue capability",
+      "wrong scalar shape",
+      "empty affine nominal variant",
+      "foreign-program affine variant"
+    ],
+    "admission_bounds": {
+      "depth_exact_fit": 256,
+      "depth_one_over": 257,
+      "items_exact_fit": 8,
+      "items_one_over": 9,
+      "byte_exact_fit": {
+        "production": 1753,
+        "reference": 1305
+      },
+      "byte_one_over": "One byte below the measured exact-fit allocation allowance rejects.",
+      "cancellation_after_control_checks": 37,
+      "admission_nodes_before_cancellation": 35,
+      "owned_state_after": 0
+    },
+    "oracle": "The separate test-only structural/type walker derives nominal cases from canonical layouts and ignores cached classes. Production class corruption is accepted by the deliberately damaged VM but rejected by the independent reference and oracle.",
+    "artifact_compatibility": "The retained unchanged pre-campaign standard artifact is strictly prepared and executes folds at 256, 4096 and 8192 without conversion; both tiers stay within eight frames and zero guard descendants."
+  },
+  "containment": {
+    "classification": "fresh passed",
+    "bounded_subprocess": {
+      "stack_bytes": 2097152,
+      "cases": 52,
+      "cleanup_complete": true,
+      "deep_rejected_raw_depth": 100001,
+      "observed_admission_progress": 35,
+      "zero_owned_after_failure": [
+        "call frames",
+        "operands",
+        "locals",
+        "type bindings",
+        "transactions",
+        "handles"
+      ],
+      "healthy_reuse": true,
+      "operand_note": "Only the VM owns an operand stack; the canonical reference's independent continuation/local model is retained."
+    },
+    "standalone_http": {
+      "after_recovery_changes": 2,
+      "after_trap_changes": 1,
+      "artifact_sha256": "b049f443841ca5ce9b64db632219c8693b69616ae2076e9a208c46a4c75d395a",
+      "committed": {
+        "bytes": 59,
+        "continuation": null,
+        "items": [
+          {
+            "key": [
+              {
+                "kind": "text",
+                "value": "success"
+              }
+            ],
+            "revision": [
+              252,
+              45,
+              38,
+              43,
+              246,
+              181,
+              156,
+              90,
+              12,
+              107,
+              212,
+              97,
+              85,
+              1,
+              54,
+              203,
+              107,
+              33,
+              164,
+              86,
+              125,
+              93,
+              150,
+              206,
+              63,
+              181,
+              133,
+              93,
+              163,
+              17,
+              37,
+              177
+            ],
+            "value": [
+              119,
+              114,
+              105,
+              116,
+              116,
+              101,
+              110
+            ]
+          }
+        ],
+        "work": 1
+      },
+      "fixed_response": "33558528",
+      "initial_committed_changes": 1,
+      "maximum_live_transactions": 1,
+      "project_directories_absent": true,
+      "pure_effects_replayed": false,
+      "trap": "integer overflow inside the final fold callback after staging"
+    },
+    "transaction_cancellation": {
+      "classification": "fresh passed",
+      "cleanup_complete": true,
+      "effects_replayed": false,
+      "failure": {
+        "class": "cancelled",
+        "code": "execution_cancelled",
+        "message": "execution was cancelled by its owning task scope",
+        "possibly_visible": false,
+        "retryable": false
+      },
+      "host_calls": 37,
+      "observation": {
+        "allocated_bytes": 1586042,
+        "allocation_charges": 280,
+        "calls": 59,
+        "capability_calls": 2,
+        "collection_items": 8193,
+        "external_calls": 37,
+        "instructions": 207,
+        "live_call_frames_after": 0,
+        "live_handles_after": 0,
+        "live_locals_after": 0,
+        "live_operands_after": 0,
+        "live_transactions_after": 0,
+        "live_type_bindings_after": 0,
+        "maximum_call_depth": 4,
+        "maximum_control_frames": 4,
+        "maximum_live_locals": 11,
+        "maximum_live_transactions": 1,
+        "maximum_live_type_bindings": 2,
+        "maximum_value_stack": 5,
+        "production_tier": "graph8_dense_bytecode_5",
+        "tail_transfers": 10,
+        "value_work": {
+          "classification_decisions": 305,
+          "constructor_child_visits": 2,
+          "input_admission_nodes": 8194,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 37
+        }
+      },
+      "recovery_observation": {
+        "allocated_bytes": 12257621,
+        "allocation_charges": 229424,
+        "calls": 49160,
+        "capability_calls": 2,
+        "collection_items": 8193,
+        "external_calls": 32771,
+        "instructions": 172066,
+        "live_call_frames_after": 0,
+        "live_handles_after": 0,
+        "live_locals_after": 0,
+        "live_operands_after": 0,
+        "live_transactions_after": 0,
+        "live_type_bindings_after": 0,
+        "maximum_call_depth": 4,
+        "maximum_control_frames": 4,
+        "maximum_live_locals": 11,
+        "maximum_live_transactions": 1,
+        "maximum_live_type_bindings": 2,
+        "maximum_value_stack": 5,
+        "production_tier": "graph8_dense_bytecode_5",
+        "tail_transfers": 8194,
+        "value_work": {
+          "classification_decisions": 262181,
+          "constructor_child_visits": 2,
+          "input_admission_nodes": 8194,
+          "internal_guard_descendant_visits": 0,
+          "raw_result_admission_nodes": 32772
+        }
+      },
+      "recovery_value": 33558528,
+      "stack_bytes": 2097152
+    },
+    "canonical_corruption": {
+      "authority": {
+        "bytes": 627932,
+        "files": 10,
+        "head_sha256": "fce81361004a82567e06883c0f0991510ae4b120ca66f310b73030639b941408",
+        "inventory_sha256": "17d357063d026845afcd342030ccae3c9e197d82c0b0675e622cc480c0ba9a49"
+      },
+      "code": "pack_entry_checksum",
+      "restored_exact_owned_fixture": true,
+      "unchanged_on_failure": true
+    },
+    "raw_adapter_visibility": "Injected adapters record one prior effect, reject their malformed result with possible_visibility, invoke no downstream capability and release owned local state. Healthy reuse makes the expected two calls. Reference adapter fixtures are independent isolated test doubles; public effects execute only in production."
+  },
+  "limits": {
+    "value_depth": 256,
+    "aggregate_collection_items": 1000000,
+    "vm_instructions": 10000000,
+    "live_frames": 4096,
+    "vm_operands": 1000000,
+    "cumulative_allocated_bytes": 268435456,
+    "capability_calls": 100000,
+    "measurement_wall_seconds": 120,
+    "acceptance_wall_seconds": 900,
+    "acceptance_owned_file_bytes": 1073741824,
+    "notes": "Existing narrower decoder/adapter limits and independent reference work units are retained. New metadata is charged without refunds; counters are observations, not fuel or permission. Builds and existing target tooling are outside the acceptance file/time measurement."
   },
   "maintained": {
     "standard_revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
@@ -150,150 +1797,904 @@
     "standard_artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
     "standard_transport_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
     "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
-    "regenerated": false
+    "regenerated": true,
+    "classification": "fresh passed",
+    "inventory_after": ".artifacts/campaign/202609081540/resume-01/maintained-after-06.txt",
+    "regenerated_assets": [
+      ".artifacts/campaign/202609081540/resume-01/regenerated-standard-06.lkja",
+      ".artifacts/campaign/202609081540/resume-01/regenerated-standard-06.lkjp",
+      ".artifacts/campaign/202609081540/resume-01/regenerated-lkjournal-06.lkja"
+    ],
+    "unchanged": "Standard/lkjournal semantic HEADs, owners, exact dependencies, routes/ports, stored graph/compiler-unit/bytecode/package/artifact encodings, generated artifact and transport bytes, and deployment/queue/object schemas. No user project migration."
+  },
+  "full_implementation": {
+    "classification": "fresh passed",
+    "command": "lkjscript-dev check full --fresh --machine --jobs 4",
+    "receipt": ".artifacts/campaign/202609081540/resume-01/full-A-receipt.json",
+    "receipt_sha256": "d596da8403e81c71441e89027445cc99e3792f94ff2210f927880dfd10c2afec",
+    "git_head": "6b36c5052866fd31c963907e941d23f3c0598ea1",
+    "worktree_input_digest": "verification_a85aed7bf75542bad8efdad27dd3144fb79167337812f697a95afc732befa790",
+    "final_worktree_input_digest": "verification_a85aed7bf75542bad8efdad27dd3144fb79167337812f697a95afc732befa790",
+    "input_stable": true,
+    "passed": 26,
+    "fresh": 26,
+    "reused": 0,
+    "elapsed_nanoseconds": 251207143653,
+    "gates": [
+      {
+        "name": "fmt",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 1491174724
+      },
+      {
+        "name": "clippy",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 201865044
+      },
+      {
+        "name": "workspace_tests",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 208890767793
+      },
+      {
+        "name": "release_build",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 209394847
+      },
+      {
+        "name": "release_command_lifecycle",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 200690234060
+      },
+      {
+        "name": "distributed_http_application",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 4297008333
+      },
+      {
+        "name": "outbound_http_application",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 13482847666
+      },
+      {
+        "name": "offline_packages",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 18444394405
+      },
+      {
+        "name": "pure_tail",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 43636228139
+      },
+      {
+        "name": "stateful_http_application",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 28622328850
+      },
+      {
+        "name": "checker_self_test",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 252942114
+      },
+      {
+        "name": "rust_only_tooling",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 23080060
+      },
+      {
+        "name": "generated_public_guides",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 190887022
+      },
+      {
+        "name": "product_surface_audit",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 89110203
+      },
+      {
+        "name": "standard_package_test",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 1066771272
+      },
+      {
+        "name": "application_package_test",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 3322954733
+      },
+      {
+        "name": "standard_artifact_build",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 1088500895
+      },
+      {
+        "name": "standard_artifact_compare",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 15236860
+      },
+      {
+        "name": "builtin_package_export",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 194860244
+      },
+      {
+        "name": "builtin_package_compare",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 15397853
+      },
+      {
+        "name": "builtin_transport_export",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 201208015
+      },
+      {
+        "name": "builtin_transport_compare",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 14470449
+      },
+      {
+        "name": "application_artifact_build",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 2735131820
+      },
+      {
+        "name": "application_artifact_compare",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 15118397
+      },
+      {
+        "name": "service_acceptance",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 12850794345
+      },
+      {
+        "name": "diff_check",
+        "classification": "fresh passed",
+        "elapsed_nanoseconds": 19361636
+      }
+    ],
+    "profile_coverage": "All product and service gates are members of this fresh full profile. Separate duplicate profile runs are not claimed."
+  },
+  "initial_blocked_attempt": {
+    "schema": "lkjscript-checked-value-campaign-evidence-1",
+    "campaign": "202609081540-checked-value-execution",
+    "status": "blocked",
+    "observed_utc": "2026-09-08",
+    "raw_root": ".artifacts/campaign/202609081540",
+    "start": {
+      "branch": "main",
+      "head": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
+      "tree": "906942697bebdcd9dc3717712473b53da352d8e3",
+      "upstream": "origin/main",
+      "refreshed_upstream": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
+      "ahead": 0,
+      "behind": 0,
+      "index": "clean",
+      "tracked_worktree": "clean",
+      "supplied_untracked": [
+        "docs/campaigns/202609081540.md"
+      ],
+      "agent_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
+      "applicable_agent_files": [
+        "AGENTS.md"
+      ],
+      "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+      "archive_disposition": "The canonical path already contained this exact supplied initial mandate as an untracked file. It was adopted and committed without overwriting or changing the initial body; there was no collision with a different mandate.",
+      "initial_mandate_blob": "5d0580ec8bde58eb3a512f70fe633ffb85235705",
+      "initial_mandate_sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
+    },
+    "reconciliation": {
+      "mandate": "Only the explicitly selected checked-value campaign is active. Prior pure-tail and offline-package campaigns have terminal records and present implementation commits.",
+      "prior_proof": "The retained pure-tail final full and exact-target receipt hashes match its final-boundaries record. These historical receipts are not fresh or reused proof of this campaign.",
+      "prior_full_receipt_sha256": "098873c948cb4b202cb9e647e6080a8a2b74dbc7e724b3815b5daadbd7f38ee7",
+      "prior_target_receipt_sha256": "b5102a47c7d0e5a905bdb1d9663412d0231fc87b9be789889480889c1cb38938",
+      "production_authority": "Accepted typed graph meaning and exact immutable package closures remain unchanged.",
+      "operational_authority": "Existing deployment, application data, queue and object state remain separate and were not opened for mutation.",
+      "publication": "Source/public version divergence does not create publication work; no public release state was refreshed."
+    },
+    "finding": {
+      "classification": "not run",
+      "source_inspection": "Both VM local/call guards and reference local/call guards still recursively inspect raw immutable values for affine resources. The VM also inspects nominal cases during local affinity classification.",
+      "owners": [
+        "src/platform/execution/normalized/vm.rs:481",
+        "src/platform/execution/normalized/vm.rs:844",
+        "src/platform/execution/normalized/vm.rs:988",
+        "src/platform/execution/normalized/vm.rs:2326",
+        "src/platform/execution/normalized/reference.rs:758",
+        "src/platform/execution/normalized/reference.rs:1043",
+        "src/platform/execution/normalized/reference.rs:3072"
+      ],
+      "dynamic_evidence": "No instrumented candidate was built, so descendant counts, forwarding matrix results and fold samples were not collected. Source inspection is not the required empirical baseline.",
+      "ingress_inventory": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
+      "invariant_gained": "None. Production checked values and the removal of repeated scans have not been implemented."
+    },
+    "blocker": {
+      "boundary": "Required release-mode empirical baseline; consequently no candidate for CVA-1 through CVA-6",
+      "classification": "failed",
+      "reason": "Two builds of the isolated measurement-only baseline ended with Cargo exit 101 and rustc SIGKILL. The serial retry ran under the unchanged release profile and increased the cgroup OOM-kill count from 1 to 2.",
+      "memory_limit_bytes": 2147483648,
+      "swap_limit_bytes": 0,
+      "release_profile": {
+        "optimization_level": 3,
+        "codegen_units": 1,
+        "lto": true,
+        "strip": "symbols"
+      },
+      "attempts": [
+        {
+          "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace",
+          "classification": "failed",
+          "cargo_exit_code": 101,
+          "rustc_signal": 9,
+          "stderr": ".artifacts/campaign/202609081540/baseline-build.stderr"
+        },
+        {
+          "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace --jobs 1",
+          "classification": "failed",
+          "cargo_exit_code": 101,
+          "rustc_signal": 9,
+          "stderr": ".artifacts/campaign/202609081540/baseline-serial-01.stderr"
+        }
+      ],
+      "diagnostic_limits": "The kernel journal query yielded no matching records. The failure diagnosis binds compiler termination plus retained cgroup memory events, including the serial retry's increment; it is not a sampled compiler peak or a measured minimum build-memory requirement.",
+      "tooling_iterations": "An unavailable /usr/bin/time wrapper exited 127 before Cargo, and a shell time syntax attempt did not execute Cargo. Both preceded the actual serial retry and are not additional builds or measurements.",
+      "resumption": "Provide a workspace with enough memory for the unchanged locked release build, rerun the retained baseline instrumentation and mandatory measurements, then resume implementation and all CVA obligations. The minimum sufficient memory was not measured.",
+      "secondary_prerequisite": "The Rust musl target is installed, but musl, musl-dev and musl-tools native packages are absent. Their exact installation inputs are owned by lkjscript-dev release target; installation and target admission were not run.",
+      "stop_authority": "Campaign sections 1, 5 and 6 require the empirical baseline, prohibit weakening mandatory proof, and direct stopping after bounded meaningful diagnosis when required proof is unavailable."
+    },
+    "outcomes": {
+      "CVA-1": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      },
+      "CVA-2": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      },
+      "CVA-3": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      },
+      "CVA-4": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      },
+      "CVA-5": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      },
+      "CVA-6": {
+        "classification": "not run",
+        "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+      }
+    },
+    "checks": {
+      "baseline_release_build": "failed",
+      "serial_baseline_release_build": "failed",
+      "baseline_forwarding_matrix": "not run",
+      "baseline_fold_warmup_and_measurements": "not run",
+      "focused_execution_checks": "not run",
+      "public_vertical_acceptance": "not run",
+      "negative_and_recovery_acceptance": "not run",
+      "owned_regeneration": "not run",
+      "fresh_full_profile": "not run",
+      "exact_musl_target_admission": "not run",
+      "maintained_tracked_inventory_comparison": "fresh passed",
+      "maintained_asset_hash_comparison": "fresh passed",
+      "prior_receipt_hash_comparison": "fresh passed",
+      "isolated_instrumentation_diff_check": "fresh passed"
+    },
+    "implementation": {
+      "archive_commit": "3ad4eeb8d787dbef86a1fa47a203e4e16da81dd9",
+      "production_source_changed": false,
+      "tests_or_verification_policy_changed": false,
+      "changed_tracked_paths": [
+        "docs/campaigns/202609081540.md",
+        "docs/evidence/202609081540-checked-value-execution.json"
+      ],
+      "product_snapshot": "0.1.24 (unchanged, unreleased)",
+      "identity_changes": "No execution, discovery, receipt, graph, compiler-unit, bytecode, artifact, package or operational contract identity changed.",
+      "instrumentation": "A measurement-only patch adds real descendant/guard counters in each predecessor evaluator and extends the existing pure-tail fixture with direct/generic forwarding matrices and one warm-up plus three measured folds. It did not compile to a candidate and has no successful acceptance status.",
+      "instrumentation_patch": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
+      "instrumentation_sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc",
+      "final_boundaries": ".artifacts/campaign/202609081540/final-boundaries.json",
+      "proof_note": "Final self-referential commit/tree/worktree boundaries and metadata integrity checks are reported out of band. No full or target rerun is claimed or scheduled as already passed."
+    },
+    "maintained": {
+      "standard_revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
+      "lkjournal_revision": "rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9",
+      "inventory_sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec",
+      "standard_artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
+      "standard_transport_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
+      "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
+      "regenerated": false
+    },
+    "environment": {
+      "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18); cargo 1.98.0 (797e8a9bc 2026-08-05)",
+      "path_adjustment": "Command-local addition of /home/coder/.cargo/bin; no persistent environment change.",
+      "docker": "Existing daemon answered the read-only version and ping probes. No daemon restart, reconfiguration or container execution.",
+      "preserved_host_binary_sha256": "602b4084223262c48618f23b7f0e5c70325b34daa721a6d5b50951b011d92d2d",
+      "preserved_verifier_sha256": "05578aabc6cbbe2efc2fb91ad31ce28918c72d608913f6550d623e3ce9d01227",
+      "existing_binaries_note": "These historical binaries were hashed only. They were not run as this campaign's acceptance candidate."
+    },
+    "cleanup": {
+      "baseline_worktree": "Removed normally after preserving and hash-checking its exact patch, reverse-applying only the owned edits, and confirming a clean worktree with no untracked files.",
+      "owned_running_builds": 0,
+      "owned_services": 0,
+      "owned_containers": 0,
+      "preserved": "Original stash; pre-existing ignored target/.artifacts state; maintained locks, catalogs, derived and operational state; unknown projects. Failed compilation may have updated disposable files under the existing target directory.",
+      "retained_raw_evidence": ".artifacts/campaign/202609081540/",
+      "no_unfamiliar_work_removed": true
+    },
+    "external_actions": {
+      "fetch": "fresh passed",
+      "push": "not run",
+      "workflow_dispatch_or_rerun": "not run",
+      "tags_releases_assets_or_publication": "not run",
+      "deployments_or_persistent_state_mutation": "not run",
+      "settings_credentials_issues_prs": "not run",
+      "native_tool_installation": "not run",
+      "irreversible_actions": "None",
+      "push_reason": "Conditional source-push preconditions require passing proof, which was not obtained."
+    },
+    "deviations": [
+      "Stopped before the required measured baseline and production cutover because the unchanged release build exceeded available workspace memory.",
+      "Product version and current/generated behavior documents remain unchanged because no implementation occurred.",
+      "No empirical cost or performance conclusions are claimed; no runtime default, build profile or verification gate was changed."
+    ],
+    "retained_files": [
+      {
+        "path": ".artifacts/campaign/202609081540/reconciliation.txt",
+        "bytes": 1273,
+        "sha256": "bef6fe74770d5f4d72053de5689731c27565128e05fdc73359861a6513705dd8"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/initial-mandate.md",
+        "bytes": 23766,
+        "sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/maintained-before.txt",
+        "bytes": 3971,
+        "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/maintained-after.txt",
+        "bytes": 3971,
+        "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/maintained-before.tar",
+        "bytes": 5826560,
+        "sha256": "bf549b38a6bc2dec58ee679b1cd689d466b614ef71fd5b6cfcf95c5460fda216"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
+        "bytes": 15140,
+        "sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-build.stdout",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-build.stderr",
+        "bytes": 3330,
+        "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-serial-01.stdout",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-serial-01.stderr",
+        "bytes": 3330,
+        "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/baseline-serial.stderr",
+        "bytes": 48,
+        "sha256": "a4e3b1f5b313280fa0ecd696f5b03c7e6f97fd4f56f45edeb07588cf9d81de4d"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/memory-before-serial.txt",
+        "bytes": 1835,
+        "sha256": "6f27243399b33d71cb29f7ce2e5d74c4a863a5e3cf8bffdf69efc55ae675739c"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/memory-serial-start.txt",
+        "bytes": 78,
+        "sha256": "0ea94bb2b239f0de154aa101206f821110b790e21fd607db72d02a2b4b4fcf66"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/memory-serial-progress.txt",
+        "bytes": 665,
+        "sha256": "11f44d727546c6bd3b00edcbca2f3dcb84ef37b2fb9550ae7b9e9543bdf45aac"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/memory-after-serial.txt",
+        "bytes": 612,
+        "sha256": "cbd577b9ac37d8c3fd60cb992c893d232f20b08d8ab2b77633e1c0985eccb97f"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
+        "bytes": 14842,
+        "sha256": "b529918b9978188e7ff725b2132597eddae37a22905e53b1958e090afcc6749a"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/docker-version.stdout",
+        "bytes": 700,
+        "sha256": "28ce21512e8b8a2f9651423694c735a6a215384bcb88a4d086abc4a308f1e14d"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/docker-version.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/kernel-oom.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stdout",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stderr",
+        "bytes": 142,
+        "sha256": "ce9697f7ac5ecbe1eb78ab7ba58b3289eed2fe3de0e260096654062c535ee4bd"
+      }
+    ],
+    "newly_observed_limitations": [
+      "This 2 GiB workspace with no swap cannot build the instrumented predecessor under the current release profile, including a serial Cargo retry. This is an environment limitation, not evidence invalidating checked-value execution."
+    ],
+    "next_selection": "None; resume this fixed mandate after build resources are available."
   },
   "environment": {
-    "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18); cargo 1.98.0 (797e8a9bc 2026-08-05)",
-    "path_adjustment": "Command-local addition of /home/coder/.cargo/bin; no persistent environment change.",
-    "docker": "Existing daemon answered the read-only version and ping probes. No daemon restart, reconfiguration or container execution.",
-    "preserved_host_binary_sha256": "602b4084223262c48618f23b7f0e5c70325b34daa721a6d5b50951b011d92d2d",
-    "preserved_verifier_sha256": "05578aabc6cbbe2efc2fb91ad31ce28918c72d608913f6550d623e3ce9d01227",
-    "existing_binaries_note": "These historical binaries were hashed only. They were not run as this campaign's acceptance candidate."
+    "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "runtime_digest": "verification_84fd5d9e81d7faefbc2b6d67e2730187c8f36ad3e5833958dcd06a26bb2aecfb",
+    "environment_digest": "verification_356f60e24cca7054a567e819df09e2bb582b1f0cf13f9ce5e45fc1c00845261a",
+    "operating_system": "linux",
+    "architecture": "x86_64",
+    "cpus": 8,
+    "memory_limit_bytes": 8589934592,
+    "swap_limit_bytes": 0,
+    "oom_kills_before": 2,
+    "oom_kills_after": 2,
+    "installation": {
+      "classification": "fresh passed",
+      "owner": "lkjscript-dev release target",
+      "packages": [
+        "musl 1.2.4-2 amd64",
+        "musl-dev 1.2.4-2 amd64",
+        "musl-tools 1.2.4-2 amd64"
+      ],
+      "inputs": "Exact first-party target-policy Ubuntu archive downloads were SHA-256 checked before local dpkg installation; all three packages were previously absent.",
+      "input_sha256": [
+        "9f0883c20b4b746e05e947bafd99cb933f5494ffaaa6fcd360cbe1fbcf264883",
+        "4b451ecb6a0f8469883058cf22a807f3bd9cc16d115cc08b7efc35fe8eb44db2",
+        "46c01d212d3eb3a1322693089037f0a5c92383a089d39c392db3c86c19ffb229"
+      ],
+      "stdout": ".artifacts/campaign/202609081540/resume-01/native-install.stdout",
+      "stdout_sha256": "6205b156891c497fe9449a10e9e9cbd59953049118c10264272542d7122afc5a",
+      "persistent_changes": "Only these authorized target build prerequisites; no daemon restart or service reconfiguration."
+    }
   },
   "cleanup": {
-    "baseline_worktree": "Removed normally after preserving and hash-checking its exact patch, reverse-applying only the owned edits, and confirming a clean worktree with no untracked files.",
-    "owned_running_builds": 0,
-    "owned_services": 0,
-    "owned_containers": 0,
-    "preserved": "Original stash; pre-existing ignored target/.artifacts state; maintained locks, catalogs, derived and operational state; unknown projects. Failed compilation may have updated disposable files under the existing target directory.",
-    "retained_raw_evidence": ".artifacts/campaign/202609081540/",
-    "no_unfamiliar_work_removed": true
+    "worktrees": {
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609081540/resume-01/worktree-cleanup.json",
+      "procedure": "Both owned isolated trees matched retained patch digests, were reverse-applied and confirmed clean including untracked files, then removed non-forcibly."
+    },
+    "preserved": [
+      "stash 87c2265f6faf0e815d80450ec2480d46c5e774fb",
+      "pre-existing ignored target/.artifacts files",
+      "maintained locks, catalogs, derived and operational state",
+      "unknown projects and all immutable history"
+    ],
+    "owned_services_after_acceptance": 0,
+    "owned_containers_after_acceptance": 0,
+    "local_resources": "Failure observations retain zero owned frames, locals, bindings, VM operands, transactions and handles; each tested failed invocation permits healthy reuse.",
+    "logs": "Bounded copied candidates, exact patches and immutable receipt/log bytes remain under the campaign raw root; no large or private logs are tracked."
   },
+  "deviations": [
+    "The initial attempt was blocked by a 2 GiB release-build OOM. After the user's resource increase, unchanged locked release profiles succeed with an 8 GiB limit; the historical failed attempt is retained below.",
+    "The first successful baseline lacked allocation-charge events and explicit sample labels. A supplemental measurement-only baseline adds those observations and reruns the fixed warm-up/three-sample schedule. No timeout was retried and no favorable timing was selected.",
+    "Candidate acceptance 01 completed its workflow but its old schema-1 receipt reader rejected the schema-2 receipt. The whole command is classified failed; the corrected reader passed in later source-bound acceptance.",
+    "Focused development compiler/test/lint failures were fixed and retained in the raw logs; they are not substituted for the later fresh full profile.",
+    "The fresh full profile contains every product and service gate. Separate duplicate product/service profile invocations are not represented as additional proof."
+  ],
   "external_actions": {
     "fetch": "fresh passed",
     "push": "not run",
+    "source_ref_observation": "During this resumed run origin/main moved from 84ccf1b5 to 6b36c505. Its local reflog records update by push at 2026-09-08 12:56:27 UTC. This agent issued no push command; the observed movement is not attributed to this agent or treated as publication proof.",
     "workflow_dispatch_or_rerun": "not run",
     "tags_releases_assets_or_publication": "not run",
-    "deployments_or_persistent_state_mutation": "not run",
+    "deployment_or_operational_migration": "not run",
     "settings_credentials_issues_prs": "not run",
-    "native_tool_installation": "not run",
-    "irreversible_actions": "None",
-    "push_reason": "Conditional source-push preconditions require passing proof, which was not obtained."
+    "target_prerequisite_installation": "fresh passed",
+    "isolated_effects": "Authorized temporary copied-binary authoring, local package transports, pinned userland containers/root filesystems and loopback HTTP/data/queue/object fixtures. Receipt owners clean their local resources; live application services and user projects are not reconfigured.",
+    "public_release_state": "Not refreshed; no release or publication obligation is inferred from the source snapshot."
   },
-  "deviations": [
-    "Stopped before the required measured baseline and production cutover because the unchanged release build exceeded available workspace memory.",
-    "Product version and current/generated behavior documents remain unchanged because no implementation occurred.",
-    "No empirical cost or performance conclusions are claimed; no runtime default, build profile or verification gate was changed."
-  ],
-  "retained_files": [
-    {
-      "path": ".artifacts/campaign/202609081540/reconciliation.txt",
-      "bytes": 1273,
-      "sha256": "bef6fe74770d5f4d72053de5689731c27565128e05fdc73359861a6513705dd8"
+  "target_implementation": {
+    "classification": "fresh passed",
+    "source_commit": "6b36c5052866fd31c963907e941d23f3c0598ea1",
+    "target": "x86_64-unknown-linux-musl",
+    "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "candidate": {
+      "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/lkjscript",
+      "byte_length": 20031744,
+      "mode": 493,
+      "sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+      "elf": {
+        "class": "ELF64",
+        "machine": "x86-64",
+        "object_type": "position-independent-executable",
+        "inspector": "lkjscript-elf64-little-endian-inspector-1",
+        "program_headers": 9,
+        "load_headers": 4,
+        "dynamic_entries": 21,
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0,
+        "position_independent": true,
+        "runtime_linkage": "static-musl"
+      }
     },
-    {
-      "path": ".artifacts/campaign/202609081540/initial-mandate.md",
-      "bytes": 23766,
-      "sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
+    "verifier": {
+      "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/candidate-lkjscript-dev-06",
+      "byte_length": 21779880,
+      "mode": 488,
+      "sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb"
     },
-    {
-      "path": ".artifacts/campaign/202609081540/maintained-before.txt",
-      "bytes": 3971,
-      "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+    "build_receipt": ".artifacts/campaign/202609081540/resume-01/target-A/build-receipt.json",
+    "build_receipt_sha256": "ba0495ca289e0fe1e03d8aeb4ae31b99236248ed1ff66a98cf01e12f19d6d5ae",
+    "build_elapsed_nanoseconds": 158984344704,
+    "build_process": {
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "reason": null,
+      "elapsed_nanoseconds": 158906248473,
+      "cpu_nanoseconds": 110000000,
+      "peak_rss_kib": 76344,
+      "stdout_limit_bytes": 8388608,
+      "stderr_limit_bytes": 33554432,
+      "stdout_limit_exhausted": false,
+      "stderr_limit_exhausted": false,
+      "stdout": {
+        "path": "build-receipt.cargo.stdout.log",
+        "kind": "file",
+        "mode": 416,
+        "bytes": 0,
+        "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      "stderr": {
+        "path": "build-receipt.cargo.stderr.log",
+        "kind": "file",
+        "mode": 416,
+        "bytes": 128,
+        "digest": "verification_489eebcf67bece9df0ed036a225cc0329b7737d8d612c56d3e08f7405bb81686"
+      }
     },
-    {
-      "path": ".artifacts/campaign/202609081540/maintained-after.txt",
-      "bytes": 3971,
-      "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+    "receipt": ".artifacts/campaign/202609081540/resume-01/target-A/admission/receipt.json",
+    "receipt_sha256": "c21a9fd7a6c99bf52bb7ecb101da41a2d8d3ef1d627019471f75f3db948cdf9b",
+    "elapsed_nanoseconds": 191673298649,
+    "cleanup_complete": true,
+    "classifications": [
+      {
+        "name": "static_linkage",
+        "classification": "fresh passed",
+        "detail": "exact candidate passed first-party ELF inspection"
+      },
+      {
+        "name": "musl_userland",
+        "classification": "fresh passed",
+        "detail": "complete command lifecycle passed in the pinned musl userland"
+      },
+      {
+        "name": "older_glibc_userland",
+        "classification": "fresh passed",
+        "detail": "complete command lifecycle passed in the pinned older-glibc userland"
+      },
+      {
+        "name": "distributed_http",
+        "classification": "fresh passed",
+        "detail": "transferred copied-binary HTTP oracle passed"
+      },
+      {
+        "name": "outbound_http",
+        "classification": "fresh passed",
+        "detail": "transferred copied-binary deployment-bound outbound HTTP oracle passed"
+      },
+      {
+        "name": "offline_packages",
+        "classification": "fresh passed",
+        "detail": "transferred public-authored offline package closure and standalone HTTP oracle passed"
+      },
+      {
+        "name": "pure_tail",
+        "classification": "fresh passed",
+        "detail": "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed"
+      },
+      {
+        "name": "stateful_http",
+        "classification": "fresh passed",
+        "detail": "transferred first-party-data BBS oracle passed"
+      },
+      {
+        "name": "service_acceptance",
+        "classification": "fresh passed",
+        "detail": "maintained lkjournal service oracle passed with the exact candidate"
+      }
+    ],
+    "userlands": [
+      {
+        "role": "musl",
+        "status": "passed",
+        "image": {
+          "requested": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+          "image_id": "sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+          "repository_digests": [
+            "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6"
+          ],
+          "operating_system": "linux",
+          "architecture": "amd64",
+          "virtual_size_bytes": 3789228
+        },
+        "expected_libc": "musl-1.2",
+        "os_release_sha256": "11213d9953a7256acf4108d617411219dc05b17b251661cda0fa5bea33913b8d",
+        "os_release": [
+          "NAME=\"Alpine Linux\"",
+          "ID=alpine",
+          "VERSION_ID=3.22.5",
+          "PRETTY_NAME=\"Alpine Linux v3.22\"",
+          "HOME_URL=\"https://alpinelinux.org/\"",
+          "BUG_REPORT_URL=\"https://gitlab.alpinelinux.org/alpine/aports/-/issues\""
+        ],
+        "rootfs_archive_bytes": 8577024,
+        "rootfs_archive_sha256": "9a39a55540899d5b451de734c0d308db3c3693ce0fbdee346d31ee6d888f4206",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "candidate_mode": 493,
+        "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+        "candidate_commands": 12,
+        "product_version": "0.1.25",
+        "capabilities_digest": "a18075b2cc5c078b6992af1d5d5a633327ab3028ec60faa5c3f9a09c843ad2d9",
+        "initial_revision": "rev_f38dca730ffff7c51ae8074a26973ee126e7783433dd2a5b274d02d9815454ed",
+        "accepted_revision": "rev_35c20813e5b2463574bf3f115b64449b802f51e06b8d7fd0972e6c6a719a518c",
+        "artifact_bytes": 335103,
+        "artifact_sha256": "08af9ae001a1feb9130b6542e321f8ff5646356d8715495a2dd6e47851036d33",
+        "clean_artifact_sha256": "08af9ae001a1feb9130b6542e321f8ff5646356d8715495a2dd6e47851036d33",
+        "execution_value": "\"hello\"",
+        "differential_equal": true,
+        "container_cleanup_complete": true,
+        "temporary_root_removed": true
+      },
+      {
+        "role": "older-glibc",
+        "status": "passed",
+        "image": {
+          "requested": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+          "image_id": "sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+          "repository_digests": [
+            "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+          ],
+          "operating_system": "linux",
+          "architecture": "amd64",
+          "virtual_size_bytes": 30261201
+        },
+        "expected_libc": "glibc-2.31",
+        "os_release_sha256": "11f039f212d535c1d7e14fa8e6960c3d7724de5e0d4e71938d787496a5d08470",
+        "os_release": [
+          "PRETTY_NAME=\"Debian GNU/Linux 11 (bullseye)\"",
+          "NAME=\"Debian GNU/Linux\"",
+          "VERSION_ID=\"11\"",
+          "VERSION=\"11 (bullseye)\"",
+          "VERSION_CODENAME=bullseye",
+          "ID=debian",
+          "HOME_URL=\"https://www.debian.org/\"",
+          "SUPPORT_URL=\"https://www.debian.org/support\"",
+          "BUG_REPORT_URL=\"https://bugs.debian.org/\""
+        ],
+        "rootfs_archive_bytes": 84230144,
+        "rootfs_archive_sha256": "4ecf340143e6bec73f72591aae95c58216811466237157ef1d8ac0518c4112de",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "candidate_mode": 493,
+        "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+        "candidate_commands": 12,
+        "product_version": "0.1.25",
+        "capabilities_digest": "a18075b2cc5c078b6992af1d5d5a633327ab3028ec60faa5c3f9a09c843ad2d9",
+        "initial_revision": "rev_87f983f48b925647f9a7b81412b62fccbef270c0614c88ef24a4fe9855dc0b59",
+        "accepted_revision": "rev_2f614652446f9169b910d3c600e56138f902df9f3cacd515f18b5555c1477432",
+        "artifact_bytes": 335103,
+        "artifact_sha256": "7660b919bfcabbff66cec917e62dd12f59fdda3f56482477af7218921a58d110",
+        "clean_artifact_sha256": "7660b919bfcabbff66cec917e62dd12f59fdda3f56482477af7218921a58d110",
+        "execution_value": "\"hello\"",
+        "differential_equal": true,
+        "container_cleanup_complete": true,
+        "temporary_root_removed": true
+      }
+    ],
+    "oracles": [
+      {
+        "name": "distributed_http",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/admission/distributed-http/receipt.json",
+          "byte_length": 80433,
+          "sha256": "247ba8472e45a9e721aee6143faff220ebea24a56271ba6dff5f31a7a1511341"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 6170922707,
+        "commands": 46,
+        "runners": 2,
+        "requests": 14,
+        "cleanup_complete": true,
+        "prerequisite": "none"
+      },
+      {
+        "name": "outbound_http",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/admission/outbound-http/receipt.json",
+          "byte_length": 59691,
+          "sha256": "5a376efb06c5125aa3c3b222f3f75c1f54980e4616807df176b698e0b31c2c03"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 15294032507,
+        "commands": 18,
+        "runners": 8,
+        "requests": 17,
+        "cleanup_complete": true,
+        "prerequisite": "http_client_adapter_1"
+      },
+      {
+        "name": "offline_packages",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/admission/offline-packages/receipt.json",
+          "byte_length": 1585422,
+          "sha256": "14f356353bc37f5a2a9547de51c86f22e7e8efa83a4f1032b4482cab72aa26a5"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 28350774051,
+        "commands": 90,
+        "runners": 1,
+        "requests": 1,
+        "cleanup_complete": true,
+        "prerequisite": "code_complete_package_container_1"
+      },
+      {
+        "name": "pure_tail",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/admission/pure-tail/receipt.json",
+          "byte_length": 648659,
+          "sha256": "839e9508efa8b3f8b8ff99386d5419e738e5a3b02f5475693f93471a1e7a9880"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 61672596046,
+        "commands": 103,
+        "runners": 1,
+        "requests": 3,
+        "cleanup_complete": true,
+        "prerequisite": "pure-tail-execution"
+      },
+      {
+        "name": "stateful_http",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609081540/resume-01/target-A/admission/stateful-http/receipt.json",
+          "byte_length": 331499,
+          "sha256": "b178a5cd0839e063bd7a47172a6a2d358d994a7ff8bbb4e4e316bafef639d04b"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 50397057932,
+        "commands": 235,
+        "runners": 3,
+        "requests": 26,
+        "cleanup_complete": true,
+        "prerequisite": "lkjscript-data-store-1"
+      },
+      {
+        "name": "service_acceptance",
+        "status": "passed",
+        "receipt": {
+          "path": "/home/coder/workspace/lkjscript/.artifacts/lkjscript-dev/service/1788873504336100520-166123-0/receipt.json",
+          "byte_length": 175939,
+          "sha256": "e1532d8c0623ef8a07954ef1886d0505ffbad48d722998032693000afb454e39"
+        },
+        "verifier_sha256": "b7cd4460280e4ed83ca75b30f2c3a17f2a07351102b4870c92b01a5fd13c96fb",
+        "candidate_sha256": "22af3325e3e46692758a4ec3f04066c93fbc1e83730670de449324264c59b931",
+        "elapsed_nanoseconds": 16450474081,
+        "commands": 69,
+        "runners": 8,
+        "requests": 26,
+        "cleanup_complete": true,
+        "prerequisite": "lkjscript-data-store-1"
+      }
+    ],
+    "scope": "Exact copied candidate inspection and execution, with network-disabled named userlands and isolated loopback application fixtures. These are local target-admission observations, not publication, deployment or general Linux portability."
+  },
+  "outcomes": {
+    "CVA-1": {
+      "classification": "fresh passed",
+      "evidence": [
+        "candidate",
+        "full_implementation",
+        "target_implementation"
+      ],
+      "result": "Copied discovery/new/plan/apply/inspect/check/build/run succeeds for runtime lists 0,1,256,1024,4096,8192 with independent sums, including 8390656 and 33558528. Ordered/reversed folds return 5/-5. Both tiers stay within eight frames; complete accepted inventories survive reads, plans, execution and stale-apply rejection. Maintained graph-owned header reducer passes."
     },
-    {
-      "path": ".artifacts/campaign/202609081540/maintained-before.tar",
-      "bytes": 5826560,
-      "sha256": "bf549b38a6bc2dec58ee679b1cd689d466b614ef71fd5b6cfcf95c5460fda216"
+    "CVA-2": {
+      "classification": "fresh passed",
+      "evidence": [
+        "baseline",
+        "candidate",
+        "cost_oracle",
+        "performance"
+      ],
+      "result": "Both direct and transported named-generic nine-pair matrices return N, have input work N+2 independent of K, zero internal descendants and root decisions independent of N at fixed K. The additive W equation holds; actual restored scans and equivalent-path faults fail acceptance."
     },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
-      "bytes": 15140,
-      "sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc"
+    "CVA-3": {
+      "classification": "fresh passed",
+      "evidence": [
+        "source_fixtures",
+        "full_implementation"
+      ],
+      "result": "Independent structural/canonical classifications and negative boundary fixtures pass. Raw last-element affine handles/empty variants, foreign identities and malformed results reject before callbacks/downstream effects. Deliberate production class corruption is caught independently. Inherited borrow/consume/scope/generation/interface/requirement protections pass."
     },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-build.stdout",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "CVA-4": {
+      "classification": "fresh passed",
+      "evidence": [
+        "containment",
+        "source_fixtures",
+        "full_implementation",
+        "target_implementation"
+      ],
+      "result": "Bounded subprocess admission and tail cancellation, exact-fit/one-over limits, deep raw disposal, cleanup and healthy reuse pass. The standalone HTTP fold commits once; overflow/cancellation roll back staged writes. Invalid raw adapter results report prior visibility honestly and stop subsequent effects. Worker/session/grant/redaction/shutdown gates pass."
     },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-build.stderr",
-      "bytes": 3330,
-      "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
+    "CVA-5": {
+      "classification": "fresh passed",
+      "evidence": [
+        "candidate",
+        "source_fixtures",
+        "maintained",
+        "full_implementation"
+      ],
+      "result": "Current/clean/reviewed incremental and missing/corrupt-cache recovery agree for equal inputs. The retained same-format artifact executes through strict preparation unchanged. Canonical corruption stays corruption; maintained inventories and owned regenerated bytes agree. Both checked-value paths replace raw slot insertion, and the successor oracle detects restored recursive guards and equivalent scans."
     },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-serial-01.stdout",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-serial-01.stderr",
-      "bytes": 3330,
-      "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/baseline-serial.stderr",
-      "bytes": 48,
-      "sha256": "a4e3b1f5b313280fa0ecd696f5b03c7e6f97fd4f56f45edeb07588cf9d81de4d"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/memory-before-serial.txt",
-      "bytes": 1835,
-      "sha256": "6f27243399b33d71cb29f7ce2e5d74c4a863a5e3cf8bffdf69efc55ae675739c"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/memory-serial-start.txt",
-      "bytes": 78,
-      "sha256": "0ea94bb2b239f0de154aa101206f821110b790e21fd607db72d02a2b4b4fcf66"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/memory-serial-progress.txt",
-      "bytes": 665,
-      "sha256": "11f44d727546c6bd3b00edcbca2f3dcb84ef37b2fb9550ae7b9e9543bdf45aac"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/memory-after-serial.txt",
-      "bytes": 612,
-      "sha256": "cbd577b9ac37d8c3fd60cb992c893d232f20b08d8ab2b77633e1c0985eccb97f"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
-      "bytes": 14842,
-      "sha256": "b529918b9978188e7ff725b2132597eddae37a22905e53b1958e090afcc6749a"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/docker-version.stdout",
-      "bytes": 700,
-      "sha256": "28ce21512e8b8a2f9651423694c735a6a215384bcb88a4d086abc4a308f1e14d"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/docker-version.stderr",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/kernel-oom.txt",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stdout",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stderr",
-      "bytes": 142,
-      "sha256": "ce9697f7ac5ecbe1eb78ab7ba58b3289eed2fe3de0e260096654062c535ee4bd"
+    "CVA-6": {
+      "classification": "fresh passed",
+      "evidence": [
+        "full_implementation",
+        "target_implementation"
+      ],
+      "result": "Clean implementation commit 6b36c505 passed all 26 source-full gates fresh with zero reuse, then exact static-musl build and nine target classifications including copied checked-value cases and both pinned userlands. Source-bound internal fault/admission fixtures remain separate. Final terminal-commit revalidation has its out-of-band owner below."
     }
-  ],
+  },
+  "final_boundary_owner": {
+    "path": ".artifacts/campaign/202609081540/resume-01/final-boundaries.json",
+    "rule": "Assemble and commit this terminal metadata before final fresh full verification and exact musl build/admission. Their self-referential source/tree/worktree/candidate/receipt identities are recorded only out of band. No fingerprint exclusions are changed, and this preassembled file does not label an unexecuted final rerun as passed.",
+    "required_final_checks": [
+      "fresh full profile with 26/26 gates and no reuse",
+      "fresh exact musl build and nine fresh target classifications on that clean terminal commit",
+      "unchanged tracked inputs after both final runs"
+    ]
+  },
   "newly_observed_limitations": [
-    "This 2 GiB workspace with no swap cannot build the instrumented predecessor under the current release profile, including a serial Cargo retry. This is an environment limitation, not evidence invalidating checked-value execution."
+    "Raw admission remains proportional to input size and bounded by exact types, depth, items and cumulative bytes; this campaign removes repeated internal eligibility scans.",
+    "Checked metadata increases the observed allocation-accounting totals and sampled RSS in this fixture. Ordinary immutable collection copying and allocation representation are unchanged.",
+    "Staticness and userland support are proved only for the exact copied x86_64-unknown-linux-musl candidate and the two pinned userlands."
   ],
-  "next_selection": "None; resume this fixed mandate after build resources are available."
+  "observed_utc": "2026-09-08"
 }
