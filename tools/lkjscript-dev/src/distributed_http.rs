@@ -2515,7 +2515,7 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "2",
+            "3",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();
@@ -2717,7 +2717,7 @@ fn definition_records(
 fn recompute_definition_digest(
     records: &[DefinitionRecord],
 ) -> Result<(String, u64), AcceptanceFailure> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v2");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v3");
     hasher.update(&(records.len() as u64).to_be_bytes());
     let mut logical_bytes = 0_u64;
     for record in records {

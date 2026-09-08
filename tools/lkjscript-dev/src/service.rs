@@ -48,7 +48,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8";
+    "f97a029cad60dff52604c22f511c9b1fdf6d37b6de1c8b513f0bff02fca443f0";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -929,7 +929,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-15 service bundle",
+        "maintained artifact-16 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -1211,7 +1211,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-15 service bundle",
+            "maintained artifact-16 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1739,7 +1739,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-15 build",
+        "service readiness disagrees with the exact fresh artifact-16 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -2465,7 +2465,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-15 build",
+        "worker readiness disagrees with the exact fresh artifact-16 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -2484,7 +2484,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-15 build",
+        "second worker readiness disagrees with the exact fresh artifact-16 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -2821,7 +2821,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-15 bundle identity",
+        "restored service readiness changed the exact artifact-16 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -2843,7 +2843,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 10 authority inventory",
+        "service acceptance changed the maintained Graph 11 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -3911,7 +3911,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-15 bundle",
+            "maintained deployment descriptor does not bind the current artifact-16 bundle",
         ));
     }
     if let Some(port) = port {
@@ -4493,7 +4493,7 @@ fn verify_http_route_topology(
         require(
             authority_unchanged,
             "route_authority_changed",
-            "HTTP route inspection changed the isolated Graph 10 application copy",
+            "HTTP route inspection changed the isolated Graph 11 application copy",
         )?;
         Ok(HttpRouteTopologyObservation {
             target,
@@ -6171,7 +6171,7 @@ fn service_definition_records(
 fn service_definition_digest(
     records: &[MaintainedDefinitionRecord],
 ) -> Result<(String, u64), ServiceFailure> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v2");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v3");
     hasher.update(&(records.len() as u64).to_be_bytes());
     let mut logical_bytes = 0_u64;
     for record in records {
