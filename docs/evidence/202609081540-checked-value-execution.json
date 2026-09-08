@@ -1,0 +1,299 @@
+{
+  "schema": "lkjscript-checked-value-campaign-evidence-1",
+  "campaign": "202609081540-checked-value-execution",
+  "status": "blocked",
+  "observed_utc": "2026-09-08",
+  "raw_root": ".artifacts/campaign/202609081540",
+  "start": {
+    "branch": "main",
+    "head": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
+    "tree": "906942697bebdcd9dc3717712473b53da352d8e3",
+    "upstream": "origin/main",
+    "refreshed_upstream": "0923eee9730bcec51aa7b242eb7e93f6a89b2af4",
+    "ahead": 0,
+    "behind": 0,
+    "index": "clean",
+    "tracked_worktree": "clean",
+    "supplied_untracked": [
+      "docs/campaigns/202609081540.md"
+    ],
+    "agent_blob": "57a9241e23cd355c7a2272621c679d2955f24e73",
+    "applicable_agent_files": [
+      "AGENTS.md"
+    ],
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "archive_disposition": "The canonical path already contained this exact supplied initial mandate as an untracked file. It was adopted and committed without overwriting or changing the initial body; there was no collision with a different mandate.",
+    "initial_mandate_blob": "5d0580ec8bde58eb3a512f70fe633ffb85235705",
+    "initial_mandate_sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
+  },
+  "reconciliation": {
+    "mandate": "Only the explicitly selected checked-value campaign is active. Prior pure-tail and offline-package campaigns have terminal records and present implementation commits.",
+    "prior_proof": "The retained pure-tail final full and exact-target receipt hashes match its final-boundaries record. These historical receipts are not fresh or reused proof of this campaign.",
+    "prior_full_receipt_sha256": "098873c948cb4b202cb9e647e6080a8a2b74dbc7e724b3815b5daadbd7f38ee7",
+    "prior_target_receipt_sha256": "b5102a47c7d0e5a905bdb1d9663412d0231fc87b9be789889480889c1cb38938",
+    "production_authority": "Accepted typed graph meaning and exact immutable package closures remain unchanged.",
+    "operational_authority": "Existing deployment, application data, queue and object state remain separate and were not opened for mutation.",
+    "publication": "Source/public version divergence does not create publication work; no public release state was refreshed."
+  },
+  "finding": {
+    "classification": "not run",
+    "source_inspection": "Both VM local/call guards and reference local/call guards still recursively inspect raw immutable values for affine resources. The VM also inspects nominal cases during local affinity classification.",
+    "owners": [
+      "src/platform/execution/normalized/vm.rs:481",
+      "src/platform/execution/normalized/vm.rs:844",
+      "src/platform/execution/normalized/vm.rs:988",
+      "src/platform/execution/normalized/vm.rs:2326",
+      "src/platform/execution/normalized/reference.rs:758",
+      "src/platform/execution/normalized/reference.rs:1043",
+      "src/platform/execution/normalized/reference.rs:3072"
+    ],
+    "dynamic_evidence": "No instrumented candidate was built, so descendant counts, forwarding matrix results and fold samples were not collected. Source inspection is not the required empirical baseline.",
+    "ingress_inventory": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
+    "invariant_gained": "None. Production checked values and the removal of repeated scans have not been implemented."
+  },
+  "blocker": {
+    "boundary": "Required release-mode empirical baseline; consequently no candidate for CVA-1 through CVA-6",
+    "classification": "failed",
+    "reason": "Two builds of the isolated measurement-only baseline ended with Cargo exit 101 and rustc SIGKILL. The serial retry ran under the unchanged release profile and increased the cgroup OOM-kill count from 1 to 2.",
+    "memory_limit_bytes": 2147483648,
+    "swap_limit_bytes": 0,
+    "release_profile": {
+      "optimization_level": 3,
+      "codegen_units": 1,
+      "lto": true,
+      "strip": "symbols"
+    },
+    "attempts": [
+      {
+        "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace",
+        "classification": "failed",
+        "cargo_exit_code": 101,
+        "rustc_signal": 9,
+        "stderr": ".artifacts/campaign/202609081540/baseline-build.stderr"
+      },
+      {
+        "command": "PATH=/home/coder/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/coder/workspace/lkjscript/target cargo build --release --locked --workspace --jobs 1",
+        "classification": "failed",
+        "cargo_exit_code": 101,
+        "rustc_signal": 9,
+        "stderr": ".artifacts/campaign/202609081540/baseline-serial-01.stderr"
+      }
+    ],
+    "diagnostic_limits": "The kernel journal query yielded no matching records. The failure diagnosis binds compiler termination plus retained cgroup memory events, including the serial retry's increment; it is not a sampled compiler peak or a measured minimum build-memory requirement.",
+    "tooling_iterations": "An unavailable /usr/bin/time wrapper exited 127 before Cargo, and a shell time syntax attempt did not execute Cargo. Both preceded the actual serial retry and are not additional builds or measurements.",
+    "resumption": "Provide a workspace with enough memory for the unchanged locked release build, rerun the retained baseline instrumentation and mandatory measurements, then resume implementation and all CVA obligations. The minimum sufficient memory was not measured.",
+    "secondary_prerequisite": "The Rust musl target is installed, but musl, musl-dev and musl-tools native packages are absent. Their exact installation inputs are owned by lkjscript-dev release target; installation and target admission were not run.",
+    "stop_authority": "Campaign sections 1, 5 and 6 require the empirical baseline, prohibit weakening mandatory proof, and direct stopping after bounded meaningful diagnosis when required proof is unavailable."
+  },
+  "outcomes": {
+    "CVA-1": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    },
+    "CVA-2": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    },
+    "CVA-3": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    },
+    "CVA-4": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    },
+    "CVA-5": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    },
+    "CVA-6": {
+      "classification": "not run",
+      "reason": "Stopped at the required baseline build boundary; no successor implementation or candidate."
+    }
+  },
+  "checks": {
+    "baseline_release_build": "failed",
+    "serial_baseline_release_build": "failed",
+    "baseline_forwarding_matrix": "not run",
+    "baseline_fold_warmup_and_measurements": "not run",
+    "focused_execution_checks": "not run",
+    "public_vertical_acceptance": "not run",
+    "negative_and_recovery_acceptance": "not run",
+    "owned_regeneration": "not run",
+    "fresh_full_profile": "not run",
+    "exact_musl_target_admission": "not run",
+    "maintained_tracked_inventory_comparison": "fresh passed",
+    "maintained_asset_hash_comparison": "fresh passed",
+    "prior_receipt_hash_comparison": "fresh passed",
+    "isolated_instrumentation_diff_check": "fresh passed"
+  },
+  "implementation": {
+    "archive_commit": "3ad4eeb8d787dbef86a1fa47a203e4e16da81dd9",
+    "production_source_changed": false,
+    "tests_or_verification_policy_changed": false,
+    "changed_tracked_paths": [
+      "docs/campaigns/202609081540.md",
+      "docs/evidence/202609081540-checked-value-execution.json"
+    ],
+    "product_snapshot": "0.1.24 (unchanged, unreleased)",
+    "identity_changes": "No execution, discovery, receipt, graph, compiler-unit, bytecode, artifact, package or operational contract identity changed.",
+    "instrumentation": "A measurement-only patch adds real descendant/guard counters in each predecessor evaluator and extends the existing pure-tail fixture with direct/generic forwarding matrices and one warm-up plus three measured folds. It did not compile to a candidate and has no successful acceptance status.",
+    "instrumentation_patch": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
+    "instrumentation_sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc",
+    "final_boundaries": ".artifacts/campaign/202609081540/final-boundaries.json",
+    "proof_note": "Final self-referential commit/tree/worktree boundaries and metadata integrity checks are reported out of band. No full or target rerun is claimed or scheduled as already passed."
+  },
+  "maintained": {
+    "standard_revision": "rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617",
+    "lkjournal_revision": "rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9",
+    "inventory_sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec",
+    "standard_artifact_sha256": "0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb",
+    "standard_transport_sha256": "63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250",
+    "lkjournal_artifact_sha256": "1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8",
+    "regenerated": false
+  },
+  "environment": {
+    "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18); cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "path_adjustment": "Command-local addition of /home/coder/.cargo/bin; no persistent environment change.",
+    "docker": "Existing daemon answered the read-only version and ping probes. No daemon restart, reconfiguration or container execution.",
+    "preserved_host_binary_sha256": "602b4084223262c48618f23b7f0e5c70325b34daa721a6d5b50951b011d92d2d",
+    "preserved_verifier_sha256": "05578aabc6cbbe2efc2fb91ad31ce28918c72d608913f6550d623e3ce9d01227",
+    "existing_binaries_note": "These historical binaries were hashed only. They were not run as this campaign's acceptance candidate."
+  },
+  "cleanup": {
+    "baseline_worktree": "Removed normally after preserving and hash-checking its exact patch, reverse-applying only the owned edits, and confirming a clean worktree with no untracked files.",
+    "owned_running_builds": 0,
+    "owned_services": 0,
+    "owned_containers": 0,
+    "preserved": "Original stash; pre-existing ignored target/.artifacts state; maintained locks, catalogs, derived and operational state; unknown projects. Failed compilation may have updated disposable files under the existing target directory.",
+    "retained_raw_evidence": ".artifacts/campaign/202609081540/",
+    "no_unfamiliar_work_removed": true
+  },
+  "external_actions": {
+    "fetch": "fresh passed",
+    "push": "not run",
+    "workflow_dispatch_or_rerun": "not run",
+    "tags_releases_assets_or_publication": "not run",
+    "deployments_or_persistent_state_mutation": "not run",
+    "settings_credentials_issues_prs": "not run",
+    "native_tool_installation": "not run",
+    "irreversible_actions": "None",
+    "push_reason": "Conditional source-push preconditions require passing proof, which was not obtained."
+  },
+  "deviations": [
+    "Stopped before the required measured baseline and production cutover because the unchanged release build exceeded available workspace memory.",
+    "Product version and current/generated behavior documents remain unchanged because no implementation occurred.",
+    "No empirical cost or performance conclusions are claimed; no runtime default, build profile or verification gate was changed."
+  ],
+  "retained_files": [
+    {
+      "path": ".artifacts/campaign/202609081540/reconciliation.txt",
+      "bytes": 1273,
+      "sha256": "bef6fe74770d5f4d72053de5689731c27565128e05fdc73359861a6513705dd8"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/initial-mandate.md",
+      "bytes": 23766,
+      "sha256": "3a17886877920e6ff3fdfaf892930c516693fcd63dbb37ab737184c5590c382d"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/maintained-before.txt",
+      "bytes": 3971,
+      "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/maintained-after.txt",
+      "bytes": 3971,
+      "sha256": "f17fda00b6063100965276140d1ce5bb4a4922afdaf558b9fb0bc8b360f518ec"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/maintained-before.tar",
+      "bytes": 5826560,
+      "sha256": "bf549b38a6bc2dec58ee679b1cd689d466b614ef71fd5b6cfcf95c5460fda216"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-instrumentation.patch",
+      "bytes": 15140,
+      "sha256": "bd9e9b79c6586ac3a3d8f2b754190f0084481a5845fd8cd59a1306e062e33ddc"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-build.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-build.stderr",
+      "bytes": 3330,
+      "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-serial-01.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-serial-01.stderr",
+      "bytes": 3330,
+      "sha256": "a1187803542759ab132f36ef30ca1b8f0a0c8809e6083485eb49d6c2fbb27f2f"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/baseline-serial.stderr",
+      "bytes": 48,
+      "sha256": "a4e3b1f5b313280fa0ecd696f5b03c7e6f97fd4f56f45edeb07588cf9d81de4d"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/memory-before-serial.txt",
+      "bytes": 1835,
+      "sha256": "6f27243399b33d71cb29f7ce2e5d74c4a863a5e3cf8bffdf69efc55ae675739c"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/memory-serial-start.txt",
+      "bytes": 78,
+      "sha256": "0ea94bb2b239f0de154aa101206f821110b790e21fd607db72d02a2b4b4fcf66"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/memory-serial-progress.txt",
+      "bytes": 665,
+      "sha256": "11f44d727546c6bd3b00edcbca2f3dcb84ef37b2fb9550ae7b9e9543bdf45aac"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/memory-after-serial.txt",
+      "bytes": 612,
+      "sha256": "cbd577b9ac37d8c3fd60cb992c893d232f20b08d8ab2b77633e1c0985eccb97f"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/ingress-guard-inventory.txt",
+      "bytes": 14842,
+      "sha256": "b529918b9978188e7ff725b2132597eddae37a22905e53b1958e090afcc6749a"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/docker-version.stdout",
+      "bytes": 700,
+      "sha256": "28ce21512e8b8a2f9651423694c735a6a215384bcb88a4d086abc4a308f1e14d"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/docker-version.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/kernel-oom.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/campaign/202609081540/native-target-prerequisites.stderr",
+      "bytes": 142,
+      "sha256": "ce9697f7ac5ecbe1eb78ab7ba58b3289eed2fe3de0e260096654062c535ee4bd"
+    }
+  ],
+  "newly_observed_limitations": [
+    "This 2 GiB workspace with no swap cannot build the instrumented predecessor under the current release profile, including a serial Cargo retry. This is an environment limitation, not evidence invalidating checked-value execution."
+  ],
+  "next_selection": "None; resume this fixed mandate after build resources are available."
+}
