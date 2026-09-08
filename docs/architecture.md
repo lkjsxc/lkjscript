@@ -515,10 +515,34 @@ the standard dependency at runtime without reversing package dependency directio
 records lower through the same authored-intent codec, validator, compiler, VM, and reference path
 as direct graph construction.
 
+The standard also owns `function-compose<A,B,C>(Function(B)->C, Function(A)->B)->Function(A)->C`.
+Its private generic graph helper invokes the inner then the outer callable; the public factory binds
+those two function values. `ExpressionOperation::Bind` stores only a callee and ordered expression
+children. The public compact form, complete definitions, relations, extraction, compiler units, and
+package closure follow those ordinary children. No composition intrinsic or second body authority
+exists.
+
+Production and canonical-reference execution independently admit a prepared target, fully resolved
+type arguments, and an immutable flat runtime prefix. Each new capture is checked before evaluating
+the next capture. Environments own immutable values and share collection payloads across invocation;
+they retain no lexical frame or mutable substitution map. Capture admission counts environment edges
+under depth 256 and charges slots, traversal, and metadata before growth. Ordinary local reads,
+argument transfers, and tail invocation use checked roots without descendant readmission. Callable
+signatures are leaves for capture safety, allowing generic composition; a stored unconstrained type
+parameter remains rejected. Runtime environments have neither semantic equality nor external or
+durable encoding.
+
+Graph 11 versions changed owner meaning independently of the current TypeObject 10 representation.
+The type codec's existing magic, digest domains, and bytes remain stable, preserving unchanged
+typed-data layout identity. Maintained standard and application graphs were materialized through
+the accepted repository writer with stable existing owner identities and exact successor dependency
+bindings; predecessor graph and artifact inputs reject.
+
 Pure graph tail calls replace the current activation in both execution tiers. Preparation derives
 terminal-only continuations once by an iterative linear traversal of strictly loaded Return/Jump
 edges, then combines them with exact canonical pure-function signatures. Only process-local
-dispatch changes; stored bytecode, compiler units, package meaning, and artifact bytes do not.
+dispatch changes during preparation; the binding cutover independently advances stored bytecode,
+compiler-unit, graph, and artifact representations.
 The canonical reference separately follows if/let/sequence/match tail contexts and unwinds lexical
 maps and substitutions before its activation loop installs the next callee. Neither tier retains
 a per-transfer continuation. Arguments retain their evaluation order and cumulative work/allocation

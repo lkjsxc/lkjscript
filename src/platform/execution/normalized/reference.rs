@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 10 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 11 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -352,7 +352,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 10 authority",
+                        "selected target is absent from canonical Graph 11 authority",
                     ));
                 }
             };
@@ -382,7 +382,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 10 authority",
+                        "selected target port is absent from canonical Graph 11 authority",
                     ));
                 }
             };
@@ -402,16 +402,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                     let arguments =
                         state.admit_port_arguments(port.function_type, arguments.into_vec())?;
                     let callee = state.evaluate(expression, &mut BTreeMap::new())?;
-                    let NormalizedValue::Function {
-                        function,
-                        type_arguments,
-                    } = callee.release()
-                    else {
-                        return Err(reference_type_error(
-                            "expression-backed target port did not evaluate to a function",
-                        ));
-                    };
-                    let declaration = state.function_reference(function)?;
+                    let (declaration, type_arguments, arguments) =
+                        state.callable_arguments(callee, arguments, true)?;
                     state.call_declaration(declaration, &type_arguments, arguments)
                 }
             }
@@ -497,7 +489,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph8_reference_records_4",
+                production_tier: "graph11_reference_records_5",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -1005,15 +997,10 @@ impl ReferenceState<'_> {
                     return self.tail_step(function, &type_arguments, arguments);
                 }
                 ExpressionOperation::Invoke { callee, arguments } => {
-                    let NormalizedValue::Function {
-                        function,
-                        type_arguments,
-                    } = self.evaluate(callee, locals)?.release()
-                    else {
-                        return Err(reference_type_error("invoke callee is not a function"));
-                    };
-                    let declaration = self.function_reference(function)?;
+                    let callee = self.evaluate(callee, locals)?;
                     let arguments = self.evaluate_many(&arguments, locals)?;
+                    let (declaration, type_arguments, arguments) =
+                        self.callable_arguments(callee, arguments, false)?;
                     return self.tail_step(declaration, &type_arguments, arguments);
                 }
                 operation => {
@@ -1148,9 +1135,10 @@ impl ReferenceState<'_> {
                         "canonical local reference escaped its exact lexical scope",
                     )
                 })?;
-                if value.ownership(&self.schema, &mut self.observation.value_work)?
-                    != Ownership::Ordinary
-                {
+                if !matches!(
+                    value.ownership(&self.schema, &mut self.observation.value_work)?,
+                    Ownership::Ordinary | Ownership::Port
+                ) {
                     return Err(reference_error(
                         "normalized_reference_local_resource_use",
                         "affine local requires its exact ownership transfer",
@@ -1246,20 +1234,18 @@ impl ReferenceState<'_> {
                         )
                     })
                     .and_then(|function| {
-                        CheckedValue::callable(&self.schema, function, type_arguments)
+                        CheckedValue::callable(&self.schema, function, type_arguments, &signature)
                     })
+            }
+            ExpressionOperation::Bind { callee, arguments } => {
+                let callee = self.evaluate(callee, locals)?;
+                self.bind_expression(callee, arguments, locals)
             }
             ExpressionOperation::Invoke { callee, arguments } => {
                 let callee = self.evaluate(callee, locals)?;
-                let NormalizedValue::Function {
-                    function,
-                    type_arguments,
-                } = callee.release()
-                else {
-                    return Err(reference_type_error("invoke callee is not a function"));
-                };
-                let declaration = self.function_reference(function)?;
                 let arguments = self.evaluate_many(&arguments, locals)?;
+                let (declaration, type_arguments, arguments) =
+                    self.callable_arguments(callee, arguments, false)?;
                 self.call_declaration(declaration, &type_arguments, arguments)
             }
             ExpressionOperation::Record {
@@ -1464,7 +1450,9 @@ impl ReferenceState<'_> {
         };
         let ownership = value.ownership(&self.schema, &mut self.observation.value_work)?;
         let valid = match use_mode {
-            ParameterUse::Unrestricted => ownership == Ownership::Ordinary,
+            ParameterUse::Unrestricted => {
+                matches!(ownership, Ownership::Ordinary | Ownership::Port)
+            }
             ParameterUse::Borrow => ownership == Ownership::Capability,
             ParameterUse::Consume => ownership != Ownership::Ordinary,
         };
@@ -2953,19 +2941,27 @@ pub(crate) fn reference_equal(
                 layout: right_layout,
                 fields: right,
             }),
-        ) if left_layout == right_layout && left.len() == right.len() => {
-            reference_equal_sequence(left, right)
+        ) => {
+            let contents = reference_equal_sequence(left, right)?;
+            Ok(left_layout == right_layout && contents)
         }
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields: left }),
             NormalizedValue::Record(NormalizedRecord::Structural { fields: right }),
-        ) if left.len() == right.len() => {
+        ) => {
+            let mut equal = left.len() == right.len();
             for ((left_name, left), (right_name, right)) in left.iter().zip(right.iter()) {
-                if left_name != right_name || !reference_equal(left, right)? {
-                    return Ok(false);
-                }
+                let values = reference_equal(left, right)?;
+                equal &= left_name == right_name && values;
             }
-            Ok(true)
+            for (_, value) in left
+                .iter()
+                .skip(right.len())
+                .chain(right.iter().skip(left.len()))
+            {
+                reference_equal(value, value)?;
+            }
+            Ok(equal)
         }
         (
             NormalizedValue::Variant {
@@ -2978,31 +2974,48 @@ pub(crate) fn reference_equal(
                 case: right_case,
                 payload: right,
             },
-        ) if left_layout == right_layout && left_case == right_case => match (left, right) {
-            (None, None) => Ok(true),
-            (Some(left), Some(right)) => reference_equal(left, right),
-            _ => Ok(false),
-        },
-        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => match (left, right) {
-            (None, None) => Ok(true),
-            (Some(left), Some(right)) => reference_equal(left, right),
-            _ => Ok(false),
-        },
-        (NormalizedValue::List(left), NormalizedValue::List(right))
-            if left.len() == right.len() =>
-        {
+        ) => {
+            let payloads = reference_optional_equality(left.as_deref(), right.as_deref())?;
+            Ok(left_layout == right_layout && left_case == right_case && payloads)
+        }
+        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
+            reference_optional_equality(left.as_deref(), right.as_deref())
+        }
+        (
+            NormalizedValue::Result {
+                success: left_case,
+                value: left,
+            },
+            NormalizedValue::Result {
+                success: right_case,
+                value: right,
+            },
+        ) => {
+            let contents = reference_equal(left, right)?;
+            Ok(left_case == right_case && contents)
+        }
+        (NormalizedValue::List(left), NormalizedValue::List(right)) => {
             reference_equal_sequence(left, right)
         }
-        (NormalizedValue::Map(left), NormalizedValue::Map(right)) if left.len() == right.len() => {
+        (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
+            let mut equal = left.len() == right.len();
             for (key, left) in left.iter() {
-                let Some(right) = right.get(key) else {
-                    return Ok(false);
+                let values = match right.get(key) {
+                    Some(right) => reference_equal(left, right)?,
+                    None => {
+                        reference_equal(left, left)?;
+                        false
+                    }
                 };
-                if !reference_equal(left, right)? {
-                    return Ok(false);
+                equal &= values;
+            }
+            for (key, value) in right.iter() {
+                if !left.contains_key(key) {
+                    reference_equal(value, value)?;
+                    equal = false;
                 }
             }
-            Ok(true)
+            Ok(equal)
         }
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(reference_trap(
@@ -3016,20 +3029,43 @@ pub(crate) fn reference_equal(
                 "live resources do not support semantic equality",
             ))
         }
-        _ => Ok(false),
+        _ => {
+            reference_equal(left, left)?;
+            reference_equal(right, right)?;
+            Ok(false)
+        }
     }
+}
+
+fn reference_optional_equality(
+    left: Option<&NormalizedValue>,
+    right: Option<&NormalizedValue>,
+) -> Result<bool, ExecutionError> {
+    if let (Some(left), Some(right)) = (left, right) {
+        return reference_equal(left, right);
+    }
+    for value in left.into_iter().chain(right) {
+        reference_equal(value, value)?;
+    }
+    Ok(left.is_none() && right.is_none())
 }
 
 fn reference_equal_sequence(
     left: &[NormalizedValue],
     right: &[NormalizedValue],
 ) -> Result<bool, ExecutionError> {
+    let mut equal = left.len() == right.len();
     for (left, right) in left.iter().zip(right.iter()) {
-        if !reference_equal(left, right)? {
-            return Ok(false);
-        }
+        equal &= reference_equal(left, right)?;
     }
-    Ok(true)
+    for value in left
+        .iter()
+        .skip(right.len())
+        .chain(right.iter().skip(left.len()))
+    {
+        reference_equal(value, value)?;
+    }
+    Ok(equal)
 }
 
 fn reference_binary_i64(
@@ -3124,6 +3160,15 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
                     })?;
                     pending.push(value);
                 }
+            }
+            NormalizedValue::Result { value, .. } => {
+                items = items.checked_add(1).ok_or_else(|| {
+                    reference_resource(
+                        "normalized_reference_external_value",
+                        "external result accounting overflowed",
+                    )
+                })?;
+                pending.push(value);
             }
             NormalizedValue::List(values) => {
                 items = items.checked_add(values.len() as u64).ok_or_else(|| {

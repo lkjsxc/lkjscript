@@ -1032,15 +1032,17 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
         "compiler_unit_digest"
     );
 
-    let mut predecessor = receipt.bytes.clone();
-    predecessor[..8].copy_from_slice(b"LKJCUN03");
-    let predecessor_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &predecessor);
-    assert_eq!(
-        CompilationUnit::decode(&predecessor, predecessor_key)
-            .expect_err("predecessor compiler-unit magic must reject")
-            .code,
-        "packed_contract"
-    );
+    for magic in [b"LKJCUN05", b"LKJCUN03"] {
+        let mut predecessor = receipt.bytes.clone();
+        predecessor[..8].copy_from_slice(magic);
+        let predecessor_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &predecessor);
+        assert_eq!(
+            CompilationUnit::decode(&predecessor, predecessor_key)
+                .expect_err("predecessor compiler-unit magic must reject")
+                .code,
+            "packed_contract"
+        );
+    }
 
     let mut invalid = receipt.unit;
     let CompilationPayload::Function { code, .. } = &mut invalid.payload else {
@@ -2020,11 +2022,11 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
 }
 
 #[test]
-fn graph9_artifact_rejects_predecessor_corruption_and_inexact_closures() {
+fn graph11_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact rejection parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+        .expect("current graph repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2034,14 +2036,16 @@ fn graph9_artifact_rejects_predecessor_corruption_and_inexact_closures() {
         .expect("link current artifact");
     let loaded = load_artifact(&linked.artifact.bytes).expect("load current artifact");
 
-    let mut predecessor = linked.artifact.bytes.clone();
-    predecessor[..8].copy_from_slice(b"LKJART13");
-    assert_eq!(
-        load_artifact(&predecessor)
-            .expect_err("predecessor bundle must reject")
-            .code,
-        "artifact_bundle_contract"
-    );
+    for magic in [b"LKJART15", b"LKJART13"] {
+        let mut predecessor = linked.artifact.bytes.clone();
+        predecessor[..8].copy_from_slice(magic);
+        assert_eq!(
+            load_artifact(&predecessor)
+                .expect_err("predecessor bundle must reject")
+                .code,
+            "artifact_bundle_contract"
+        );
+    }
 
     let mut wrong_manifest = linked.artifact.bytes.clone();
     wrong_manifest[28] ^= 0x80;
@@ -2472,5 +2476,100 @@ impl PayloadCodes for CompilationPayload {
             | Self::External { .. }
             | Self::Target { .. } => Box::new(std::iter::empty()),
         }
+    }
+}
+
+#[test]
+fn artifact_rejects_independently_encoded_unchecked_binding_prefixes() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("packages/standard/generated/standard.lkja");
+    let loaded = load_artifact(&std::fs::read(path).unwrap()).unwrap();
+    let (old_key, original) = loaded.objects.iter().filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .find_map(|(key, bytes)| {
+            let unit = CompilationUnit::decode(bytes, *key).unwrap();
+            matches!(&unit.payload, CompilationPayload::Function { code, .. } if code.instructions.iter().any(|instruction| matches!(instruction, CompiledInstruction::Bind { .. })))
+                .then_some((*key, unit))
+        }).unwrap();
+    for fault in ["wrong-order", "missing-admission", "oversized-prefix"] {
+        let mut unit = original.clone();
+        let CompilationPayload::Function { code, .. } = &mut unit.payload else {
+            panic!("binding unit")
+        };
+        match fault {
+            "oversized-prefix" => {
+                let instruction = code
+                    .instructions
+                    .iter_mut()
+                    .find(|instruction| {
+                        matches!(instruction, CompiledInstruction::BeginBind { .. })
+                    })
+                    .unwrap();
+                *instruction = CompiledInstruction::BeginBind { arguments: 100_001 };
+            }
+            _ => {
+                let instruction = code
+                    .instructions
+                    .iter_mut()
+                    .find(|instruction| {
+                        matches!(instruction, CompiledInstruction::Capture { index: 0 })
+                    })
+                    .unwrap();
+                *instruction = if fault == "wrong-order" {
+                    CompiledInstruction::Capture { index: 1 }
+                } else {
+                    CompiledInstruction::Unit
+                };
+            }
+        }
+        // Deliberately bypass the normal compiler encoder: all enclosing digests are valid.
+        let bytes = crate::platform::packed::encode(
+            super::unit::COMPILER_UNIT_MAGIC,
+            super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
+            &unit,
+            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        )
+        .unwrap();
+        let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
+        let error = CompilationUnit::decode(&bytes, key).unwrap_err();
+        assert_eq!(error.class, crate::platform::DiagnosticClass::Corrupt);
+        assert_eq!(error.code, "compiler_unit_bind_protocol", "{fault}");
+        let mut objects = loaded.objects.clone();
+        objects.remove(&old_key);
+        objects.insert(key, bytes);
+        let mut manifest = loaded.manifest.clone();
+        let package = manifest
+            .packages
+            .iter_mut()
+            .find(|package| package.package == unit.source.package)
+            .unwrap();
+        let old_compilation = package.compilation;
+        let mut compilation =
+            CompilationManifest::decode(&objects[&old_compilation.object_key()], old_compilation)
+                .unwrap();
+        let mut entries = artifact_map_entries(&loaded, compilation.units);
+        let mut replacements = 0;
+        for (owner, value) in &mut entries {
+            let owner = crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap();
+            let mut binding = CompilationBinding::decode(value, owner).unwrap();
+            if binding.object.object_key() == old_key {
+                binding.object = CompilerUnitObjectDigest::from_bytes(key.digest.bytes());
+                *value = binding.encode(owner).unwrap();
+                replacements += 1;
+            }
+        }
+        assert_eq!(replacements, 1);
+        compilation.units = replace_artifact_map(&mut objects, entries);
+        let (digest, bytes) = compilation.encode().unwrap();
+        objects.remove(&old_compilation.object_key());
+        objects.insert(digest.object_key(), bytes);
+        package.compilation = digest;
+        let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
+        manifest.closure = closure;
+        manifest.object_count = count;
+        manifest.object_bytes = bytes;
+        let error = super::artifact::encode_artifact(manifest, &objects).unwrap_err();
+        assert_eq!(error.class, crate::platform::DiagnosticClass::Corrupt);
+        assert_eq!(error.code, "compiler_unit_bind_protocol", "{fault}");
+        println!("binding-artifact-negative {fault} {}", error.code);
     }
 }

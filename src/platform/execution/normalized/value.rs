@@ -1,4 +1,4 @@
-//! Runtime-only dense values for normalized Graph 10 execution.
+//! Runtime-only dense values for normalized Graph 11 execution.
 
 use super::resource::NormalizedResourceHandle;
 use crate::platform::kernel::{Name, TypeObjectDigest};
@@ -15,6 +15,7 @@ pub struct ValueOrigin(u64);
 pub(crate) struct ValueWork {
     pub input_admission_nodes: u64,
     pub raw_result_admission_nodes: u64,
+    pub capture_admission_nodes: u64,
     pub constructor_child_visits: u64,
     pub internal_guard_descendant_visits: u64,
     pub classification_decisions: u64,
@@ -75,11 +76,18 @@ pub enum NormalizedValue {
         payload: Option<Box<NormalizedValue>>,
     },
     Option(Option<Box<NormalizedValue>>),
+    // Runtime ingress can carry this existing type; no external result codec is added.
+    #[allow(dead_code)]
+    Result {
+        success: bool,
+        value: Box<NormalizedValue>,
+    },
     List(Arc<Vec<NormalizedValue>>),
     Map(Arc<BTreeMap<NormalizedMapKey, NormalizedValue>>),
     Function {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
+        bound_arguments: Option<Arc<Vec<NormalizedValue>>>,
     },
     Resource(NormalizedResourceHandle),
 }
@@ -112,6 +120,7 @@ impl NormalizedValue {
                 payload.as_ref().is_none_or(|payload| payload.is_durable())
             }
             Self::Option(value) => value.as_ref().is_none_or(|value| value.is_durable()),
+            Self::Result { value, .. } => value.is_durable(),
             Self::List(items) => items.iter().all(Self::is_durable),
             Self::Map(entries) => entries.values().all(Self::is_durable),
             Self::Unit
@@ -145,6 +154,7 @@ impl NormalizedMapKey {
             | NormalizedValue::Record(_)
             | NormalizedValue::Variant { .. }
             | NormalizedValue::Option(_)
+            | NormalizedValue::Result { .. }
             | NormalizedValue::List(_)
             | NormalizedValue::Map(_)
             | NormalizedValue::Function { .. }
@@ -202,11 +212,16 @@ pub(super) fn release_raw_values(mut values: Vec<NormalizedValue>) {
     while let Some(value) = values.pop() {
         match value {
             NormalizedValue::Option(Some(value))
+            | NormalizedValue::Result { value, .. }
             | NormalizedValue::Variant {
                 payload: Some(value),
                 ..
             } => values.push(*value),
-            NormalizedValue::List(children)
+            NormalizedValue::Function {
+                bound_arguments: Some(children),
+                ..
+            }
+            | NormalizedValue::List(children)
             | NormalizedValue::Record(NormalizedRecord::Nominal {
                 fields: children, ..
             }) => {

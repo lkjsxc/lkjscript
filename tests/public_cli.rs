@@ -1509,7 +1509,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("27")
+        Some("31")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2631,7 +2631,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("21"));
+    assert_eq!(compact_field(tests, "passed"), Some("25"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -2699,7 +2699,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("21")
+        Some("25")
     );
 
     let artifact = temporary.path().join("sample.lkja");
@@ -3314,6 +3314,437 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
         current_revision_at(&copied_binary, temporary.path(), &project),
         accepted
     );
+}
+
+#[test]
+fn copied_binary_returns_two_runtime_bound_reducers_after_factory_return() {
+    let temporary = tempfile::TempDir::new().expect("isolated binding workspace");
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("binding");
+    let run = |args: &[&str]| compact_success_at(&copied, temporary.path(), args);
+    run(&[
+        "new",
+        path(&project),
+        "--template",
+        "command",
+        "--name",
+        "binding",
+    ]);
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let module = run(&[
+        "--project",
+        path(&project),
+        "query",
+        "find",
+        "module",
+        "application",
+    ]);
+    let module = compact_field(compact_record(&module, "owner"), "id").unwrap();
+    let mut standard = BTreeMap::new();
+    for name in ["add", "multiply", "list-fold-left"] {
+        let owners = run(&["package", "builtin", "query", "owners", "--name", name]);
+        standard.insert(
+            name,
+            compact_field(compact_record(&owners, "owner"), "reference")
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let add = &standard["add"];
+    let multiply = &standard["multiply"];
+    let fold = &standard["list-fold-left"];
+    let request = format!(
+        r#"request base={base}
+type.list as=@items item=i64
+type.function as=@reducer result=i64
+type.argument parent=@reducer index=0 type=i64
+type.argument parent=@reducer index=1 type=i64
+type.structural-record as=@totals
+type.field parent=@totals index=0 name=first type=i64
+type.field parent=@totals index=1 name=second type=i64
+expression.local as=$scale value=$step_scale
+expression.local as=$bias value=$step_bias
+expression.local as=$state value=$step_state
+expression.local as=$item value=$step_item
+expression.call as=$scaled function={multiply}
+expression.argument parent=$scaled index=0 expression=$scale
+expression.argument parent=$scaled index=1 expression=$item
+expression.call as=$sum function={add}
+expression.argument parent=$sum index=0 expression=$state
+expression.argument parent=$sum index=1 expression=$scaled
+expression.call as=$step_body function={add}
+expression.argument parent=$step_body index=0 expression=$sum
+expression.argument parent=$step_body index=1 expression=$bias
+create.function as=$step module={module} name=configured-step visibility=private result=i64 effect=pure body=$step_body
+add.parameter as=$step_scale function=$step name=scale type=i64
+add.parameter as=$step_bias function=$step name=bias type=i64
+add.parameter as=$step_state function=$step name=state type=i64
+add.parameter as=$step_item function=$step name=item type=i64
+expression.function-value as=$target function=$step
+expression.local as=$saved_scale value=$make_scale
+expression.local as=$saved_bias value=$make_bias
+expression.bind as=$bound callee=$target
+expression.argument parent=$bound index=0 expression=$saved_scale
+expression.argument parent=$bound index=1 expression=$saved_bias
+expression.unit as=$make_unit
+expression.sequence as=$make_body
+expression.argument parent=$make_body index=0 expression=$make_unit
+expression.argument parent=$make_body index=1 expression=$bound
+create.function as=$make module={module} name=make-reducer visibility=private result=@reducer effect=pure body=$make_body
+add.parameter as=$make_scale function=$make name=scale type=i64
+add.parameter as=$make_bias function=$make name=bias type=i64
+expression.local as=$scale_a value=$input_scale_a
+expression.local as=$bias_a value=$input_bias_a
+expression.local as=$scale_b value=$input_scale_b
+expression.local as=$bias_b value=$input_bias_b
+expression.call as=$a function=$make
+expression.argument parent=$a index=0 expression=$scale_a
+expression.argument parent=$a index=1 expression=$bias_a
+expression.call as=$b function=$make
+expression.argument parent=$b index=0 expression=$scale_b
+expression.argument parent=$b index=1 expression=$bias_b
+expression.local as=$items_a value=$input_items
+expression.local as=$items_b value=$input_items
+expression.local as=$retained_a value=$closure_a
+expression.local as=$retained_b value=$closure_b
+expression.i64 as=$zero_a value=0
+expression.i64 as=$zero_b value=0
+expression.call as=$fold_a function={fold}
+type.argument parent=$fold_a index=0 type=i64
+type.argument parent=$fold_a index=1 type=i64
+expression.argument parent=$fold_a index=0 expression=$items_a
+expression.argument parent=$fold_a index=1 expression=$zero_a
+expression.argument parent=$fold_a index=2 expression=$retained_a
+expression.call as=$fold_b function={fold}
+type.argument parent=$fold_b index=0 type=i64
+type.argument parent=$fold_b index=1 type=i64
+expression.argument parent=$fold_b index=0 expression=$items_b
+expression.argument parent=$fold_b index=1 expression=$zero_b
+expression.argument parent=$fold_b index=2 expression=$retained_b
+expression.record as=$totals
+expression.record-field parent=$totals index=0 name=first value=$fold_a
+expression.record-field parent=$totals index=1 name=second value=$fold_b
+expression.let as=$body body=$totals
+expression.binding parent=$body index=0 as=$closure_a name=first-reducer value=$a type=@reducer
+expression.binding parent=$body index=1 as=$closure_b name=second-reducer value=$b type=@reducer
+create.function as=$run module={module} name=configured visibility=private result=@totals effect=pure body=$body
+add.parameter as=$input_scale_a function=$run name=scale-a type=i64
+add.parameter as=$input_bias_a function=$run name=bias-a type=i64
+add.parameter as=$input_scale_b function=$run name=scale-b type=i64
+add.parameter as=$input_bias_b function=$run name=bias-b type=i64
+add.parameter as=$input_items function=$run name=items type=@items
+type.function as=@run result=@totals
+type.argument parent=@run index=0 type=i64
+type.argument parent=@run index=1 type=i64
+type.argument parent=@run index=2 type=i64
+type.argument parent=@run index=3 type=i64
+type.argument parent=@run index=4 type=@items
+create.component as=$component module={module} name=binding-check visibility=package
+add.port as=$port component=$component name=run type=@run function=$run
+create.target as=$command name=configured component=$component port=$port runner=command
+"#
+    );
+    let before = content_inventory(&project);
+    let request_path = temporary.path().join("binding.lkjc");
+    std::fs::write(&request_path, &request).unwrap();
+    let plan = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+    ]);
+    let token = compact_field(compact_record(&plan, "plan"), "token").unwrap();
+    let make = plan
+        .iter()
+        .find(|record| {
+            record.operation == "identity" && compact_field(record, "symbol") == Some("$make")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .unwrap();
+    assert_eq!(before, content_inventory(&project));
+    run(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&request_path),
+        "--plan",
+        token,
+    ]);
+    let accepted = current_revision_at(&copied, temporary.path(), &project);
+    assert_ne!(base, accepted);
+    let accepted_inventory = content_inventory(&project);
+    let stale = compact_failure_output_with_status(
+        command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "apply",
+                "--input-file",
+                path(&request_path),
+                "--plan",
+                token,
+            ],
+        ),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+    assert_eq!(accepted_inventory, content_inventory(&project));
+    let definition = run(&[
+        "--project",
+        path(&project),
+        "inspect",
+        "owner",
+        "pure_function",
+        make,
+        "--detail",
+        "definition",
+        "--limit",
+        "100",
+    ]);
+    assert!(
+        definition
+            .iter()
+            .any(|record| compact_field(record, "form") == Some("bind")),
+        "{definition:?}"
+    );
+    run(&["--project", path(&project), "check"]);
+    let bundle = temporary.path().join("binding.lkja");
+    run(&[
+        "--project",
+        path(&project),
+        "build",
+        "--output",
+        path(&bundle),
+    ]);
+    let result = run(&[
+        "--project",
+        path(&project),
+        "run",
+        "configured",
+        "--arguments",
+        "[3,5,-2,1,[1,2,4]]",
+    ]);
+    let execution = compact_record(&result, "execution");
+    assert_eq!(
+        compact_field(execution, "value"),
+        Some(r#"{"first":36,"second":-11}"#)
+    );
+    assert_eq!(compact_field(execution, "differential"), Some("equal"));
+    for tier in ["production", "reference"] {
+        assert!(
+            compact_field(execution, &format!("{tier}-capture-admission-nodes"))
+                .unwrap()
+                .parse::<u64>()
+                .unwrap()
+                > 0
+        );
+        assert_eq!(
+            compact_field(execution, &format!("{tier}-guard-descendants")),
+            Some("0")
+        );
+    }
+    assert_eq!(
+        accepted,
+        current_revision_at(&copied, temporary.path(), &project)
+    );
+    let bound = plan
+        .iter()
+        .find(|record| {
+            record.operation == "identity" && compact_field(record, "symbol") == Some("$bound")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .unwrap();
+    let relations = all_public_relations(&copied, temporary.path(), &project, bound, "incoming");
+    assert_eq!(
+        relations
+            .iter()
+            .filter(|edge| edge.kind == "expression_parent"
+                && edge.target_owner.as_deref() == Some(bound))
+            .count(),
+        3,
+        "{relations:?}"
+    );
+    let oracle =
+        lkjscript::platform::contributor::function_extraction_oracle(&project, make, bound)
+            .unwrap();
+    let context = all_public_context(&copied, temporary.path(), &project, bound, "both", 1);
+    let expected_context = public_context_oracle(
+        &copied,
+        temporary.path(),
+        &project,
+        &oracle.package,
+        bound,
+        "both",
+        1,
+    );
+    assert_eq!(context.owners, expected_context.0);
+    assert_eq!(context.relations, expected_context.1);
+    assert_eq!(oracle.captures.len(), 2);
+    assert!(oracle.moved_owners.iter().any(|owner| owner == bound));
+    let extraction = format!(
+        "request base={accepted}\nextract.function as=$extracted function={make} expression={bound} name=extracted-binding\n"
+    );
+    let before = content_inventory(&project);
+    let reviewed = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &extraction,
+    ]);
+    assert_eq!(before, content_inventory(&project));
+    let token = compact_field(compact_record(&reviewed, "plan"), "token").unwrap();
+    run(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input",
+        &extraction,
+        "--plan",
+        token,
+    ]);
+    let result = run(&[
+        "--project",
+        path(&project),
+        "run",
+        "configured",
+        "--arguments",
+        "[3,5,-2,1,[1,2,4]]",
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&result, "execution"), "value"),
+        Some(r#"{"first":36,"second":-11}"#)
+    );
+}
+
+#[test]
+fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("binding-rejections");
+    compact_success_at(
+        &copied,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "command",
+            "--name",
+            "binding-rejections",
+        ],
+    );
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let modules = compact_success_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "module",
+            "application",
+        ],
+    );
+    let module = compact_field(compact_record(&modules, "owner"), "id").unwrap();
+    let inventory = content_inventory(&project);
+    let mut cases = Vec::new();
+    for (name, types, ty) in [
+        ("secret", "".to_owned(), "secret"),
+        ("stream", "type.stream as=@bad item=bytes\n".to_owned(), "@bad"),
+        ("list-secret", "type.list as=@bad item=secret\n".to_owned(), "@bad"),
+        ("option-secret", "type.option as=@bad item=secret\n".to_owned(), "@bad"),
+        ("map-secret", "type.map as=@bad key=i64 value=secret\n".to_owned(), "@bad"),
+        ("result-absent-secret", "type.result as=@bad ok=i64 error=secret\n".to_owned(), "@bad"),
+        ("record-last-secret", "type.structural-record as=@bad\ntype.field parent=@bad index=0 name=a type=i64\ntype.field parent=@bad index=1 name=z type=secret\n".to_owned(), "@bad"),
+        ("nominal-absent-stream", format!("create.variant as=$variant module={module} name=Hidden visibility=private\nadd.case as=$absent variant=$variant name=Absent\ntype.stream as=@stream item=bytes\nadd.case as=$present variant=$variant name=Present payload=@stream\ntype.named as=@bad declaration=$variant\n"), "@bad"),
+        ("capability-resource", format!("create.interface as=$interface module={module} name=Authority visibility=private\nadd.operation as=$observe interface=$interface name=observe result=unit idempotency=idempotent external-visibility=none\ntype.capability-resource as=@bad interface=$interface\n"), "@bad"),
+    ] {
+        cases.push((name, format!("{types}type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$target module={module} name=target visibility=private result=unit effect=pure body=$unit\nadd.parameter as=$ignored function=$target name=ignored type={ty}\nexpression.function-value as=$callee function=$target\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.parameter as=$input function=$factory name=input type={ty}\n")));
+    }
+    cases.push(("bare-type-parameter", format!("type.parameter as=@T parameter=$T\ntype.parameter as=@U parameter=$U\ntype.function as=@thunk result=@T\nexpression.local as=$value value=$value-parameter\ncreate.function as=$identity module={module} name=identity visibility=private result=@U effect=pure body=$value\nadd.type-parameter as=$U function=$identity name=U\nadd.parameter as=$value-parameter function=$identity name=value type=@U\nexpression.function-value as=$callee function=$identity\ntype.argument parent=$callee index=0 type=@T\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.type-parameter as=$T function=$factory name=T\nadd.parameter as=$input function=$factory name=input type=@T\n")));
+    cases.push(("task-empty-binding", format!("type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$task module={module} name=task visibility=private result=unit effect=task body=$unit\nexpression.function-value as=$callee function=$task\nexpression.bind as=$bound callee=$callee\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\n")));
+    for (name, capture, result, arguments) in [
+        (
+            "wrong-prefix",
+            "expression.bool as=$capture value=true\n",
+            "@thunk",
+            "expression.argument parent=$bound index=0 expression=$capture\n",
+        ),
+        (
+            "excessive-prefix",
+            "expression.i64 as=$capture value=1\nexpression.i64 as=$extra value=2\n",
+            "@thunk",
+            "expression.argument parent=$bound index=0 expression=$capture\nexpression.argument parent=$bound index=1 expression=$extra\n",
+        ),
+        (
+            "wrong-suffix",
+            "expression.i64 as=$capture value=1\n",
+            "@unary",
+            "expression.argument parent=$bound index=0 expression=$capture\n",
+        ),
+        (
+            "duplicate-child",
+            "expression.i64 as=$capture value=1\n",
+            "@thunk",
+            "expression.argument parent=$bound index=0 expression=$capture\nexpression.argument parent=$bound index=1 expression=$capture\n",
+        ),
+    ] {
+        cases.push((name, format!("type.function as=@thunk result=i64\ntype.function as=@unary result=i64\ntype.argument parent=@unary index=0 type=i64\nexpression.local as=$value value=$parameter\ncreate.function as=$target module={module} name=target visibility=private result=i64 effect=pure body=$value\nadd.parameter as=$parameter function=$target name=value type=i64\nexpression.function-value as=$callee function=$target\n{capture}expression.bind as=$bound callee=$callee\n{arguments}create.function as=$factory module={module} name=factory visibility=private result={result} effect=pure body=$bound\n")));
+    }
+    for (name, body) in cases {
+        let request = format!("request base={base}\n{body}");
+        let output = command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &request,
+            ],
+        );
+        assert!(!output.status.success(), "{name} was accepted");
+        let records = parse_records("rejected binding", &output.stdout).unwrap();
+        let code = compact_field(compact_record(&records, "diagnostic"), "code").unwrap();
+        let expected = match name {
+            "task-empty-binding" => "kernel_type_task_function_value",
+            "wrong-prefix" => "kernel_type_argument",
+            "excessive-prefix" => "kernel_type_bind_arity",
+            "wrong-suffix" => "kernel_type_root",
+            "duplicate-child" => "change_expression_shared",
+            _ => "kernel_type_bind_capture",
+        };
+        assert_eq!(code, expected, "{name}: {records:?}");
+        assert!(
+            records
+                .iter()
+                .all(|record| record.operation != "plan" && record.operation != "execution")
+        );
+        assert_eq!(
+            inventory,
+            content_inventory(&project),
+            "{name} changed authority"
+        );
+        println!("binding-rejection {name} {code}");
+    }
 }
 
 #[test]

@@ -1634,18 +1634,20 @@ fn owner_codec_rejects_wrong_key_and_predecessor_magic() {
         .expect_err("wrong owner key must reject");
     assert_eq!(diagnostic.code, "kernel_owner_key_mismatch");
 
-    let mut predecessor = bytes;
-    predecessor[..8].copy_from_slice(b"LKJOWN08");
-    let predecessor_digest = OwnerObjectDigest::of(&predecessor);
-    assert!(
-        decode_owner(
-            &predecessor,
-            OwnerKey::Module(module),
-            OwnerKind::Module,
-            predecessor_digest,
-        )
-        .is_err()
-    );
+    for magic in [b"LKJOWN10", b"LKJOWN08"] {
+        let mut predecessor = bytes.clone();
+        predecessor[..8].copy_from_slice(magic);
+        let predecessor_digest = OwnerObjectDigest::of(&predecessor);
+        assert!(
+            decode_owner(
+                &predecessor,
+                OwnerKey::Module(module),
+                OwnerKind::Module,
+                predecessor_digest,
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]
@@ -1670,7 +1672,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "fe839b8f363ba45759ea5b8602ad29948818ea746f483bd10d62b6b327fb6452"
+        "c1075c5bacc7a5c6b3b6db6a10cf828e6402f1ac546e5152dc20335368a2f1e1"
     );
 }
 
@@ -2266,4 +2268,113 @@ fn owner_blob_roots_cover_expression_and_documentation_authority() {
         },
     });
     assert_eq!(documentation.blob_roots(), vec![(documentation_digest, 29)]);
+}
+
+#[test]
+fn pure_binding_cannot_retain_task_port_values_through_annotated_locals() {
+    let (mut snapshot, ids) = prototype_snapshot();
+    let callee = ExpressionId::migrate(b"bind-port-task-negative", 0);
+    snapshot.owners.insert(
+        OwnerKey::Expression(callee),
+        OwnerRecord::Expression(
+            ExpressionRecord::new(
+                callee,
+                ExpressionOperation::FunctionValue {
+                    function: DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: ids.caller,
+                    },
+                    type_arguments: vec![],
+                },
+            )
+            .unwrap(),
+        ),
+    );
+    let (port, function_type) = snapshot
+        .owners
+        .iter_mut()
+        .find_map(|(key, owner)| match owner {
+            OwnerRecord::Port(record) => {
+                record.implementation = PortImplementation::Expression(callee);
+                Some((*key, record.function_type))
+            }
+            _ => None,
+        })
+        .unwrap();
+    snapshot.root.owners = map_root(snapshot.owners.len(), 1);
+    validate_full(&snapshot).expect("separately authorized ordinary task-port preparation");
+    for annotated in [false, true] {
+        let mut candidate = snapshot.clone();
+        let bound = ExpressionId::migrate(b"bind-port-task-negative", 1);
+        let local = ExpressionId::migrate(b"bind-port-task-negative", 2);
+        let root = ExpressionId::migrate(b"bind-port-task-negative", 3);
+        let binding = BindingId::migrate(b"bind-port-task-negative", 0);
+        let selected = if annotated {
+            candidate.owners.insert(
+                OwnerKey::Binding(binding),
+                OwnerRecord::Binding(BindingRecord {
+                    header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                    name: name("saved-task"),
+                    kind: BindingKind::Let,
+                    value: Some(callee),
+                    declared_type: Some(function_type),
+                }),
+            );
+            candidate.owners.insert(
+                OwnerKey::Expression(local),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        local,
+                        ExpressionOperation::Local {
+                            value: LocalValueReference::LexicalBinding(binding),
+                        },
+                    )
+                    .unwrap(),
+                ),
+            );
+            candidate.owners.insert(
+                OwnerKey::Expression(root),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        root,
+                        ExpressionOperation::Let {
+                            bindings: vec![binding],
+                            body: bound,
+                        },
+                    )
+                    .unwrap(),
+                ),
+            );
+            local
+        } else {
+            callee
+        };
+        candidate.owners.insert(
+            OwnerKey::Expression(bound),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    bound,
+                    ExpressionOperation::Bind {
+                        callee: selected,
+                        arguments: vec![],
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        let OwnerRecord::Port(record) = candidate.owners.get_mut(&port).unwrap() else {
+            panic!("port")
+        };
+        record.implementation =
+            PortImplementation::Expression(if annotated { root } else { bound });
+        candidate.root.owners = map_root(candidate.owners.len(), 1);
+        let errors = validate_full(&candidate)
+            .expect_err("task-port context cannot certify a pure environment");
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "kernel_type_task_function_value"),
+            "{errors:?}"
+        );
+    }
 }

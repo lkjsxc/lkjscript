@@ -1,4 +1,4 @@
-//! Stable-ID Graph 10 expression records.
+//! Stable-ID Graph 11 expression records.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_INLINE_TEXT_BYTES};
 use super::digest::{BlobObjectDigest, TypeObjectDigest};
@@ -145,6 +145,10 @@ pub enum ExpressionOperation {
         binding: BindingId,
         body: ExpressionId,
     },
+    Bind {
+        callee: ExpressionId,
+        arguments: Vec<ExpressionId>,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -237,6 +241,8 @@ pub enum ExpressionChildRole {
     MatchArmBody,
     CapabilityArgument,
     TransactionBody,
+    BindCallee,
+    BindArgument,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
@@ -264,6 +270,9 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         }
         ExpressionOperation::Invoke { arguments, .. } => {
             require_count("invoke arguments", arguments.len(), true)?;
+        }
+        ExpressionOperation::Bind { arguments, .. } => {
+            require_count("bind arguments", arguments.len(), true)?;
         }
         ExpressionOperation::Record {
             nominal_type,
@@ -353,7 +362,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(expression_error(
             "kernel_expression_child_count",
-            format!("{label} count {count} is outside the Graph 10 bound"),
+            format!("{label} count {count} is outside the Graph 11 bound"),
         ));
     }
     Ok(())
@@ -413,6 +422,10 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
                 arguments,
                 ExpressionChildRole::InvokeArgument,
             );
+        }
+        ExpressionOperation::Bind { callee, arguments } => {
+            push_child(&mut children, *callee, ExpressionChildRole::BindCallee, 0);
+            push_many(&mut children, arguments, ExpressionChildRole::BindArgument);
         }
         ExpressionOperation::Record { fields, .. } => {
             let values = fields.iter().map(|field| field.value).collect::<Vec<_>>();

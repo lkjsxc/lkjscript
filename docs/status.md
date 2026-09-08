@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-05 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-08 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -22,23 +22,23 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_020a3fd10bc3ccd0f05c8e1bbf12bf259f93ca9dcee084fcaee5528c1e764617`; state `semantic_state_8c6bc5e8a1b83e0018d60223c63bf6b1d9b8999d0ca247b1d8bbaaf600ac9e15` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9`; state `semantic_state_11cccd6ab1f48dbcc637737aab3e4740a29a1b3678e94b9e0899b4cc755d4c0c` |
-| built-in standard dependency | package revision `package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9`; transport `package_transport_52a7f2a867563eb5367443df9f21518051a4fa0ed527317026651207a1d78124`; artifact manifest `artifact_manifest_4a45508f7083e9e1d913596eb3c7a37e624df08b2bbe2a38db61ee150148b691` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_e235829aa34183eeb80affe127feddf7300a8ed2540c0282885cc3f14ffecc6e`; state `semantic_state_d926cd106e6bafef668aa16d9906757127da06eaf2d0f534e334a4ab6ebd6b81` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_eb655c7951c01fbd935856dadbc69401472c9008ffb2e0824db7c356ca3d1313`; state `semantic_state_d4021e79731eb17b0d1eb752aa297f040c7b831588920e27c4851b133c234bce` |
+| built-in standard dependency | package revision `package_revision_b3d0bf609bfdf87f22a39a1c3758bd04086285e269f424cbff56f90fb8a29135`; transport `package_transport_b1c0065d6e74ce3bd4a14295a6ba93381393e73d8c1ae1ea5c04d8349cfd7ccb`; artifact manifest `artifact_manifest_c53e75fecf545a896031e6b29fddb890490b01a7352c10b9e8d6b21a58834cd7` |
 
-The standard package owns 550 live semantic owners, 106 compiler units, and 20 graph tests. Its
-current artifact has 1,057 closure objects and 328,738 bytes. `lkjournal` owns 2,040 live semantic
-owners and one exact standard dependency; its two-package artifact has 196 compiler units, 3,538
-closure objects, and 1,062,638 bytes. Its complete dependency closure runs 27 graph tests. Both
+The standard package owns 618 live semantic owners, 113 compiler units, and 24 graph tests. Its
+current artifact has 1,149 closure objects and 355,305 bytes. `lkjournal` owns 2,040 live semantic
+owners and one exact standard dependency; its two-package artifact has 203 compiler units, 3,630
+closure objects, and 1,089,205 bytes. Its complete dependency closure runs 31 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 231,436 bytes | `63837ac2cf106c03819eccaa929078015bbf2189dc898d645f957dd669fc1250` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 328,738 bytes | `0cbf9b61a09163c1736da01bd92cd32e5533956593635ab7acfefc156e0a93cb` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,062,638 bytes | `1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 248,606 bytes | `07d62d211e64ada35b836369fdb7bab0b10c57328cfa8dae012e37d839302c46` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 355,305 bytes | `eb8595aac1cba0c1642cfcc283d4c0cb071bc5f285ec8ff07903d2c2a36b1cb9` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,089,205 bytes | `f97a029cad60dff52604c22f511c9b1fdf6d37b6de1c8b513f0bff02fca443f0` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -104,21 +104,30 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.25`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.26`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
-Graph 10, validation witness 6, owner summary 5,
-validator 10, package 3, package interface 6, compiler-unit 5, bytecode 3, Artifact 15, resident
-runtime 3, function-definition projection 2, service receipt 10, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 14, authored change 11,
+Graph 11, TypeObject 10, validation witness 7, owner summary 6,
+validator 11, package 3, package interface 7, compiler-unit 6, bytecode 4, Artifact 16, resident
+runtime 3, function-definition projection 3, service receipt 10, distributed-HTTP receipt 4,
+outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 15, authored change 12,
 logical change plan 5, query 6,
-project creation 5, registry 12, CLI 26, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 13, CLI 27, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
+
+The pure-function binding campaign is implementing immutable runtime prefixes and graph-owned
+standard composition. Focused public witnesses exercise returned reducers, nested callable capture,
+composition, extraction, and request-configured transactional folding; final BND-1–BND-6 acceptance
+and exact-target proof remain pending. The maintained Graph 11 materialization keeps existing
+semantic owner identities and unchanged TypeObject 10 bytes and typed-data layouts. Stored bare
+type parameters remain outside the capture-safe subset. See the
+[campaign](campaigns/202609090021.md) and
+[decision](decisions/20260909-explicit-pure-function-binding.md).
 
 The standard package meaning and derived identities let its maintained HTTP and Nostr consumers own
 typed exact/pattern route sets. `lkjournal` owns eight exact and three pattern HTTP routes while
@@ -133,7 +142,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`3f938b8992e41959806205e3304fed2652e441c2e17ab7e795a12ed92020f9bd` in current source.
+`e22fcdbd0d9554ccdfbeedef94fd47c0bc6e0fd4eabb1f9c85a0f932713dbbd3` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,

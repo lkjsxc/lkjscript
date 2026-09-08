@@ -77,6 +77,7 @@ pub(super) fn inspect(
             NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
                 usize::from(payload.is_some())
             }
+            NormalizedValue::Result { .. } => 1,
             _ => 0,
         };
         items = items
@@ -165,6 +166,9 @@ pub(super) fn inspect(
                     children.push((value, *item, false));
                 }
             }
+            (NormalizedValue::Result { success, value }, TypeForm::Result { ok, error }) => {
+                children.push((value.as_ref(), if *success { *ok } else { *error }, false));
+            }
             (
                 NormalizedValue::Map(values),
                 TypeForm::Map {
@@ -242,6 +246,11 @@ pub(super) fn forced_descendant_work(value: &NormalizedValue, work: &mut super::
                 pending.extend(payload.as_deref())
             }
             NormalizedValue::Map(entries) => pending.extend(entries.values()),
+            NormalizedValue::Result { value, .. } => pending.push(value),
+            NormalizedValue::Function {
+                bound_arguments: Some(prefix),
+                ..
+            } => pending.extend(prefix.iter()),
             _ => {}
         }
     }

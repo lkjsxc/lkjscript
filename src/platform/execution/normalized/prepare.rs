@@ -115,6 +115,15 @@ pub enum NormalizedInstruction {
     Invoke {
         arguments: u32,
     },
+    Bind {
+        arguments: u32,
+    },
+    BeginBind {
+        arguments: u32,
+    },
+    Capture {
+        index: u32,
+    },
     TailInvoke {
         arguments: u32,
     },
@@ -2264,6 +2273,15 @@ fn translate_code(
             CompiledInstruction::Invoke { arguments } => NormalizedInstruction::Invoke {
                 arguments: *arguments,
             },
+            CompiledInstruction::Bind { arguments } => NormalizedInstruction::Bind {
+                arguments: *arguments,
+            },
+            CompiledInstruction::BeginBind { arguments } => NormalizedInstruction::BeginBind {
+                arguments: *arguments,
+            },
+            CompiledInstruction::Capture { index } => {
+                NormalizedInstruction::Capture { index: *index }
+            }
             CompiledInstruction::Record {
                 nominal_type,
                 fields,

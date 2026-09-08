@@ -14,7 +14,7 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.25`; immutable supported release `v0.1.21` remains at exact
+Current product source is unreleased `0.1.26`; immutable supported release `v0.1.21` remains at exact
 release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
@@ -80,6 +80,13 @@ initialize/verify/backup/restore, canonical typed application values, and
 `data`/`durable_queue_data` deployment adapters while keeping semantic and operational authority
 separate. Public product surfaces expose the root product version and opaque capabilities digest
 without separate subsystem generation numbers.
+
+Unreleased 0.1.26 adds explicit `bind` expressions with immutable runtime prefixes and graph-owned
+`function-compose<A,B,C>`. Factories can return pure functions over runtime configuration and other
+pure callables after their own frame ends. Stored bare type parameters, secrets, streams, and
+resources remain outside the capture-safe subset. Graph 11 preserves unchanged TypeObject 10 bytes
+and persisted typed-data layouts; the maintained application retains its existing semantic owners.
+The [binding campaign](docs/campaigns/202609090021.md) tracks verification and exact-target admission.
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary

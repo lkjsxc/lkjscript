@@ -21,12 +21,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_c9502434e3b0ce4434fddf7ce56e18f3d7bf5a197ac242878d819554a040bdde`;
-- package revision: `package_revision_64569dc96f354374a465c95b4287861716a57e9093c58184b425831be04da562`;
-- package transport: `package_transport_c2698e7d88f16120e6aef4215ef1704183eab1e623492021a6ccc290877b6d96`;
-- artifact manifest: `artifact_manifest_a59e32e589d8d670348e281c4cf678008ec290c333b86116d1edee640ed12eb3`;
-- artifact bundle: `artifact_bundle_a2eccd58b0a94442b0e56922472b218caed74a3e4daa1e94283a4247367b559a`;
-- 550 live semantic owners, 106 compiler units, and 20 graph tests.
+- semantic revision: `rev_e235829aa34183eeb80affe127feddf7300a8ed2540c0282885cc3f14ffecc6e`;
+- package revision: `package_revision_b3d0bf609bfdf87f22a39a1c3758bd04086285e269f424cbff56f90fb8a29135`;
+- package transport: `package_transport_b1c0065d6e74ce3bd4a14295a6ba93381393e73d8c1ae1ea5c04d8349cfd7ccb`;
+- artifact manifest: `artifact_manifest_c53e75fecf545a896031e6b29fddb890490b01a7352c10b9e8d6b21a58834cd7`;
+- artifact bundle: `artifact_bundle_286a32c340ad10c7b54576960d7bb2cd2afb830fd9d5ead6e8f5b6e21b81b230`;
+- 618 live semantic owners, 113 compiler units, and 24 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -55,6 +55,13 @@ instantiations are graph-owned tests, and the maintained stateful HTTP workflow 
 predicate as a named function value. Exact type parameters, signatures, implementation-free
 references, and the rest of the public interface are executable-generated in
 [`docs/generated/builtin-standard.md`](../../docs/generated/builtin-standard.md).
+
+`function-compose<A,B,C>(outer: Function(B)->C, inner: Function(A)->B) -> Function(A)->C`
+uses `bind` over its private generic graph helper. Four maintained graph tests fix composition
+order and heterogeneous `I64 -> Bool -> Text` instantiation. Runtime bound prefixes may capture
+other checked pure callables or recursively safe immutable data; bare unconstrained stored type
+parameters, secrets, streams, and resources are rejected. Graph 11 changes code meaning encoding;
+unchanged TypeObject 10 bytes and typed-data layout identities remain current.
 
 The `HttpClient` interface has exactly one idempotent, possibly externally visible `get` operation.
 It accepts only ordered headers and returns status, ordered headers, and whole body bytes; endpoint,

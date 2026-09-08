@@ -83,7 +83,7 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         let sink = Mutex::new(None);
         let host = ProgressHost { calls: AtomicU64::new(0), cancel_after: 37 };
         let control = ExecutionControl::uncancelled();
-        let arguments = vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("cancelled"))];
+        let arguments = vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
         let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() })
             .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
@@ -91,7 +91,7 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         require(error.code == "execution_cancelled" && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
         let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing(&recovery_sink, &CoreNormalizedHost)
-            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("after-cancel"))], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
+            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
         require(recovery.0 == NormalizedValue::I64(33_558_528) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
         Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_value":33_558_528,"host_calls":host.calls.load(Ordering::Relaxed),"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
@@ -252,6 +252,142 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
     };
     let mut cases = Vec::new();
     for reference in [false, true] {
+        for (target, expected, calls) in [
+            ("binding-thunk-created", 42, 0),
+            ("binding-capture-once", 9, 3),
+        ] {
+            let (result, mut observed) =
+                invocation(&prepared, reference, target, vec![], policy, u64::MAX)?;
+            require(
+                result.is_ok_and(|value| value == NormalizedValue::I64(expected))
+                    && observed["host_calls"] == calls,
+                "binding executed its target early or evaluated a capture more than once",
+            )?;
+            observed["case"] = json!("binding-evaluation-order-and-count");
+            observed["expected_host_calls"] = json!(calls);
+            cases.push(observed);
+        }
+        for n in [1, 256, 4096] {
+            let mut peak = None;
+            let mut admission = None;
+            for k in [1, 64, 1024] {
+                let (result, mut observed) = invocation(
+                    &prepared,
+                    reference,
+                    "bound-forward",
+                    vec![
+                        NormalizedValue::I64(k),
+                        NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); n])),
+                    ],
+                    policy,
+                    u64::MAX,
+                )?;
+                require(
+                    result.is_ok_and(|value| value == NormalizedValue::I64(n as i64)),
+                    "bound tail forwarding lost its retained list",
+                )?;
+                let frames = observed["observation"]["maximum_call_depth"].clone();
+                let capture =
+                    observed["observation"]["value_work"]["capture_admission_nodes"].clone();
+                require(
+                    capture.as_u64().is_some_and(|visits| visits > n as u64)
+                        && frames.as_u64().is_some_and(|frames| frames <= 8)
+                        && admission.as_ref().is_none_or(|prior| prior == &capture)
+                        && peak.as_ref().is_none_or(|prior| prior == &frames)
+                        && observed["observation"]["value_work"]["internal_guard_descendant_visits"]
+                            == 0,
+                    "bound invocation repeated capture admission or grew live frames",
+                )?;
+                peak = Some(frames);
+                admission = Some(capture);
+                observed["case"] = json!("bound-forward-eight-frame-matrix");
+                observed["n"] = json!(n);
+                observed["k"] = json!(k);
+                cases.push(observed);
+            }
+        }
+        let (result, mut observed) = invocation_control(
+            &prepared,
+            reference,
+            "bound-forward",
+            vec![
+                NormalizedValue::I64(64),
+                NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+            ],
+            policy,
+            u64::MAX,
+            &ExecutionControl::cancel_after_checks(400),
+        )?;
+        let error = result
+            .err()
+            .ok_or_else(|| failure("capture cancellation did not interrupt"))?;
+        require(
+            error.code == "execution_cancelled"
+                && observed["host_calls"] == 0
+                && observed["observation"]["value_work"]["capture_admission_nodes"]
+                    .as_u64()
+                    .is_some_and(|visits| visits > 0),
+            "capture cancellation executed its target or skipped retention admission",
+        )?;
+        observed["case"] = json!("capture-construction-cancellation");
+        observed["failure"] = json!(error);
+        cases.push(observed);
+        let (result, measured) = invocation(
+            &prepared,
+            reference,
+            "bound-forward",
+            vec![
+                NormalizedValue::I64(1),
+                NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+            ],
+            policy,
+            u64::MAX,
+        )?;
+        require(result.is_ok(), "capture allocation calibration failed")?;
+        let allocated = measured["observation"]["allocated_bytes"]
+            .as_u64()
+            .filter(|bytes| *bytes > 0)
+            .ok_or_else(|| failure("capture accounting absent"))?;
+        let items = measured["observation"]["collection_items"]
+            .as_u64()
+            .filter(|items| *items > 0)
+            .ok_or_else(|| failure("capture item accounting absent"))?;
+        for (byte_limit, item_limit, accepted) in [
+            (allocated, items, true),
+            (allocated - 1, items, false),
+            (allocated, items - 1, false),
+        ] {
+            let (result, mut observed) = invocation(
+                &prepared,
+                reference,
+                "bound-forward",
+                vec![
+                    NormalizedValue::I64(1),
+                    NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+                ],
+                NormalizedRunPolicy {
+                    maximum_allocated_bytes: byte_limit,
+                    maximum_collection_items: item_limit,
+                    ..policy
+                },
+                u64::MAX,
+            )?;
+            require(
+                result.is_ok() == accepted,
+                "capture exact-fit/one-over bound is not enforced",
+            )?;
+            if let Err(error) = result {
+                require(
+                    error.class == crate::platform::execution::ExecutionFailureClass::Resource,
+                    "capture bound has wrong failure class",
+                )?;
+                observed["failure"] = json!(error);
+            }
+            observed["case"] = json!("capture-construction-exact-bound");
+            observed["allocated_limit"] = json!(byte_limit);
+            observed["item_limit"] = json!(item_limit);
+            cases.push(observed);
+        }
         let control = ExecutionControl::cancel_after_checks(37);
         let (result, mut observed) = invocation_control(
             &prepared,
@@ -586,7 +722,13 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 cases.push(observation);
             }
         }
-        for target in ["argument-order", "callee-order"] {
+        for target in [
+            "argument-order",
+            "callee-order",
+            "binding-thunk-trap",
+            "binding-capture-order",
+            "binding-callee-order",
+        ] {
             let (result, mut observation) =
                 invocation(&prepared, reference, target, vec![], policy, u64::MAX)?;
             let error = result
@@ -601,6 +743,12 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     },
                 "later argument ran before selected early trap",
             )?;
+            if target.starts_with("binding-") {
+                require(
+                    observation["host_calls"] == 1,
+                    "failed bind continued to later expressions",
+                )?;
+            }
             observation["failure"] = json!(error);
             cases.push(observation);
         }
@@ -617,6 +765,37 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             "fresh healthy invocation failed after exhaustion/cancellation",
         )?;
         cases.push(observation);
+    }
+    // Safe wrong-prefix fault: alter the captured scalar only in disposable production code.
+    let mut wrong_prefix = prepared.clone();
+    for function in Arc::make_mut(&mut wrong_prefix.program.functions) {
+        if let NormalizedFunctionBody::Code(code) = &mut function.body {
+            for instruction in Arc::make_mut(&mut code.instructions) {
+                if matches!(instruction, NormalizedInstruction::I64(4)) {
+                    *instruction = NormalizedInstruction::I64(6);
+                }
+            }
+        }
+    }
+    for reference in [false, true] {
+        let (result, mut observed) = invocation(
+            &wrong_prefix,
+            reference,
+            "binding-partial",
+            vec![],
+            policy,
+            u64::MAX,
+        )?;
+        let value = result
+            .map_err(|error| failure(&format!("wrong-prefix fault trapped: {}", error.code)))?;
+        require(
+            value == NormalizedValue::I64(if reference { 9 } else { 11 }),
+            "wrong-prefix fixed expectation did not discriminate production from canonical meaning",
+        )?;
+        observed["fault"] = json!("wrong-bound-prefix-fixed-expectation");
+        observed["expected"] = json!(9);
+        observed["actual"] = json!(if reference { 9 } else { 11 });
+        cases.push(observed);
     }
     // Safe fault: remove derived tail dispatch only in this private prepared copy. Canonical
     // reference execution must still succeed; production must now hit the independent bound.

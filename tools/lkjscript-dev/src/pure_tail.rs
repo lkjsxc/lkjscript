@@ -20,6 +20,7 @@ const MAXIMUM_SECONDS: u64 = 900;
 struct ValueWork {
     input_admission_nodes: u64,
     raw_result_admission_nodes: u64,
+    capture_admission_nodes: u64,
     constructor_child_visits: u64,
     internal_guard_descendant_visits: u64,
     classification_decisions: u64,
@@ -29,6 +30,7 @@ impl ValueWork {
     fn visits(&self) -> Result<u64, DevError> {
         self.input_admission_nodes
             .checked_add(self.raw_result_admission_nodes)
+            .and_then(|work| work.checked_add(self.capture_admission_nodes))
             .and_then(|work| work.checked_add(self.constructor_child_visits))
             .and_then(|work| work.checked_add(self.internal_guard_descendant_visits))
             .ok_or_else(|| DevError::usage("affinity observation total overflowed"))
@@ -50,6 +52,10 @@ fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevErr
         raw_result_admission_nodes: integer_field(
             records,
             &format!("{tier}-raw-result-admission-nodes"),
+        )?,
+        capture_admission_nodes: integer_field(
+            records,
+            &format!("{tier}-capture-admission-nodes"),
         )?,
         constructor_child_visits: integer_field(
             records,
@@ -94,6 +100,10 @@ fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
                 require(
                     work.input_admission_nodes == select(n, 1)?.input_admission_nodes,
                     "input admission multiplied with call count",
+                )?;
+                require(
+                    work.capture_admission_nodes == select(n, 1)?.capture_admission_nodes,
+                    "capture admission multiplied with invocation count",
                 )?;
                 require(
                     work.internal_guard_descendant_visits == 0,
@@ -222,7 +232,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-2".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-3".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -584,6 +594,18 @@ impl Context {
 fn workflow(context: &mut Context) -> Result<(), DevError> {
     let discovery = context.cli(None, &["capabilities", "--section", "runners"], true)?;
     require(
+        field(&discovery, "execution.binding", "expression")? == "bind"
+            && field(&discovery, "execution.binding", "environment")? == "immutable-flat-prefix"
+            && field(&discovery, "execution.binding", "task-targets")?
+                == "rejected-including-port-preparation"
+            && field(
+                &discovery,
+                "execution.binding",
+                "environment-readmission-on-invoke",
+            )? == "none",
+        "discovery omitted pure binding or its checked environment boundary",
+    )?;
+    require(
         discovery
             .iter()
             .any(|record| record.operation == "execution.tail"),
@@ -601,6 +623,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         for suffix in [
             "input-admission-nodes",
             "raw-result-admission-nodes",
+            "capture-admission-nodes",
             "constructor-child-visits",
             "guard-descendants",
             "classification-decisions",
@@ -657,6 +680,8 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     )?;
     for name in [
         "add",
+        "multiply",
+        "function-compose",
         "subtract",
         "divide",
         "i64-equal",
@@ -702,6 +727,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     library.logical = field(&records, "package", "package-revision")?;
     library.transport = field(&records, "package", "transport")?;
     let keep = format!("{}/{}", library.id, library.symbols["$keep"]);
+    let factory = format!("{}/{}", library.id, library.symbols["$reducer-factory"]);
     let mut consumer = context.new_package("consumer")?;
     context.stage(&consumer, &library)?;
     context.stage(&consumer, &standard)?;
@@ -711,7 +737,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             "{}{}{}",
             dependency(&library),
             dependency(&standard),
-            pure_tail_program::consumer(&standard.symbols, &keep)
+            pure_tail_program::consumer(&standard.symbols, &keep, &factory)
         ),
     )?;
     context.cli(
@@ -749,7 +775,29 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&library.path)?;
     fs::remove_file(&library.container)?;
     fs::remove_file(&standard.container)?;
-    for target in ["forward", "forward-generic"] {
+    context.run(
+        &consumer,
+        "configured",
+        "[3,5,-2,1,[1,2,4]]",
+        r#"{"first":36,"second":-11}"#,
+    )?;
+    for (target, arguments, expected) in [
+        ("binding-empty", "[]", "9"),
+        ("binding-partial", "[]", "9"),
+        ("binding-repeated", "[]", "9"),
+        ("binding-complete", "[]", "9"),
+        ("binding-factory", "[]", "12"),
+        ("compose-forward", "[4,3,5]", "17"),
+        ("compose-reverse", "[4,3,5]", "27"),
+        ("compose-types", "[42]", "\"true\""),
+        ("compose-types", "[1]", "\"false\""),
+        ("binding-thunk-created", "[]", "42"),
+        ("binding-capture-once", "[]", "9"),
+        ("binding-constant", "[]", "9"),
+    ] {
+        context.run(&consumer, target, arguments, expected)?;
+    }
+    for target in ["forward", "forward-generic", "bound-forward"] {
         let mut matrix = Vec::new();
         for n in [1_i64, 256, 4096] {
             for k in [1_i64, 64, 1024] {
@@ -829,9 +877,10 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     )?;
     context.run(&consumer, "count", "[8192]", "0")?;
     let renamed = consumer.symbols["$ordered-step"].clone();
+    let edited_binding = consumer.symbols["$binding-partial"].clone();
     context.apply(
         &mut consumer,
-        &format!("rename.owner owner={renamed} name=ordered-step-reviewed\n"),
+        &format!("rename.owner owner={renamed} name=ordered-step-reviewed\nexpression.function-value as=$reviewed-callee function={}\nexpression.i64 as=$reviewed-prefix value=6\nexpression.bind as=$reviewed-bound callee=$reviewed-callee\nexpression.argument parent=$reviewed-bound index=0 expression=$reviewed-prefix\nexpression.i64 as=$reviewed-suffix value=5\nexpression.invoke as=$reviewed-call function=$reviewed-bound\nexpression.argument parent=$reviewed-call index=0 expression=$reviewed-suffix\nreplace.body function={edited_binding} body=$reviewed-call\n", standard.symbols["add"]),
     )?;
     let incremental = context.build(&consumer, "reviewed-incremental")?;
     fs::remove_dir_all(consumer.path.join("derived/compiler"))?;
@@ -839,6 +888,11 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         context.build(&consumer, "reviewed-clean")? == incremental,
         "reviewed incremental and clean bytes disagree",
     )?;
+    context.run(&consumer, "binding-partial", "[]", "11")?;
+    context.receipt.outcomes.insert(
+        "post-edit-binding".to_owned(),
+        serde_json::json!({"before":9,"after":11,"incremental_equals_clean":true}),
+    );
     context.run(
         &consumer,
         "sum",
@@ -849,7 +903,13 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "reviewed_artifact_sha256".to_owned(),
         serde_json::json!(incremental),
     );
-    for target in ["argument-order", "callee-order"] {
+    for target in [
+        "argument-order",
+        "callee-order",
+        "binding-thunk-trap",
+        "binding-capture-order",
+        "binding-callee-order",
+    ] {
         let before = authority::observe_graph_authority(&consumer.path)?;
         let records = context.cli(
             Some(&consumer.path),
@@ -1029,7 +1089,7 @@ fn standalone_http(
             )?,
         ),
     ]);
-    let sum = format!("{}/{}", consumer.id, consumer.symbols["$sum"]);
+    let sum = format!("{}/{}", consumer.id, consumer.symbols["$configured-fold"]);
     context.apply(
         &mut http,
         &format!(
@@ -1179,7 +1239,7 @@ fn standalone_http(
             address,
             "GET",
             "/?success",
-            &serde_json::to_vec(&values)?,
+            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":1,"bias":0}))?,
             &[],
         )?;
         require(
@@ -1202,7 +1262,7 @@ fn standalone_http(
             address,
             "GET",
             "/?trapped",
-            &serde_json::to_vec(&trapping)?,
+            &serde_json::to_vec(&serde_json::json!({"items":trapping,"scale":1,"bias":0}))?,
             &[],
         )?;
         require(
@@ -1217,14 +1277,26 @@ fn standalone_http(
             address,
             "GET",
             "/?recovery",
-            &serde_json::to_vec(&values)?,
+            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":1,"bias":0}))?,
             &[],
         )?;
         require(
             response.status == 200 && response.body == b"33558528" && data_scan()?.items.len() == 2,
             "transaction state leaked after helper failure",
         )?;
-        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response":"33558528","initial_committed_changes":1,"after_trap_changes":1,"after_recovery_changes":2,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
+        let configured = serde_json::json!({"items":[1,2,4],"scale":3,"bias":5});
+        let response = crate::http_probe::request(
+            address,
+            "GET",
+            "/?configured",
+            &serde_json::to_vec(&configured)?,
+            &[],
+        )?;
+        require(
+            response.status == 200 && response.body == b"36" && data_scan()?.items.len() == 3,
+            "request-configured bound reducer did not commit exactly once",
+        )?;
+        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response":"33558528","initial_committed_changes":1,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"36","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
         Ok(())
     })();
     control.interrupt();
@@ -1296,7 +1368,7 @@ fn standalone_http(
         )
         .map_err(|error| DevError::corrupt(error.to_string()))?;
     require(
-        after.items.len() == 3
+        after.items.len() == 4
             && after.items.iter().all(|item| {
                 item.key.parts()
                     != [lkjscript::platform::data::DataKeyPart::Text(
@@ -1305,7 +1377,7 @@ fn standalone_http(
             }),
         "cancelled staged write became durable or healthy recovery did not commit once",
     )?;
-    context.receipt.outcomes.insert("transaction_cancellation".to_owned(), serde_json::json!({"execution":cancellation,"after":after,"cancelled_key_absent":true,"committed_changes":3}));
+    context.receipt.outcomes.insert("transaction_cancellation".to_owned(), serde_json::json!({"execution":cancellation,"after":after,"cancelled_key_absent":true,"committed_changes":4}));
     require(
         digest(&artifact)? == artifact_sha256,
         "HTTP execution changed artifact",
@@ -1496,7 +1568,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-2"
+        receipt.schema == "lkjscript-pure-tail-acceptance-3"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1544,15 +1616,48 @@ pub(crate) fn read_transferred_receipt(
             "pure-tail fixed public result or frame boundary missing",
         )?;
     }
+    for (target, expected) in [
+        ("configured", r#"{"first":36,"second":-11}"#),
+        ("binding-empty", "9"),
+        ("binding-partial", "9"),
+        ("binding-repeated", "9"),
+        ("binding-complete", "9"),
+        ("binding-factory", "12"),
+        ("binding-constant", "9"),
+        ("binding-capture-once", "9"),
+        ("binding-thunk-created", "42"),
+        ("compose-forward", "17"),
+        ("compose-reverse", "27"),
+        ("compose-types", "\"true\""),
+        ("compose-types", "\"false\""),
+    ] {
+        require(
+            receipt.outcomes.iter().any(|(key, outcome)| {
+                key.ends_with(&format!("-{target}")) && outcome["expected"] == expected
+            }),
+            "binding/composition fixed public outcome is missing",
+        )?;
+    }
+    require(
+        receipt
+            .outcomes
+            .get("post-edit-binding")
+            .is_some_and(|outcome| {
+                outcome["before"] == 9
+                    && outcome["after"] == 11
+                    && outcome["incremental_equals_clean"] == true
+            }),
+        "edited binding did not agree between incremental and clean reconstruction",
+    )?;
     let discovery = receipt
         .outcomes
         .get("checked-value-discovery")
         .ok_or_else(|| DevError::corrupt("checked-value discovery evidence missing"))?;
     require(
-        discovery["observation_fields"] == 16 && discovery["classification"] == "fresh passed",
+        discovery["observation_fields"] == 18 && discovery["classification"] == "fresh passed",
         "checked-value discovery evidence missing",
     )?;
-    for target in ["forward", "forward-generic"] {
+    for target in ["forward", "forward-generic", "bound-forward"] {
         let matrix = receipt
             .outcomes
             .get(&format!("checked-value-{target}-matrix"))
@@ -1586,6 +1691,42 @@ pub(crate) fn read_transferred_receipt(
     let cases = stack["cases"]
         .as_array()
         .ok_or_else(|| DevError::corrupt("bounded-stack cases absent"))?;
+    for tier in ["production", "canonical-reference"] {
+        for n in [1, 256, 4096] {
+            for k in [1, 64, 1024] {
+                require(
+                    cases
+                        .iter()
+                        .filter(|case| {
+                            case["tier"] == tier
+                                && case["case"] == "bound-forward-eight-frame-matrix"
+                                && case["n"] == n
+                                && case["k"] == k
+                        })
+                        .count()
+                        == 1,
+                    "exact bound-callable eight-frame matrix is incomplete",
+                )?;
+            }
+        }
+        require(
+            cases.iter().any(|case| {
+                case["tier"] == tier
+                    && case["case"] == "capture-construction-cancellation"
+                    && case["failure"]["code"] == "execution_cancelled"
+            }),
+            "capture cancellation proof is absent",
+        )?;
+        require(
+            cases.iter().any(|case| {
+                case["tier"] == tier
+                    && case["fault"] == "wrong-bound-prefix-fixed-expectation"
+                    && case["expected"] == 9
+                    && case["actual"] == if tier == "production" { 11 } else { 9 }
+            }),
+            "wrong-prefix fault did not discriminate independent canonical meaning",
+        )?;
+    }
     for case in cases {
         let observation = &case["observation"];
         let admission_failure = case["failure"].is_object()
@@ -1682,6 +1823,8 @@ pub(crate) fn read_transferred_receipt(
             && http["initial_committed_changes"] == 1
             && http["after_trap_changes"] == 1
             && http["after_recovery_changes"] == 2
+            && http["configured_response"] == "36"
+            && http["after_configured_changes"] == 3
             && http["project_directories_absent"] == true,
         "standalone transaction boundary incomplete",
     )?;
@@ -1694,7 +1837,7 @@ pub(crate) fn read_transferred_receipt(
             && cancellation["execution"]["cleanup_complete"] == true
             && cancellation["execution"]["observation"]["maximum_live_transactions"] == 1
             && cancellation["cancelled_key_absent"] == true
-            && cancellation["committed_changes"] == 3,
+            && cancellation["committed_changes"] == 4,
         "transaction cancellation boundary incomplete",
     )?;
     require(
@@ -1736,6 +1879,7 @@ mod checked_value_tests {
                 let work = ValueWork {
                     input_admission_nodes: n as u64 + 2,
                     raw_result_admission_nodes: k as u64,
+                    capture_admission_nodes: 0,
                     constructor_child_visits: 0,
                     internal_guard_descendant_visits: 0,
                     classification_decisions: 10 * k as u64,

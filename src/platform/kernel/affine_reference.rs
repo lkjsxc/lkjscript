@@ -295,7 +295,8 @@ impl Reference<'_> {
                 arguments,
                 ..
             } => self.function_call(*function, arguments, live),
-            ExpressionOperation::Invoke { callee, arguments } => {
+            ExpressionOperation::Invoke { callee, arguments }
+            | ExpressionOperation::Bind { callee, arguments } => {
                 self.plain(*callee, live)?;
                 for argument in arguments {
                     self.plain(*argument, live)?;

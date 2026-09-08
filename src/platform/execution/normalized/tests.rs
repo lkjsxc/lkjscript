@@ -13,6 +13,222 @@ use super::deployment::{
     NormalizedPreparedDeployment,
 };
 use super::http::NormalizedHttpApplication;
+
+#[test]
+fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/graph10-unchanged-types-and-data.json"
+    ))
+    .expect("independently generated Graph 10 fixtures");
+    assert_eq!(
+        fixture["source_commit"],
+        "bd58aebafe88c4222ac13307526eaa426650b838"
+    );
+    assert_eq!(
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        11
+    );
+    assert_eq!(
+        crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
+        10
+    );
+    let hex = |value: &serde_json::Value| {
+        value
+            .as_str()
+            .expect("hex witness")
+            .as_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| {
+                let text = std::str::from_utf8(pair).expect("ASCII hex");
+                u8::from_str_radix(text, 16).expect("hex byte")
+            })
+            .collect::<Vec<_>>()
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let standard = GraphRepository::open(&root.join("packages/standard"))
+        .unwrap()
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let application = GraphRepository::open(&root.join("applications/lkjournal"))
+        .unwrap()
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let schema =
+        super::reference_schema::NormalizedReferenceSchema::reconstruct([&standard, &application])
+            .unwrap();
+    let mut nominal = 0;
+    let mut nested = 0;
+    for (project, type_count) in fixture["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip([85, 149])
+    {
+        let snapshot = if project["package"] == "pkg_10000000000000000000000000000001" {
+            &standard
+        } else {
+            &application
+        };
+        assert_eq!(
+            snapshot.root.repository_id.to_string(),
+            project["repository"]
+        );
+        assert_eq!(snapshot.root.package_id.to_string(), project["package"]);
+        assert_eq!(snapshot.root.package_name.as_str(), project["package_name"]);
+        let old_owners = project["owners"].as_object().unwrap();
+        let old_retirements = project["retirements"].as_object().unwrap();
+        for (key, owner) in &snapshot.owners {
+            if let Some(expected) = old_owners.get(&key.to_string()) {
+                assert_eq!(
+                    &neutral_binding_generation_hash(serde_json::to_value(owner).unwrap()),
+                    expected,
+                    "changed predecessor owner {key}"
+                );
+            }
+        }
+        for key in old_owners.keys() {
+            assert!(
+                snapshot
+                    .owners
+                    .keys()
+                    .any(|owner| owner.to_string() == *key),
+                "lost owner {key}"
+            );
+        }
+        assert_eq!(snapshot.retirements.len(), old_retirements.len());
+        for (key, retired) in &snapshot.retirements {
+            assert_eq!(
+                neutral_binding_generation_hash(serde_json::to_value(retired).unwrap()),
+                old_retirements[&key.to_string()],
+                "changed retirement {key}"
+            );
+        }
+        let additions = snapshot
+            .owners
+            .iter()
+            .filter(|(key, _)| !old_owners.contains_key(&key.to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(additions.len(), if type_count == 85 { 68 } else { 0 });
+        let new_declarations = additions
+            .iter()
+            .filter_map(|(_, owner)| match owner {
+                OwnerRecord::Declaration(record) => Some(record.name.as_str()),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            new_declarations,
+            if type_count == 85 {
+                BTreeSet::from([
+                    "function-compose",
+                    "function-compose-apply",
+                    "function-compose-test-label",
+                    "function-compose-forward",
+                    "function-compose-reverse",
+                    "function-compose-i64-bool-text-true",
+                    "function-compose-i64-bool-text-false",
+                ])
+            } else {
+                BTreeSet::new()
+            }
+        );
+        println!(
+            "{}",
+            serde_json::json!({"case":"maintained-generation-inventory","package":snapshot.root.package_id,
+            "unchanged_owners":old_owners.len(),"added_owners":additions.len(),"unchanged_retirements":old_retirements.len(),
+            "type_byte_witnesses":type_count,"generation_fields_removed":["contract_version","graph_contract_version"]})
+        );
+        let program = NormalizedProgram::prepare(
+            load_artifact(
+                &std::fs::read(root.join(project["artifact"].as_str().unwrap())).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(project["type_bytes"].as_array().unwrap().len(), type_count);
+        for witness in project["type_bytes"].as_array().unwrap() {
+            let ty: TypeObjectDigest = serde_json::from_value(witness["type"].clone()).unwrap();
+            let bytes = hex(&witness["bytes"]);
+            let object = crate::platform::kernel::decode_type_object(&bytes, ty).unwrap();
+            assert_eq!(encode_type_object(&object).unwrap(), (ty, bytes));
+            let current = standard
+                .types
+                .get(&ty)
+                .or_else(|| application.types.get(&ty))
+                .or_else(|| application.dependency_types.get(&ty))
+                .expect("unchanged maintained type");
+            assert_eq!(current, &object);
+        }
+        for witness in project["typed_data"].as_array().unwrap() {
+            let ty: TypeObjectDigest = serde_json::from_value(witness["type"].clone()).unwrap();
+            let bytes = hex(&witness["bytes"]);
+            assert_eq!(&bytes[10..42], hex(&witness["layout"]));
+            let value = super::data_codec::decode_typed(&program, &bytes, ty).unwrap();
+            assert_eq!(
+                super::codec::encode_value(&program, &value, ty, JsonLimits::default()).unwrap(),
+                witness["value"]
+            );
+            assert_eq!(
+                super::data_codec::encode_typed(&program, &value, ty).unwrap(),
+                bytes
+            );
+            let reference = super::data_codec_reference::decode_typed(&schema, &bytes, ty).unwrap();
+            assert_eq!(
+                super::codec::encode_value(&schema, &reference, ty, JsonLimits::default()).unwrap(),
+                witness["value"]
+            );
+            assert_eq!(
+                super::data_codec_reference::encode_typed(&schema, &reference, ty).unwrap(),
+                bytes
+            );
+            nominal += usize::from(matches!(program.types[&ty].form, TypeForm::Named { .. }));
+            nested += usize::from(
+                witness["value"].as_object().is_some_and(|fields| {
+                    fields
+                        .values()
+                        .any(|field| field.is_object() || field.is_array())
+                }) || witness["value"].is_array(),
+            );
+        }
+    }
+    assert!(
+        nominal >= 10 && nested >= 10,
+        "nominal={nominal}, nested={nested}"
+    );
+}
+
+fn neutral_binding_generation_hash(mut value: serde_json::Value) -> serde_json::Value {
+    fn remove_generation(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                fields.remove("contract_version");
+                fields.remove("graph_contract_version");
+                for child in fields.values_mut() {
+                    remove_generation(child);
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for child in values {
+                    remove_generation(child);
+                }
+            }
+            _ => {}
+        }
+    }
+    remove_generation(&mut value);
+    blake3::hash(&serde_json::to_vec(&value).unwrap())
+        .to_hex()
+        .to_string()
+        .into()
+}
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
@@ -3210,7 +3426,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph8_dense_bytecode_5");
+    assert_eq!(observation.production_tier, "graph11_dense_bytecode_6");
 }
 
 #[test]
@@ -3506,7 +3722,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph8_reference_records_4"
+        "graph11_reference_records_5"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -3723,9 +3939,9 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
 }
 
 #[test]
-fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
-    // This maintained same-format artifact predates the campaign. No compiler or conversion
-    // participates: both calls enter its existing graph-owned fold with runtime values.
+fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
+    // The current-generation artifact retains the predecessor graph-owned fold semantics.
+    // Invocation does not rebuild it; type/data compatibility is checked independently above.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
     let bytes = std::fs::read(root.join("generated/standard.lkja")).expect("maintained artifact");
     let program =
@@ -3759,6 +3975,7 @@ fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
                 NormalizedValue::Function {
                     function: index,
                     type_arguments: Arc::from([]),
+                    bound_arguments: None,
                 },
             ]
         };
@@ -3772,7 +3989,7 @@ fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
                 None,
                 &ExecutionControl::uncancelled(),
             )
-            .expect("old artifact receives tail execution");
+            .expect("current artifact receives tail execution");
         let canonical_add = super::value::FunctionIndex(
             u32::try_from(schema.functions.binary_search(&add).expect("canonical add"))
                 .expect("bounded index"),
@@ -3785,7 +4002,7 @@ fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
                 arguments(canonical_add),
                 &ExecutionControl::uncancelled(),
             )
-            .expect("independent old canonical fold");
+            .expect("independent canonical fold");
         assert_eq!(production.0, NormalizedValue::I64(n * (n + 1) / 2));
         assert_eq!(production.0, reference.0);
         assert!(production.1.maximum_call_depth <= 8 && reference.1.maximum_call_depth <= 8);
@@ -4360,5 +4577,214 @@ fn raw_adapter_result_rejection_reports_prior_visibility_and_stops_next_effect()
             "{}",
             serde_json::json!({"case":"raw-adapter-result", "reference": reference, "prior_effects": 1, "downstream_calls": 0, "cleanup_owned": 0, "healthy_reuse_calls": 2, "failure": error, "work": work})
         );
+    }
+}
+
+#[test]
+fn bound_environment_cost_oracle_detects_real_per_invoke_rescanning() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+    let standard = GraphRepository::open(&root)
+        .unwrap()
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let length = declaration_named(&standard, "list-length").declaration;
+    let equal = declaration_named(&standard, "i64-equal").declaration;
+    let subtract = declaration_named(&standard, "subtract").declaration;
+    let temporary = tempfile::tempdir().unwrap();
+    let created = GraphRepository::create(&temporary.path().join("cost"), &standard, None).unwrap();
+    let base = created.repository.view_current().unwrap().revision();
+    let request = format!(
+        r#"request base={base}
+create.module as=$module name=binding-cost
+ type.list as=@items item=i64
+ type.function as=@thunk result=i64
+expression.local as=$items value=$length-items
+expression.call as=$length-body function={length}
+type.argument parent=$length-body index=0 type=i64
+expression.argument parent=$length-body index=0 expression=$items
+create.function as=$length module=$module name=retained-length visibility=private result=i64 effect=pure body=$length-body
+add.parameter as=$length-items function=$length name=items type=@items
+expression.local as=$condition-n value=$go-n
+expression.i64 as=$zero value=0
+expression.call as=$condition function={equal}
+expression.argument parent=$condition index=0 expression=$condition-n
+expression.argument parent=$condition index=1 expression=$zero
+expression.local as=$final value=$go-thunk
+expression.invoke as=$final-value function=$final
+expression.local as=$each value=$go-thunk
+expression.invoke as=$each-value function=$each
+expression.local as=$next-n value=$go-n
+expression.i64 as=$one value=1
+expression.call as=$decrement function={subtract}
+expression.argument parent=$decrement index=0 expression=$next-n
+expression.argument parent=$decrement index=1 expression=$one
+expression.local as=$next-thunk value=$go-thunk
+expression.call as=$transfer function=$go
+expression.argument parent=$transfer index=0 expression=$decrement
+expression.argument parent=$transfer index=1 expression=$next-thunk
+expression.sequence as=$again
+expression.argument parent=$again index=0 expression=$each-value
+expression.argument parent=$again index=1 expression=$transfer
+expression.if as=$go-body condition=$condition when-true=$final-value when-false=$again
+create.function as=$go module=$module name=forward-bound visibility=private result=i64 effect=pure body=$go-body
+add.parameter as=$go-n function=$go name=n type=i64
+add.parameter as=$go-thunk function=$go name=thunk type=@thunk
+expression.function-value as=$callee function=$length
+expression.local as=$capture value=$entry-items
+expression.bind as=$bound callee=$callee
+expression.argument parent=$bound index=0 expression=$capture
+expression.local as=$n value=$entry-n
+expression.call as=$entry-body function=$go
+expression.argument parent=$entry-body index=0 expression=$n
+expression.argument parent=$entry-body index=1 expression=$bound
+create.function as=$entry module=$module name=bound-entry visibility=private result=i64 effect=pure body=$entry-body
+add.parameter as=$entry-n function=$entry name=n type=i64
+add.parameter as=$entry-items function=$entry name=items type=@items
+"#
+    );
+    let decoded =
+        crate::platform::control::decode_compact_change("bound-cost", request.as_bytes()).unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    assert!(matches!(
+        created.repository.publish(&prepared.publication).unwrap(),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let snapshot = created
+        .repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let program = prepare_snapshot(&snapshot);
+    let entry = declaration_named(&snapshot, "bound-entry");
+    let policy = NormalizedRunPolicy {
+        maximum_call_depth: 8,
+        ..Default::default()
+    };
+    for reference in [false, true] {
+        let mut regular = BTreeMap::new();
+        let mut rescanned = BTreeMap::new();
+        for n in [1, 256, 4096] {
+            for k in [1, 64, 1024] {
+                for fault in [false, true] {
+                    let run = || {
+                        let arguments = vec![
+                            NormalizedValue::I64(k),
+                            NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); n])),
+                        ];
+                        if reference {
+                            let (value, observation) =
+                                NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                                    .invoke(
+                                        entry,
+                                        arguments,
+                                        None,
+                                        &ExecutionControl::uncancelled(),
+                                    )
+                                    .unwrap();
+                            assert_eq!(
+                                observation.live_call_frames_after
+                                    + observation.live_control_frames_after
+                                    + observation.live_local_scopes_after
+                                    + observation.live_type_scopes_after
+                                    + observation.live_transactions_after
+                                    + observation.live_handles_after,
+                                0
+                            );
+                            (
+                                value,
+                                observation.value_work,
+                                observation.maximum_call_depth,
+                                observation.allocated_bytes,
+                            )
+                        } else {
+                            let (value, observation) = NormalizedVm::new(&program, policy)
+                                .invoke(entry, arguments, None, &ExecutionControl::uncancelled())
+                                .unwrap();
+                            assert_eq!(
+                                observation.live_call_frames_after
+                                    + observation.live_locals_after
+                                    + observation.live_type_bindings_after
+                                    + observation.live_operands_after
+                                    + observation.live_transactions_after
+                                    + observation.live_handles_after,
+                                0
+                            );
+                            (
+                                value,
+                                observation.value_work,
+                                observation.maximum_call_depth,
+                                observation.allocated_bytes,
+                            )
+                        }
+                    };
+                    let started = std::time::Instant::now();
+                    let (value, work, frames, bytes) = if fault {
+                        super::value_oracle::force_rescan(run)
+                    } else {
+                        run()
+                    };
+                    assert_eq!(value, NormalizedValue::I64(n as i64));
+                    assert!(frames <= 8);
+                    if !fault {
+                        assert_eq!(work.internal_guard_descendant_visits, 0);
+                        println!(
+                            "{}",
+                            serde_json::json!({"case":"bound-value-cost","reference":reference,"n":n,"k":k,"work":work,"frames":frames,"allocated_bytes":bytes,"elapsed_nanoseconds":started.elapsed().as_nanos()})
+                        );
+                    }
+                    if fault {
+                        rescanned.insert((n, k), work);
+                    } else {
+                        regular.insert((n, k), work);
+                    }
+                }
+            }
+        }
+        let visits = |work: &super::value::ValueWork| {
+            work.input_admission_nodes
+                + work.raw_result_admission_nodes
+                + work.capture_admission_nodes
+                + work.constructor_child_visits
+                + work.internal_guard_descendant_visits
+        };
+        let independent = |matrix: &BTreeMap<_, super::value::ValueWork>| {
+            [1, 256, 4096].into_iter().all(|n| {
+                [1, 64, 1024].into_iter().all(|k| {
+                    visits(&matrix[&(n, k)]) - visits(&matrix[&(1, k)])
+                        == visits(&matrix[&(n, 1)]) - visits(&matrix[&(1, 1)])
+                })
+            })
+        };
+        assert!(independent(&regular));
+        assert!(
+            !independent(&rescanned),
+            "a restored environment scan must fail the N/K cost oracle"
+        );
+        println!(
+            "{}",
+            serde_json::json!({"case":"bound-environment-rescan-fault","reference":reference,
+            "regular_separable":true,"restored_scan_separable":false,"n":4096,"k":1024,
+            "regular_work":regular[&(4096,1024)],"restored_work":rescanned[&(4096,1024)]})
+        );
+        for n in [1, 256, 4096] {
+            for k in [1, 64, 1024] {
+                assert_eq!(
+                    regular[&(n, k)].input_admission_nodes,
+                    regular[&(n, 1)].input_admission_nodes
+                );
+                assert_eq!(
+                    regular[&(n, k)].capture_admission_nodes,
+                    regular[&(n, 1)].capture_admission_nodes
+                );
+            }
+        }
     }
 }

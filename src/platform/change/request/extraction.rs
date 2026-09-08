@@ -1185,12 +1185,6 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
                     } => requirements.extend(called),
                 }
             }
-            ExpressionOperation::FunctionValue { .. } | ExpressionOperation::Invoke { .. } => {
-                return Err(extract_error(
-                    "change_extract_closure",
-                    "function values and indirect invocation are outside the extraction boundary",
-                ));
-            }
             _ => {}
         }
     }
@@ -1412,7 +1406,8 @@ fn replace_expression_reference(
         | ExpressionOperation::CapabilityCall {
             arguments: items, ..
         } => items.iter_mut().for_each(&mut replace),
-        ExpressionOperation::Invoke { callee, arguments } => {
+        ExpressionOperation::Invoke { callee, arguments }
+        | ExpressionOperation::Bind { callee, arguments } => {
             replace(callee);
             arguments.iter_mut().for_each(&mut replace);
         }

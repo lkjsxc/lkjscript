@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 10 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 11 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -45,17 +45,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-15";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-15";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 15;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF15";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART15";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN15";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-16";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-16";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 16;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF16";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART16";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN16";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v15";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v15";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v15";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v15";
+    "lkjscript.artifact-manifest-envelope.v16";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v16";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v16";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v16";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;

@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 10 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 11 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -345,7 +345,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph8_dense_bytecode_5",
+                production_tier: "graph11_dense_bytecode_6",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -392,15 +392,8 @@ impl<'a> NormalizedVm<'a> {
             let Some(arguments) = port_arguments else {
                 return Ok(value);
             };
-            let NormalizedValue::Function {
-                function,
-                type_arguments,
-            } = value.into_raw()
-            else {
-                return Err(type_error(
-                    "expression-backed target port did not evaluate to a function",
-                ));
-            };
+            let (function, type_arguments, arguments) =
+                machine.prepare_invocation(value, arguments, true)?;
             machine.call(function, type_arguments, arguments)?;
             finish_admitted(&mut machine)
         })();
@@ -547,7 +540,7 @@ impl Machine<'_> {
                     })?;
                     let class = value.class(self.program, &mut self.observation.value_work)?;
                     let valid = match use_mode {
-                        ParameterUse::Unrestricted => class == Class::Free,
+                        ParameterUse::Unrestricted => matches!(class, Class::Free | Class::Port),
                         ParameterUse::Borrow => class == Class::Direct,
                         ParameterUse::Consume => class != Class::Free,
                     };
@@ -609,24 +602,76 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::Invoke { arguments } => {
                     let arguments = self.pop_many(arguments as usize)?;
-                    let NormalizedValue::Function {
-                        function,
-                        type_arguments,
-                    } = self.pop()?.into_raw()
-                    else {
-                        return Err(type_error("invoke callee is not a function"));
-                    };
+                    let callee = self.pop()?;
+                    let (function, type_arguments, arguments) =
+                        self.prepare_invocation(callee, arguments, false)?;
                     self.call(function, type_arguments, arguments)?;
+                }
+                NormalizedInstruction::BeginBind { arguments } => {
+                    let callee = self.pop()?;
+                    let value = checked::Admission {
+                        substitutions: &BTreeMap::new(),
+                        program: self.program,
+                        resources: self.resources,
+                        control: self.control,
+                        policy: self.policy,
+                        work: &mut self.observation.value_work,
+                        allocated: &mut self.observation.allocated_bytes,
+                        allocation_charges: &mut self.observation.allocation_charges,
+                        items: &mut self.observation.collection_items,
+                    }
+                    .begin_bind(callee, arguments as usize)?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::Capture { index } => {
+                    let argument = self.pop()?;
+                    let offset = self
+                        .stack
+                        .len()
+                        .checked_sub(index as usize + 1)
+                        .filter(|offset| {
+                            *offset >= self.frames.last().map_or(0, |frame| frame.stack_base)
+                        })
+                        .ok_or_else(|| {
+                            type_error("capture instruction has no in-frame bind callee")
+                        })?;
+                    let callee = &self.stack[offset];
+                    let value = checked::Admission {
+                        substitutions: &BTreeMap::new(),
+                        program: self.program,
+                        resources: self.resources,
+                        control: self.control,
+                        policy: self.policy,
+                        work: &mut self.observation.value_work,
+                        allocated: &mut self.observation.allocated_bytes,
+                        allocation_charges: &mut self.observation.allocation_charges,
+                        items: &mut self.observation.collection_items,
+                    }
+                    .capture(callee, argument, index as usize)?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::Bind { arguments } => {
+                    let arguments = self.pop_many(arguments as usize)?;
+                    let callee = self.pop()?;
+                    let value = checked::Admission {
+                        substitutions: &BTreeMap::new(),
+                        program: self.program,
+                        resources: self.resources,
+                        control: self.control,
+                        policy: self.policy,
+                        work: &mut self.observation.value_work,
+                        allocated: &mut self.observation.allocated_bytes,
+                        allocation_charges: &mut self.observation.allocation_charges,
+                        items: &mut self.observation.collection_items,
+                    }
+                    .bind(callee, arguments)?;
+                    self.push(value)?;
                 }
                 NormalizedInstruction::TailInvoke { arguments } => {
                     let arguments = self.pop_many(arguments as usize)?;
-                    let NormalizedValue::Function {
-                        function,
-                        type_arguments,
-                    } = self.pop()?.into_raw()
-                    else {
-                        return Err(type_error("invoke callee is not a function"));
-                    };
+                    let callee = self.pop()?;
+                    let (function, type_arguments, arguments) =
+                        self.prepare_invocation(callee, arguments, false)?;
                     self.validate_tail_caller()?;
                     let tail = self
                         .program
@@ -933,6 +978,51 @@ impl Machine<'_> {
             })
             .collect::<Result<Vec<_>, _>>()
             .map(Into::into)
+    }
+
+    fn prepare_invocation(
+        &mut self,
+        callee: CheckedValue,
+        arguments: Vec<CheckedValue>,
+        allow_port: bool,
+    ) -> Result<checked::Invocation, ExecutionError> {
+        self.control.check()?;
+        #[cfg(test)]
+        super::value_oracle::forced_descendant_work(callee.raw(), &mut self.observation.value_work);
+        let NormalizedValue::Function {
+            bound_arguments, ..
+        } = callee.raw()
+        else {
+            return Err(type_error("invoke callee is not a function"));
+        };
+        let prefix = bound_arguments.as_ref().map_or(0, |prefix| prefix.len());
+        let total = prefix
+            .checked_add(arguments.len())
+            .filter(|total| *total <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
+            .ok_or_else(|| {
+                resource_error(
+                    "normalized_collection_items",
+                    "complete callable arguments exceed the child bound",
+                )
+            })?;
+        if prefix != 0 {
+            let slots = prefix
+                .checked_add(total)
+                .and_then(|slots| slots.checked_mul(std::mem::size_of::<CheckedValue>()))
+                .ok_or_else(|| {
+                    resource_error(
+                        "normalized_allocation",
+                        "callable argument storage overflowed",
+                    )
+                })?;
+            self.charge_allocation(slots as u64)?;
+        }
+        let (function, types, mut complete) = callee.invocation(self.program, allow_port)?;
+        if prefix == 0 {
+            return Ok((function, types, arguments));
+        }
+        complete.extend(arguments);
+        Ok((function, types, complete))
     }
 
     fn call(
@@ -1634,6 +1724,15 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
                     pending.push(value);
                 }
             }
+            NormalizedValue::Result { value, .. } => {
+                items = items.checked_add(1).ok_or_else(|| {
+                    resource_error(
+                        "normalized_external_value",
+                        "external result item count overflowed",
+                    )
+                })?;
+                pending.push(value);
+            }
             NormalizedValue::List(values) => {
                 items = items.checked_add(values.len() as u64).ok_or_else(|| {
                     resource_error(
@@ -2324,19 +2423,23 @@ pub(crate) fn normalized_equal(
                 layout: right_layout,
                 fields: right,
             }),
-        ) if left_layout == right_layout && left.len() == right.len() => {
-            equal_sequences(left, right)
-        }
+        ) => Ok(equal_sequences(left, right)? && left_layout == right_layout),
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields: left }),
             NormalizedValue::Record(NormalizedRecord::Structural { fields: right }),
-        ) if left.len() == right.len() => {
-            for ((left_name, left), (right_name, right)) in left.iter().zip(right.iter()) {
-                if left_name != right_name || !normalized_equal(left, right)? {
-                    return Ok(false);
-                }
+        ) => {
+            let mut equal = left.len() == right.len();
+            for index in 0..left.len().max(right.len()) {
+                equal &= match (left.get(index), right.get(index)) {
+                    (Some((a, left)), Some((b, right))) => normalized_equal(left, right)? && a == b,
+                    (Some((_, value)), None) | (None, Some((_, value))) => {
+                        normalized_equal(value, value)?;
+                        false
+                    }
+                    (None, None) => false,
+                };
             }
-            Ok(true)
+            Ok(equal)
         }
         (
             NormalizedValue::Variant {
@@ -2349,31 +2452,35 @@ pub(crate) fn normalized_equal(
                 case: right_case,
                 payload: right,
             },
-        ) if left_layout == right_layout && left_case == right_case => match (left, right) {
-            (None, None) => Ok(true),
-            (Some(left), Some(right)) => normalized_equal(left, right),
-            _ => Ok(false),
-        },
-        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => match (left, right) {
-            (None, None) => Ok(true),
-            (Some(left), Some(right)) => normalized_equal(left, right),
-            _ => Ok(false),
-        },
-        (NormalizedValue::List(left), NormalizedValue::List(right))
-            if left.len() == right.len() =>
-        {
-            equal_sequences(left, right)
+        ) => Ok(equal_optional(left.as_deref(), right.as_deref())?
+            && left_layout == right_layout
+            && left_case == right_case),
+        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
+            equal_optional(left.as_deref(), right.as_deref())
         }
-        (NormalizedValue::Map(left), NormalizedValue::Map(right)) if left.len() == right.len() => {
+        (
+            NormalizedValue::Result {
+                success: left_case,
+                value: left,
+            },
+            NormalizedValue::Result {
+                success: right_case,
+                value: right,
+            },
+        ) => Ok(normalized_equal(left, right)? && left_case == right_case),
+        (NormalizedValue::List(left), NormalizedValue::List(right)) => equal_sequences(left, right),
+        (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
+            let mut equal = left.len() == right.len();
             for (key, left) in left.iter() {
-                let Some(right) = right.get(key) else {
-                    return Ok(false);
-                };
-                if !normalized_equal(left, right)? {
-                    return Ok(false);
+                equal &= equal_optional(Some(left), right.get(key))?;
+            }
+            for (key, right) in right.iter() {
+                if !left.contains_key(key) {
+                    normalized_equal(right, right)?;
+                    equal = false;
                 }
             }
-            Ok(true)
+            Ok(equal)
         }
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(trap_error(
@@ -2385,7 +2492,25 @@ pub(crate) fn normalized_equal(
             "normalized_value_not_comparable",
             "live resources do not support semantic equality",
         )),
-        _ => Ok(false),
+        _ => {
+            normalized_equal(left, left)?;
+            normalized_equal(right, right)?;
+            Ok(false)
+        }
+    }
+}
+
+fn equal_optional(
+    left: Option<&NormalizedValue>,
+    right: Option<&NormalizedValue>,
+) -> Result<bool, ExecutionError> {
+    match (left, right) {
+        (None, None) => Ok(true),
+        (Some(left), Some(right)) => normalized_equal(left, right),
+        (Some(value), None) | (None, Some(value)) => {
+            normalized_equal(value, value)?;
+            Ok(false)
+        }
     }
 }
 
@@ -2393,12 +2518,11 @@ fn equal_sequences(
     left: &[NormalizedValue],
     right: &[NormalizedValue],
 ) -> Result<bool, ExecutionError> {
-    for (left, right) in left.iter().zip(right.iter()) {
-        if !normalized_equal(left, right)? {
-            return Ok(false);
-        }
+    let mut equal = left.len() == right.len();
+    for index in 0..left.len().max(right.len()) {
+        equal &= equal_optional(left.get(index), right.get(index))?;
     }
-    Ok(true)
+    Ok(equal)
 }
 
 fn binary_i64(

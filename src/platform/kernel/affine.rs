@@ -1,4 +1,4 @@
-//! Language-order affine capability-resource validation for Graph 10.
+//! Language-order affine capability-resource validation for Graph 11.
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
@@ -538,7 +538,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 arguments,
                 ..
             } => self.evaluate_function_call(expression, function, &arguments, state, depth + 1),
-            ExpressionOperation::Invoke { callee, arguments } => {
+            ExpressionOperation::Invoke { callee, arguments }
+            | ExpressionOperation::Bind { callee, arguments } => {
                 self.require_unrestricted(callee, state, depth + 1, "invoked value")?;
                 for argument in arguments {
                     self.require_unrestricted(argument, state, depth + 1, "function argument")?;

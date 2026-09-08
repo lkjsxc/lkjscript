@@ -36,8 +36,9 @@ must exhaust fuel. Deterministic cancellation after progress, cumulative allocat
 one-over, VM operand exact-fit and one-over, and healthy subsequent invocations discriminate
 accounting resets and leaks. Reference allocation/expression units remain independent; the
 canonical evaluator has no VM operand stack. Safe malformed preparation/runtime fixtures and
-forced ordinary frame growth must be detected. The unchanged maintained pre-campaign artifact
-is strictly prepared and its graph fold invoked with long runtime lists without conversion.
+forced ordinary frame growth must be detected. The current maintained artifact is strictly
+prepared and its graph fold invoked with long runtime lists; predecessor artifact generations
+reject, while independent generation-neutral inventories preserve the inherited graph meaning.
 
 One standalone loopback HTTP bundle stages a data write in a lexical transaction and calls the
 same long pure fold through an empty-requirement task frame. A raw client and independent data
@@ -53,7 +54,7 @@ runtime list length N in {1, 256, 4096}, countdown K in {1, 64, 1024}, direct ca
 invocation through a separately authored transported library whose producer is removed. Each
 result is independently N. Input admission depends on N and is equal across K; internal affinity
 guard descendant visits are exactly zero; checked-root classification decisions at fixed K are
-equal across N. With W equal to input admission nodes, raw-result admission nodes, constructor
+equal across N. With W equal to input admission nodes, raw-result admission nodes, capture-admission nodes, constructor
 child visits and internal guard descendant visits, require
 `W(N,K)-W(1,K) = W(N,1)-W(1,1)` in each tier and each matrix. Moving an aggregate scan to result
 admission, type checking or another equivalent guard cannot evade this total. A retained
@@ -67,6 +68,7 @@ Observation units are evaluator-local and cumulative for one invocation:
 | --- | --- |
 | `input-admission-nodes` | Raw value nodes inspected before installing invocation arguments, including the root and the node that rejects; shared child occurrences count separately. |
 | `raw-result-admission-nodes` | Raw host, adapter or decoded result nodes inspected before use; declared result types and effect visibility checks grant no certificate. |
+| `capture-admission-nodes` | Runtime capture-value and capture-type nodes visited during construction/admission, including nested environment edges and absent nominal cases. Callable signatures are leaves for capture safety. |
 | `constructor-child-visits` | Immediate checked children combined by aggregate constructors and additions; existing admitted siblings and projections inherit their proof. |
 | `guard-descendants` | Descendant visits to rediscover internal eligibility, including equivalent replacement validation paths; required to be zero in ordinary execution. |
 | `classification-decisions` | Checked-root eligibility queries at local, call and constructor guards; raw-node classification is covered by admission nodes instead. Constant proof propagation is not a descendant visit. |
@@ -95,6 +97,32 @@ depth 256/257, item and allocation exact-fit/one-over, owned-state cleanup and h
 Raw adapter-result violations preserve actual prior visibility and stop subsequent effects;
 lexical transactions still roll back staged work. Effects are never replayed for public comparison.
 Transferred receipts validate these observations in addition to all inherited pure-tail gates.
+
+Pure binding extends the existing public CLI, offline-package, and pure-tail owners. Fixed results
+include two simultaneously retained runtime reducers (36 and -11), composition in both orders
+(17 and 27), heterogeneous `I64 -> Bool -> Text`, empty/partial/repeated/complete binding, and
+capture of another callable. A fully bound division-by-zero thunk constructs without running its
+target; invocation traps. Ordered trap and host-call observations distinguish callee order,
+one-time captures, and stopping before later captures. An exported factory retains a private graph
+helper after producer removal; a standalone transactional HTTP fold uses request-supplied scale
+and bias, commits once, and retains trap/cancellation rollback and healthy recovery.
+
+The additional N/K matrix binds one runtime list into a zero-argument length callable and invokes
+and forwards that same value through pure tail steps. Both tiers retain the eight-frame ceiling,
+K-independent input/capture admission, zero internal descendant guards, and the same W equation.
+Safe source-bound faults restore actual per-invocation environment traversal and alter a captured
+prefix in disposable production code; fixed cost/results must detect both while the canonical
+reference retains accepted meaning. Raw ingress exercises true nested callable environments,
+foreign origin, signatures/substitutions, empty and oversized prefixes, forbidden/absent captures,
+depth 256/257, exact item/allocation limits, cancellation, stack-safe rejected-value disposal, and
+post-failure reuse. Independently packed malformed binding units reject inside strict artifact
+validation even with recomputed enclosing identities.
+
+The maintained-generation oracle compares every predecessor owner and retirement after removing
+only graph-generation fields. The standard's selected composition owners are the only additions;
+the application retains its owner set. Separate predecessor-generated fixtures compare unchanged
+type-object bytes/digests and nominal/nested typed-data layout identities and bytes exactly. This
+oracle does not supply a production predecessor reader or an operational-data migration.
 
 Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
 share bounded snapshot decoding but cannot share production provenance, transfer, consume,
@@ -313,14 +341,16 @@ candidate receives only `LANG`, and the workflow never invokes Cargo or reads ma
 generated source assets, or compiled dependency assets. An explicit evidence root supports
 transferred no-checkout execution by the copied verifier and exact candidate.
 
-Only public authoring creates D's private helper and public offset, B's doubling function, C's
+Only public authoring creates D's private helper, public offset and bound-callable factory, B's doubling function, C's
 negating function, and A's sum. The independently fixed diamond has five distinct packages and eight
 edges including shared standard arithmetic. After producer deletion it must return 11, remain 11
 after staging D2, reject a conflicting mixed closure, and return 12 after one paired replacement.
-The five selected packages run 24 tests exactly once in total. Public nominal types and rank-one
+The five selected packages run 28 tests exactly once in total. Public nominal types and rank-one
 generic calls cross D→B. Complete before/after review files, imported interface queries, visibility
 rejections, unavailable transitive source, stale/altered plans, exact cache recovery, and a raw
 standalone HTTP response from a non-built-in pure function are retained with exact identities.
+The B/C paths receive the factory result, apply empty rebinding, and invoke its private target after
+producer removal. Exact helper visibility and paired dependency replacement remain enforced.
 
 Before each export, a separate read-only current-graph reconstruction captures the public-authored
 producer's complete owner/object, type, retirement, and dependency inventory. It must match the

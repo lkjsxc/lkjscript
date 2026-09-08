@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-5";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 5;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-3";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 3;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN05";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v5";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v5";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-6";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 6;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-4";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 4;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN06";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v6";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v6";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -307,6 +307,15 @@ pub enum CompiledInstruction {
         binding: u32,
     },
     Return,
+    Bind {
+        arguments: u32,
+    },
+    BeginBind {
+        arguments: u32,
+    },
+    Capture {
+        index: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -443,7 +452,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 10 inline bound",
+                        "compiled inline text exceeds the Graph 11 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -1073,6 +1082,26 @@ impl CompiledInstruction {
                 require_index("transaction binding", *binding, code.local_count as usize)
             }
             Self::Invoke { arguments } => require_runtime_count("invoke arguments", *arguments),
+            Self::Bind { arguments } | Self::BeginBind { arguments } => {
+                if *arguments as usize > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+                    return Err(unit_error(
+                        DiagnosticClass::Corrupt,
+                        "compiler_unit_bind_protocol",
+                        "bind prefix exceeds the canonical child bound",
+                    ));
+                }
+                Ok(())
+            }
+            Self::Capture { index } => {
+                if *index as usize >= crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+                    return Err(unit_error(
+                        DiagnosticClass::Corrupt,
+                        "compiler_unit_bind_protocol",
+                        "capture index exceeds the canonical child bound",
+                    ));
+                }
+                Ok(())
+            }
             Self::Unit | Self::Bool(_) | Self::I64(_) | Self::Drop | Self::Return => Ok(()),
         }
     }
@@ -1135,9 +1164,19 @@ fn require_runtime_count(label: &str, count: u32) -> Result<(), Diagnostic> {
 }
 
 fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
-    let mut pending = vec![(0_usize, 0_usize)];
+    // Persistent, bounded binding states avoid copying an operand bitmap at every instruction.
+    // A live binding protects its callee and admitted prefix from ordinary stack consumers.
+    #[derive(Clone, Copy)]
+    struct Binding {
+        parent: Option<usize>,
+        position: usize,
+        arguments: usize,
+        captured: usize,
+    }
+    let mut bindings = Vec::<Binding>::new();
+    let mut pending = vec![(0_usize, 0_usize, None::<usize>)];
     let mut depths = vec![None; code.instructions.len()];
-    while let Some((instruction_index, depth)) = pending.pop() {
+    while let Some((instruction_index, depth, binding)) = pending.pop() {
         let slot = depths.get_mut(instruction_index).ok_or_else(|| {
             unit_corrupt(
                 "compiler_unit_control_flow",
@@ -1145,15 +1184,15 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
             )
         })?;
         if let Some(previous) = *slot {
-            if previous != depth {
+            if previous != (depth, binding) {
                 return Err(unit_corrupt(
                     "compiler_unit_stack_merge",
-                    "compiled control-flow paths merge with different stack depths",
+                    "compiled control-flow paths merge with different stack depths or unfinished bindings",
                 ));
             }
             continue;
         }
-        *slot = Some(depth);
+        *slot = Some((depth, binding));
         let instruction = &code.instructions[instruction_index];
         let (consumed, produced) = stack_effect(instruction)?;
         let next_depth = depth
@@ -1172,6 +1211,74 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
                 "compiled operand stack exceeds the compiler-unit bound",
             ));
         }
+        let active = binding.map(|index| bindings[index]);
+        let protected = active.map_or(0, |value| value.position + 1 + value.captured);
+        let mut next_binding = binding;
+        let next_state =
+            match instruction {
+                CompiledInstruction::BeginBind { arguments } if depth > protected => {
+                    Some(Binding {
+                        parent: binding,
+                        position: depth - 1,
+                        arguments: *arguments as usize,
+                        captured: 0,
+                    })
+                }
+                CompiledInstruction::Capture { index } => {
+                    let value = active.filter(|value| {
+                    value.captured == *index as usize
+                        && value.captured < value.arguments
+                        && depth == protected + 1
+                }).ok_or_else(|| unit_corrupt(
+                    "compiler_unit_bind_protocol",
+                    "capture does not admit the next value of its exact unfinished binding",
+                ))?;
+                    Some(Binding {
+                        captured: value.captured + 1,
+                        ..value
+                    })
+                }
+                CompiledInstruction::Bind { arguments } => {
+                    let value = active
+                        .filter(|value| {
+                            value.arguments == *arguments as usize
+                                && value.captured == value.arguments
+                                && depth == protected
+                        })
+                        .ok_or_else(|| {
+                            unit_corrupt(
+                                "compiler_unit_bind_protocol",
+                                "bind does not complete one fully admitted ordered prefix",
+                            )
+                        })?;
+                    next_binding = value.parent;
+                    None
+                }
+                CompiledInstruction::BeginBind { .. } => {
+                    return Err(unit_corrupt(
+                        "compiler_unit_bind_protocol",
+                        "bind preparation consumes an unfinished binding or capture",
+                    ));
+                }
+                _ if depth - consumed < protected => {
+                    return Err(unit_corrupt(
+                        "compiler_unit_bind_protocol",
+                        "ordinary instruction consumes an unfinished binding or admitted capture",
+                    ));
+                }
+                _ => None,
+            };
+        if let Some(state) = next_state {
+            if bindings.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
+                return Err(unit_error(
+                    DiagnosticClass::Resource,
+                    "compiler_unit_item_count",
+                    "binding verification exceeds the compiler-unit bound",
+                ));
+            }
+            next_binding = Some(bindings.len());
+            bindings.push(state);
+        }
         match instruction {
             CompiledInstruction::Return => {
                 if depth != 1 {
@@ -1182,16 +1289,19 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
                 }
             }
             CompiledInstruction::Jump(target) => {
-                pending.push((*target as usize, next_depth));
+                pending.push((*target as usize, next_depth, next_binding));
             }
             CompiledInstruction::JumpIfFalse(target) => {
-                pending.push((*target as usize, next_depth));
-                pending.push((instruction_index + 1, next_depth));
+                pending.push((*target as usize, next_depth, next_binding));
+                pending.push((instruction_index + 1, next_depth, next_binding));
             }
             CompiledInstruction::SwitchVariant(arms) => {
-                pending.extend(arms.iter().map(|arm| (arm.target as usize, next_depth)));
+                pending.extend(
+                    arms.iter()
+                        .map(|arm| (arm.target as usize, next_depth, next_binding)),
+                );
             }
-            _ => pending.push((instruction_index + 1, next_depth)),
+            _ => pending.push((instruction_index + 1, next_depth, next_binding)),
         }
     }
     if depths.iter().any(Option::is_none) {
@@ -1227,7 +1337,8 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         | CompiledInstruction::BeginTransaction { .. }
         | CompiledInstruction::CommitTransaction { .. } => (0, 0),
         CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
-        CompiledInstruction::Invoke { arguments } => {
+        CompiledInstruction::BeginBind { .. } | CompiledInstruction::Capture { .. } => (1, 1),
+        CompiledInstruction::Invoke { arguments } | CompiledInstruction::Bind { arguments } => {
             let consumed = count(*arguments)?.checked_add(1).ok_or_else(|| {
                 unit_error(
                     DiagnosticClass::Resource,
@@ -1280,4 +1391,96 @@ fn unit_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    #[test]
+    fn stack_verifier_requires_ordered_capture_admission_and_protects_live_prefixes() {
+        use CompiledInstruction::*;
+        let code = |instructions| CompiledCode {
+            parameter_count: 0,
+            local_count: 1,
+            instructions,
+        };
+        let valid = vec![
+            Unit,
+            BeginBind { arguments: 2 },
+            I64(3),
+            Capture { index: 0 },
+            Unit,
+            BeginBind { arguments: 1 },
+            Bool(true),
+            JumpIfFalse(10),
+            I64(5),
+            Jump(11),
+            I64(6),
+            Capture { index: 0 },
+            Bind { arguments: 1 },
+            Capture { index: 1 },
+            Bind { arguments: 2 },
+            Return,
+        ];
+        assert!(verify_stack(&code(valid)).is_ok());
+        for instructions in [
+            vec![Unit, Bind { arguments: 0 }, Return],
+            vec![
+                Unit,
+                BeginBind { arguments: 1 },
+                I64(3),
+                Bind { arguments: 1 },
+                Return,
+            ],
+            vec![
+                Unit,
+                BeginBind { arguments: 1 },
+                I64(3),
+                Capture { index: 1 },
+                Bind { arguments: 1 },
+                Return,
+            ],
+            vec![
+                Unit,
+                BeginBind { arguments: 1 },
+                I64(3),
+                Capture { index: 0 },
+                StoreLocal(0),
+                Bind { arguments: 0 },
+                Return,
+            ],
+            vec![
+                Unit,
+                BeginBind { arguments: 0 },
+                Invoke { arguments: 0 },
+                Return,
+            ],
+            vec![Unit, BeginBind { arguments: 0 }, Return],
+            vec![
+                Unit,
+                BeginBind { arguments: 1 },
+                Bool(true),
+                JumpIfFalse(7),
+                I64(3),
+                Capture { index: 0 },
+                Jump(8),
+                I64(3),
+                Bind { arguments: 1 },
+                Return,
+            ],
+        ] {
+            let result = verify_stack(&code(instructions));
+            assert!(
+                matches!(
+                    result,
+                    Err(Diagnostic {
+                        class: DiagnosticClass::Corrupt,
+                        ..
+                    })
+                ),
+                "{result:?}"
+            );
+        }
+    }
 }

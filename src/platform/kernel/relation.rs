@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 10 records.
+//! Single deterministic relation extractor for Graph 11 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -787,6 +787,7 @@ where
         | ExpressionOperation::Let { .. }
         | ExpressionOperation::Sequence { .. }
         | ExpressionOperation::Invoke { .. }
+        | ExpressionOperation::Bind { .. }
         | ExpressionOperation::Field {
             selector: FieldSelector::Structural(_),
             ..

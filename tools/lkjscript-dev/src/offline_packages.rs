@@ -419,10 +419,10 @@ impl Context {
     fn check(&mut self, target: &Package) -> Result<(), DevError> {
         let records = self.cli(Some(&target.path), &["check"], true)?;
         require(
-            field(&records, "tests", "passed")? == "24"
+            field(&records, "tests", "passed")? == "28"
                 && field(&records, "tests", "failed")? == "0"
                 && field(&records, "tests", "differential")? == "equal",
-            "each of five selected packages must be tested exactly once (20+1+1+1+1)",
+            "each of five selected packages must be tested exactly once (24+1+1+1+1)",
         )?;
         require(
             field(&records, "artifact", "packages")? == "5",
@@ -583,6 +583,11 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         d.symbols["$module"]
     );
     context.apply(&mut d, &http_body)?;
+    let factory = format!(
+        "type.function as=@thunk result=i64\nexpression.function-value as=$private-callee function={}\nexpression.local as=$captured-value value=$factory-parameter\nexpression.bind as=$environment callee=$private-callee\nexpression.argument parent=$environment index=0 expression=$captured-value\ncreate.function as=$factory module={} name=offset-factory visibility=public result=@thunk effect=pure body=$environment\nadd.parameter as=$factory-parameter function=$factory name=value type=i64\n",
+        d.symbols["$helper"], d.symbols["$module"]
+    );
+    context.apply(&mut d, &factory)?;
     let d1_inventory = context.export(&mut d)?;
     let d1 = d.clone();
     let mut b = context.new_package("producer-b")?;
@@ -607,9 +612,17 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         } else {
             (String::new(), "$arg")
         };
-        context.apply(package, &format!("{}{}{}{}expression.local as=$arg value=$x\nexpression.i64 as=$factor value={constant}\n{crossing}{}{}{}",
+        let returned_factory = format!(
+            "{}expression.bind as=$returned-empty-binding callee=$returned-factory\nexpression.invoke as=$offset function=$returned-empty-binding\n",
+            call(
+                "$returned-factory",
+                &reference(&d, "$factory")?,
+                &[argument]
+            )
+        );
+        context.apply(package, &format!("{}{}{}{}expression.local as=$arg value=$x\nexpression.i64 as=$factor value={constant}\n{crossing}{returned_factory}{}{}",
             binding("add", &standard), binding("add", &d), module(), unary("$entry", name, "public", "$body", "$x"),
-            call("$offset", &reference(&d, "$entry")?, &[argument]), call("$body", &standard.symbols[operator], &["$factor", "$offset"]), graph_test()))?;
+            call("$body", &standard.symbols[operator], &["$factor", "$offset"]), graph_test()))?;
         context.export(package)?;
     }
     let b1 = b.clone();
@@ -833,6 +846,10 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     );
     context.check(&a)?;
     context.run(&a, 11)?;
+    context.receipt.observations.insert(
+        "bound_private_factory".to_owned(),
+        "returned-rebound-invoked-after-producer-removal".to_owned(),
+    );
     context.cache_recovery(&a, "a1")?;
     let executable_input = context.evidence.join("a1-exact.lkja");
     context.reject(
@@ -1471,6 +1488,10 @@ pub(crate) fn read_transferred_receipt(
         ("fixed_results", "11,11,12"),
         ("diamond_package_ids_distinct", "true"),
         ("producers_absent_before_execution", "true"),
+        (
+            "bound_private_factory",
+            "returned-rebound-invoked-after-producer-removal",
+        ),
         ("imported_nominal_and_rank_one_generic", "fresh passed"),
         ("standalone_http_body", "offline-package-closure"),
         ("canonical_body_corruption", "pack_entry_checksum"),

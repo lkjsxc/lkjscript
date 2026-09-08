@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR11";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR12";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -1239,6 +1239,13 @@ impl Writer {
                     writer.expression(value, definitions, next)
                 })
             }
+            AuthoredExpressionOperation::Bind { callee, arguments } => {
+                self.tag(23)?;
+                self.expression(callee, definitions, next)?;
+                self.list(arguments, |writer, value| {
+                    writer.expression(value, definitions, next)
+                })
+            }
             AuthoredExpressionOperation::Record {
                 nominal_type,
                 fields,
@@ -1573,7 +1580,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "90af9d4b2489356010cbf99aea5ec8750c4f98efe7cdfb2ad978326cad7a4fc0"
+            "c6fd6d92d7179fcb42301f0ec9a8a4a10e831fcdca3c86f9e2f14928a8041c62"
         );
     }
 

@@ -19,6 +19,14 @@ public interface binding. The dependency's package transport carries the complet
 graph, including private implementations, and exact transitive selection required to install that binding. It is immutable transport,
 not editable source or an alternate package repository.
 
+An exported factory can return a pure function with a runtime bound prefix over its private graph
+helper. Transport and linking include that helper's complete code and type closure; receiving the
+callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
+expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 11
+meaning rejects predecessor graph inputs. The unchanged TypeObject 10 codec, magic, digest domains,
+and bytes remain current, as do typed-data layout identities for unchanged types. This cutover does
+not rewrite operational data or add a predecessor graph reader.
+
 Public package interfaces retain exact-interface capability-resource types and operation parameter
 use modes. Resource interface references must resolve inside the exact dependency closure and
 participate in interface identity. A missing, foreign, wrong-kind, or predecessor resource/use
@@ -167,6 +175,12 @@ Compiler units preserve unrestricted/borrow/consume local-load decisions. Artifa
 the exact resource type, interface, operation parameter use, and requirement closure, but never a
 live handle or private queue attempt tuple. Strict decoding rejects predecessor compiler,
 bytecode, artifact, or package-interface forms before normalized execution.
+
+Binding bytecode preserves callee-first evaluation and interleaves each argument with its capture
+admission before the next expression. Strict preparation rejects missing, reordered, or leaked
+capture preparation and prefixes exceeding the canonical child bound. Both evaluators resolve
+exact pure targets and substitutions independently. Their immutable flat prefixes retain no caller
+activation, and eligible tail invocation transfers to the ultimate graph target.
 
 ## Preparation, execution, and deployment
 

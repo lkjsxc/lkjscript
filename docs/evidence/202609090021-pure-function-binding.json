@@ -1,0 +1,294 @@
+{
+  "schema": "lkjscript-pure-function-binding-evidence-1",
+  "campaign": "202609090021-pure-function-binding",
+  "status": "incomplete",
+  "start": {
+    "branch": "main",
+    "commit": "bd58aebafe88c4222ac13307526eaa426650b838",
+    "tree": "17a0731b1dfd6630c19a87cd7e63452bc24601ca",
+    "origin": "https://github.com/lkjsxc/lkjscript",
+    "remote_divergence": [
+      0,
+      0
+    ],
+    "index": "clean",
+    "preserved_work": [
+      "supplied AGENTS.md adopted in 4417f41303fd50cda7cb4cb7da512ac7db803314",
+      "supplied docs/campaigns/202609090021.md adopted with startup record",
+      "stash 87c2265f6faf0e815d80450ec2480d46c5e774fb",
+      "applications/lkjournal/state/data and predecessor maintained ignored derivations"
+    ]
+  },
+  "implementation_commit": null,
+  "contracts": {
+    "changed": {
+      "product": "0.1.26",
+      "graph": 11,
+      "validator": 11,
+      "witness": 7,
+      "owner_summary": 6,
+      "compiler_unit": 6,
+      "bytecode": 4,
+      "artifact": 16,
+      "package_interface": 7,
+      "compact_change": 15,
+      "authored_change": 12,
+      "registry": 13,
+      "cli": 27,
+      "function_definition_projection": 3,
+      "production_tier": "graph11_dense_bytecode_6",
+      "reference_tier": "graph11_reference_records_5"
+    },
+    "stable": {
+      "type_object": 10,
+      "type_magic": "LKJTYP10",
+      "type_digest_domains": "unchanged v10",
+      "typed_data": 1,
+      "typed_data_layout_identity": "byte-identical for retained unchanged nominal and nested cases",
+      "pack": 1,
+      "object_catalog": 2,
+      "compilation_manifest": 3,
+      "package_source_physical_container": 1,
+      "function_definition_continuation": 2
+    }
+  },
+  "maintained": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_e235829aa34183eeb80affe127feddf7300a8ed2540c0282885cc3f14ffecc6e",
+      "package_revision": "package_revision_b3d0bf609bfdf87f22a39a1c3758bd04086285e269f424cbff56f90fb8a29135",
+      "transport": "package_transport_b1c0065d6e74ce3bd4a14295a6ba93381393e73d8c1ae1ea5c04d8349cfd7ccb",
+      "artifact": "artifact_bundle_286a32c340ad10c7b54576960d7bb2cd2afb830fd9d5ead6e8f5b6e21b81b230",
+      "unchanged_owners": 550,
+      "added_owners": 68,
+      "unchanged_retirements": 37,
+      "compiler_units": 113,
+      "graph_tests": 24,
+      "composition": "decl_304414b1711babc16d4c4904bcf01587",
+      "private_helper": "decl_1762bf0981a15aed5a37a12a50b2df28"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_eb655c7951c01fbd935856dadbc69401472c9008ffb2e0824db7c356ca3d1313",
+      "package_revision": "package_revision_38e12979dcf1813bbcdad5a4590d1e157edc26fc85656431a511f2db0454b5c5",
+      "artifact": "artifact_bundle_8f20dd717b177e1652650c129228a540fcae016b814d698b82aaf8d7aeaecabd",
+      "unchanged_owners": 2040,
+      "added_owners": 0,
+      "unchanged_retirements": 1058,
+      "compiler_units": 203,
+      "graph_tests": 31
+    }
+  },
+  "migration": {
+    "writer": "GraphRepository::create_with_package_transports in isolated owned repositories; composition added by public reviewed plan/apply",
+    "owner_comparison": "independent full reconstruction; only contract_version and graph_contract_version removed",
+    "fixture": "tests/fixtures/graph10-unchanged-types-and-data.json",
+    "fixture_sha256": "04cf51f115e27b1ebef16db6d996889abc60a458d0607be3aef4c19508906767",
+    "type_byte_witness_counts": [
+      85,
+      149
+    ],
+    "predecessor_exports_sha256": [
+      "f5d1fb536dc5db11e798c06e752a6bb52856a67cac900e7bc3183c71e69aa910",
+      "cd85d975b403e398ad4bd47b2202834d67715615e078fc90b438b14068d2d6fc"
+    ],
+    "composition_request_sha256": "ccb56f6644417535d65ff66f9e80fba97670f6a1520fa8b40baa0c152fa7a657",
+    "temporary_worktrees": "removed after retaining patches and additive-tool sources in raw provenance archives",
+    "predecessor_production_readers": "none retained",
+    "operational_data_rewritten": false
+  },
+  "acceptance": {
+    "BND-1": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    },
+    "BND-2": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    },
+    "BND-3": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    },
+    "BND-4": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    },
+    "BND-5": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    },
+    "BND-6": {
+      "classification": "not run",
+      "note": "Final combined source/candidate-bound acceptance remains pending; iteration evidence follows."
+    }
+  },
+  "iterations": [
+    {
+      "owner": "pure-tail",
+      "classification": "fresh passed",
+      "receipt": ".artifacts/campaign/202609090021/pure-tail-binding-complete/receipt.json",
+      "digest": "verification_7db36b925c66f91038a8f48e107527f36a36793a9020a1c14be4910e68dd834c",
+      "candidate_sha256": "b221af297d1225f59db1b932a2346fbbd2f27a9a0324cfc72ac80cda7eed4aa6",
+      "verifier_sha256": "c6a9b120755fdb8239ee7300784a6d06312b49fac0640ca2d46dd0dc43a9791f",
+      "commands": 130,
+      "elapsed_nanoseconds": 262559573777,
+      "peak_owned_file_bytes": 96233623,
+      "cleanup_complete": true,
+      "note": "Precedes the additional reviewed capture-edit/clean-build case and final source-bound gates."
+    },
+    {
+      "owner": "source-bound tests",
+      "classification": "fresh passed",
+      "logs": [
+        "binding-source-bound-tests.log",
+        "binding-library-cases.log",
+        "maintained-inventory-type-data-test.log",
+        "public-binding-extraction.log"
+      ],
+      "note": "Iteration runs; final full profile not yet executed."
+    },
+    {
+      "owner": "offline-packages",
+      "classification": "failed",
+      "receipt": ".artifacts/campaign/202609090021/offline-binding/receipt.json",
+      "reason": "Inherited 20-standard-test expectation required selected 24-standard-test cutover.",
+      "cleanup_complete": true
+    },
+    {
+      "owner": "focused",
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788893961720190640-319741-0/receipt.json",
+      "digest": "verification_7bdc05f0bb8efe1905bc6ee437b892832cd9c9d214390c6ed8b631bbcc08cc75",
+      "fresh_gates": 6,
+      "note": "Before final lint factoring and inherited projection-fixture correction; 510 library, 9 service, and copied-binary tests passed."
+    },
+    {
+      "owner": "product",
+      "classification": "failed",
+      "receipt": ".artifacts/lkjscript-dev/check/1788894131638201580-323408-0/receipt.json",
+      "digest": "verification_82599975aaa6d97a8f7efbacf20268a7c221abde7c0fac10943c9f2d2dd38d33",
+      "fresh_passed_gates": 20,
+      "failed_gate": "distributed_http_application",
+      "reason": "Inherited definition projection 2 expectation received selected projection 3; corrected in its existing owner.",
+      "pure_tail": {
+        "classification": "fresh passed",
+        "commands": 131,
+        "digest": "verification_57bfece2f4ce81fe2c94dbe6d91c681c766fe818a314a057a70fbffd192f599d"
+      },
+      "offline_packages": {
+        "classification": "fresh passed",
+        "digest": "verification_a50e235947be14d7d8e3accfffab84ea4f1074915f6ba46fa785656edf33bc8e"
+      }
+    },
+    {
+      "owner": "clippy",
+      "classification": "fresh passed",
+      "log": ".artifacts/campaign/202609090021/clippy-cutover.log",
+      "note": "Factored invocation return aliases and fixed fixture decoding; no lint exemption or runtime behavior change."
+    }
+  ],
+  "workloads": {
+    "fixed_results": {
+      "configured": [
+        36,
+        -11
+      ],
+      "composition": [
+        17,
+        27
+      ],
+      "heterogeneous": [
+        "true",
+        "false"
+      ],
+      "binding_shapes": 9,
+      "consumer_factory_rebinding": 12,
+      "thunk_creation": 42,
+      "http_configured": 36
+    },
+    "retained_list": {
+      "n": [
+        1,
+        256,
+        4096
+      ],
+      "k": [
+        1,
+        64,
+        1024
+      ],
+      "expected": "N",
+      "frame_limit": 8,
+      "work_equation": "W(N,K)-W(1,K) = W(N,1)-W(1,1)",
+      "w_units": [
+        "input-admission-nodes",
+        "raw-result-admission-nodes",
+        "capture-admission-nodes",
+        "constructor-child-visits",
+        "guard-descendants"
+      ],
+      "required_internal_guard_descendants": 0
+    },
+    "bounds": {
+      "depth_exact_fit": 256,
+      "depth_one_over": 257,
+      "rejected_raw_callable_depth": 10002,
+      "collection_items": 1000000,
+      "allocated_accounting_bytes": 268435456,
+      "vm_instructions": 10000000,
+      "live_frames": 4096,
+      "operands": 1000000,
+      "capability_calls": 100000,
+      "oracle_seconds": 900,
+      "oracle_owned_file_bytes": 1073741824
+    },
+    "faults": [
+      "wrong production bound prefix: fixed 9 becomes 11 while canonical reference stays 9",
+      "real restored environment scan preserves values but fails N/K separability",
+      "independently packed wrong-order, missing-admission and oversized binding units reject as corruption"
+    ],
+    "effects": "Production live effects execute once; only enclosing staged data transaction rolls back; reference never replays live effects."
+  },
+  "environment": {
+    "toolchain": "Rust/Cargo 1.98.0",
+    "development_build_environment": {
+      "CARGO_PROFILE_DEV_STRIP": "debuginfo"
+    },
+    "reason": "Unstripped contributor executable exceeded the unchanged 384 MiB file-admission bound. Removed debug metadata; no resource limit or global configuration changed."
+  },
+  "final_checks": {
+    "focused": "not run",
+    "product": "not run",
+    "service": "not run",
+    "full_fresh": "not run",
+    "musl_target_build": "not run",
+    "musl_target_admission": "not run"
+  },
+  "limitations": [
+    "Bare unconstrained stored type parameters cannot be captured; function signatures remain callable leaves.",
+    "No task closures, anonymous bodies, mutable or serialized environments, new codecs, releases, deployment, or universal constant-time claim.",
+    "Timings, allocated-accounting bytes and sampled RSS are bounded advisory observations."
+  ],
+  "raw_root": ".artifacts/campaign/202609090021/",
+  "external_actions": {
+    "git_fetch": "read-only origin refresh at startup",
+    "push": "not performed",
+    "publication": "not performed",
+    "deployment": "not performed",
+    "workflow_dispatch": "not performed"
+  },
+  "predecessor_rejection": {
+    "source_commit": "bd58aebafe88c4222ac13307526eaa426650b838",
+    "candidate_sha256": "6526d1787270a2a476285e948916931fc4fc24373f10c66b33a4018aef1762a8",
+    "command": "copied executable --project isolated Graph 10 standard status",
+    "exit_code": 2,
+    "diagnostic": "publication_head_contract",
+    "head_before_and_after_sha256": "7d2a5360bfc1f164efc48e328d0c0181fdd5aee4300fe70879dcc942a39ea043",
+    "output_sha256": "1c5475dfaa94c9c8a27e5a5d83892994bac19796e0b797e0633d51c39588fe9e",
+    "raw": ".artifacts/campaign/202609090021/predecessor-public-rejection",
+    "cleanup": "isolated source copy and executable removed; bounded records retained"
+  }
+}

@@ -2,10 +2,12 @@
 
 use super::super::value::ValueOrigin;
 use super::*;
+use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Ownership {
     Ordinary,
+    Port,
     Capability,
     AffineVariant,
 }
@@ -16,6 +18,8 @@ pub(super) struct Value {
     preparation: ValueOrigin,
     ownership: Ownership,
 }
+
+type Invocation = (DeclarationReference, Arc<[TypeObjectDigest]>, Vec<Value>);
 
 impl Value {
     pub(super) fn raw(&self) -> &NormalizedValue {
@@ -43,7 +47,7 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         match (self.ownership, use_mode) {
-            (Ownership::Ordinary, ParameterUse::Unrestricted)
+            (Ownership::Ordinary | Ownership::Port, ParameterUse::Unrestricted)
             | (Ownership::Capability, ParameterUse::Borrow) => Ok(Self {
                 datum: self.datum.clone(),
                 preparation: self.preparation,
@@ -81,6 +85,7 @@ impl Value {
         schema: &BoundReferenceSchema,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
+        signature: &ReferenceSignature,
     ) -> Result<Self, ExecutionError> {
         if function.1 != schema.value_origin || schema.functions.get(function.0 as usize).is_none()
         {
@@ -88,13 +93,27 @@ impl Value {
                 "callable identity is foreign; select its canonical declaration",
             ));
         }
+        if signature.type_parameters.len() != type_arguments.len()
+            || type_arguments
+                .iter()
+                .any(|ty| schema.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
+        {
+            return Err(reject(
+                "named reference callable requires all resolved canonical type arguments",
+            ));
+        }
         Ok(Self {
             datum: NormalizedValue::Function {
                 function,
                 type_arguments,
+                bound_arguments: None,
             },
             preparation: schema.value_origin,
-            ownership: Ownership::Ordinary,
+            ownership: if signature.pure {
+                Ownership::Ordinary
+            } else {
+                Ownership::Port
+            },
         })
     }
 
@@ -422,6 +441,16 @@ impl ReferenceState<'_> {
     }
 }
 
+type ReferenceBindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
+type ReferenceVisit<'a> = (
+    &'a NormalizedValue,
+    TypeObjectDigest,
+    u16,
+    bool,
+    Arc<ReferenceBindings>,
+    bool,
+);
+
 impl ReferenceState<'_> {
     pub(super) fn admit_raw(
         &mut self,
@@ -462,15 +491,31 @@ impl ReferenceState<'_> {
         input: bool,
     ) -> Result<Ownership, ExecutionError> {
         self.control.check()?;
+        self.charge_reference_bindings(bindings.len())?;
+        self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
+        let bindings = Arc::new(bindings.clone());
+        self.inspect_reference_values(
+            vec![(datum, expected, 0, true, bindings, false)],
+            authority,
+            input,
+        )
+    }
+
+    fn inspect_reference_values(
+        &mut self,
+        mut visits: Vec<ReferenceVisit<'_>>,
+        authority: Option<RequirementReference>,
+        input: bool,
+    ) -> Result<Ownership, ExecutionError> {
         let mut ownership = None;
-        // One independent depth-first worklist. No reference admission calls a VM certifier.
-        let mut visits = vec![(datum, expected, 0_u16, true)];
-        self.charge_allocation(
-            std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, u16, bool)>() as u64,
-        )?;
-        while let Some((node, mut expected, depth, owner_position)) = visits.pop() {
+        let mut capture_types = BTreeSet::new();
+        while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
+            visits.pop()
+        {
             self.control.check()?;
-            let counter = if input {
+            let counter = if captured {
+                &mut self.observation.value_work.capture_admission_nodes
+            } else if input {
                 &mut self.observation.value_work.input_admission_nodes
             } else {
                 &mut self.observation.value_work.raw_result_admission_nodes
@@ -483,7 +528,7 @@ impl ReferenceState<'_> {
                 ));
             }
             let node_ownership = self.raw_ownership(node)?;
-            if depth == 0 {
+            if ownership.is_none() {
                 ownership = Some(node_ownership);
             }
             if !owner_position && node_ownership != Ownership::Ordinary {
@@ -495,6 +540,16 @@ impl ReferenceState<'_> {
                 self.schema.types.get(&expected).map(|ty| &ty.form)
             {
                 expected = *bindings.get(parameter).ok_or_else(|| reject("raw boundary has an unbound type parameter; supply all exact type arguments"))?;
+            }
+            if captured {
+                self.check_capture_type(expected, &bindings, &mut capture_types)?;
+                if node_ownership != Ownership::Ordinary
+                    || matches!(node, NormalizedValue::Resource(_))
+                {
+                    return Err(reject(
+                        "reference environment contains live or affine authority",
+                    ));
+                }
             }
             let schema = Arc::clone(&self.schema);
             let ty = &schema
@@ -531,7 +586,14 @@ impl ReferenceState<'_> {
                             std::mem::size_of::<NormalizedValue>(),
                         )?;
                         for (child, field) in fields.iter().zip(definition.fields.iter()).rev() {
-                            visits.push((child, field.ty, next_depth, false));
+                            visits.push((
+                                child,
+                                field.ty,
+                                next_depth,
+                                false,
+                                Arc::clone(&bindings),
+                                captured,
+                            ));
                         }
                     }
                     NormalizedValue::Variant {
@@ -558,6 +620,8 @@ impl ReferenceState<'_> {
                                     owner_position
                                         && node_ownership == Ownership::AffineVariant
                                         && direct,
+                                    Arc::clone(&bindings),
+                                    captured,
                                 ));
                             }
                             _ => {
@@ -596,7 +660,14 @@ impl ReferenceState<'_> {
                             ));
                         }
                         self.charge_allocation(name.as_str().len() as u64)?;
-                        visits.push((child, field.ty, next_depth, false));
+                        visits.push((
+                            child,
+                            field.ty,
+                            next_depth,
+                            false,
+                            Arc::clone(&bindings),
+                            captured,
+                        ));
                     }
                 }
                 TypeForm::List { item } => {
@@ -610,7 +681,14 @@ impl ReferenceState<'_> {
                         std::mem::size_of::<NormalizedValue>(),
                     )?;
                     for child in items.iter().rev() {
-                        visits.push((child, *item, next_depth, false));
+                        visits.push((
+                            child,
+                            *item,
+                            next_depth,
+                            false,
+                            Arc::clone(&bindings),
+                            captured,
+                        ));
                     }
                 }
                 TypeForm::Option { item } => {
@@ -621,8 +699,31 @@ impl ReferenceState<'_> {
                     };
                     if let Some(child) = child.as_deref() {
                         self.charge_admission_children(1, std::mem::size_of::<NormalizedValue>())?;
-                        visits.push((child, *item, next_depth, false));
+                        visits.push((
+                            child,
+                            *item,
+                            next_depth,
+                            false,
+                            Arc::clone(&bindings),
+                            captured,
+                        ));
                     }
+                }
+                TypeForm::Result { ok, error } => {
+                    let NormalizedValue::Result { success, value } = node else {
+                        return Err(reject(
+                            "raw result type received another value; supply its exact result case",
+                        ));
+                    };
+                    self.charge_admission_children(1, std::mem::size_of::<NormalizedValue>())?;
+                    visits.push((
+                        value,
+                        if *success { *ok } else { *error },
+                        next_depth,
+                        false,
+                        Arc::clone(&bindings),
+                        captured,
+                    ));
                 }
                 TypeForm::Map {
                     key: key_type,
@@ -662,7 +763,14 @@ impl ReferenceState<'_> {
                             ));
                         }
                         self.charge_allocation(reference_map_key_bytes(key))?;
-                        visits.push((child, *value, next_depth, false));
+                        visits.push((
+                            child,
+                            *value,
+                            next_depth,
+                            false,
+                            Arc::clone(&bindings),
+                            captured,
+                        ));
                     }
                 }
                 TypeForm::CapabilityResource { interface } => {
@@ -701,6 +809,7 @@ impl ReferenceState<'_> {
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
+                        bound_arguments,
                     } = node
                     else {
                         return Err(reject(
@@ -710,7 +819,16 @@ impl ReferenceState<'_> {
                     let declaration = schema.functions.get(function.0 as usize).copied().filter(|_| function.1 == schema.value_origin).ok_or_else(|| reject("raw callback belongs to another preparation; select the current callable"))?;
                     let signature = self.function_signature(declaration)?;
                     if !signature.pure
-                        || signature.parameters.len() != parameters.len()
+                        || bound_arguments
+                            .as_ref()
+                            .is_some_and(|prefix| prefix.is_empty())
+                        || bound_arguments.as_ref().map_or(0, |prefix| prefix.len())
+                            > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+                        || signature
+                            .parameters
+                            .len()
+                            .checked_sub(bound_arguments.as_ref().map_or(0, |prefix| prefix.len()))
+                            != Some(parameters.len())
                         || signature.type_parameters.len() != type_arguments.len()
                         || signature
                             .parameters
@@ -729,29 +847,51 @@ impl ReferenceState<'_> {
                             "raw callback contains a foreign or unbound type argument; supply exact canonical types",
                         ));
                     }
-                    self.charge_allocation(
-                        (type_arguments.len()
-                            * std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>())
-                            as u64,
-                    )?;
-                    let actual_bindings = signature
-                        .type_parameters
-                        .iter()
-                        .copied()
-                        .zip(type_arguments.iter().copied())
-                        .collect();
+                    self.charge_reference_bindings(type_arguments.len())?;
+                    let actual_bindings = Arc::new(
+                        signature
+                            .type_parameters
+                            .iter()
+                            .copied()
+                            .zip(type_arguments.iter().copied())
+                            .collect::<ReferenceBindings>(),
+                    );
                     for (actual, expected) in signature
                         .parameters
                         .iter()
+                        .skip(bound_arguments.as_ref().map_or(0, |prefix| prefix.len()))
                         .zip(parameters)
                         .map(|(parameter, ty)| (parameter.ty, *ty))
                         .chain(std::iter::once((signature.result, *result)))
                     {
                         let actual = schema.instantiated_identity(actual, &actual_bindings, 0).ok_or_else(|| reject("raw callback has an unbound exact type; instantiate its declared parameters"))?;
-                        let expected = schema.instantiated_identity(expected, bindings, 0).ok_or_else(|| reject("raw callback boundary has an unbound expected type; select an exact invocation"))?;
+                        let expected = schema.instantiated_identity(expected, &bindings, 0).ok_or_else(|| reject("raw callback boundary has an unbound expected type; select an exact invocation"))?;
                         if actual != expected {
                             return Err(reject(
                                 "raw callback has foreign parameter or result types; select the exact callable",
+                            ));
+                        }
+                    }
+                    if let Some(prefix) = bound_arguments {
+                        self.charge_admission_children(
+                            prefix.len(),
+                            std::mem::size_of::<NormalizedValue>(),
+                        )?;
+                        self.charge_allocation(
+                            (std::mem::size_of::<Vec<NormalizedValue>>()
+                                + 2 * std::mem::size_of::<usize>())
+                                as u64,
+                        )?;
+                        for (value, parameter) in
+                            prefix.iter().zip(signature.parameters.iter()).rev()
+                        {
+                            visits.push((
+                                value,
+                                parameter.ty,
+                                next_depth,
+                                false,
+                                Arc::clone(&actual_bindings),
+                                true,
                             ));
                         }
                     }
@@ -809,7 +949,7 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         self.charge_items(
             count,
-            payload_bytes + std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, u16, bool)>(),
+            payload_bytes + std::mem::size_of::<ReferenceVisit<'_>>(),
         )
     }
 
@@ -875,6 +1015,287 @@ impl ReferenceState<'_> {
             .zip(parameters)
             .map(|(value, ty)| self.admit_raw(value, *ty, &BTreeMap::new(), None, true))
             .collect()
+    }
+}
+
+impl ReferenceState<'_> {
+    pub(super) fn bind_expression(
+        &mut self,
+        callee: Value,
+        arguments: Vec<ExpressionId>,
+        locals: &mut BTreeMap<LocalValueReference, Value>,
+    ) -> Result<Value, ExecutionError> {
+        self.control.check()?;
+        if callee.ownership(&self.schema, &mut self.observation.value_work)? != Ownership::Ordinary
+        {
+            return Err(reject("binding cannot retain a task-port callable"));
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = callee.raw()
+        else {
+            return Err(reference_type_error("bind callee is not a function"));
+        };
+        let declaration = self.function_reference(*function)?;
+        let signature = self.function_signature(declaration)?;
+        if !signature.pure
+            || signature.type_parameters.len() != type_arguments.len()
+            || signature
+                .parameters
+                .iter()
+                .any(|parameter| parameter.resource_requirement.is_some())
+        {
+            return Err(reject(
+                "binding requires the exact pure canonical function signature",
+            ));
+        }
+        let retained = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
+        let total = arguments
+            .len()
+            .checked_add(retained.len())
+            .filter(|count| {
+                *count <= signature.parameters.len()
+                    && *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN
+            })
+            .ok_or_else(|| {
+                reject("binding prefix exceeds the canonical target's remaining parameters")
+            })?;
+        if arguments.is_empty() {
+            self.control.check()?;
+            return Ok(callee);
+        }
+        self.charge_items(total, std::mem::size_of::<NormalizedValue>())?;
+        self.charge_allocation(
+            (std::mem::size_of::<Vec<NormalizedValue>>() + 2 * std::mem::size_of::<usize>()) as u64,
+        )?;
+        self.charge_reference_bindings(type_arguments.len())?;
+        let bindings = Arc::new(
+            signature
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(type_arguments.iter().copied())
+                .collect::<ReferenceBindings>(),
+        );
+        let mut prefix = Vec::with_capacity(total);
+        prefix.extend(retained.iter().cloned());
+        for expression in arguments {
+            let value = self.evaluate(expression, locals)?;
+            if value.ownership(&self.schema, &mut self.observation.value_work)?
+                != Ownership::Ordinary
+            {
+                return Err(reject("capture contains affine or task-port ownership"));
+            }
+            let parameter = signature
+                .parameters
+                .get(prefix.len())
+                .ok_or_else(|| reject("capture escaped its canonical prefix"))?;
+            self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
+            self.inspect_reference_values(
+                vec![(
+                    value.raw(),
+                    parameter.ty,
+                    1,
+                    false,
+                    Arc::clone(&bindings),
+                    true,
+                )],
+                None,
+                false,
+            )?;
+            prefix.push(value.release());
+        }
+        self.control.check()?;
+        Ok(Value {
+            datum: NormalizedValue::Function {
+                function: *function,
+                type_arguments: Arc::clone(type_arguments),
+                bound_arguments: Some(Arc::new(prefix)),
+            },
+            preparation: self.schema.value_origin,
+            ownership: Ownership::Ordinary,
+        })
+    }
+
+    pub(super) fn callable_arguments(
+        &mut self,
+        callee: Value,
+        arguments: Vec<Value>,
+        port: bool,
+    ) -> Result<Invocation, ExecutionError> {
+        self.control.check()?;
+        let ownership = callee.ownership(&self.schema, &mut self.observation.value_work)?;
+        if ownership != Ownership::Ordinary && !(port && ownership == Ownership::Port) {
+            return Err(reject("invocation requires a checked pure callable"));
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = callee.raw()
+        else {
+            return Err(reference_type_error("invoke callee is not a function"));
+        };
+        let declaration = self.function_reference(*function)?;
+        let Some(prefix) = bound_arguments else {
+            return Ok((declaration, Arc::clone(type_arguments), arguments));
+        };
+        let total = prefix
+            .len()
+            .checked_add(arguments.len())
+            .filter(|total| *total <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_collection_items",
+                    "complete callable arguments exceed the child bound",
+                )
+            })?;
+        self.charge_allocation(
+            total
+                .checked_mul(std::mem::size_of::<Value>())
+                .ok_or_else(|| {
+                    reference_resource(
+                        "normalized_reference_allocation",
+                        "callable arguments overflow allocation accounting",
+                    )
+                })? as u64,
+        )?;
+        let mut complete = Vec::with_capacity(total);
+        for child in prefix.iter() {
+            complete.push(Value {
+                datum: child.clone(),
+                preparation: callee.preparation,
+                ownership: Ownership::Ordinary,
+            });
+        }
+        complete.extend(arguments);
+        Ok((declaration, Arc::clone(type_arguments), complete))
+    }
+
+    fn charge_reference_bindings(&mut self, count: usize) -> Result<(), ExecutionError> {
+        let entry = std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+            + 3 * std::mem::size_of::<usize>();
+        let bytes = count
+            .checked_mul(entry)
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    std::mem::size_of::<ReferenceBindings>() + 2 * std::mem::size_of::<usize>(),
+                )
+            })
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_allocation",
+                    "canonical binding metadata exceeds accounting range",
+                )
+            })?;
+        self.charge_allocation(bytes as u64)
+    }
+
+    fn check_capture_type(
+        &mut self,
+        root: TypeObjectDigest,
+        bindings: &ReferenceBindings,
+        checked: &mut BTreeSet<TypeObjectDigest>,
+    ) -> Result<(), ExecutionError> {
+        self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
+        let schema = Arc::clone(&self.schema);
+        let mut types = vec![(root, 0_u16)];
+        while let Some((mut ty, depth)) = types.pop() {
+            self.control.check()?;
+            self.observation.value_work.capture_admission_nodes = self
+                .observation
+                .value_work
+                .capture_admission_nodes
+                .saturating_add(1);
+            if depth > 256 {
+                return Err(reference_resource(
+                    "normalized_reference_value_depth",
+                    "capture type exceeds depth 256",
+                ));
+            }
+            if let Some(TypeForm::TypeParameter { parameter }) =
+                schema.types.get(&ty).map(|object| &object.form)
+            {
+                ty = *bindings
+                    .get(parameter)
+                    .ok_or_else(|| reject("capture stores an unresolved type parameter"))?;
+            }
+            let identity = schema
+                .instantiated_identity(ty, bindings, 0)
+                .ok_or_else(|| reject("capture type cannot be resolved from canonical bindings"))?;
+            if checked.contains(&identity) {
+                continue;
+            }
+            self.charge_allocation(
+                (std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>()) as u64,
+            )?;
+            checked.insert(identity);
+            let form = &schema
+                .types
+                .get(&ty)
+                .ok_or_else(|| reject("capture type is absent from canonical authority"))?
+                .form;
+            let mut append = |child| -> Result<(), ExecutionError> {
+                self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
+                types.push((child, depth + 1));
+                Ok(())
+            };
+            match form {
+                TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Function { .. } => {}
+                TypeForm::Secret
+                | TypeForm::Stream { .. }
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::TypeParameter { .. } => {
+                    return Err(reject(
+                        "capture stores a secret, stream, resource, or unknown type parameter",
+                    ));
+                }
+                TypeForm::List { item } | TypeForm::Option { item } => append(*item)?,
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => {
+                    append(*value)?;
+                    append(*key)?;
+                }
+                TypeForm::StructuralRecord { fields } => {
+                    for field in fields.iter().rev() {
+                        append(field.ty)?;
+                    }
+                }
+                TypeForm::Named { declaration } => {
+                    if let Ok(index) = schema
+                        .records
+                        .binary_search_by_key(declaration, |record| record.declaration)
+                    {
+                        for field in schema.records[index].fields.iter().rev() {
+                            append(field.ty)?;
+                        }
+                    } else if let Ok(index) = schema
+                        .variants
+                        .binary_search_by_key(declaration, |variant| variant.declaration)
+                    {
+                        for case in schema.variants[index].cases.iter().rev() {
+                            if let Some(payload) = case.payload {
+                                append(payload)?;
+                            }
+                        }
+                    } else {
+                        return Err(reject("capture has no canonical nominal definition"));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 

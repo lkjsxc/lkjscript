@@ -585,6 +585,13 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                     .to_string(),
             ),
             (
+                "production-capture-admission-nodes",
+                run.production
+                    .value_work
+                    .capture_admission_nodes
+                    .to_string(),
+            ),
+            (
                 "production-guard-descendants",
                 run.production
                     .value_work
@@ -627,6 +634,10 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                     .value_work
                     .constructor_child_visits
                     .to_string(),
+            ),
+            (
+                "reference-capture-admission-nodes",
+                run.reference.value_work.capture_admission_nodes.to_string(),
             ),
             (
                 "reference-guard-descendants",
@@ -4115,6 +4126,10 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("form", "invoke".to_owned()));
                 fields.push(("arguments", arguments.len().to_string()));
             }
+            ExpressionOperation::Bind { arguments, .. } => {
+                fields.push(("form", "bind".to_owned()));
+                fields.push(("arguments", arguments.len().to_string()));
+            }
             ExpressionOperation::Record {
                 nominal_type,
                 fields: values,
@@ -4339,6 +4354,26 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         owner,
                         argument,
                         (ExpressionChildRole::CallArgument, "call_argument"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::Bind { callee, arguments } => {
+                self.visit_expression_child(
+                    owner,
+                    callee,
+                    (ExpressionChildRole::BindCallee, "bind_callee"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, argument) in arguments.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        argument,
+                        (ExpressionChildRole::BindArgument, "bind_argument"),
                         index,
                         None,
                         child_depth,

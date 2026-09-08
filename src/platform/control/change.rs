@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-14";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 14;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-11";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 11;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-15";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 15;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-12";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 12;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1225,6 +1225,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "call",
     "function-value",
     "invoke",
+    "bind",
     "let",
     "record",
     "variant",
@@ -1557,6 +1558,18 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
     CompactFormField {
         form: "invoke",
         name: "function",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "bind",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "bind",
+        name: "callee",
         required: true,
         syntax: "$NAME",
     },
@@ -3062,6 +3075,14 @@ impl Decoder {
                         .into_iter()
                         .map(|edge| self.decode_type(&edge.value))
                         .collect::<Result<Vec<_>, _>>()?,
+                }
+            }
+            "expression.bind" => {
+                check_fields(&record, &["as", "callee"])?;
+                let callee = required(&record, "callee")?.to_owned();
+                AuthoredExpressionOperation::Bind {
+                    callee: Box::new(self.decode_expression(&callee)?),
+                    arguments: self.decode_expression_edges(symbol)?,
                 }
             }
             "expression.invoke" => {

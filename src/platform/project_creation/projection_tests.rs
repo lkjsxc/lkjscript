@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-const PROJECTION_DOMAIN: &str = "lkjscript.recipe.generation-neutral.v1";
+const PROJECTION_DOMAIN: &str = "lkjscript.recipe.generation-neutral.v2";
 
 #[derive(Debug)]
 struct RecipeProjection {
@@ -29,7 +29,7 @@ fn recipes_match_captured_generation_neutral_projections() {
     let cases = [
         (
             ProjectTemplate::Minimal,
-            "recipe_projection_1959117ddc6915b382b7f0ae8bd7a51ea160cbee0780c9633d6fb681d43e4654",
+            "recipe_projection_dc27526c20ccfb33f3392631ff37554adde67aa74db73afc896b5b4f0d9bf2f2",
             0,
             0,
             0,
@@ -37,7 +37,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Command,
-            "recipe_projection_be87f531eec7fe96ebe4c784efa699dbedd955d6ae0d9d548d8bec4292947160",
+            "recipe_projection_b83d0cad81bbc51e28b7979763079f8605eac167f29207ec0defea2c39d13469",
             10,
             2,
             4,
@@ -45,7 +45,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_ebfc81363fc6c817f5d432d4e2c20a3d256f605a648fdef5a501873743e484e6",
+            "recipe_projection_21612dff15aa137efb8440c5852176d692f9ef524aba4f74c556524ee5e60684",
             21,
             12,
             10,
@@ -53,7 +53,7 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_55c6cb68f909496c6318822e0a731bf55a9ddfe1be32ef05992a33c26ea1ae1b",
+            "recipe_projection_8fc407096c57b11f3f10e01544f131a3ec0071347208de8c13d2a5aab8c5c0f7",
             56,
             12,
             43,
@@ -383,7 +383,8 @@ fn visit_expression(
         ExpressionOperation::Call { arguments, .. } => {
             visit_many(snapshot, arguments, &label, "argument", identities)
         }
-        ExpressionOperation::Invoke { callee, arguments } => {
+        ExpressionOperation::Invoke { callee, arguments }
+        | ExpressionOperation::Bind { callee, arguments } => {
             visit_expression(snapshot, *callee, format!("{label}/callee"), identities);
             visit_many(snapshot, arguments, &label, "argument", identities);
         }
@@ -559,6 +560,17 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             }
         }
         Value::Object(values) => {
+            // Generation is compared separately from recipe meaning. Exact dependency selection
+            // changes with maintained materialization; its stable package identity remains here.
+            values.remove("contract_version");
+            values.remove("graph_contract_version");
+            if values.contains_key("package")
+                && values.contains_key("semantic_revision")
+                && values.contains_key("package_revision")
+            {
+                values.remove("semantic_revision");
+                values.remove("package_revision");
+            }
             for value in values.values_mut() {
                 normalize_strings(value, identities);
             }

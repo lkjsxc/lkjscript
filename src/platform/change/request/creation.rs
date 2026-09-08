@@ -231,6 +231,10 @@ pub enum AuthoredExpressionOperation {
         callee: Box<AuthoredExpression>,
         arguments: Vec<AuthoredExpression>,
     },
+    Bind {
+        callee: Box<AuthoredExpression>,
+        arguments: Vec<AuthoredExpression>,
+    },
     Record {
         nominal_type: Option<AuthoredDeclarationReference>,
         fields: Vec<AuthoredRecordExpressionField>,
@@ -378,7 +382,8 @@ pub(super) fn collect_expression_symbols(
         | AuthoredExpressionOperation::CapabilityCall { arguments, .. } => {
             collect_many_expression_symbols(arguments, definitions)
         }
-        AuthoredExpressionOperation::Invoke { callee, arguments } => {
+        AuthoredExpressionOperation::Invoke { callee, arguments }
+        | AuthoredExpressionOperation::Bind { callee, arguments } => {
             collect_expression_symbols(callee, definitions)?;
             collect_many_expression_symbols(arguments, definitions)
         }
@@ -771,6 +776,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     arguments: self.lower_expressions(arguments)?,
                 }
             }
+            AuthoredExpressionOperation::Bind { callee, arguments } => ExpressionOperation::Bind {
+                callee: self.lower_expression(callee)?,
+                arguments: self.lower_expressions(arguments)?,
+            },
             AuthoredExpressionOperation::Record {
                 nominal_type,
                 fields,

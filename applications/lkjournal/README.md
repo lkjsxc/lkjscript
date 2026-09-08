@@ -20,12 +20,17 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_0c800bcaf3fb598035b3d29d6bf886dc42f62537569e0aa5124f5fa8c95745a9`;
-- semantic state: `semantic_state_11cccd6ab1f48dbcc637737aab3e4740a29a1b3678e94b9e0899b4cc755d4c0c`;
-- package revision: `package_revision_02f6b51664a610d0a653aa901cef11e39a77bd713c8750defa1aeea5c841faa9`;
-- artifact manifest: `artifact_manifest_561a57c404ee1429bbc6f4bf326b8089c4acf86b033c98ac5cf5535f7abbd463`;
-- artifact bundle: `artifact_bundle_fedd83ac62aeeed15a772c40cc075d85b76dfda95e37cf66f6892f0d4edd356a`;
+- semantic revision: `rev_eb655c7951c01fbd935856dadbc69401472c9008ffb2e0824db7c356ca3d1313`;
+- semantic state: `semantic_state_d4021e79731eb17b0d1eb752aa297f040c7b831588920e27c4851b133c234bce`;
+- package revision: `package_revision_38e12979dcf1813bbcdad5a4590d1e157edc26fc85656431a511f2db0454b5c5`;
+- artifact manifest: `artifact_manifest_aaf801f7dadd254e4e416f085f037f10745b289e99ad1aa416c75f6b8376627c`;
+- artifact bundle: `artifact_bundle_8f20dd717b177e1652650c129228a540fcae016b814d698b82aaf8d7aeaecabd`;
 - 2,040 live root semantic owners and one exact built-in standard dependency.
+
+The Graph 11 materialization preserves all existing application owner identities and behavior.
+Its exact standard dependency includes graph-owned function composition; the application has no
+capture-specific rewrite. Unchanged nominal and nested typed-data bytes retain their layout
+identities and require no operational-data migration.
 
 ## Inspect and verify current authority
 
@@ -42,8 +47,8 @@ target/release/lkjscript build --project applications/lkjournal \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure with 90 application and 196 total compiler
-units, then runs 7 application tests plus 20 standard tests. All 27 must agree between normalized
+Check compiles and links the exact two-package closure with 90 application and 203 total compiler
+units, then runs 7 application tests plus 24 standard tests. All 31 must agree between normalized
 bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
 not change accepted `HEAD`.
@@ -73,9 +78,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,062,638-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,089,205-byte
 artifact bundle above (SHA-256
-`1a1cf9b5fd7c920e3f6f5a788fc21fa16c35e19238b3f33ea5ccd771fb4311a8`). The service descriptor
+`f97a029cad60dff52604c22f511c9b1fdf6d37b6de1c8b513f0bff02fca443f0`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

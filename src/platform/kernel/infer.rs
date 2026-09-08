@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 10.
+//! Independent exact-ID expression type and effect oracle for Graph 11.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -611,7 +611,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             } => {
                 let signature = self.function_signature(function, &type_arguments)?;
                 self.validate_call_effect(&signature, context)?;
-                self.validate_arguments(&arguments, &signature.parameters, context, next)?;
+                let mut argument_context = context.clone();
+                argument_context.allow_task_function_value = false;
+                self.validate_arguments(
+                    &arguments,
+                    &signature.parameters,
+                    &argument_context,
+                    next,
+                )?;
                 Ok(signature.result)
             }
             ExpressionOperation::FunctionValue {
@@ -627,8 +634,41 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 }
                 self.function_type(&signature)
             }
+            ExpressionOperation::Bind { callee, arguments } => {
+                let mut pure_callable_context = context.clone();
+                pure_callable_context.allow_task_function_value = false;
+                let callee_type = self.infer(callee, &pure_callable_context, next)?;
+                let TypeForm::Function { parameters, result } = self.type_object(callee_type)?.form
+                else {
+                    return Err(type_error(
+                        "kernel_type_bind",
+                        "bind callee must be a pure function value",
+                    ));
+                };
+                if arguments.len() > parameters.len() {
+                    return Err(type_error(
+                        "kernel_type_bind_arity",
+                        "bound prefix exceeds the callee's remaining parameter count",
+                    ));
+                }
+                for parameter in parameters.iter().take(arguments.len()) {
+                    self.require_capture_safe(*parameter, &mut BTreeSet::new(), 0)?;
+                }
+                self.validate_arguments(
+                    &arguments,
+                    &parameters[..arguments.len()],
+                    &pure_callable_context,
+                    next,
+                )?;
+                self.canonical_type(TypeForm::Function {
+                    parameters: parameters[arguments.len()..].to_vec(),
+                    result,
+                })
+            }
             ExpressionOperation::Invoke { callee, arguments } => {
-                let callee_type = self.infer(callee, context, next)?;
+                let mut callable_context = context.clone();
+                callable_context.allow_task_function_value = false;
+                let callee_type = self.infer(callee, &callable_context, next)?;
                 let object = self.type_object(callee_type)?;
                 let TypeForm::Function { parameters, result } = object.form else {
                     return Err(type_error(
@@ -636,7 +676,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "invoke callee is not a function value",
                     ));
                 };
-                self.validate_arguments(&arguments, &parameters, context, next)?;
+                self.validate_arguments(&arguments, &parameters, &callable_context, next)?;
                 Ok(result)
             }
             ExpressionOperation::Record {
@@ -824,6 +864,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         ));
                     }
                 };
+                // A port's separately authorized task value can sit behind an annotated local.
+                // Pure binding must inspect that source under its own context as well as its type.
+                if !context.allow_task_function_value
+                    && context.declaration.is_none()
+                    && let Some(value) = record.value
+                {
+                    let actual = self.infer(value, context, depth)?;
+                    if let Some(expected) = record.declared_type {
+                        require_same(expected, actual, "kernel_type_binding", "binding value")?;
+                    }
+                    return Ok(actual);
+                }
                 if let Some(ty) = record.declared_type {
                     return Ok(ty);
                 }
@@ -1146,6 +1198,103 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "match value names a non-declaration dependency owner",
             )),
         }
+    }
+
+    fn require_capture_safe(
+        &mut self,
+        ty: TypeObjectDigest,
+        visited: &mut BTreeSet<TypeObjectDigest>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_bind_capture_depth",
+                "capture type exceeds the type-depth bound",
+            ));
+        }
+        if !visited.insert(ty) {
+            return Ok(());
+        }
+        let children = match self.type_object(ty)?.form {
+            TypeForm::Unit
+            | TypeForm::Bool
+            | TypeForm::I64
+            | TypeForm::Bytes
+            | TypeForm::Text
+            | TypeForm::StaticText
+            | TypeForm::Function { .. } => Vec::new(),
+            TypeForm::Secret
+            | TypeForm::Stream { .. }
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::TypeParameter { .. } => {
+                return Err(type_error(
+                    "kernel_type_bind_capture",
+                    "bound values require capture-safe stored types; remove secrets, streams, resources, and unconstrained stored type parameters",
+                ));
+            }
+            TypeForm::List { item } | TypeForm::Option { item } => vec![item],
+            TypeForm::Map { key, value }
+            | TypeForm::Result {
+                ok: key,
+                error: value,
+            } => vec![key, value],
+            TypeForm::StructuralRecord { fields } => {
+                fields.into_iter().map(|field| field.ty).collect()
+            }
+            TypeForm::Named { declaration } => {
+                let payload = if declaration.package == self.read.package_id() {
+                    match self
+                        .read
+                        .owner(OwnerKey::Declaration(declaration.declaration))?
+                    {
+                        Some(OwnerRecord::Declaration(record)) => match record.payload {
+                            DeclarationPayload::Record { fields } => Some((fields, Vec::new())),
+                            DeclarationPayload::Variant { cases } => Some((Vec::new(), cases)),
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                } else {
+                    match self.dependency_owner(
+                        declaration.package,
+                        OwnerKey::Declaration(declaration.declaration),
+                        "captured nominal type",
+                    )? {
+                        PackageInterfaceRecord::Declaration(record) => match record.payload {
+                            PackageInterfaceDeclarationPayload::Record { fields } => {
+                                Some((fields, Vec::new()))
+                            }
+                            PackageInterfaceDeclarationPayload::Variant { cases } => {
+                                Some((Vec::new(), cases))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                };
+                let (fields, cases) = payload.ok_or_else(|| {
+                    type_error(
+                        "kernel_type_bind_capture",
+                        "capture type must name an exact record or variant",
+                    )
+                })?;
+                let mut children = Vec::new();
+                for field in fields {
+                    children.push(self.field_record(declaration.package, field)?.ty);
+                }
+                for case in cases {
+                    if let Some(payload) = self.case_record(declaration.package, case)?.payload {
+                        children.push(payload);
+                    }
+                }
+                children
+            }
+        };
+        for child in children {
+            self.require_capture_safe(child, visited, depth + 1)?;
+        }
+        Ok(())
     }
 
     fn field_record(&self, package: PackageId, field: FieldId) -> Result<FieldRecord, Diagnostic> {

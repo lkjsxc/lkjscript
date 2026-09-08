@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 10 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 11 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -1313,6 +1313,22 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.expression(argument, depth)?;
                 }
                 self.push(CompiledInstruction::Invoke {
+                    arguments: argument_count,
+                })?;
+            }
+            ExpressionOperation::Bind { callee, arguments } => {
+                let argument_count = u32_count("bind arguments", arguments.len())?;
+                self.expression(callee, depth)?;
+                self.push(CompiledInstruction::BeginBind {
+                    arguments: argument_count,
+                })?;
+                for (index, argument) in arguments.into_iter().enumerate() {
+                    self.expression(argument, depth)?;
+                    self.push(CompiledInstruction::Capture {
+                        index: u32_count("capture index", index)?,
+                    })?;
+                }
+                self.push(CompiledInstruction::Bind {
                     arguments: argument_count,
                 })?;
             }

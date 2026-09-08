@@ -99,16 +99,16 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-11";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 12;
-pub const CLI_CONTRACT_VERSION: u16 = 26;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-13";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 13;
+pub const CLI_CONTRACT_VERSION: u16 = 27;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-2";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 2;
+    "lkjscript-function-definition-projection-3";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 3;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -155,13 +155,13 @@ pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: u64 = MAXIMUM_FUNCTION_DEFINI
     + MAXIMUM_FUNCTION_DEFINITION_FACT_READS
         * super::super::witness::contract::MAXIMUM_OWNER_SUMMARY_BYTES as u64;
 
-pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT02";
+pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT03";
 pub(crate) const FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN: &str =
-    "lkjscript.function-definition.continuation-integrity.v2";
+    "lkjscript.function-definition.continuation-integrity.v3";
 pub(crate) const FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN: &str =
-    "lkjscript.function-definition.logical.v2";
+    "lkjscript.function-definition.logical.v3";
 pub(crate) const FUNCTION_DEFINITION_RECORD_KEY_DOMAIN: &str =
-    "lkjscript.function-definition.record-key.v2";
+    "lkjscript.function-definition.record-key.v3";
 
 pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("result", "status"),
@@ -396,6 +396,7 @@ pub enum ContractKey {
     Registry,
     Cli,
     MeaningGraph,
+    TypeObject,
     ImmutableObjectStore,
     ImmutablePack,
     ObjectCatalog,
@@ -447,6 +448,7 @@ impl ContractKey {
             Self::Registry => "registry",
             Self::Cli => "cli",
             Self::MeaningGraph => "meaning_graph",
+            Self::TypeObject => "type_object",
             Self::ImmutableObjectStore => "immutable_object_store",
             Self::ImmutablePack => "immutable_pack",
             Self::ObjectCatalog => "object_catalog",
@@ -587,7 +589,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-13",
+            identity: "lkjscript-cli-27",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -603,15 +605,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN10", "LKJTYP10", "LKJSMR01", "LKJDEP10", "LKJRET10"],
+            magic_values: &["LKJOWN11", "LKJSMR01", "LKJDEP11", "LKJRET11"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::DEPENDENCY_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::RETIREMENT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::OWNER_OBJECT_DIGEST_DOMAIN,
-                super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
                 super::super::kernel::contract::BLOB_OBJECT_DIGEST_DOMAIN,
                 super::super::kernel::contract::SEQUENCE_OBJECT_DIGEST_DOMAIN,
                 super::super::kernel::contract::SEMANTIC_ROOT_DIGEST_DOMAIN,
@@ -620,6 +620,20 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 super::super::kernel::contract::RETIREMENT_OBJECT_DIGEST_DOMAIN,
                 super::super::kernel::contract::CHANGE_DIGEST_DOMAIN,
                 super::super::kernel::contract::PACKAGE_ID_MIGRATION_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::TypeObject,
+            name: "current structural type-object encoding",
+            identity: super::super::kernel::contract::TYPE_OBJECT_CONTRACT_IDENTITY,
+            version: super::super::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::CanonicalMeaning,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJTYP10"],
+            digest_domains: &[
+                super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
         simple_contract(
@@ -729,7 +743,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM09"],
+            magic_values: &["LKJSUM10"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -752,7 +766,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT06"],
+            magic_values: &["LKJWIT07"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -789,7 +803,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR11", "LKJABG01"],
+            magic_values: &["LKJACR12", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -868,7 +882,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF06"],
+            magic_values: &["LKJPIF07"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -933,7 +947,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN05"],
+            magic_values: &["LKJCUN06"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -955,7 +969,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF15"],
+            magic_values: &["LKJAMF16"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -969,7 +983,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART15", "LKJAEN15"],
+            magic_values: &["LKJART16", "LKJAEN16"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -3623,6 +3637,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Correct the invocation or adapter value against the selected program; do not assert an affine classification.",
         ),
         diagnostic(
+            "kernel_type_bind",
+            DiagnosticClass::Semantic,
+            "The binding callee is not an exact pure function value.",
+            "Use an explicitly instantiated pure named function or an already checked pure callable.",
+        ),
+        diagnostic(
+            "kernel_type_bind_arity",
+            DiagnosticClass::Semantic,
+            "The prefix contains more values than the callee's remaining parameters.",
+            "Bind an ordered prefix within the remaining arity; complete binding creates a zero-argument function.",
+        ),
+        diagnostic(
+            "kernel_type_bind_capture",
+            DiagnosticClass::Semantic,
+            "A stored capture type contains a secret, stream, capability resource, or unresolved type parameter.",
+            "Capture recursively safe ordinary values or pure callables; inspect every nominal case, including absent resource cases.",
+        ),
+        diagnostic(
+            "kernel_type_bind_capture_depth",
+            DiagnosticClass::Semantic,
+            "Capture-type validation exceeded its bounded structural depth.",
+            "Reduce stored type nesting within the current capture subset.",
+        ),
+        diagnostic(
+            "compiler_unit_bind_protocol",
+            DiagnosticClass::Corrupt,
+            "Loaded bytecode does not preserve one ordered, completely admitted binding prefix.",
+            "Rebuild from accepted graph meaning; do not execute the malformed derived unit.",
+        ),
+        diagnostic(
             "normalized_reference_value_admission",
             DiagnosticClass::Infrastructure,
             "A raw reference value disagrees with independent canonical type or ownership admission.",
@@ -5639,6 +5683,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "call",
                 "function_value",
                 "invoke",
+                "bind",
                 "record",
                 "variant",
                 "field",
@@ -5989,10 +6034,55 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                 ],
             )?);
+            records.push(compact_record(
+                "execution.binding",
+                &[
+                    ("expression", "bind".to_owned()),
+                    ("target", "exact-pure-named-code".to_owned()),
+                    ("environment", "immutable-flat-prefix".to_owned()),
+                    (
+                        "order",
+                        "callee-then-captures-left-to-right-once".to_owned(),
+                    ),
+                    (
+                        "empty",
+                        "preserve-without-environment-allocation".to_owned(),
+                    ),
+                    ("complete", "zero-argument-function".to_owned()),
+                    (
+                        "capture-types",
+                        "recursive-ordinary-data-and-pure-callables".to_owned(),
+                    ),
+                    (
+                        "stored-type-parameters",
+                        "reject-unknown-capture-safety".to_owned(),
+                    ),
+                    (
+                        "function-signature-parameters",
+                        "permitted-callable-leaf".to_owned(),
+                    ),
+                    (
+                        "task-targets",
+                        "rejected-including-port-preparation".to_owned(),
+                    ),
+                    ("serialization", "forbidden".to_owned()),
+                    (
+                        "equality",
+                        "forbidden-including-containing-values".to_owned(),
+                    ),
+                    (
+                        "capture-slots",
+                        "remaining-arity-and-100000-children".to_owned(),
+                    ),
+                    ("environment-readmission-on-invoke", "none".to_owned()),
+                    ("tail-invoke", "ultimate-graph-target".to_owned()),
+                ],
+            )?);
             for tier in ["production", "reference"] {
                 for (field, unit) in [
                     ("input-admission-nodes", "raw-input-node"),
                     ("raw-result-admission-nodes", "raw-result-node"),
+                    ("capture-admission-nodes", "capture-value-or-type-node"),
                     ("constructor-child-visits", "checked-immediate-child"),
                     ("guard-descendants", "internal-affinity-descendant"),
                     ("classification-decisions", "internal-root-classification"),
@@ -6639,9 +6729,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-2"
+            "lkjscript-function-definition-projection-3"
         );
-        assert_eq!(contract.version, 2);
+        assert_eq!(contract.version, 3);
         assert_eq!(
             contract_descriptors()
                 .iter()

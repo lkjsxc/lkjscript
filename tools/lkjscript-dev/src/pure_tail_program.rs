@@ -53,6 +53,18 @@ impl Request {
         self.expression("function-value", &format!("function={function}"))
     }
 
+    fn bind(&mut self, callee: &str, captures: &[String]) -> String {
+        let result = self.expression("bind", &format!("callee={callee}"));
+        self.arguments(&result, captures);
+        result
+    }
+
+    fn invoke(&mut self, callee: &str, arguments: &[String]) -> String {
+        let result = self.expression("invoke", &format!("function={callee}"));
+        self.arguments(&result, arguments);
+        result
+    }
+
     fn function(&mut self, name: &str, result: &str, body: &str, parameters: &[(&str, &str)]) {
         self.text.push_str(&format!("create.function as=${name} module=$module name={name} visibility=public result={result} effect=pure body={body}\n"));
         for (parameter, ty) in parameters {
@@ -146,17 +158,21 @@ pub(super) fn http(
         &[space, key, value, missing],
     );
     let task_items = request.local("$task-items");
-    let pure_fold = request.call(helper, &[], &[task_items]);
-    request.text.push_str(&format!("create.function as=$task-fold module={} name=task-fold visibility=private result=i64 effect=task body={pure_fold}\nadd.parameter as=$task-items function=$task-fold name=items type=@items\n", bindings["module"]));
+    let task_scale = request.local("$task-scale");
+    let task_bias = request.local("$task-bias");
+    let pure_fold = request.call(helper, &[], &[task_items, task_scale, task_bias]);
+    request.text.push_str(&format!("create.function as=$task-fold module={} name=task-fold visibility=private result=i64 effect=task body={pure_fold}\nadd.parameter as=$task-items function=$task-fold name=items type=@items\nadd.parameter as=$task-scale function=$task-fold name=scale type=i64\nadd.parameter as=$task-bias function=$task-fold name=bias type=i64\n", bindings["module"]));
     let items = request.local("$write-items");
-    let folded = request.call("$task-fold", &[], &[items]);
+    let scale = request.local("$write-scale");
+    let bias = request.local("$write-bias");
+    let folded = request.call("$task-fold", &[], &[items, scale, bias]);
     let steps = request.expression("sequence", "");
     request.arguments(&steps, &[put, folded]);
     let transaction = request.expression(
         "transaction",
         &format!("requirement=$data binding=$transaction name=transaction body={steps}"),
     );
-    request.text.push_str(&format!("create.function as=$write-fold module={} name=write-fold visibility=private result=i64 effect=task body={transaction}\neffect.requirement parent=$write-fold index=0 requirement=$data\nadd.parameter as=$write-items function=$write-fold name=items type=@items\nadd.parameter as=$write-key function=$write-fold name=key type=text\n",bindings["module"]));
+    request.text.push_str(&format!("create.function as=$write-fold module={} name=write-fold visibility=private result=i64 effect=task body={transaction}\neffect.requirement parent=$write-fold index=0 requirement=$data\nadd.parameter as=$write-items function=$write-fold name=items type=@items\nadd.parameter as=$write-key function=$write-fold name=key type=text\nadd.parameter as=$write-scale function=$write-fold name=scale type=i64\nadd.parameter as=$write-bias function=$write-fold name=bias type=i64\n",bindings["module"]));
 
     let input = request.local(&bindings["parameter"]);
     let stream = request.field(&input, "body");
@@ -167,11 +183,33 @@ pub(super) fn http(
         &[stream, maximum],
     );
     let empty = request.expression("list", "item=i64");
-    let decoded = request.call(&standard["json-decode-or"], &["@items"], &[bytes, empty]);
-    let items = request.field(&decoded, "value");
+    request.text.push_str("type.structural-record as=@configured-input\ntype.field parent=@configured-input index=0 name=bias type=i64\ntype.field parent=@configured-input index=1 name=items type=@items\ntype.field parent=@configured-input index=2 name=scale type=i64\n");
+    let one = request.integer(1);
+    let zero = request.integer(0);
+    let fallback = request.expression("record", "");
+    for (index, (name, value)) in [("bias", zero), ("items", empty), ("scale", one)]
+        .iter()
+        .enumerate()
+    {
+        request.text.push_str(&format!(
+            "expression.record-field parent={fallback} index={index} name={name} value={value}\n"
+        ));
+    }
+    let decoded = request.call(
+        &standard["json-decode-or"],
+        &["@configured-input"],
+        &[bytes, fallback],
+    );
+    let configured = request.field(&decoded, "value");
+    let input_items = request.local("$request-data");
+    let items = request.field(&input_items, "items");
+    let input_scale = request.local("$request-data");
+    let scale = request.field(&input_scale, "scale");
+    let input_bias = request.local("$request-data");
+    let bias = request.field(&input_bias, "bias");
     let input = request.local(&bindings["parameter"]);
     let key = request.field(&input, "query");
-    let sum = request.call("$write-fold", &[], &[items, key]);
+    let sum = request.call("$write-fold", &[], &[items, key, scale, bias]);
     let body = request.call(&standard["json-encode"], &["i64"], &[sum]);
     request.text.push_str("type.structural-record as=@header\ntype.field parent=@header index=0 name=name type=text\ntype.field parent=@header index=1 name=value type=bytes\n");
     let headers = request.expression("list", "item=@header");
@@ -186,7 +224,9 @@ pub(super) fn http(
         ));
     }
     request.text.push_str("type.list as=@headers item=@header\ntype.structural-record as=@response\ntype.field parent=@response index=0 name=body type=bytes\ntype.field parent=@response index=1 name=headers type=@headers\ntype.field parent=@response index=2 name=status type=i64\n");
-    request.text.push_str(&format!("set.function-contract as=%contract function={} result=@response effect=task\neffect.requirement parent=%contract index=0 requirement={}\neffect.requirement parent=%contract index=1 requirement=$data\nreplace.body function={} body={response}\n",bindings["function"],bindings["streams"],bindings["function"]));
+    let retained = request.expression("let", &format!("body={response}"));
+    request.text.push_str(&format!("expression.binding parent={retained} index=0 as=$request-data name=request-data value={configured} type=@configured-input\n"));
+    request.text.push_str(&format!("set.function-contract as=%contract function={} result=@response effect=task\neffect.requirement parent=%contract index=0 requirement={}\neffect.requirement parent=%contract index=1 requirement=$data\nreplace.body function={} body={retained}\n",bindings["function"],bindings["streams"],bindings["function"]));
     request.text
 }
 
@@ -220,10 +260,36 @@ pub(super) fn library(standard: &BTreeMap<String, String>) -> String {
         &[("n", "i64"), ("a", "@A"), ("b", "@B")],
     );
     request.text.push_str("add.type-parameter as=$A function=$keep name=A\nadd.type-parameter as=$B function=$keep name=B\n");
+    request.text.push_str("type.function as=@reducer result=i64\ntype.argument parent=@reducer index=0 type=i64\ntype.argument parent=@reducer index=1 type=i64\n");
+    let scale = request.local("$configured-step_scale");
+    let item = request.local("$configured-step_item");
+    let scaled = request.call(&standard["multiply"], &[], &[scale, item]);
+    let state = request.local("$configured-step_state");
+    let sum = request.call(&standard["add"], &[], &[state, scaled]);
+    let bias = request.local("$configured-step_bias");
+    let step = request.call(&standard["add"], &[], &[sum, bias]);
+    request.text.push_str(&format!("create.function as=$configured-step module=$module name=configured-step visibility=private result=i64 effect=pure body={step}\n"));
+    for name in ["scale", "bias", "state", "item"] {
+        request.text.push_str(&format!("add.parameter as=$configured-step_{name} function=$configured-step name={name} type=i64\n"));
+    }
+    let target = request.function_value("$configured-step");
+    let scale = request.local("$reducer-factory_scale");
+    let bias = request.local("$reducer-factory_bias");
+    let bound = request.bind(&target, &[scale, bias]);
+    request.function(
+        "reducer-factory",
+        "@reducer",
+        &bound,
+        &[("scale", "i64"), ("bias", "i64")],
+    );
     request.text
 }
 
-pub(super) fn consumer(standard: &BTreeMap<String, String>, library: &str) -> String {
+pub(super) fn consumer(
+    standard: &BTreeMap<String, String>,
+    library: &str,
+    factory: &str,
+) -> String {
     let mut request = Request::default();
     request.text.push_str("create.module as=$module name=application\ncreate.component as=$component module=$module name=application visibility=package\ntype.list as=@items item=i64\n");
     for (name, operator) in [("sum-step", "add"), ("ordered-step", "subtract")] {
@@ -390,5 +456,262 @@ pub(super) fn consumer(standard: &BTreeMap<String, String>, library: &str) -> St
         &[("n", "i64"), ("items", "@items")],
     );
     request.target("forward-generic", "i64", &["i64", "@items"]);
+    binding_consumer(&mut request, standard, factory);
     request.text
+}
+
+fn binding_consumer(request: &mut Request, standard: &BTreeMap<String, String>, factory: &str) {
+    request.text.push_str("type.function as=@thunk result=i64\ntype.function as=@reducer result=i64\ntype.argument parent=@reducer index=0 type=i64\ntype.argument parent=@reducer index=1 type=i64\ntype.structural-record as=@totals\ntype.field parent=@totals index=0 name=first type=i64\ntype.field parent=@totals index=1 name=second type=i64\n");
+    let mut closures = Vec::new();
+    for name in ["first", "second"] {
+        let scale = request.local(&format!("$configured_{name}-scale"));
+        let bias = request.local(&format!("$configured_{name}-bias"));
+        closures.push(request.call(factory, &[], &[scale, bias]));
+    }
+    let mut totals = Vec::new();
+    for name in ["first", "second"] {
+        let items = request.local("$configured_items");
+        let zero = request.integer(0);
+        let reducer = request.local(&format!("$retained-{name}"));
+        totals.push(request.call(
+            &standard["list-fold-left"],
+            &["i64", "i64"],
+            &[items, zero, reducer],
+        ));
+    }
+    let result = request.expression("record", "");
+    for (index, name) in ["first", "second"].iter().enumerate() {
+        request.text.push_str(&format!(
+            "expression.record-field parent={result} index={index} name={name} value={}\n",
+            totals[index]
+        ));
+    }
+    let body = request.expression("let", &format!("body={result}"));
+    for (index, name) in ["first", "second"].iter().enumerate() {
+        request.text.push_str(&format!("expression.binding parent={body} index={index} as=$retained-{name} name={name} value={} type=@reducer\n", closures[index]));
+    }
+    request.function(
+        "configured",
+        "@totals",
+        &body,
+        &[
+            ("first-scale", "i64"),
+            ("first-bias", "i64"),
+            ("second-scale", "i64"),
+            ("second-bias", "i64"),
+            ("items", "@items"),
+        ],
+    );
+    request.target(
+        "configured",
+        "@totals",
+        &["i64", "i64", "i64", "i64", "@items"],
+    );
+
+    let items = request.local("$retained-length_items");
+    let length = request.call(&standard["list-length"], &["i64"], &[items]);
+    request.function("retained-length", "i64", &length, &[("items", "@items")]);
+    let condition = request.test_zero(standard, "$forward-bound_n");
+    let closure = request.local("$forward-bound_closure");
+    let value = request.invoke(&closure, &[]);
+    let closure = request.local("$forward-bound_closure");
+    let measured = request.invoke(&closure, &[]);
+    let next = request.decrement(standard, "$forward-bound_n");
+    let closure = request.local("$forward-bound_closure");
+    let transfer = request.call("$forward-bound", &[], &[next, closure]);
+    let sequence = request.expression("sequence", "");
+    request.arguments(&sequence, &[measured, transfer]);
+    let body = request.choose(&condition, &value, &sequence);
+    request.function(
+        "forward-bound",
+        "i64",
+        &body,
+        &[("n", "i64"), ("closure", "@thunk")],
+    );
+    let function = request.function_value("$retained-length");
+    let items = request.local("$bound-forward_items");
+    let closure = request.bind(&function, &[items]);
+    let n = request.local("$bound-forward_n");
+    let body = request.call("$forward-bound", &[], &[n, closure]);
+    request.function(
+        "bound-forward",
+        "i64",
+        &body,
+        &[("n", "i64"), ("items", "@items")],
+    );
+    request.target("bound-forward", "i64", &["i64", "@items"]);
+
+    // This consumer returns and rebinds an exported factory's private implementation.
+    let scale = request.local("$configured-fold_scale");
+    let bias = request.local("$configured-fold_bias");
+    let reducer = request.call(factory, &[], &[scale, bias]);
+    let items = request.local("$configured-fold_items");
+    let zero = request.integer(0);
+    let body = request.call(
+        &standard["list-fold-left"],
+        &["i64", "i64"],
+        &[items, zero, reducer],
+    );
+    request.function(
+        "configured-fold",
+        "i64",
+        &body,
+        &[("items", "@items"), ("scale", "i64"), ("bias", "i64")],
+    );
+
+    for shape in ["empty", "partial", "repeated", "complete", "factory"] {
+        let body = if shape == "factory" {
+            let three = request.integer(3);
+            let five = request.integer(5);
+            let reducer = request.call(factory, &[], &[three, five]);
+            let one = request.integer(1);
+            let rebound = request.bind(&reducer, &[one]);
+            let two = request.integer(2);
+            request.invoke(&rebound, &[two])
+        } else {
+            let target = request.function_value(&standard["add"]);
+            let four = request.integer(4);
+            let five = request.integer(5);
+            match shape {
+                "empty" => {
+                    let bound = request.bind(&target, &[]);
+                    request.invoke(&bound, &[four, five])
+                }
+                "partial" => {
+                    let bound = request.bind(&target, &[four]);
+                    request.invoke(&bound, &[five])
+                }
+                "repeated" => {
+                    let first = request.bind(&target, &[four]);
+                    let second = request.bind(&first, &[five]);
+                    request.invoke(&second, &[])
+                }
+                _ => {
+                    let bound = request.bind(&target, &[four, five]);
+                    request.invoke(&bound, &[])
+                }
+            }
+        };
+        let name = format!("binding-{shape}");
+        request.function(&name, "i64", &body, &[]);
+        request.target(&name, "i64", &[]);
+    }
+    for reverse in [false, true] {
+        let name = if reverse {
+            "compose-reverse"
+        } else {
+            "compose-forward"
+        };
+        let add = request.function_value(&standard["add"]);
+        let bias = request.local(&format!("${name}_bias"));
+        let outer = request.bind(&add, &[bias]);
+        let multiply = request.function_value(&standard["multiply"]);
+        let scale = request.local(&format!("${name}_scale"));
+        let inner = request.bind(&multiply, &[scale]);
+        let arguments = if reverse {
+            [inner, outer]
+        } else {
+            [outer, inner]
+        };
+        let composed = request.call(
+            &standard["function-compose"],
+            &["i64", "i64", "i64"],
+            &arguments,
+        );
+        let input = request.local(&format!("${name}_input"));
+        let complete = request.bind(&composed, &[input]);
+        let body = request.invoke(&complete, &[]);
+        request.function(
+            name,
+            "i64",
+            &body,
+            &[("input", "i64"), ("scale", "i64"), ("bias", "i64")],
+        );
+        request.target(name, "i64", &["i64", "i64", "i64"]);
+    }
+    let condition = request.local("$binding-label_value");
+    let yes = request.expression("text", "value=true");
+    let no = request.expression("text", "value=false");
+    let label = request.choose(&condition, &yes, &no);
+    request.function("binding-label", "text", &label, &[("value", "bool")]);
+    let outer = request.function_value("$binding-label");
+    let equal = request.function_value(&standard["i64-equal"]);
+    let fixed = request.integer(42);
+    let inner = request.bind(&equal, &[fixed]);
+    let composed = request.call(
+        &standard["function-compose"],
+        &["i64", "bool", "text"],
+        &[outer, inner],
+    );
+    let input = request.local("$compose-types_input");
+    let body = request.invoke(&composed, &[input]);
+    request.function("compose-types", "text", &body, &[("input", "i64")]);
+    request.target("compose-types", "text", &["i64"]);
+
+    for invoke in [false, true] {
+        let division = request.function_value(&standard["divide"]);
+        let one = request.integer(1);
+        let zero = request.integer(0);
+        let thunk = request.bind(&division, &[one, zero]);
+        let body = if invoke {
+            request.invoke(&thunk, &[])
+        } else {
+            let forty_two = request.integer(42);
+            let sequence = request.expression("sequence", "");
+            request.arguments(&sequence, &[thunk, forty_two]);
+            sequence
+        };
+        let name = if invoke {
+            "binding-thunk-trap"
+        } else {
+            "binding-thunk-created"
+        };
+        request.function(name, "i64", &body, &[]);
+        request.target(name, "i64", &[]);
+    }
+    let target = request.function_value(&standard["add"]);
+    let one = request.integer(1);
+    let zero = request.integer(0);
+    let first = request.call(&standard["divide"], &[], &[one, zero]);
+    let maximum = request.integer(i64::MAX);
+    let one = request.integer(1);
+    let second = request.call(&standard["add"], &[], &[maximum, one]);
+    let bound = request.bind(&target, &[first, second]);
+    let body = request.invoke(&bound, &[]);
+    request.function("binding-capture-order", "i64", &body, &[]);
+    request.target("binding-capture-order", "i64", &[]);
+    let one = request.integer(1);
+    let zero = request.integer(0);
+    let first = request.call(&standard["divide"], &[], &[one, zero]);
+    let target = request.function_value(&standard["add"]);
+    let callee = request.expression("sequence", "");
+    request.arguments(&callee, &[first, target]);
+    let maximum = request.integer(i64::MAX);
+    let one = request.integer(1);
+    let capture = request.call(&standard["add"], &[], &[maximum, one]);
+    let zero = request.integer(0);
+    let bound = request.bind(&callee, &[capture, zero]);
+    let body = request.invoke(&bound, &[]);
+    request.function("binding-callee-order", "i64", &body, &[]);
+    request.target("binding-callee-order", "i64", &[]);
+    let target = request.function_value(&standard["add"]);
+    let mut captures = Vec::new();
+    for value in [1, 2] {
+        let value = request.integer(value);
+        let three = request.integer(3);
+        captures.push(request.call(&standard["add"], &[], &[value, three]));
+    }
+    let bound = request.bind(&target, &captures);
+    let body = request.invoke(&bound, &[]);
+    request.function("binding-capture-once", "i64", &body, &[]);
+    request.target("binding-capture-once", "i64", &[]);
+    let target = request.function_value(&standard["add"]);
+    let four = request.integer(4);
+    let five = request.integer(5);
+    let bound = request.bind(&target, &[four, five]);
+    request.text.push_str(&format!("create.constant as=$bound-constant module=$module name=bound-constant visibility=private type=@thunk value={bound}\n"));
+    let constant = request.expression("constant", "declaration=$bound-constant");
+    let body = request.invoke(&constant, &[]);
+    request.function("binding-constant", "i64", &body, &[]);
+    request.target("binding-constant", "i64", &[]);
 }

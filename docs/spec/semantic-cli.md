@@ -290,12 +290,19 @@ mismatched, borrowed, unrestricted, multiple, nonfinal, public, package, generic
 cross-package, recursive, indirect, resource-result, and caller-reuse forms reject before plan
 publication. Unknown predecessor type/use spellings also reject.
 
-The higher-order slice has exactly three public spellings: `add.type-parameter` adds one ordered
+The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered
 stable parameter to a pure function; `expression.function-value` names one exact pure function and
 receives all ordered `type.argument` children; and `expression.invoke` receives one function-valued
-expression plus ordered `expression.argument` children. A function value is monomorphic after
-complete explicit substitution, carries no capture or capability authority, and is evaluated once
-before invocation arguments are evaluated left-to-right. Missing, excess, duplicate, foreign, task,
+expression plus ordered `expression.argument` children. `expression.bind as=$bound callee=$callee`
+uses the same ordered argument children to bind an exact parameter prefix. A function value is
+monomorphic after complete explicit substitution; its immutable runtime prefix contains only
+capture-safe values and checked pure callables. Callee and capture expressions run once in order;
+binding never executes the target. Empty binding preserves the callable and complete binding
+returns a zero-argument callable. Bare stored type parameters, secrets, streams, capability resources,
+and aggregates containing them reject. Function signatures are callable leaves for capture safety.
+Definition, relation, context, reviewed-change, and eligible extraction projections include binding
+children. Runtime environments are absent from all semantic and external encodings.
+Missing, excess, duplicate, foreign, task,
 nonfunction, arity, and argument-type cases reject before publication. `function-ref`, `lambda`,
 `closure`, and `apply` are not aliases. The dependency-closed data cutover also adds exact
 `create.interface`, `create.external`, interface `add.operation`, operation parameters,

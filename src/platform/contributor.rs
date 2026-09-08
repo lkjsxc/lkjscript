@@ -1048,13 +1048,6 @@ fn reconstruct_function_extraction(
                     required.extend(requirements);
                 }
             }
-            ExpressionOperation::FunctionValue { .. } | ExpressionOperation::Invoke { .. } => {
-                return Err(oracle_error(
-                    DiagnosticClass::Semantic,
-                    "contributor_extraction_closure",
-                    "function values and indirect invocation are outside extraction",
-                ));
-            }
             _ => {}
         }
     }
@@ -2457,6 +2450,7 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::Call { .. } => "call",
         ExpressionOperation::FunctionValue { .. } => "function_value",
         ExpressionOperation::Invoke { .. } => "invoke",
+        ExpressionOperation::Bind { .. } => "bind",
         ExpressionOperation::Record { .. } => "record",
         ExpressionOperation::Variant { .. } => "variant",
         ExpressionOperation::Field { .. } => "field",
@@ -2486,6 +2480,8 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::CallArgument => "call_argument",
         ExpressionChildRole::InvokeCallee => "invoke_callee",
         ExpressionChildRole::InvokeArgument => "invoke_argument",
+        ExpressionChildRole::BindCallee => "bind_callee",
+        ExpressionChildRole::BindArgument => "bind_argument",
         ExpressionChildRole::RecordField => "record_field",
         ExpressionChildRole::VariantPayload => "variant_payload",
         ExpressionChildRole::FieldValue => "field_value",
@@ -2574,7 +2570,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 550);
+        assert_eq!(inventory.owners, 618);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

@@ -1,6 +1,6 @@
-//! Content-addressed, structural Graph 10 type objects.
+//! Content-addressed, structural version-10 type objects.
 
-use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN};
+use super::contract::{MAXIMUM_CHILDREN, TYPE_OBJECT_CONTRACT_VERSION};
 use super::digest::TypeObjectDigest;
 use super::name::Name;
 use super::reference::DeclarationReference;
@@ -20,7 +20,7 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: GRAPH_CONTRACT_VERSION,
+            contract_version: TYPE_OBJECT_CONTRACT_VERSION,
             form,
         };
         object.validate_local()?;
@@ -28,11 +28,11 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != GRAPH_CONTRACT_VERSION {
+        if self.contract_version != TYPE_OBJECT_CONTRACT_VERSION {
             return Err(type_error(
                 "kernel_type_contract",
                 format!(
-                    "type object contract {} is not Graph Contract {GRAPH_CONTRACT_VERSION}",
+                    "type object contract {} is not Type Object Contract {TYPE_OBJECT_CONTRACT_VERSION}",
                     self.contract_version
                 ),
             ));
@@ -248,7 +248,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(type_error(
             "kernel_type_child_count",
-            format!("{label} count {count} is outside the Graph 10 bound"),
+            format!("{label} count {count} is outside the current type-object bound"),
         ));
     }
     Ok(())

@@ -15,7 +15,7 @@ operations and lexical transactions preserve that order.
 
 Pure graph function bodies are tail contexts. The selected `if` branch, `let` body after
 ordered bindings, last sequence item, and selected `match` arm inherit that context. A direct
-call or named `invoke` there transfers to an exact pure graph function without retaining the
+call or pure `invoke` there transfers to an exact pure graph function without retaining the
 outgoing activation, in both production and canonical reference execution. This includes self
 and mutual recursion, explicit rank-one instantiation, and admitted package boundaries.
 
@@ -126,7 +126,7 @@ join retains an owner only when every reachable arm retains the same provenance.
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
 nested nominal values cannot contain a resource. Multiple, borrowed, nonfinal, public,
 package-visible, cross-package, generic, indirect, recursive, captured, or result-bearing resource
-function forms reject. Partial moves, affine containers, resource polymorphism, closures, async or
+function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.
 
 ## Declarations, effects, and capabilities
@@ -166,35 +166,70 @@ Generic application is explicit and order-independent:
 
 Generic task functions reject. Recursive generic cycles may pass their own type parameters in the
 same order; a cycle that changes ordered type arguments rejects as polymorphic recursion. There is
-no constraint dictionary, higher-rank quantification, partial application, specialization in
+no constraint dictionary, higher-rank quantification, implicit generic application, specialization in
 accepted meaning, or order-dependent inference. Compiler/runtime erasure or specialization is
 derived and cannot change graph meaning or artifact determinism.
 
-## Named function values and invocation
+## Pure function values, binding, and invocation
 
 The public `function-value` expression identifies one named function and supplies all required type
 arguments.
-`invoke` evaluates a function-valued expression, then evaluates arguments left-to-right and calls
-the named function. Function values contain stable named-function provenance, not a code address,
-lexical scope, or captured environment.
+`bind` evaluates its callee first and then an ordered prefix of runtime arguments exactly once,
+left-to-right. For `Function(P0,...,Pn-1)->R`, binding k exactly typed arguments, with
+`0 <= k <= n`, produces `Function(Pk,...,Pn-1)->R`. It never executes the target. Empty binding
+preserves the value without allocating an environment; complete binding creates a zero-argument
+function. Rebinding concatenates the prefixes in order. `invoke` evaluates its callee and remaining
+arguments in that same order, then calls the exact named target with prefix and remaining arguments.
+
+The accepted `Bind { callee, arguments }` owns ordinary expression children and contains no body or
+runtime data. At execution, a callable carries exact prepared-program provenance, fully resolved
+rank-1 type arguments, and one flat immutable prefix. It retains values, never the creator's frame,
+locals, or substitution map, and can escape, be shared, and be invoked repeatedly. An eligible pure
+tail invocation transfers directly to the ultimate target with the complete argument list.
+
+Capture-safe stored types are scalars including `StaticText`, records, variants, lists, maps,
+options, and results with recursively safe members, and checked pure callables with safe
+environments. Every nominal field and case is inspected, including absent affine cases. A function
+signature is a leaf for capture safety: its future parameters and result are not stored captures.
+Secrets, streams, capability resources, other live resources, and aggregates containing them reject.
+An unknown stored type parameter rejects at declaration validation; this slice supplies no implicit
+generic capture constraints. A generic helper may capture a function whose signature contains type
+parameters, or a concrete safe prefix, but cannot capture a bare unconstrained `T`.
+
+Binding has precisely the effects of evaluating its callee and captures. A failed capture stops
+later evaluation and installs no callable. Earlier completed effects retain their actual visibility;
+only an enclosing transaction can roll back its staged work. Retention admission is bounded,
+iterative, cancellable at every visited node and before installation, and counted separately from
+input and raw-result admission. Environment edges count toward depth 256 and capture slots toward
+cumulative collection and allocation bounds. Internal reads and calls preserve checked values
+without rescanning retained descendants or copying a captured collection's payload.
+
+Callable environments are runtime-only and have no semantic equality or serialization. Constants
+may evaluate binding under the existing pure constant rules; their evaluated environment is not
+accepted data. Durable literals, external encodings, operational stores, queues, backups, and retained
+session state reject function values, including functions nested in aggregates. Exported factories
+may return private helpers as callables while ordinary package lookup still enforces visibility;
+transported code closure includes those helpers.
 
 Ordinary pure expression contexts reject task function values. Component port preparation may bind
 an explicitly selected task function under component capability rules; this does not make task
-functions freely passable values. Lexical lambdas, anonymous functions, closure capture, partial
-application, and durable captured environments are not implemented.
+functions freely passable values. `bind` always requires a pure callee, even with an empty prefix
+inside port preparation. Task code may capture ordinary capability results into a pure callable.
+Lexical lambdas, anonymous bodies, automatic free-variable capture, mutable environments, argument
+holes/reordering, task closures, and durable captured environments are outside this language slice.
 
 ## Expressions and bindings
 
 The complete graph expression kinds are unit/bool/i64/text/static-text literals, variable,
 conditional, lexical let, sequencing, direct call with explicit type arguments, function
-reference with explicit type arguments, invocation, record construction and projection, variant
+reference with explicit type arguments, prefix binding, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
 Compact change records expose unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
 construction and field projection; variants and exhaustive matches; typed lists; exact requirement
 capability calls; lexical transactions; named `function-value` expressions with ordered explicit
-type arguments; and `invoke` with ordered expression arguments. `add.type-parameter` adds an
+type arguments; and `bind` and `invoke` with ordered expression arguments. `add.type-parameter` adds an
 ordered stable parameter to a pure function created or selected through the current function
 surface. Generic task functions, map expressions, and arbitrary topology creation remain outside
 this compact slice. The generated [change grammar](../generated/change-grammar.md) is the
@@ -252,7 +287,7 @@ those facts by path-local delta, but the dependency frontier does not yet select
 validation.
 
 Compiler lowering consumes validated graph structures directly. The bytecode VM and semantic
-reference interpreter implement direct calls, named function values, invoke, and explicit generic
+reference interpreter implement direct calls, named function values, bind, invoke, and explicit generic
 instantiation independently and are compared in tests. No maintained text is rendered or parsed by
 build, check, run, service, or worker paths.
 

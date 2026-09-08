@@ -18,6 +18,9 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Class {
     Free,
+    Port,
+    Binding(usize),
+    Retained(usize),
     Direct,
     Variant,
 }
@@ -28,6 +31,8 @@ pub(super) struct Value {
     origin: ValueOrigin,
     class: Class,
 }
+
+pub(super) type Invocation = (FunctionIndex, Arc<[TypeObjectDigest]>, Vec<Value>);
 
 impl Value {
     pub(super) fn raw(&self) -> &NormalizedValue {
@@ -56,7 +61,8 @@ impl Value {
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if !matches!(
             (self.class, use_mode),
-            (Class::Free, ParameterUse::Unrestricted) | (Class::Direct, ParameterUse::Borrow)
+            (Class::Free | Class::Port, ParameterUse::Unrestricted)
+                | (Class::Direct, ParameterUse::Borrow)
         ) {
             return Err(runtime_error(
                 "normalized_local_resource_use",
@@ -99,21 +105,63 @@ impl Value {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
     ) -> Result<Self, ExecutionError> {
-        if function.1 != program.value_origin
-            || program.functions.get(function.0 as usize).is_none()
+        let target = program.functions.get(function.0 as usize)
+            .filter(|_| function.1 == program.value_origin)
+            .ok_or_else(|| admission_error("function constructor has a foreign prepared identity; select the exact callable"))?;
+        if target.type_parameters.len() != type_arguments.len()
+            || type_arguments
+                .iter()
+                .any(|ty| program.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
         {
             return Err(admission_error(
-                "function constructor has a foreign prepared identity; select the exact callable",
+                "function constructor requires exact resolved type arguments",
             ));
         }
+        let pure = target.pure_graph
+            || matches!(
+                target.body,
+                super::super::prepare::NormalizedFunctionBody::External(_)
+            );
         Ok(Self {
             raw: NormalizedValue::Function {
                 function,
                 type_arguments,
+                bound_arguments: None,
             },
             origin: program.value_origin,
-            class: Class::Free,
+            class: if pure { Class::Free } else { Class::Port },
         })
+    }
+
+    /// Prefix children inherit the construction/admission proof; invocation never readmits them.
+    pub(super) fn invocation(
+        &self,
+        program: &NormalizedProgram,
+        allow_port: bool,
+    ) -> Result<Invocation, ExecutionError> {
+        if self.origin != program.value_origin || (!allow_port && self.class != Class::Free) {
+            return Err(admission_error(
+                "invoke requires a checked pure callable from this preparation",
+            ));
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = &self.raw
+        else {
+            return Err(type_error("invoke callee is not a function"));
+        };
+        let arguments = bound_arguments
+            .iter()
+            .flat_map(|prefix| prefix.iter())
+            .map(|raw| Self {
+                raw: raw.clone(),
+                origin: self.origin,
+                class: Class::Free,
+            })
+            .collect();
+        Ok((*function, Arc::clone(type_arguments), arguments))
     }
 
     fn free_children(
@@ -403,7 +451,278 @@ pub(super) struct Admission<'a> {
     pub items: &'a mut u64,
 }
 
+type Bindings = BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>;
+type Visit<'a> = (
+    &'a NormalizedValue,
+    TypeObjectDigest,
+    usize,
+    bool,
+    Arc<Bindings>,
+    bool,
+);
+
 impl Admission<'_> {
+    pub(super) fn begin_bind(
+        &mut self,
+        mut callee: Value,
+        arguments: usize,
+    ) -> Result<Value, ExecutionError> {
+        self.control.check()?;
+        if callee.class(self.program, self.work)? != Class::Free {
+            return Err(admission_error(
+                "bind requires a pure callable; task-port values cannot become environments",
+            ));
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = callee.raw()
+        else {
+            return Err(type_error("bind callee is not a function"));
+        };
+        let target = self
+            .program
+            .functions
+            .get(function.0 as usize)
+            .filter(|_| function.1 == self.program.value_origin)
+            .ok_or_else(|| admission_error("bind target belongs to another prepared program"))?;
+        if !(target.pure_graph
+            || matches!(
+                target.body,
+                super::super::prepare::NormalizedFunctionBody::External(_)
+            ))
+            || !target.task_requirements.is_empty()
+            || target
+                .parameters
+                .iter()
+                .any(|parameter| parameter.resource_requirement.is_some())
+            || type_arguments.len() != target.type_parameters.len()
+        {
+            return Err(admission_error("bind target is not an exact pure callable"));
+        }
+        let existing = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
+        let count = existing
+            .len()
+            .checked_add(arguments)
+            .filter(|count| {
+                *count <= target.parameters.len()
+                    && *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN
+            })
+            .ok_or_else(|| {
+                admission_error("bound prefix exceeds remaining arity or the capture-slot bound")
+            })?;
+        if arguments != 0 {
+            self.collection(count)?;
+            self.allocate(
+                (std::mem::size_of::<Vec<NormalizedValue>>() + 2 * std::mem::size_of::<usize>())
+                    as u64,
+            )?;
+        }
+        callee.class = Class::Binding(arguments);
+        Ok(callee)
+    }
+
+    pub(super) fn capture(
+        &mut self,
+        callee: &Value,
+        mut argument: Value,
+        index: usize,
+    ) -> Result<Value, ExecutionError> {
+        self.control.check()?;
+        if !matches!(callee.class(self.program, self.work)?, Class::Binding(count) if index < count)
+            || argument.class(self.program, self.work)? != Class::Free
+        {
+            return Err(admission_error(
+                "capture requires its exact in-progress bind and an ordinary value",
+            ));
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = callee.raw()
+        else {
+            return Err(type_error("capture has no callable target"));
+        };
+        let target = self
+            .program
+            .functions
+            .get(function.0 as usize)
+            .ok_or_else(|| admission_error("capture target is absent"))?;
+        let parameter = index
+            .checked_add(bound_arguments.as_ref().map_or(0, |prefix| prefix.len()))
+            .and_then(|index| target.parameters.get(index))
+            .ok_or_else(|| admission_error("capture index exceeds remaining arity"))?;
+        self.binding_storage(type_arguments.len())?;
+        let bindings = Arc::new(
+            target
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(type_arguments.iter().copied())
+                .collect::<Bindings>(),
+        );
+        self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
+        self.inspect_pending(
+            vec![(argument.raw(), parameter.ty, 1, false, bindings, true)],
+            None,
+            false,
+        )?;
+        self.control.check()?;
+        argument.class = Class::Retained(index);
+        Ok(argument)
+    }
+
+    pub(super) fn bind(
+        &mut self,
+        mut callee: Value,
+        arguments: Vec<Value>,
+    ) -> Result<Value, ExecutionError> {
+        self.control.check()?;
+        if callee.class(self.program, self.work)? != Class::Binding(arguments.len()) {
+            return Err(admission_error(
+                "bind completion is missing its exact prepared capture count",
+            ));
+        }
+        for (index, argument) in arguments.iter().enumerate() {
+            if argument.class(self.program, self.work)? != Class::Retained(index) {
+                return Err(admission_error(
+                    "bind completion contains an unchecked or reordered capture",
+                ));
+            }
+        }
+        if arguments.is_empty() {
+            callee.class = Class::Free;
+            return Ok(callee);
+        }
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments,
+        } = callee.raw()
+        else {
+            return Err(type_error("bind completion has no callable"));
+        };
+        let existing = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
+        let count = existing
+            .len()
+            .checked_add(arguments.len())
+            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
+            .ok_or_else(|| admission_error("bind completion exceeds the checked prefix bound"))?;
+        let mut prefix = Vec::with_capacity(count);
+        prefix.extend(existing.iter().cloned());
+        prefix.extend(arguments.into_iter().map(Value::into_raw));
+        self.control.check()?;
+        Ok(Value {
+            raw: NormalizedValue::Function {
+                function: *function,
+                type_arguments: Arc::clone(type_arguments),
+                bound_arguments: Some(Arc::new(prefix)),
+            },
+            origin: self.program.value_origin,
+            class: Class::Free,
+        })
+    }
+
+    fn require_capture_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        bindings: &Bindings,
+        checked: &mut std::collections::BTreeSet<TypeObjectDigest>,
+    ) -> Result<(), ExecutionError> {
+        let program = self.program;
+        let control = self.control;
+        self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
+        let mut pending = vec![(ty, 0_usize)];
+        while let Some((ty, depth)) = pending.pop() {
+            self.control.check()?;
+            self.work.capture_admission_nodes = self.work.capture_admission_nodes.saturating_add(1);
+            if depth > 256 {
+                return Err(resource_error(
+                    "normalized_value_depth",
+                    "capture type exceeds depth 256",
+                ));
+            }
+            let ty = self.parameter(ty, bindings)?;
+            let identity = self
+                .type_identity(ty, bindings, 0)
+                .ok_or_else(|| admission_error("capture type is unresolved or foreign"))?;
+            if checked.contains(&identity) {
+                continue;
+            }
+            self.allocate(
+                (std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>()) as u64,
+            )?;
+            checked.insert(identity);
+            let object = self.program.types.get(&ty).ok_or_else(|| {
+                admission_error("capture type is absent from the prepared program")
+            })?;
+            let mut append = |child| -> Result<(), ExecutionError> {
+                self.control.check()?;
+                self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
+                pending.push((child, depth + 1));
+                Ok(())
+            };
+            match &object.form {
+                TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Function { .. } => {}
+                TypeForm::Secret
+                | TypeForm::Stream { .. }
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::TypeParameter { .. } => {
+                    return Err(admission_error(
+                        "capture type contains a secret, stream, resource, or unresolved stored parameter",
+                    ));
+                }
+                TypeForm::Named { declaration } => {
+                    if let Ok(index) = program
+                        .records
+                        .binary_search_by_key(declaration, |record| record.declaration)
+                    {
+                        let fields = &program.records[index].fields;
+                        for field in fields.iter().rev() {
+                            append(field.ty)?;
+                        }
+                    } else if let Ok(index) = program
+                        .variants
+                        .binary_search_by_key(declaration, |variant| variant.declaration)
+                    {
+                        let cases = &program.variants[index].cases;
+                        for case in cases.iter().rev() {
+                            control.check()?;
+                            if let Some(payload) = case.payload {
+                                append(payload)?;
+                            }
+                        }
+                    } else {
+                        return Err(admission_error("capture has no exact nominal layout"));
+                    }
+                }
+                TypeForm::StructuralRecord { fields } => {
+                    for field in fields.iter().rev() {
+                        append(field.ty)?;
+                    }
+                }
+                TypeForm::List { item } | TypeForm::Option { item } => append(*item)?,
+                TypeForm::Map { key, value } => {
+                    append(*value)?;
+                    append(*key)?;
+                }
+                TypeForm::Result { ok, error } => {
+                    append(*error)?;
+                    append(*ok)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn value(
         &mut self,
         raw: NormalizedValue,
@@ -441,15 +760,26 @@ impl Admission<'_> {
         input: bool,
     ) -> Result<Class, ExecutionError> {
         self.control.check()?;
+        self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
+        self.binding_storage(self.substitutions.len())?;
+        let bindings = Arc::new(self.substitutions.clone());
+        self.inspect_pending(vec![(raw, ty, 0, true, bindings, false)], authority, input)
+    }
+
+    fn inspect_pending(
+        &mut self,
+        mut pending: Vec<Visit<'_>>,
+        authority: Option<RequirementReference>,
+        input: bool,
+    ) -> Result<Class, ExecutionError> {
         let mut root_class = None;
-        let mut pending = Vec::new();
-        self.allocate(
-            std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, usize, bool)>() as u64,
-        )?;
-        pending.push((raw, ty, 0_usize, true));
-        while let Some((value, ty, depth, affine_allowed)) = pending.pop() {
+        let mut capture_types = std::collections::BTreeSet::new();
+        while let Some((value, ty, depth, affine_allowed, bindings, capture)) = pending.pop() {
             self.control.check()?;
-            if input {
+            if capture {
+                self.work.capture_admission_nodes =
+                    self.work.capture_admission_nodes.saturating_add(1);
+            } else if input {
                 self.work.input_admission_nodes = self.work.input_admission_nodes.saturating_add(1);
             } else {
                 self.work.raw_result_admission_nodes =
@@ -462,7 +792,7 @@ impl Admission<'_> {
                 ));
             }
             let class = self.classify(value)?;
-            if depth == 0 {
+            if root_class.is_none() {
                 root_class = Some(class);
             }
             if class != Class::Free && !affine_allowed {
@@ -470,7 +800,15 @@ impl Admission<'_> {
                     "raw aggregate contains affine authority; remove the nested capability owner",
                 ));
             }
-            let ty = self.parameter(ty)?;
+            let ty = self.parameter(ty, &bindings)?;
+            if capture {
+                self.require_capture_type(ty, &bindings, &mut capture_types)?;
+                if !matches!(class, Class::Free) || matches!(value, NormalizedValue::Resource(_)) {
+                    return Err(admission_error(
+                        "bound environment contains runtime authority; capture only ordinary immutable data and pure callables",
+                    ));
+                }
+            }
             let object = self.program.types.get(&ty).ok_or_else(|| {
                 admission_error(
                     "raw value has an unknown exact type; use the selected prepared program",
@@ -561,17 +899,21 @@ impl Admission<'_> {
                         children.push((value.as_ref(), *item, false));
                     }
                 }
+                (NormalizedValue::Result { success, value }, TypeForm::Result { ok, error }) => {
+                    self.collection(1)?;
+                    children.push((value.as_ref(), if *success { *ok } else { *error }, false));
+                }
                 (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
                     self.collection(values.len())?;
-                    let key_type =
-                        self.program
-                            .types
-                            .get(&self.parameter(*key)?)
-                            .ok_or_else(|| {
-                                admission_error(
-                                    "raw map has an unknown key type; supply an exact map type",
-                                )
-                            })?;
+                    let key_type = self
+                        .program
+                        .types
+                        .get(&self.parameter(*key, &bindings)?)
+                        .ok_or_else(|| {
+                            admission_error(
+                                "raw map has an unknown key type; supply an exact map type",
+                            )
+                        })?;
                     for (key, value) in values.iter() {
                         self.control.check()?;
                         if !matches!(
@@ -612,6 +954,7 @@ impl Admission<'_> {
                     NormalizedValue::Function {
                         function,
                         type_arguments,
+                        bound_arguments,
                     },
                     TypeForm::Function { parameters, result },
                 ) => {
@@ -627,7 +970,16 @@ impl Admission<'_> {
                             .iter()
                             .any(|parameter| parameter.resource_requirement.is_some())
                         || callable.type_parameters.len() != type_arguments.len()
-                        || callable.parameters.len() != parameters.len()
+                        || bound_arguments
+                            .as_ref()
+                            .is_some_and(|prefix| prefix.is_empty())
+                        || bound_arguments.as_ref().map_or(0, |prefix| prefix.len())
+                            > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+                        || callable
+                            .parameters
+                            .len()
+                            .checked_sub(bound_arguments.as_ref().map_or(0, |prefix| prefix.len()))
+                            != Some(parameters.len())
                     {
                         return Err(admission_error(
                             "raw callback has a foreign signature or effect; pass the exact pure callable",
@@ -642,23 +994,22 @@ impl Admission<'_> {
                             "raw callback has a foreign or unresolved type argument; supply exact canonical types",
                         ));
                     }
-                    self.allocate(
-                        (type_arguments.len()
-                            * std::mem::size_of::<(
-                                crate::platform::semantic_id::TypeParameterId,
-                                TypeObjectDigest,
-                            )>()) as u64,
-                    )?;
-                    let substitutions = callable
-                        .type_parameters
-                        .iter()
-                        .copied()
-                        .zip(type_arguments.iter().copied())
-                        .collect::<BTreeMap<_, _>>();
-                    for (actual, expected) in callable.parameters.iter().zip(parameters) {
+                    self.binding_storage(type_arguments.len())?;
+                    let substitutions = Arc::new(
+                        callable
+                            .type_parameters
+                            .iter()
+                            .copied()
+                            .zip(type_arguments.iter().copied())
+                            .collect::<BTreeMap<_, _>>(),
+                    );
+                    let prefix_len = bound_arguments.as_ref().map_or(0, |prefix| prefix.len());
+                    for (actual, expected) in
+                        callable.parameters.iter().skip(prefix_len).zip(parameters)
+                    {
                         if self.type_identity(actual.ty, &substitutions, 0).is_none()
                             || self.type_identity(actual.ty, &substitutions, 0)
-                                != self.type_identity(*expected, self.substitutions, 0)
+                                != self.type_identity(*expected, &bindings, 0)
                         {
                             return Err(admission_error(
                                 "raw callback parameters disagree with the exact type; instantiate the declared callable",
@@ -669,11 +1020,31 @@ impl Admission<'_> {
                         .type_identity(callable.result, &substitutions, 0)
                         .is_none()
                         || self.type_identity(callable.result, &substitutions, 0)
-                            != self.type_identity(*result, self.substitutions, 0)
+                            != self.type_identity(*result, &bindings, 0)
                     {
                         return Err(admission_error(
                             "raw callback result disagrees with the exact type; instantiate the declared callable",
                         ));
+                    }
+                    if let Some(prefix) = bound_arguments {
+                        self.collection(prefix.len())?;
+                        self.allocate(
+                            (std::mem::size_of::<Vec<NormalizedValue>>()
+                                + 2 * std::mem::size_of::<usize>())
+                                as u64,
+                        )?;
+                        for (child, parameter) in
+                            prefix.iter().zip(callable.parameters.iter()).rev()
+                        {
+                            pending.push((
+                                child,
+                                parameter.ty,
+                                depth + 1,
+                                false,
+                                Arc::clone(&substitutions),
+                                true,
+                            ));
+                        }
                     }
                 }
                 _ => {
@@ -683,7 +1054,14 @@ impl Admission<'_> {
                 }
             }
             for (child, ty, allowed) in children.into_iter().rev() {
-                pending.push((child, ty, depth + 1, allowed));
+                pending.push((
+                    child,
+                    ty,
+                    depth + 1,
+                    allowed,
+                    Arc::clone(&bindings),
+                    capture,
+                ));
             }
         }
         let root_class = root_class.ok_or_else(|| {
@@ -700,11 +1078,15 @@ impl Admission<'_> {
         Ok(root_class)
     }
 
-    fn parameter(&self, ty: TypeObjectDigest) -> Result<TypeObjectDigest, ExecutionError> {
+    fn parameter(
+        &self,
+        ty: TypeObjectDigest,
+        bindings: &Bindings,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
         if let Some(TypeForm::TypeParameter { parameter }) =
             self.program.types.get(&ty).map(|object| &object.form)
         {
-            self.substitutions.get(parameter).copied().filter(|ty| self.program.types.contains_key(ty))
+            bindings.get(parameter).copied().filter(|ty| self.program.types.contains_key(ty))
                 .ok_or_else(|| admission_error("raw value type parameter is unbound; supply the exact declared type arguments"))
         } else {
             Ok(ty)
@@ -796,6 +1178,27 @@ impl Admission<'_> {
         }
     }
 
+    fn binding_storage(&mut self, count: usize) -> Result<(), ExecutionError> {
+        // Account the Arc/map headers and bounded map-node storage before collecting.
+        let unit = std::mem::size_of::<(
+            crate::platform::semantic_id::TypeParameterId,
+            TypeObjectDigest,
+        )>() + 3 * std::mem::size_of::<usize>();
+        let bytes = count
+            .checked_mul(unit)
+            .and_then(|bytes| {
+                bytes
+                    .checked_add(std::mem::size_of::<Bindings>() + 2 * std::mem::size_of::<usize>())
+            })
+            .ok_or_else(|| {
+                resource_error(
+                    "normalized_allocation",
+                    "binding admission metadata overflowed",
+                )
+            })?;
+        self.allocate(bytes as u64)
+    }
+
     fn allocate(&mut self, bytes: u64) -> Result<(), ExecutionError> {
         let next = self
             .allocated
@@ -829,7 +1232,7 @@ impl Admission<'_> {
         // Raw payload storage and both bounded traversal worklists are charged before growth.
         let unit = std::mem::size_of::<NormalizedValue>()
             + std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, bool)>()
-            + std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, usize, bool)>();
+            + std::mem::size_of::<Visit<'_>>();
         self.allocate((count as u64).checked_mul(unit as u64).ok_or_else(|| {
             resource_error("normalized_allocation", "value admission size overflowed")
         })?)

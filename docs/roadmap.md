@@ -25,7 +25,7 @@ rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source is
-unreleased `0.1.25`; immutable `v0.1.21` remains the supported public
+unreleased `0.1.26`; immutable `v0.1.21` remains the supported public
 `x86_64-unknown-linux-musl` distribution. Its exact and latest downloads independently passed static
 inspection, distributed HTTP with complete function-definition projection and exact routes,
 deployment-bound outbound HTTPS/TLS/DNS, stateful HTTP, structured sessions, identity-preserving
@@ -33,23 +33,26 @@ extraction, catalog recovery, and affine service/worker acceptance with one exac
 through publication.
 Immutable v0.1.8 remains an unclosed historical recovery point.
 
-Each future item requires a named maintained consumer, exact contract, independent oracle,
-measured reversal gate, and dependency-closed cutover/deletion plan.
+Each future item requires demonstrated usefulness and composition through a representative public
+workload, an exact contract, independent proof, reversal conditions, and a complete cutover/deletion
+plan. A new witness may justify a foundation that current limitations prevent maintained consumers
+from expressing. Existing adoption and new witnesses must be reported separately; no application
+count is a prerequisite. These possibilities are contingent, not an authorized work queue.
 
-1. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
+1. **Worker project recipe from a public binary-only workload.** Add one only when a representative
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-2. **Outbound WebSocket clients and Nostr event semantics from a maintained consumer.** Reuse the
+2. **Outbound WebSocket clients and Nostr event semantics from a public workload.** Reuse the
    exact endpoint, DNS/address, TLS trust, cancellation, and resource ownership established by
    `HttpClient` without widening it into an ambient URL or socket capability. Keep the implemented
    inbound structured-session server independent. Define outbound connection ownership,
    reconnect/backoff, NIP-01 event canonicalization, signing/key authority, relay authentication,
    replay visibility, and an implementation-disjoint client oracle before adding graph meaning or
    an outbound adapter.
-3. **Broader affine lifetime or result protocols from a maintained workload.** The current direct
+3. **Broader affine lifetime or result protocols from a public workload.** The current direct
    handoff intentionally admits only one final consume parameter on a private same-package acyclic
    task helper. Add resource results, borrowing parameters, public or cross-package signatures,
-   closures, affine containers, async ownership, or linear must-use values only when a maintained
+   closures, affine containers, async ownership, or linear must-use values only when a representative
    workload fixes the complete lifetime/failure protocol and an independent oracle, migration, and
    predecessor deletion prove it.
 4. **Million-owner compiler admission and separately selected data/history scale.** The current
@@ -60,7 +63,7 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    roots, an independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O
    observations before any deletion, packing, or compaction mechanism.
 5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
-   and member/case edits, inline, and repair only from maintained workflows. Keep typed
+   and member/case edits, inline, and repair only from demonstrated public workflows. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
    and predecessor rejection in each vertical slice.
 6. **Additional platform releases one target at a time.** Treat each architecture and operating
@@ -83,12 +86,12 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.
-11. **Further language abstraction from real consumers.** The named noncapturing rank-1 slice is
-   implemented. Constraints, inference, lexical capture/closures, component composition,
-   specialization, AOT, JIT, SIMD, or custom allocation still require multiple maintained
-   workloads, independent semantic/reference behavior, measurements, and explicit reversal
-   conditions. Do not infer lexical closure capture from route-segment capture or named function
-   values.
+11. **Further language abstraction from public composition needs.** Campaign 202609090021 selects
+   explicit pure prefix binding and graph-owned function composition; its remaining acceptance is
+   recorded in that campaign. Generic capture constraints, automatic lexical capture, component
+   composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
+   witness, independent semantic/reference behavior, measurements where relevant, and reversal
+   conditions. Explicit prefix binding does not imply anonymous bodies or free-variable inference.
 
 Inbound TLS is not a roadmap item. The present listener remains plaintext and requires an
 appropriate external trusted transport boundary; outbound HTTPS trust is confined to one exact

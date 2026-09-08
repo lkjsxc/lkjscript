@@ -34,6 +34,496 @@ fn fixture() -> (NormalizedProgram, KernelSnapshot) {
     (program, snapshot)
 }
 
+#[test]
+fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
+    let (mut program, mut snapshot) = fixture();
+    let mut schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    let integer = internal_type(&mut program, &mut schema, TypeForm::I64);
+    let boolean = internal_type(&mut program, &mut schema, TypeForm::Bool);
+    let static_text = internal_type(&mut program, &mut schema, TypeForm::StaticText);
+    let secret = internal_type(&mut program, &mut schema, TypeForm::Secret);
+    let result = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Result {
+            ok: integer,
+            error: static_text,
+        },
+    );
+    let unsafe_result = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Result {
+            ok: integer,
+            error: secret,
+        },
+    );
+    let thunk = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Function {
+            parameters: vec![],
+            result: integer,
+        },
+    );
+    let unary = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Function {
+            parameters: vec![integer],
+            result: integer,
+        },
+    );
+    let wrong_suffix = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Function {
+            parameters: vec![boolean],
+            result: integer,
+        },
+    );
+    snapshot.types = schema.types.clone();
+    let find = |name: &str| {
+        program.functions.iter().enumerate().find(|(_, function)|
+        function.type_parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(actual) if actual.as_str() == name))
+        .map(|(index, function)| (FunctionIndex(u32::try_from(index).unwrap(), program.value_origin), function.declaration)).unwrap()
+    };
+    let (length, length_declaration) = find("core.list.length");
+    let length_closure = |ty, elements| NormalizedValue::Function {
+        function: length,
+        type_arguments: Arc::from([ty]),
+        bound_arguments: Some(Arc::new(vec![NormalizedValue::List(Arc::new(elements))])),
+    };
+    let (affine_index, affine_variant) = program
+        .variants
+        .iter()
+        .enumerate()
+        .find(|(index, _)| program.affine_variants[*index])
+        .unwrap();
+    let affine_type = program.types.iter().find_map(|(ty, object)| matches!(&object.form, TypeForm::Named { declaration } if *declaration == affine_variant.declaration).then_some(*ty)).unwrap();
+    let absent_case = affine_variant
+        .cases
+        .iter()
+        .position(|case| case.payload.is_none())
+        .unwrap();
+    let resource_scope = NormalizedResourceScope::new().unwrap();
+    let interface = program
+        .types
+        .values()
+        .find_map(|ty| match ty.form {
+            TypeForm::CapabilityResource { interface } => Some(interface),
+            _ => None,
+        })
+        .unwrap();
+    let handle = resource_scope
+        .reserve_queue_lease(
+            RequirementReference {
+                package: program.root_package,
+                requirement: crate::platform::semantic_id::RequirementId::migrate(
+                    b"bound-raw-negative",
+                    0,
+                ),
+            },
+            interface,
+        )
+        .unwrap()
+        .commit(crate::platform::queue::JobLease {
+            job_id: "owned-binding-test".to_owned(),
+            attempt_id: "attempt".to_owned(),
+            worker_id: "worker".to_owned(),
+            payload: vec![],
+            attempt_number: 1,
+            lease_until_milliseconds: 1,
+        })
+        .unwrap();
+    let add = program
+        .functions
+        .iter()
+        .enumerate()
+        .find(|(_, function)| {
+            function.type_parameters.is_empty()
+                && function.parameters.len() == 2
+                && function.result == integer
+                && function
+                    .parameters
+                    .iter()
+                    .all(|parameter| parameter.ty == integer)
+                && matches!(
+                    &function.body,
+                    super::super::super::prepare::NormalizedFunctionBody::External(_)
+                )
+        })
+        .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
+        .unwrap();
+    let helper = program
+        .functions
+        .iter()
+        .enumerate()
+        .find(|(_, function)| {
+            function.type_parameters.len() == 3
+                && function.parameters.len() == 3
+                && function.pure_graph
+        })
+        .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
+        .unwrap();
+    let leaf = || NormalizedValue::Function {
+        function: add,
+        type_arguments: Arc::from([]),
+        bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+    };
+    let nested = |count| {
+        let mut value = leaf();
+        for _ in 0..count {
+            value = NormalizedValue::Function {
+                function: helper,
+                type_arguments: Arc::from([integer, integer, integer]),
+                bound_arguments: Some(Arc::new(vec![value, leaf()])),
+            };
+        }
+        value
+    };
+    let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
+        let arguments = vec![NormalizedValue::List(Arc::new(vec![value]))];
+        if reference {
+            let sink = std::sync::Mutex::new(None);
+            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                .observing(
+                    &sink,
+                    &super::super::super::reference::CoreNormalizedReferenceHost,
+                )
+                .invoke_instantiated(length_declaration, &[ty], arguments, control)
+                .map(|(value, _)| value);
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_control_frames_after
+                    + observation.live_local_scopes_after
+                    + observation.live_type_scopes_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result,
+                observation.value_work,
+                observation.allocated_bytes,
+                observation.collection_items,
+            )
+        } else {
+            let sink = std::sync::Mutex::new(None);
+            let result = super::super::NormalizedVm::new(&program, policy)
+                .observing(&sink, &super::super::CoreNormalizedHost)
+                .invoke_entry(
+                    super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                        length,
+                        Arc::from([ty]),
+                    ),
+                    arguments,
+                    None,
+                    control,
+                )
+                .map(|(value, _)| value);
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_locals_after
+                    + observation.live_type_bindings_after
+                    + observation.live_operands_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result,
+                observation.value_work,
+                observation.allocated_bytes,
+                observation.collection_items,
+            )
+        }
+    };
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        for (ty, raw) in [
+            (
+                static_text,
+                NormalizedValue::StaticText(Arc::from("retained")),
+            ),
+            (
+                result,
+                NormalizedValue::Result {
+                    success: true,
+                    value: Box::new(NormalizedValue::I64(42)),
+                },
+            ),
+            (
+                result,
+                NormalizedValue::Result {
+                    success: false,
+                    value: Box::new(NormalizedValue::StaticText(Arc::from("error"))),
+                },
+            ),
+        ] {
+            assert_eq!(
+                invoke(
+                    reference,
+                    thunk,
+                    length_closure(ty, vec![raw]),
+                    Default::default(),
+                    &control
+                )
+                .0
+                .unwrap(),
+                NormalizedValue::I64(1)
+            );
+        }
+        let mut hidden = vec![NormalizedValue::I64(1); 128];
+        hidden.push(NormalizedValue::Resource(handle));
+        for (name, raw) in [
+            (
+                "absent-result-secret",
+                length_closure(
+                    unsafe_result,
+                    vec![NormalizedValue::Result {
+                        success: true,
+                        value: Box::new(NormalizedValue::I64(1)),
+                    }],
+                ),
+            ),
+            (
+                "absent-affine-variant",
+                length_closure(
+                    affine_type,
+                    vec![NormalizedValue::Variant {
+                        layout: VariantLayoutIndex(
+                            u32::try_from(affine_index).unwrap(),
+                            program.value_origin,
+                        ),
+                        case: u32::try_from(absent_case).unwrap(),
+                        payload: None,
+                    }],
+                ),
+            ),
+            (
+                "empty-list-affine-variant",
+                length_closure(affine_type, vec![]),
+            ),
+            ("hidden-last-resource", length_closure(integer, hidden)),
+        ] {
+            let rejected = invoke(reference, thunk, raw, Default::default(), &control);
+            assert_eq!(
+                rejected.0.unwrap_err().code,
+                if reference {
+                    "normalized_reference_value_admission"
+                } else {
+                    "normalized_value_admission"
+                },
+                "{name}"
+            );
+            if name == "hidden-last-resource" {
+                assert!(rejected.1.capture_admission_nodes > 128);
+            }
+            assert_eq!(
+                resource_scope.live_resources(),
+                1,
+                "foreign ingress cannot acquire or release unrelated authority"
+            );
+        }
+        let good = invoke(reference, unary, leaf(), Default::default(), &control);
+        assert_eq!(good.0.unwrap(), NormalizedValue::I64(1));
+        assert!(good.1.capture_admission_nodes > 0);
+        assert_eq!(good.1.internal_guard_descendant_visits, 0);
+        let malformed = [
+            (
+                "wrong-prefix",
+                unary,
+                NormalizedValue::Function {
+                    function: add,
+                    type_arguments: Arc::from([]),
+                    bound_arguments: Some(Arc::new(vec![NormalizedValue::Bool(true)])),
+                },
+            ),
+            (
+                "too-long-prefix",
+                unary,
+                NormalizedValue::Function {
+                    function: add,
+                    type_arguments: Arc::from([]),
+                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(0); 3])),
+                },
+            ),
+            (
+                "noncanonical-empty",
+                unary,
+                NormalizedValue::Function {
+                    function: add,
+                    type_arguments: Arc::from([]),
+                    bound_arguments: Some(Arc::new(vec![])),
+                },
+            ),
+            (
+                "unexpected-substitution",
+                unary,
+                NormalizedValue::Function {
+                    function: add,
+                    type_arguments: Arc::from([integer]),
+                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+                },
+            ),
+            ("wrong-suffix", wrong_suffix, leaf()),
+            (
+                "absent-target",
+                unary,
+                NormalizedValue::Function {
+                    function: FunctionIndex(u32::MAX, program.value_origin),
+                    type_arguments: Arc::from([]),
+                    bound_arguments: None,
+                },
+            ),
+            (
+                "foreign-origin",
+                unary,
+                NormalizedValue::Function {
+                    function: FunctionIndex(add.0, ValueOrigin::default()),
+                    type_arguments: Arc::from([]),
+                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+                },
+            ),
+        ];
+        for (name, ty, value) in malformed {
+            let error = invoke(reference, ty, value, Default::default(), &control)
+                .0
+                .unwrap_err();
+            assert_eq!(
+                error.code,
+                if reference {
+                    "normalized_reference_value_admission"
+                } else {
+                    "normalized_value_admission"
+                },
+                "{name}"
+            );
+        }
+        for (depth, accepted) in [(254, true), (255, false), (10_000, false)] {
+            let result = invoke(
+                reference,
+                unary,
+                nested(depth),
+                Default::default(),
+                &control,
+            )
+            .0;
+            assert_eq!(
+                result.is_ok(),
+                accepted,
+                "nested environment {depth}, reference {reference}"
+            );
+            if let Err(error) = result {
+                assert_eq!(
+                    error.code,
+                    if reference {
+                        "normalized_reference_value_depth"
+                    } else {
+                        "normalized_value_depth"
+                    }
+                );
+            }
+        }
+        let measured = invoke(reference, unary, nested(8), Default::default(), &control);
+        assert_eq!(measured.0.unwrap(), NormalizedValue::I64(1));
+        for (bytes, items, accepted) in [
+            (measured.2, measured.3, true),
+            (measured.2 - 1, measured.3, false),
+            (measured.2, measured.3 - 1, false),
+        ] {
+            let result = invoke(
+                reference,
+                unary,
+                nested(8),
+                super::super::NormalizedRunPolicy {
+                    maximum_allocated_bytes: bytes,
+                    maximum_collection_items: items,
+                    ..Default::default()
+                },
+                &control,
+            )
+            .0;
+            assert_eq!(result.is_ok(), accepted);
+            if let Err(error) = result {
+                assert_eq!(
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+            }
+        }
+        let cancelled = invoke(
+            reference,
+            unary,
+            nested(128),
+            Default::default(),
+            &ExecutionControl::cancel_after_checks(37),
+        );
+        assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
+        assert!(cancelled.1.capture_admission_nodes > 0);
+        assert_eq!(
+            invoke(reference, unary, leaf(), Default::default(), &control)
+                .0
+                .unwrap(),
+            NormalizedValue::I64(1)
+        );
+        println!(
+            "{}",
+            serde_json::json!({"case":"bound-environment-admission", "reference":reference,
+            "exact_fit_depth":256,"one_over_depth":257,"disposed_raw_environment_depth":10002,
+            "exact_fit_bytes":measured.2,"exact_fit_items":measured.3,"work":measured.1,
+            "cancelled_work":cancelled.1,"cleanup_owned":0})
+        );
+    }
+}
+
+#[test]
+fn aggregate_equality_cannot_skip_a_callable_after_an_unequal_prefix_or_shape() {
+    let (program, _) = fixture();
+    let callable = NormalizedValue::Function {
+        function: FunctionIndex(0, program.value_origin),
+        type_arguments: Arc::from([]),
+        bound_arguments: None,
+    };
+    let list = |values| NormalizedValue::List(Arc::new(values));
+    let cases = [
+        (
+            list(vec![NormalizedValue::I64(1), callable.clone()]),
+            list(vec![NormalizedValue::I64(2), callable.clone()]),
+        ),
+        (list(vec![callable.clone()]), list(vec![])),
+        (
+            NormalizedValue::Option(Some(Box::new(callable.clone()))),
+            NormalizedValue::Option(None),
+        ),
+        (
+            NormalizedValue::Map(Arc::new(BTreeMap::from([(
+                NormalizedMapKey::I64(1),
+                callable.clone(),
+            )]))),
+            NormalizedValue::Map(Arc::new(BTreeMap::new())),
+        ),
+        (list(vec![callable]), NormalizedValue::I64(0)),
+    ];
+    for (left, right) in cases {
+        for (a, b) in [(&left, &right), (&right, &left)] {
+            assert_eq!(
+                super::super::normalized_equal(a, b).unwrap_err().code,
+                "normalized_value_not_comparable"
+            );
+            assert_eq!(
+                super::super::super::reference::reference_equal(a, b)
+                    .unwrap_err()
+                    .code,
+                "normalized_reference_value_not_comparable"
+            );
+        }
+    }
+}
+
 fn internal_type(
     program: &mut NormalizedProgram,
     schema: &mut NormalizedReferenceSchema,
@@ -809,6 +1299,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
     let invalid_callback = NormalizedValue::Function {
         function: FunctionIndex(0, foreign.value_origin),
         type_arguments: Arc::from([]),
+        bound_arguments: None,
     };
     for reference in [false, true] {
         let host = RejectingHost::default();
