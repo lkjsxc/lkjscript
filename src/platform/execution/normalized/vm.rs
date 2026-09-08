@@ -21,6 +21,12 @@ use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[path = "vm_checked.rs"]
+mod checked;
+use checked::{Class, Value as CheckedValue};
+#[path = "vm_intrinsics.rs"]
+mod checked_intrinsics;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
     pub instruction_steps: u64,
@@ -51,6 +57,8 @@ pub struct NormalizedRunObservation {
     pub external_calls: u64,
     pub capability_calls: u64,
     pub allocated_bytes: u64,
+    pub allocation_charges: u64,
+    pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub maximum_call_depth: usize,
     pub maximum_value_stack: usize,
@@ -66,6 +74,7 @@ pub struct NormalizedRunObservation {
     pub live_type_bindings_after: usize,
     pub live_operands_after: usize,
     pub live_transactions_after: usize,
+    pub live_handles_after: usize,
 }
 
 pub type NormalizedInvocation = (NormalizedValue, NormalizedRunObservation);
@@ -107,12 +116,10 @@ impl NormalizedHost for CoreNormalizedHost {
     }
 }
 
-static CORE_HOST: CoreNormalizedHost = CoreNormalizedHost;
-
 pub struct NormalizedVm<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
-    host: &'a dyn NormalizedHost,
+    host: Option<&'a dyn NormalizedHost>,
     observer: Option<&'a std::sync::Mutex<Option<NormalizedRunObservation>>>,
 }
 
@@ -121,7 +128,7 @@ impl<'a> NormalizedVm<'a> {
         Self {
             program,
             policy,
-            host: &CORE_HOST,
+            host: None,
             observer: None,
         }
     }
@@ -132,7 +139,7 @@ impl<'a> NormalizedVm<'a> {
         host: &'a dyn NormalizedHost,
     ) -> Self {
         self.observer = Some(observer);
-        self.host = host;
+        self.host = Some(host);
         self
     }
 
@@ -144,6 +151,7 @@ impl<'a> NormalizedVm<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let function = self.program.function(declaration).ok_or_else(|| {
             runtime_error(
                 "normalized_function_missing",
@@ -152,7 +160,7 @@ impl<'a> NormalizedVm<'a> {
         })?;
         self.invoke_entry(
             NormalizedEntryPoint::Function(function),
-            arguments,
+            arguments.into_vec(),
             capabilities,
             control,
         )
@@ -165,8 +173,15 @@ impl<'a> NormalizedVm<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let resources = NormalizedResourceScope::new()?;
-        self.invoke_root_target_scoped(name, arguments, capabilities, &resources, control)
+        self.invoke_root_target_scoped(
+            name,
+            arguments.into_vec(),
+            capabilities,
+            &resources,
+            control,
+        )
     }
 
     pub(crate) fn invoke_root_target_scoped(
@@ -177,13 +192,20 @@ impl<'a> NormalizedVm<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let target = self.program.root_target(name).ok_or_else(|| {
             runtime_error(
                 "normalized_target_missing",
                 "root artifact package has no target with the exact selected name",
             )
         })?;
-        self.invoke_target_scoped(target, arguments, capabilities, resources, control)
+        self.invoke_target_scoped(
+            target,
+            arguments.into_vec(),
+            capabilities,
+            resources,
+            control,
+        )
     }
 
     pub(crate) fn invoke_target_scoped(
@@ -194,6 +216,7 @@ impl<'a> NormalizedVm<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let port = target.port.ok_or_else(|| {
             runtime_error(
                 "normalized_target_port_missing",
@@ -203,7 +226,7 @@ impl<'a> NormalizedVm<'a> {
         self.invoke_port_scoped(
             target.component,
             port,
-            arguments,
+            arguments.into_vec(),
             capabilities,
             resources,
             control,
@@ -219,6 +242,7 @@ impl<'a> NormalizedVm<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let port = self.program.ports.get(port.0 as usize).ok_or_else(|| {
             runtime_error(
                 "normalized_target_port",
@@ -233,7 +257,7 @@ impl<'a> NormalizedVm<'a> {
         }
         self.invoke_entry_scoped(
             port.entry.clone(),
-            arguments,
+            arguments.into_vec(),
             capabilities,
             resources,
             control,
@@ -274,8 +298,15 @@ impl<'a> NormalizedVm<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let resources = NormalizedResourceScope::new()?;
-        self.invoke_entry_scoped(entry, arguments, capabilities, &resources, control)
+        self.invoke_entry_scoped(
+            entry,
+            arguments.into_vec(),
+            capabilities,
+            &resources,
+            control,
+        )
     }
 
     fn invoke_entry_scoped(
@@ -286,6 +317,7 @@ impl<'a> NormalizedVm<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         validate_policy(self.policy)?;
         control.check()?;
         let mut machine = Machine {
@@ -308,10 +340,12 @@ impl<'a> NormalizedVm<'a> {
                 external_calls: 0,
                 capability_calls: 0,
                 allocated_bytes: 0,
+                allocation_charges: 0,
+                value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph8_dense_bytecode_4",
+                production_tier: "graph8_dense_bytecode_5",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -322,24 +356,34 @@ impl<'a> NormalizedVm<'a> {
                 live_type_bindings_after: 0,
                 live_operands_after: 0,
                 live_transactions_after: 0,
+                live_handles_after: 0,
             },
         };
         let result = (|| {
+            machine.charge_allocation(self.program.affine_variants.len() as u64)?;
             let port_arguments = match entry {
                 NormalizedEntryPoint::Function(function) => {
+                    let arguments = machine.admit_arguments(function, &[], arguments.into_vec())?;
                     machine.call(function, Arc::from([]), arguments)?;
                     None
                 }
                 #[cfg(test)]
                 NormalizedEntryPoint::InstantiatedFunction(function, types) => {
+                    let arguments =
+                        machine.admit_arguments(function, &types, arguments.into_vec())?;
                     machine.call(function, types, arguments)?;
                     None
                 }
                 NormalizedEntryPoint::Code(code) => {
-                    machine.call_code(code, arguments, BTreeMap::new(), None, false)?;
+                    if !arguments.is_empty() {
+                        return Err(type_error("anonymous code cannot receive raw arguments"));
+                    }
+                    machine.call_code(code, Vec::new(), BTreeMap::new(), None, false)?;
                     None
                 }
-                NormalizedEntryPoint::PortExpression(code) => {
+                NormalizedEntryPoint::PortExpression(code, function_type) => {
+                    let arguments =
+                        machine.admit_port_arguments(function_type, arguments.into_vec())?;
                     machine.call_code(code, Vec::new(), BTreeMap::new(), None, false)?;
                     Some(arguments)
                 }
@@ -351,7 +395,7 @@ impl<'a> NormalizedVm<'a> {
             let NormalizedValue::Function {
                 function,
                 type_arguments,
-            } = value
+            } = value.into_raw()
             else {
                 return Err(type_error(
                     "expression-backed target port did not evaluate to a function",
@@ -364,6 +408,7 @@ impl<'a> NormalizedVm<'a> {
             machine.rollback_all();
             machine.frames.clear();
             machine.stack.clear();
+            resources.release_all();
         }
         machine.observation.live_call_frames_after = machine.frames.len();
         machine.observation.live_locals_after =
@@ -375,6 +420,7 @@ impl<'a> NormalizedVm<'a> {
             .sum();
         machine.observation.live_operands_after = machine.stack.len();
         machine.observation.live_transactions_after = machine.transactions.len();
+        machine.observation.live_handles_after = resources.live_resources();
         if let Some(observer) = self.observer {
             let mut observed = observer.lock().map_err(|_| {
                 runtime_error(
@@ -384,11 +430,11 @@ impl<'a> NormalizedVm<'a> {
             })?;
             *observed = Some(machine.observation.clone());
         }
-        result.map(|value| (value, machine.observation))
+        result.map(|value| (value.into_raw(), machine.observation))
     }
 }
 
-fn finish_admitted(machine: &mut Machine<'_>) -> Result<NormalizedValue, ExecutionError> {
+fn finish_admitted(machine: &mut Machine<'_>) -> Result<CheckedValue, ExecutionError> {
     if !machine.frames.is_empty() {
         return machine.run();
     }
@@ -407,7 +453,7 @@ struct Frame {
     function: Option<FunctionIndex>,
     code: NormalizedCode,
     instruction: usize,
-    locals: Vec<Option<NormalizedValue>>,
+    locals: Vec<Option<CheckedValue>>,
     type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     stack_base: usize,
 }
@@ -419,21 +465,15 @@ struct ActiveTransaction {
     transaction: Box<dyn NormalizedCapabilityTransaction>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AffineValueShape {
-    Direct,
-    Variant,
-}
-
 struct Machine<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
-    host: &'a dyn NormalizedHost,
+    host: Option<&'a dyn NormalizedHost>,
     capabilities: Option<&'a NormalizedCapabilities>,
     resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
     remaining_steps: u64,
-    stack: Vec<NormalizedValue>,
+    stack: Vec<CheckedValue>,
     frames: Vec<Frame>,
     next_frame: u64,
     next_transaction: u64,
@@ -443,7 +483,7 @@ struct Machine<'a> {
 }
 
 impl Machine<'_> {
-    fn run(&mut self) -> Result<NormalizedValue, ExecutionError> {
+    fn run(&mut self) -> Result<CheckedValue, ExecutionError> {
         loop {
             self.control.check()?;
             if self.remaining_steps == 0 {
@@ -471,12 +511,18 @@ impl Machine<'_> {
                 instruction
             };
             match instruction {
-                NormalizedInstruction::Unit => self.push(NormalizedValue::Unit)?,
-                NormalizedInstruction::Bool(value) => self.push(NormalizedValue::Bool(value))?,
-                NormalizedInstruction::I64(value) => self.push(NormalizedValue::I64(value))?,
-                NormalizedInstruction::Text(value) => self.push(NormalizedValue::Text(value))?,
+                NormalizedInstruction::Unit => self.push_scalar(NormalizedValue::Unit)?,
+                NormalizedInstruction::Bool(value) => {
+                    self.push_scalar(NormalizedValue::Bool(value))?
+                }
+                NormalizedInstruction::I64(value) => {
+                    self.push_scalar(NormalizedValue::I64(value))?
+                }
+                NormalizedInstruction::Text(value) => {
+                    self.push_scalar(NormalizedValue::Text(value))?
+                }
                 NormalizedInstruction::StaticText(value) => {
-                    self.push(NormalizedValue::StaticText(value))?
+                    self.push_scalar(NormalizedValue::StaticText(value))?
                 }
                 NormalizedInstruction::LoadLocal { local, use_mode } => {
                     let value = match use_mode {
@@ -489,7 +535,9 @@ impl Machine<'_> {
                             .frames
                             .last()
                             .and_then(|frame| frame.locals.get(local as usize))
-                            .and_then(Clone::clone),
+                            .and_then(Option::as_ref)
+                            .map(|value| value.duplicate(use_mode))
+                            .transpose()?,
                     }
                     .ok_or_else(|| {
                         runtime_error(
@@ -497,18 +545,20 @@ impl Machine<'_> {
                             "normalized code read an uninitialized or consumed local",
                         )
                     })?;
-                    let contains_resource = value_contains_affine_resource(&value);
-                    let affine_shape = self.affine_value_shape(&value);
+                    let class = value.class(self.program, &mut self.observation.value_work)?;
                     let valid = match use_mode {
-                        ParameterUse::Unrestricted => affine_shape.is_none() && !contains_resource,
-                        ParameterUse::Borrow => affine_shape == Some(AffineValueShape::Direct),
-                        ParameterUse::Consume => affine_shape.is_some(),
+                        ParameterUse::Unrestricted => class == Class::Free,
+                        ParameterUse::Borrow => class == Class::Direct,
+                        ParameterUse::Consume => class != Class::Free,
                     };
                     if !valid {
                         return Err(runtime_error(
                             "normalized_local_resource_use",
-                            "normalized bytecode local-use mode disagrees with its runtime resource value",
+                            "normalized local use disagrees with the checked ownership classification",
                         ));
+                    }
+                    if let NormalizedValue::Resource(handle) = value.raw() {
+                        self.resources.validate_admission(*handle, None, None)?;
                     }
                     self.push(value)?;
                 }
@@ -520,7 +570,7 @@ impl Machine<'_> {
                     self.pop()?;
                 }
                 NormalizedInstruction::JumpIfFalse(target) => {
-                    let NormalizedValue::Bool(condition) = self.pop()? else {
+                    let NormalizedValue::Bool(condition) = self.pop()?.into_raw() else {
                         return Err(type_error("if condition is not boolean"));
                     };
                     if !condition {
@@ -551,17 +601,18 @@ impl Machine<'_> {
                     type_arguments,
                 } => {
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
-                    self.push(NormalizedValue::Function {
+                    self.push(CheckedValue::function(
+                        self.program,
                         function,
                         type_arguments,
-                    })?;
+                    )?)?;
                 }
                 NormalizedInstruction::Invoke { arguments } => {
                     let arguments = self.pop_many(arguments as usize)?;
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
-                    } = self.pop()?
+                    } = self.pop()?.into_raw()
                     else {
                         return Err(type_error("invoke callee is not a function"));
                     };
@@ -572,7 +623,7 @@ impl Machine<'_> {
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
-                    } = self.pop()?
+                    } = self.pop()?.into_raw()
                     else {
                         return Err(type_error("invoke callee is not a function"));
                     };
@@ -600,20 +651,25 @@ impl Machine<'_> {
                     } else {
                         0
                     })?;
-                    self.push(NormalizedValue::Variant {
+                    let value = CheckedValue::variant(
+                        self.program,
                         layout,
                         case,
-                        payload: payload.map(Box::new),
-                    })?;
+                        payload,
+                        &mut self.observation.value_work,
+                    )?;
+                    self.push(value)?;
                 }
                 NormalizedInstruction::Field(field) => {
                     let value = self.pop()?;
-                    self.push(select_field(value, &field)?)?;
+                    self.push(value.field(&field)?)?;
                 }
                 NormalizedInstruction::List { items } => {
                     let items = self.pop_many(items as usize)?;
                     self.charge_collection(items.len(), std::mem::size_of::<NormalizedValue>())?;
-                    self.push(NormalizedValue::List(Arc::new(items)))?;
+                    let value =
+                        CheckedValue::list(self.program, items, &mut self.observation.value_work)?;
+                    self.push(value)?;
                 }
                 NormalizedInstruction::Map { entries } => {
                     let count = (entries as usize).checked_mul(2).ok_or_else(|| {
@@ -625,20 +681,20 @@ impl Machine<'_> {
                     let values = self.pop_many(count)?;
                     let mut map = BTreeMap::new();
                     let mut key_bytes = 0_u64;
-                    let (pairs, remainder) = values.as_chunks::<2>();
-                    if !remainder.is_empty() {
-                        return Err(runtime_error(
-                            "normalized_map_pairs",
-                            "verified map instruction produced an incomplete key-value pair",
-                        ));
-                    }
-                    for pair in pairs {
+                    let mut values = values.into_iter();
+                    while let Some(key) = values.next() {
                         let key =
-                            NormalizedMapKey::from_value(pair[0].clone()).ok_or_else(|| {
+                            NormalizedMapKey::from_value(key.into_raw()).ok_or_else(|| {
                                 type_error("map key is not a deterministically ordered primitive")
                             })?;
+                        let value = values.next().ok_or_else(|| {
+                            runtime_error(
+                                "normalized_map_pairs",
+                                "verified map has an incomplete pair",
+                            )
+                        })?;
                         key_bytes = key_bytes.saturating_add(map_key_bytes(&key));
-                        if map.insert(key, pair[1].clone()).is_some() {
+                        if map.insert(key, value).is_some() {
                             return Err(trap_error(
                                 "normalized_map_duplicate_key",
                                 "map expression contains a duplicate key",
@@ -650,17 +706,12 @@ impl Machine<'_> {
                         std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
                     )?;
                     self.charge_allocation(key_bytes)?;
-                    self.push(NormalizedValue::Map(Arc::new(map)))?;
+                    let value =
+                        CheckedValue::map(self.program, map, &mut self.observation.value_work)?;
+                    self.push(value)?;
                 }
                 NormalizedInstruction::SwitchVariant(jumps) => {
-                    let NormalizedValue::Variant {
-                        layout,
-                        case,
-                        payload,
-                    } = self.pop()?
-                    else {
-                        return Err(type_error("match value is not a variant"));
-                    };
+                    let (layout, case, payload) = self.pop()?.split_variant(self.program)?;
                     let jump = jumps
                         .iter()
                         .find(|jump| jump.layout == layout && jump.case == case)
@@ -671,7 +722,7 @@ impl Machine<'_> {
                             )
                         })?;
                     match (jump.binding_local, payload) {
-                        (Some(local), Some(payload)) => self.set_local(local, Some(*payload))?,
+                        (Some(local), Some(payload)) => self.set_local(local, Some(payload))?,
                         (None, None) => {}
                         _ => {
                             return Err(runtime_error(
@@ -688,9 +739,12 @@ impl Machine<'_> {
                     arguments,
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
+                    self.validate_operation_arguments(requirement, operation, &arguments)?;
+                    let arguments = arguments.into_iter().map(CheckedValue::into_raw).collect();
                     self.charge_capability_call(requirement)?;
                     let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
                     let canonical = capabilities.canonical_requirement(requirement)?;
+                    let transactional = self.transactions.contains_key(&canonical);
                     let value = if let Some(transaction) = self.transactions.get_mut(&canonical) {
                         let policy = self
                             .capabilities
@@ -713,7 +767,13 @@ impl Machine<'_> {
                             self.control,
                         )?
                     };
-                    self.charge_external_value(&value)?;
+                    let ty = self.program.operations[operation.0 as usize].result;
+                    let authority = self.program.requirements[requirement.0 as usize].reference;
+                    let value = self.admit(value, ty, Some(authority), false).map_err(|error| {
+                        if !transactional && self.program.operations[operation.0 as usize].external_visibility == crate::platform::kernel::ExternalVisibility::Possible {
+                            ExecutionError::new(ExecutionFailureClass::PossibleVisibility, error.code, "adapter result failed value admission after a possibly visible operation; inspect the operation outcome before retrying")
+                        } else { error }
+                    })?;
                     self.push(value)?;
                 }
                 NormalizedInstruction::BeginTransaction {
@@ -756,7 +816,10 @@ impl Machine<'_> {
                         self.control,
                     )?;
                     self.next_transaction = next_generation;
-                    self.set_local(binding, Some(NormalizedValue::Unit))?;
+                    self.set_local(
+                        binding,
+                        Some(CheckedValue::scalar(self.program, NormalizedValue::Unit)?),
+                    )?;
                     self.transactions.insert(
                         canonical,
                         ActiveTransaction {
@@ -787,7 +850,11 @@ impl Machine<'_> {
                             )
                         })?;
                     let frame = self.current_frame()?;
-                    let token = frame.locals.get(binding as usize).and_then(Option::as_ref);
+                    let token = frame
+                        .locals
+                        .get(binding as usize)
+                        .and_then(Option::as_ref)
+                        .map(CheckedValue::raw);
                     if transaction.owner_frame != frame.id
                         || transaction.binding != binding
                         || !matches!(token, Some(NormalizedValue::Unit))
@@ -841,32 +908,6 @@ impl Machine<'_> {
         }
     }
 
-    fn affine_value_shape(&self, value: &NormalizedValue) -> Option<AffineValueShape> {
-        match value {
-            NormalizedValue::Resource(handle) if handle.is_affine_capability() => {
-                Some(AffineValueShape::Direct)
-            }
-            NormalizedValue::Variant { layout, .. }
-                if self
-                    .program
-                    .variants
-                    .get(layout.0 as usize)
-                    .is_some_and(|variant| {
-                        variant.cases.iter().any(|case| {
-                            case.payload.is_some_and(|payload| {
-                                self.program.types.get(&payload).is_some_and(|object| {
-                                    matches!(object.form, TypeForm::CapabilityResource { .. })
-                                })
-                            })
-                        })
-                    }) =>
-            {
-                Some(AffineValueShape::Variant)
-            }
-            _ => None,
-        }
-    }
-
     fn resolve_type_arguments(
         &self,
         type_arguments: &[TypeObjectDigest],
@@ -898,7 +939,7 @@ impl Machine<'_> {
         &mut self,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
     ) -> Result<(), ExecutionError> {
         self.dispatch_call(function, type_arguments, arguments, false)
     }
@@ -907,7 +948,7 @@ impl Machine<'_> {
         &mut self,
         function_index: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
         tail: bool,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
@@ -915,6 +956,7 @@ impl Machine<'_> {
             .program
             .functions
             .get(function_index.0 as usize)
+            .filter(|_| function_index.1 == self.program.value_origin)
             .ok_or_else(|| {
                 runtime_error(
                     "normalized_function_index",
@@ -924,7 +966,7 @@ impl Machine<'_> {
         if arguments.len() != function.parameter_count as usize {
             return Err(type_error("function argument count is foreign"));
         }
-        if !type_arguments.is_empty() && type_arguments.len() != function.type_parameters.len() {
+        if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
         }
         let type_arguments_by_parameter = function
@@ -971,24 +1013,39 @@ impl Machine<'_> {
             ),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
-                let value = self.host.call(
-                    self.program,
-                    function,
-                    implementation,
-                    &type_arguments,
-                    arguments,
-                    self.control,
-                )?;
-                self.charge_external_value(&value)?;
+                let value = if let Some(host) = self.host {
+                    let raw = host.call(
+                        self.program,
+                        function,
+                        implementation,
+                        &type_arguments,
+                        arguments.into_iter().map(CheckedValue::into_raw).collect(),
+                        self.control,
+                    )?;
+                    self.admit_instantiated(
+                        raw,
+                        function.result,
+                        None,
+                        false,
+                        &type_arguments_by_parameter,
+                    )?
+                } else {
+                    self.call_checked_intrinsic(
+                        function,
+                        implementation.as_str(),
+                        &type_arguments,
+                        arguments,
+                    )?
+                };
                 self.push(value)
             }
         }
     }
 
     fn validate_call_resources(
-        &self,
+        &mut self,
         function: &super::prepare::NormalizedFunction,
-        arguments: &[NormalizedValue],
+        arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
         for (index, (parameter, argument)) in function.parameters.iter().zip(arguments).enumerate()
         {
@@ -996,14 +1053,15 @@ impl Machine<'_> {
                 Some(requirement) => {
                     if index.saturating_add(1) != function.parameters.len()
                         || parameter.use_mode != ParameterUse::Consume
-                        || self.affine_value_shape(argument) != Some(AffineValueShape::Direct)
+                        || argument.class(self.program, &mut self.observation.value_work)?
+                            != Class::Direct
                     {
                         return Err(runtime_error(
                             "normalized_resource_call_shape",
                             "resource-bearing call does not use one final consume parameter and direct handle",
                         ));
                     }
-                    let NormalizedValue::Resource(handle) = argument else {
+                    let NormalizedValue::Resource(handle) = argument.raw() else {
                         return Err(runtime_error(
                             "normalized_resource_call_value",
                             "resource-bearing call argument is not one exact runtime handle",
@@ -1027,7 +1085,8 @@ impl Machine<'_> {
                 }
                 None => {
                     if parameter.use_mode != ParameterUse::Unrestricted
-                        || value_contains_affine_resource(argument)
+                        || argument.class(self.program, &mut self.observation.value_work)?
+                            != Class::Free
                     {
                         return Err(runtime_error(
                             "normalized_resource_call_parameter",
@@ -1043,7 +1102,7 @@ impl Machine<'_> {
     fn call_code(
         &mut self,
         code: NormalizedCode,
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
         type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
         function: Option<FunctionIndex>,
         tail: bool,
@@ -1058,7 +1117,7 @@ impl Machine<'_> {
             ));
         }
         let locals_bytes = (code.local_count as u64)
-            .checked_mul(std::mem::size_of::<Option<NormalizedValue>>() as u64)
+            .checked_mul(std::mem::size_of::<Option<CheckedValue>>() as u64)
             .ok_or_else(|| {
                 resource_error(
                     "normalized_local_allocation",
@@ -1071,7 +1130,7 @@ impl Machine<'_> {
         if tail {
             self.frames.pop();
         }
-        let mut locals = vec![None; code.local_count as usize];
+        let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
         for (index, argument) in arguments.into_iter().enumerate() {
             locals[index] = Some(argument);
         }
@@ -1114,7 +1173,7 @@ impl Machine<'_> {
         Ok(())
     }
 
-    fn validate_tail_caller(&self) -> Result<(), ExecutionError> {
+    fn validate_tail_caller(&mut self) -> Result<(), ExecutionError> {
         let frame = self.current_frame()?;
         if !frame
             .function
@@ -1142,16 +1201,19 @@ impl Machine<'_> {
                 "tail transfer cannot discard an owned transaction",
             ));
         }
-        if frame
-            .locals
-            .iter()
+        for value in self
+            .frames
+            .last()
+            .into_iter()
+            .flat_map(|frame| &frame.locals)
             .flatten()
-            .any(|value| self.affine_value_shape(value).is_some())
         {
-            return Err(runtime_error(
-                "normalized_tail_resource",
-                "tail transfer cannot discard affine authority",
-            ));
+            if value.class(self.program, &mut self.observation.value_work)? != Class::Free {
+                return Err(runtime_error(
+                    "normalized_tail_resource",
+                    "tail transfer cannot discard affine authority",
+                ));
+            }
         }
         Ok(())
     }
@@ -1160,8 +1222,8 @@ impl Machine<'_> {
         &mut self,
         layout: Option<super::value::RecordLayoutIndex>,
         fields: &[NormalizedFieldSelector],
-        values: Vec<NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        values: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.charge_collection(values.len(), std::mem::size_of::<NormalizedValue>())?;
         if let Some(layout) = layout {
             let field_count = self
@@ -1182,7 +1244,7 @@ impl Machine<'_> {
                     "nominal record construction does not cover its exact layout",
                 ));
             }
-            let mut slots = vec![None; field_count];
+            let mut slots = (0..field_count).map(|_| None).collect::<Vec<_>>();
             for (selector, value) in fields.iter().zip(values) {
                 let NormalizedFieldSelector::Nominal {
                     layout: field_layout,
@@ -1224,10 +1286,18 @@ impl Machine<'_> {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout,
-                fields: Arc::new(slots),
-            }))
+            let fields = self.program.records[layout.0 as usize]
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .zip(slots)
+                .collect();
+            CheckedValue::record(
+                self.program,
+                Some(layout),
+                fields,
+                &mut self.observation.value_work,
+            )
         } else {
             let mut structural = fields
                 .iter()
@@ -1251,9 +1321,12 @@ impl Machine<'_> {
             self.charge_allocation(structural.iter().fold(0_u64, |total, (name, _)| {
                 total.saturating_add(name.as_str().len() as u64)
             }))?;
-            Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(structural),
-            }))
+            CheckedValue::record(
+                self.program,
+                None,
+                structural,
+                &mut self.observation.value_work,
+            )
         }
     }
 
@@ -1328,6 +1401,10 @@ impl Machine<'_> {
             ));
         }
         self.observation.allocated_bytes = next;
+        if bytes != 0 {
+            self.observation.allocation_charges =
+                self.observation.allocation_charges.saturating_add(1);
+        }
         Ok(())
     }
 
@@ -1371,11 +1448,7 @@ impl Machine<'_> {
         })
     }
 
-    fn set_local(
-        &mut self,
-        local: u32,
-        value: Option<NormalizedValue>,
-    ) -> Result<(), ExecutionError> {
+    fn set_local(&mut self, local: u32, value: Option<CheckedValue>) -> Result<(), ExecutionError> {
         let destination = self
             .current_frame_mut()?
             .locals
@@ -1390,20 +1463,25 @@ impl Machine<'_> {
         Ok(())
     }
 
-    fn push(&mut self, value: NormalizedValue) -> Result<(), ExecutionError> {
+    fn push(&mut self, value: CheckedValue) -> Result<(), ExecutionError> {
         if self.stack.len() >= self.policy.maximum_value_stack {
             return Err(resource_error(
                 "normalized_value_stack",
                 "normalized execution exceeded its value-stack budget",
             ));
         }
+        // Charge the additional proof carried by this operand placement. Frame local
+        // storage continues to be charged cumulatively, including on every tail call.
+        self.charge_allocation(
+            (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
+        )?;
         self.stack.push(value);
         self.observation.maximum_value_stack =
             self.observation.maximum_value_stack.max(self.stack.len());
         Ok(())
     }
 
-    fn pop(&mut self) -> Result<NormalizedValue, ExecutionError> {
+    fn pop(&mut self) -> Result<CheckedValue, ExecutionError> {
         let base = self.frames.last().map_or(0, |frame| frame.stack_base);
         if self.stack.len() <= base {
             return Err(runtime_error(
@@ -1419,7 +1497,7 @@ impl Machine<'_> {
         })
     }
 
-    fn pop_many(&mut self, count: usize) -> Result<Vec<NormalizedValue>, ExecutionError> {
+    fn pop_many(&mut self, count: usize) -> Result<Vec<CheckedValue>, ExecutionError> {
         let base = self.frames.last().map_or(0, |frame| frame.stack_base);
         if self.stack.len().saturating_sub(base) < count {
             return Err(runtime_error(
@@ -2321,33 +2399,6 @@ fn equal_sequences(
         }
     }
     Ok(true)
-}
-
-fn value_contains_affine_resource(value: &NormalizedValue) -> bool {
-    match value {
-        NormalizedValue::Resource(handle) => handle.is_affine_capability(),
-        NormalizedValue::Variant { payload, .. } => payload
-            .as_deref()
-            .is_some_and(value_contains_affine_resource),
-        NormalizedValue::Option(value) => {
-            value.as_deref().is_some_and(value_contains_affine_resource)
-        }
-        NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
-            fields.iter().any(value_contains_affine_resource)
-        }
-        NormalizedValue::Record(NormalizedRecord::Structural { fields }) => fields
-            .iter()
-            .any(|(_, value)| value_contains_affine_resource(value)),
-        NormalizedValue::List(items) => items.iter().any(value_contains_affine_resource),
-        NormalizedValue::Map(entries) => entries.values().any(value_contains_affine_resource),
-        NormalizedValue::Unit
-        | NormalizedValue::Bool(_)
-        | NormalizedValue::I64(_)
-        | NormalizedValue::Bytes(_)
-        | NormalizedValue::Text(_)
-        | NormalizedValue::StaticText(_)
-        | NormalizedValue::Function { .. } => false,
-    }
 }
 
 fn binary_i64(

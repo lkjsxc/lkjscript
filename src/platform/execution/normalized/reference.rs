@@ -28,6 +28,12 @@ use crate::platform::semantic_id::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[path = "reference_checked.rs"]
+mod checked;
+use checked::{Ownership, Value as CheckedValue};
+#[path = "reference_intrinsics.rs"]
+mod checked_intrinsics;
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedReferenceObservation {
     pub expressions: u64,
@@ -35,6 +41,8 @@ pub struct NormalizedReferenceObservation {
     pub external_calls: u64,
     pub capability_calls: u64,
     pub allocated_bytes: u64,
+    pub allocation_charges: u64,
+    pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub maximum_call_depth: usize,
     pub canonical_owner_reads: u64,
@@ -51,6 +59,7 @@ pub struct NormalizedReferenceObservation {
     pub live_local_scopes_after: usize,
     pub live_type_scopes_after: usize,
     pub live_transactions_after: usize,
+    pub live_handles_after: usize,
 }
 
 pub type NormalizedReferenceInvocation = (NormalizedValue, NormalizedReferenceObservation);
@@ -186,18 +195,45 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
     }
 }
 
-static CORE_REFERENCE_HOST: CoreNormalizedReferenceHost = CoreNormalizedReferenceHost;
+struct BoundReferenceSchema {
+    canonical: Arc<NormalizedReferenceSchema>,
+    value_origin: super::value::ValueOrigin,
+}
+
+impl std::ops::Deref for BoundReferenceSchema {
+    type Target = NormalizedReferenceSchema;
+    fn deref(&self) -> &Self::Target {
+        &self.canonical
+    }
+}
+
+impl NormalizedValueSchema for BoundReferenceSchema {
+    fn value_origin(&self) -> super::value::ValueOrigin {
+        self.value_origin
+    }
+    fn records(&self) -> &[super::prepare::NormalizedRecordLayout] {
+        &self.canonical.records
+    }
+    fn variants(&self) -> &[super::prepare::NormalizedVariantLayout] {
+        &self.canonical.variants
+    }
+    fn types(&self) -> &BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject> {
+        &self.canonical.types
+    }
+}
 
 pub struct ReferenceSignature {
     type_parameters: Vec<TypeParameterId>,
     parameters: Vec<ParameterRecord>,
+    result: TypeObjectDigest,
+    pure: bool,
 }
 
 pub struct NormalizedReferenceInterpreter<'a> {
     authority: &'a dyn NormalizedReferenceRead,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
-    host: &'a dyn NormalizedReferenceHost,
+    host: Option<&'a dyn NormalizedReferenceHost>,
     observer: Option<&'a std::sync::Mutex<Option<NormalizedReferenceObservation>>>,
 }
 
@@ -220,7 +256,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             authority,
             program,
             policy,
-            host: &CORE_REFERENCE_HOST,
+            host: None,
             observer: None,
         }
     }
@@ -231,7 +267,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         host: &'a dyn NormalizedReferenceHost,
     ) -> Self {
         self.observer = Some(observer);
-        self.host = host;
+        self.host = Some(host);
         self
     }
 
@@ -243,7 +279,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         self.execute(capabilities, control, |state| {
+            let arguments = state.admit_call_arguments(declaration, &[], arguments.into_vec())?;
             state.call_declaration(declaration, &[], arguments)
         })
     }
@@ -256,7 +294,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         self.execute(None, control, |state| {
+            let arguments = state.admit_call_arguments(declaration, types, arguments.into_vec())?;
             state.call_declaration(declaration, types, arguments)
         })
     }
@@ -268,8 +308,15 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let resources = NormalizedResourceScope::new()?;
-        self.invoke_root_target_scoped(name, arguments, capabilities, &resources, control)
+        self.invoke_root_target_scoped(
+            name,
+            arguments.into_vec(),
+            capabilities,
+            &resources,
+            control,
+        )
     }
 
     pub(crate) fn invoke_root_target_scoped(
@@ -280,6 +327,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         let expected_name = name.clone();
         self.execute_scoped(capabilities, resources, control, move |state| {
             let target_id = state
@@ -346,14 +394,18 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             }
             match port.implementation {
                 PortImplementation::Function(function) => {
+                    let arguments =
+                        state.admit_call_arguments(function, &[], arguments.into_vec())?;
                     state.call_declaration(function, &[], arguments)
                 }
                 PortImplementation::Expression(expression) => {
+                    let arguments =
+                        state.admit_port_arguments(port.function_type, arguments.into_vec())?;
                     let callee = state.evaluate(expression, &mut BTreeMap::new())?;
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
-                    } = callee
+                    } = callee.release()
                     else {
                         return Err(reference_type_error(
                             "expression-backed target port did not evaluate to a function",
@@ -385,7 +437,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         &self,
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
-        operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<NormalizedValue, ExecutionError>,
+        operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<CheckedValue, ExecutionError>,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         let resources = NormalizedResourceScope::new()?;
         self.execute_scoped(capabilities, &resources, control, operation)
@@ -396,7 +448,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         resources: &NormalizedResourceScope,
         control: &ExecutionControl,
-        operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<NormalizedValue, ExecutionError>,
+        operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<CheckedValue, ExecutionError>,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         validate_reference_policy(self.policy)?;
         control.check()?;
@@ -407,7 +459,10 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 "reference authority and executable artifact do not bind one exact accepted root",
             ));
         }
-        let schema = self.authority.schema()?;
+        let schema = Arc::new(BoundReferenceSchema {
+            canonical: self.authority.schema()?,
+            value_origin: self.program.value_origin,
+        });
         let schema_work = schema.work;
         let mut state = ReferenceState {
             authority: self.authority,
@@ -434,13 +489,15 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 external_calls: 0,
                 capability_calls: 0,
                 allocated_bytes: 0,
+                allocation_charges: 0,
+                value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 maximum_call_depth: 0,
                 canonical_owner_reads: schema_work.owner_reads,
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph8_reference_records_3",
+                production_tier: "graph8_reference_records_4",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -450,9 +507,16 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 live_local_scopes_after: 0,
                 live_type_scopes_after: 0,
                 live_transactions_after: 0,
+                live_handles_after: 0,
             },
         };
-        let result = match operation(&mut state) {
+        let operation = state
+            .charge_allocation(
+                (state.schema.affine_variants.len() + std::mem::size_of::<BoundReferenceSchema>())
+                    as u64,
+            )
+            .and_then(|()| operation(&mut state));
+        let result = match operation {
             Ok(value) if state.transactions.is_empty() => Ok(value),
             Ok(_) => {
                 state.rollback_all();
@@ -466,6 +530,10 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 Err(error)
             }
         };
+        if result.is_err() {
+            resources.release_all();
+        }
+        state.observation.live_handles_after = resources.live_resources();
         state.observation.live_call_frames_after = state.call_depth;
         state.observation.live_control_frames_after = state.control_frames;
         state.observation.live_local_scopes_after = state.local_counts.len();
@@ -480,7 +548,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             })?;
             *observed = Some(state.observation.clone());
         }
-        result.map(|value| (value, state.observation))
+        result.map(|value| (value.release(), state.observation))
     }
 }
 
@@ -495,9 +563,9 @@ struct ReferenceState<'a> {
     binding: NormalizedReferenceBinding,
     active_package: PackageId,
     program: &'a NormalizedProgram,
-    schema: Arc<NormalizedReferenceSchema>,
+    schema: Arc<BoundReferenceSchema>,
     policy: NormalizedRunPolicy,
-    host: &'a dyn NormalizedReferenceHost,
+    host: Option<&'a dyn NormalizedReferenceHost>,
     capabilities: Option<&'a NormalizedCapabilities>,
     resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
@@ -513,11 +581,11 @@ struct ReferenceState<'a> {
 }
 
 enum ReferenceStep {
-    Value(NormalizedValue),
+    Value(CheckedValue),
     Tail {
         declaration: DeclarationReference,
         types: Vec<TypeObjectDigest>,
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
     },
 }
 
@@ -526,7 +594,7 @@ impl ReferenceState<'_> {
         &mut self,
         reference: DeclarationReference,
         expected: bool,
-    ) -> Result<NormalizedValue, ExecutionError> {
+    ) -> Result<CheckedValue, ExecutionError> {
         let previous_package = self.active_package;
         self.active_package = reference.package;
         let result = (|| {
@@ -577,8 +645,8 @@ impl ReferenceState<'_> {
         &mut self,
         mut reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
-        mut arguments: Vec<NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        mut arguments: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         let mut type_arguments = self.resolve_type_arguments(type_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
@@ -620,10 +688,15 @@ impl ReferenceState<'_> {
         &mut self,
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
         tail: bool,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.control.check()?;
+        self.charge_allocation(
+            (arguments.len()
+                * (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()))
+                as u64,
+        )?;
         self.observation.calls = self.observation.calls.saturating_add(1);
         (|| {
             let declaration = self.declaration(reference)?;
@@ -638,9 +711,7 @@ impl ReferenceState<'_> {
                 DeclarationPayload::Function(function) => {
                     let parameters = self.parameters(reference.package, &function.parameters)?;
                     self.validate_call_resources(&parameters, &arguments)?;
-                    if !type_arguments.is_empty()
-                        && type_arguments.len() != function.type_parameters.len()
-                    {
+                    if type_arguments.len() != function.type_parameters.len() {
                         Err(reference_type_error(
                             "function type-argument count disagrees with its exact signature",
                         ))
@@ -700,9 +771,7 @@ impl ReferenceState<'_> {
                 DeclarationPayload::External(external) => {
                     let parameters = self.parameters(reference.package, &external.parameters)?;
                     self.validate_call_resources(&parameters, &arguments)?;
-                    if !type_arguments.is_empty()
-                        && type_arguments.len() != external.type_parameters.len()
-                    {
+                    if type_arguments.len() != external.type_parameters.len() {
                         Err(reference_type_error(
                             "external type-argument count disagrees with its exact signature",
                         ))
@@ -714,22 +783,36 @@ impl ReferenceState<'_> {
                         let signature = ReferenceSignature {
                             type_parameters: external.type_parameters,
                             parameters,
+                            result: external.result,
+                            pure: true,
                         };
                         self.observation.external_calls =
                             self.observation.external_calls.saturating_add(1);
-                        self.host
-                            .call(
+                        let value = if let Some(host) = self.host {
+                            let value = host.call(
                                 self.schema.as_ref(),
                                 &signature,
                                 &external.implementation,
                                 type_arguments,
-                                arguments,
+                                arguments.into_iter().map(CheckedValue::release).collect(),
                                 self.control,
-                            )
-                            .and_then(|value| {
-                                self.charge_value(&value)?;
-                                Ok(ReferenceStep::Value(value))
-                            })
+                            )?;
+                            let bindings = signature
+                                .type_parameters
+                                .iter()
+                                .copied()
+                                .zip(type_arguments.iter().copied())
+                                .collect();
+                            self.admit_raw(value, signature.result, &bindings, None, false)?
+                        } else {
+                            self.checked_intrinsic(
+                                &signature,
+                                external.implementation.as_str(),
+                                type_arguments,
+                                arguments,
+                            )?
+                        };
+                        Ok(ReferenceStep::Value(value))
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
@@ -758,21 +841,22 @@ impl ReferenceState<'_> {
     fn validate_call_resources(
         &mut self,
         parameters: &[ParameterRecord],
-        arguments: &[NormalizedValue],
+        arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
             match parameter.resource_requirement {
                 Some(requirement) => {
                     if index.saturating_add(1) != parameters.len()
                         || parameter.use_mode != ParameterUse::Consume
-                        || !matches!(argument, NormalizedValue::Resource(handle) if handle.is_affine_capability())
+                        || argument.ownership(&self.schema, &mut self.observation.value_work)?
+                            != Ownership::Capability
                     {
                         return Err(reference_error(
                             "normalized_reference_resource_call_shape",
                             "resource-bearing call does not use one final consume parameter and direct handle",
                         ));
                     }
-                    let NormalizedValue::Resource(handle) = argument else {
+                    let NormalizedValue::Resource(handle) = argument.raw() else {
                         return Err(reference_error(
                             "normalized_reference_resource_call_value",
                             "resource-bearing call argument is not one exact runtime handle",
@@ -796,7 +880,8 @@ impl ReferenceState<'_> {
                 }
                 None => {
                     if parameter.use_mode != ParameterUse::Unrestricted
-                        || reference_value_contains_resource(argument)
+                        || argument.ownership(&self.schema, &mut self.observation.value_work)?
+                            != Ownership::Ordinary
                     {
                         return Err(reference_error(
                             "normalized_reference_resource_call_parameter",
@@ -815,7 +900,7 @@ impl ReferenceState<'_> {
     fn evaluate_tail(
         &mut self,
         mut expression: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.control_frames += 1;
         self.observation.maximum_control_frames = self
@@ -830,7 +915,7 @@ impl ReferenceState<'_> {
                     when_true,
                     when_false,
                 } => {
-                    expression = match self.evaluate(condition, locals)? {
+                    expression = match self.evaluate(condition, locals)?.release() {
                         NormalizedValue::Bool(true) => when_true,
                         NormalizedValue::Bool(false) => when_false,
                         _ => return Err(reference_type_error("if condition is not boolean")),
@@ -871,14 +956,9 @@ impl ReferenceState<'_> {
                     expression = *last;
                 }
                 ExpressionOperation::Match { value, arms } => {
-                    let NormalizedValue::Variant {
-                        layout,
-                        case,
-                        payload,
-                    } = self.evaluate_match_value(value, locals)?
-                    else {
-                        return Err(reference_type_error("match value is not a variant"));
-                    };
+                    let (layout, case, payload) = self
+                        .evaluate_match_value(value, locals)?
+                        .open_variant(&self.schema)?;
                     let mut selected = None;
                     for arm in arms {
                         if self.case_layout(arm.case)? == (layout, case) {
@@ -896,7 +976,7 @@ impl ReferenceState<'_> {
                         (Some(binding), Some(payload)) => {
                             self.binding(binding, BindingKind::MatchPayload)?;
                             if locals
-                                .insert(LocalValueReference::MatchPayload(binding), *payload)
+                                .insert(LocalValueReference::MatchPayload(binding), payload)
                                 .is_some()
                             {
                                 return Err(reference_error(
@@ -928,7 +1008,7 @@ impl ReferenceState<'_> {
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
-                    } = self.evaluate(callee, locals)?
+                    } = self.evaluate(callee, locals)?.release()
                     else {
                         return Err(reference_type_error("invoke callee is not a function"));
                     };
@@ -951,7 +1031,7 @@ impl ReferenceState<'_> {
         &mut self,
         declaration: DeclarationReference,
         types: &[TypeObjectDigest],
-        arguments: Vec<NormalizedValue>,
+        arguments: Vec<CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         let callable = self.declaration(declaration)?;
         if let DeclarationPayload::Function(function) = callable.payload
@@ -959,7 +1039,7 @@ impl ReferenceState<'_> {
         {
             let types = self.resolve_type_arguments(types)?;
             if arguments.len() != function.parameters.len()
-                || (!types.is_empty() && types.len() != function.type_parameters.len())
+                || types.len() != function.type_parameters.len()
             {
                 return Err(reference_type_error(
                     "tail call argument count disagrees with its canonical signature",
@@ -981,8 +1061,8 @@ impl ReferenceState<'_> {
     fn evaluate(
         &mut self,
         expression: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.control_frames += 1;
         self.observation.maximum_control_frames = self
             .observation
@@ -997,7 +1077,7 @@ impl ReferenceState<'_> {
         result
     }
 
-    fn observe_locals(&mut self, locals: &BTreeMap<LocalValueReference, NormalizedValue>) {
+    fn observe_locals(&mut self, locals: &BTreeMap<LocalValueReference, CheckedValue>) {
         if let Some(count) = self.local_counts.last_mut() {
             *count = locals.len();
         }
@@ -1040,30 +1120,43 @@ impl ReferenceState<'_> {
     fn evaluate_operation(
         &mut self,
         operation: ExpressionOperation,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        self.charge_allocation(
+            (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
+        )?;
         match operation {
-            ExpressionOperation::Unit {} => Ok(NormalizedValue::Unit),
-            ExpressionOperation::Bool { value } => Ok(NormalizedValue::Bool(value)),
-            ExpressionOperation::I64 { value } => Ok(NormalizedValue::I64(value)),
-            ExpressionOperation::Text { value } => self.text(value).map(NormalizedValue::Text),
-            ExpressionOperation::StaticText { value } => {
-                self.text(value).map(NormalizedValue::StaticText)
+            ExpressionOperation::Unit {} => {
+                CheckedValue::primitive(&self.schema, NormalizedValue::Unit)
             }
+            ExpressionOperation::Bool { value } => {
+                CheckedValue::primitive(&self.schema, NormalizedValue::Bool(value))
+            }
+            ExpressionOperation::I64 { value } => {
+                CheckedValue::primitive(&self.schema, NormalizedValue::I64(value))
+            }
+            ExpressionOperation::Text { value } => self.text(value).and_then(|value| {
+                CheckedValue::primitive(&self.schema, NormalizedValue::Text(value))
+            }),
+            ExpressionOperation::StaticText { value } => self.text(value).and_then(|value| {
+                CheckedValue::primitive(&self.schema, NormalizedValue::StaticText(value))
+            }),
             ExpressionOperation::Local { value } => {
-                let value = locals.get(&value).cloned().ok_or_else(|| {
+                let value = locals.get(&value).ok_or_else(|| {
                     reference_error(
                         "normalized_reference_local_missing",
                         "canonical local reference escaped its exact lexical scope",
                     )
                 })?;
-                if reference_value_contains_resource(&value) {
+                if value.ownership(&self.schema, &mut self.observation.value_work)?
+                    != Ownership::Ordinary
+                {
                     return Err(reference_error(
                         "normalized_reference_local_resource_use",
-                        "affine local requires an explicit borrow, consume, variant transfer, or match",
+                        "affine local requires its exact ownership transfer",
                     ));
                 }
-                Ok(value)
+                value.duplicate(ParameterUse::Unrestricted)
             }
             ExpressionOperation::Constant { declaration } => {
                 self.call_declaration(declaration, &[], Vec::new())
@@ -1072,7 +1165,7 @@ impl ReferenceState<'_> {
                 condition,
                 when_true,
                 when_false,
-            } => match self.evaluate(condition, locals)? {
+            } => match self.evaluate(condition, locals)?.release() {
                 NormalizedValue::Bool(true) => self.evaluate(when_true, locals),
                 NormalizedValue::Bool(false) => self.evaluate(when_false, locals),
                 _ => Err(reference_type_error("if condition is not boolean")),
@@ -1145,16 +1238,15 @@ impl ReferenceState<'_> {
                     .binary_search(&function)
                     .ok()
                     .and_then(|index| u32::try_from(index).ok())
-                    .map(FunctionIndex)
-                    .map(|function| NormalizedValue::Function {
-                        function,
-                        type_arguments,
-                    })
+                    .map(|index| FunctionIndex(index, self.schema.value_origin))
                     .ok_or_else(|| {
                         reference_error(
                             "normalized_reference_function_value",
                             "exact function value is absent from the canonical callable inventory",
                         )
+                    })
+                    .and_then(|function| {
+                        CheckedValue::callable(&self.schema, function, type_arguments)
                     })
             }
             ExpressionOperation::Invoke { callee, arguments } => {
@@ -1162,7 +1254,7 @@ impl ReferenceState<'_> {
                 let NormalizedValue::Function {
                     function,
                     type_arguments,
-                } = callee
+                } = callee.release()
                 else {
                     return Err(reference_type_error("invoke callee is not a function"));
                 };
@@ -1198,16 +1290,11 @@ impl ReferenceState<'_> {
                             },
                         )
                     })
-                    .transpose()?
-                    .map(Box::new);
+                    .transpose()?;
                 if payload.is_some() {
                     self.charge_items(1, std::mem::size_of::<NormalizedValue>())?;
                 }
-                Ok(NormalizedValue::Variant {
-                    layout,
-                    case: tag,
-                    payload,
-                })
+                self.variant_value(layout, tag, payload)
             }
             ExpressionOperation::Field { value, selector } => {
                 let value = self.evaluate(value, locals)?;
@@ -1216,14 +1303,15 @@ impl ReferenceState<'_> {
             ExpressionOperation::List { items, .. } => {
                 let values = self.evaluate_many(&items, locals)?;
                 self.charge_items(values.len(), std::mem::size_of::<NormalizedValue>())?;
-                Ok(NormalizedValue::List(Arc::new(values)))
+                self.list_value(values)
             }
             ExpressionOperation::Map { entries, .. } => {
                 let mut values = BTreeMap::new();
                 let mut key_bytes = 0_u64;
                 for entry in entries {
-                    let key = NormalizedMapKey::from_value(self.evaluate(entry.key, locals)?)
-                        .ok_or_else(|| {
+                    let key =
+                        NormalizedMapKey::from_value(self.evaluate(entry.key, locals)?.release())
+                            .ok_or_else(|| {
                             reference_type_error(
                                 "map key is not a deterministically ordered primitive",
                             )
@@ -1242,17 +1330,12 @@ impl ReferenceState<'_> {
                     std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
                 )?;
                 self.charge_allocation(key_bytes)?;
-                Ok(NormalizedValue::Map(Arc::new(values)))
+                self.map_value(values)
             }
             ExpressionOperation::Match { value, arms } => {
-                let NormalizedValue::Variant {
-                    layout,
-                    case,
-                    payload,
-                } = self.evaluate_match_value(value, locals)?
-                else {
-                    return Err(reference_type_error("match value is not a variant"));
-                };
+                let (layout, case, payload) = self
+                    .evaluate_match_value(value, locals)?
+                    .open_variant(&self.schema)?;
                 let mut selected = None;
                 for arm in arms {
                     if self.case_layout(arm.case)? == (layout, case) {
@@ -1270,7 +1353,7 @@ impl ReferenceState<'_> {
                     (Some(binding), Some(payload)) => {
                         self.binding(binding, BindingKind::MatchPayload)?;
                         let local = LocalValueReference::MatchPayload(binding);
-                        if locals.insert(local, *payload).is_some() {
+                        if locals.insert(local, payload).is_some() {
                             return Err(reference_error(
                                 "normalized_reference_local_duplicate",
                                 "match payload identity was already bound",
@@ -1312,8 +1395,8 @@ impl ReferenceState<'_> {
     fn evaluate_many(
         &mut self,
         expressions: &[ExpressionId],
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<Vec<NormalizedValue>, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<Vec<CheckedValue>, ExecutionError> {
         expressions
             .iter()
             .map(|expression| self.evaluate(*expression, locals))
@@ -1324,8 +1407,8 @@ impl ReferenceState<'_> {
         &mut self,
         expressions: &[ExpressionId],
         uses: &[ParameterUse],
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<Vec<NormalizedValue>, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<Vec<CheckedValue>, ExecutionError> {
         if expressions.len() != uses.len() {
             return Err(reference_type_error(
                 "call arguments disagree with their exact parameter uses",
@@ -1341,9 +1424,9 @@ impl ReferenceState<'_> {
     fn evaluate_with_use(
         &mut self,
         expression: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
         use_mode: ParameterUse,
-    ) -> Result<NormalizedValue, ExecutionError> {
+    ) -> Result<CheckedValue, ExecutionError> {
         let local = match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => match record.operation {
                 ExpressionOperation::Local { value } => Some(value),
@@ -1365,7 +1448,10 @@ impl ReferenceState<'_> {
         let value = if let Some(local) = local {
             match use_mode {
                 ParameterUse::Consume => locals.remove(&local),
-                ParameterUse::Unrestricted | ParameterUse::Borrow => locals.get(&local).cloned(),
+                ParameterUse::Unrestricted | ParameterUse::Borrow => locals
+                    .get(&local)
+                    .map(|value| value.duplicate(use_mode))
+                    .transpose()?,
             }
             .ok_or_else(|| {
                 reference_error(
@@ -1376,13 +1462,11 @@ impl ReferenceState<'_> {
         } else {
             self.evaluate(expression, locals)?
         };
-        let contains = reference_value_contains_resource(&value);
+        let ownership = value.ownership(&self.schema, &mut self.observation.value_work)?;
         let valid = match use_mode {
-            ParameterUse::Unrestricted => !contains,
-            ParameterUse::Borrow => {
-                matches!(&value, NormalizedValue::Resource(handle) if handle.is_affine_capability())
-            }
-            ParameterUse::Consume => contains,
+            ParameterUse::Unrestricted => ownership == Ownership::Ordinary,
+            ParameterUse::Borrow => ownership == Ownership::Capability,
+            ParameterUse::Consume => ownership != Ownership::Ordinary,
         };
         if !valid {
             return Err(reference_error(
@@ -1390,14 +1474,17 @@ impl ReferenceState<'_> {
                 "canonical parameter use disagrees with its runtime affine value",
             ));
         }
+        if let NormalizedValue::Resource(handle) = value.raw() {
+            self.resources.validate_admission(*handle, None, None)?;
+        }
         Ok(value)
     }
 
     fn evaluate_match_value(
         &mut self,
         expression: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         let local = match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => match record.operation {
                 ExpressionOperation::Local { value } => Some(value),
@@ -1419,7 +1506,9 @@ impl ReferenceState<'_> {
         if let Some(local) = local
             && locals
                 .get(&local)
-                .is_some_and(reference_value_contains_resource)
+                .map(|value| value.ownership(&self.schema, &mut self.observation.value_work))
+                .transpose()?
+                .is_some_and(|ownership| ownership != Ownership::Ordinary)
         {
             return locals.remove(&local).ok_or_else(|| {
                 reference_error(
@@ -1435,14 +1524,21 @@ impl ReferenceState<'_> {
         &mut self,
         reference: DeclarationReference,
     ) -> Result<ReferenceSignature, ExecutionError> {
-        let (type_parameters, parameters) = match self.declaration(reference)?.payload {
-            DeclarationPayload::Function(function) => {
-                (function.type_parameters, function.parameters)
-            }
-            DeclarationPayload::External(external) => {
-                (external.type_parameters, external.parameters)
-            }
-            DeclarationPayload::Constant { .. } => (Vec::new(), Vec::new()),
+        let (type_parameters, parameters, result, pure) = match self.declaration(reference)?.payload
+        {
+            DeclarationPayload::Function(function) => (
+                function.type_parameters,
+                function.parameters,
+                function.result,
+                matches!(function.effect, FunctionEffect::Pure),
+            ),
+            DeclarationPayload::External(external) => (
+                external.type_parameters,
+                external.parameters,
+                external.result,
+                true,
+            ),
+            DeclarationPayload::Constant { ty, .. } => (Vec::new(), Vec::new(), ty, false),
             _ => {
                 return Err(reference_type_error(
                     "exact callable has a non-callable canonical owner",
@@ -1452,6 +1548,8 @@ impl ReferenceState<'_> {
         Ok(ReferenceSignature {
             type_parameters,
             parameters: self.parameters(reference.package, &parameters)?,
+            result,
+            pure,
         })
     }
 
@@ -1593,6 +1691,7 @@ impl ReferenceState<'_> {
         self.schema
             .functions
             .get(function.0 as usize)
+            .filter(|_| function.1 == self.schema.value_origin)
             .copied()
             .ok_or_else(|| {
                 reference_error(
@@ -1606,13 +1705,13 @@ impl ReferenceState<'_> {
         &mut self,
         nominal_type: Option<DeclarationReference>,
         selectors: impl IntoIterator<Item = FieldSelector>,
-        values: Vec<NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        values: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.charge_items(values.len(), std::mem::size_of::<NormalizedValue>())?;
         if let Some(declaration) = nominal_type {
             let layout = self.record_layout(declaration)?;
             let field_count = self.schema.records[layout.0 as usize].fields.len();
-            let mut slots = vec![None; field_count];
+            let mut slots = (0..field_count).map(|_| None).collect::<Vec<_>>();
             for (selector, value) in selectors.into_iter().zip(values) {
                 let FieldSelector::Nominal(field) = selector else {
                     return Err(reference_error(
@@ -1651,10 +1750,13 @@ impl ReferenceState<'_> {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout,
-                fields: Arc::new(fields),
-            }))
+            let fields = self.schema.records[layout.0 as usize]
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .zip(fields)
+                .collect();
+            self.record_value(Some(layout), fields)
         } else {
             let mut fields = selectors
                 .into_iter()
@@ -1677,47 +1779,16 @@ impl ReferenceState<'_> {
             self.charge_allocation(fields.iter().fold(0_u64, |total, (name, _)| {
                 total.saturating_add(name.as_str().len() as u64)
             }))?;
-            Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(fields),
-            }))
+            self.record_value(None, fields)
         }
     }
 
     fn field(
         &self,
-        value: NormalizedValue,
+        value: CheckedValue,
         selector: FieldSelector,
-    ) -> Result<NormalizedValue, ExecutionError> {
-        match (value, selector) {
-            (
-                NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }),
-                FieldSelector::Nominal(field),
-            ) => {
-                let (expected, offset) = self.field_layout(field)?;
-                if expected != layout {
-                    return Err(reference_type_error(
-                        "nominal field belongs to another runtime record layout",
-                    ));
-                }
-                fields.get(offset as usize).cloned().ok_or_else(|| {
-                    reference_error(
-                        "normalized_reference_field_offset",
-                        "nominal field offset escaped its runtime layout",
-                    )
-                })
-            }
-            (
-                NormalizedValue::Record(NormalizedRecord::Structural { fields }),
-                FieldSelector::Structural(name),
-            ) => fields
-                .binary_search_by(|(candidate, _)| candidate.cmp(&name))
-                .ok()
-                .map(|index| fields[index].1.clone())
-                .ok_or_else(|| reference_type_error("structural record has no selected field")),
-            _ => Err(reference_type_error(
-                "field selection received a foreign record layout",
-            )),
-        }
+    ) -> Result<CheckedValue, ExecutionError> {
+        value.project_field(selector, &self.schema)
     }
 
     fn record_layout(
@@ -1729,7 +1800,7 @@ impl ReferenceState<'_> {
             .iter()
             .position(|layout| layout.declaration == declaration)
             .and_then(|index| u32::try_from(index).ok())
-            .map(RecordLayoutIndex)
+            .map(|index| RecordLayoutIndex(index, self.schema.value_origin))
             .ok_or_else(|| {
                 reference_error(
                     "normalized_reference_record_layout",
@@ -1760,7 +1831,10 @@ impl ReferenceState<'_> {
                         "prepared field layout count exceeds the dense index domain",
                     )
                 })?;
-                return Ok((RecordLayoutIndex(layout_index), offset));
+                return Ok((
+                    RecordLayoutIndex(layout_index, self.schema.value_origin),
+                    offset,
+                ));
             }
         }
         Err(reference_error(
@@ -1791,7 +1865,10 @@ impl ReferenceState<'_> {
                         "prepared case count exceeds the dense index domain",
                     )
                 })?;
-                return Ok((VariantLayoutIndex(layout_index), tag));
+                return Ok((
+                    VariantLayoutIndex(layout_index, self.schema.value_origin),
+                    tag,
+                ));
             }
         }
         Err(reference_error(
@@ -1804,13 +1881,24 @@ impl ReferenceState<'_> {
         &mut self,
         requirement: RequirementReference,
         operation: OperationReference,
-        arguments: Vec<NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        arguments: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let Some(OwnerRecord::Operation(record)) =
+            self.owner_in_package(operation.package, OwnerKey::Operation(operation.operation))?
+        else {
+            return Err(reference_type_error(
+                "capability result type is absent from canonical authority",
+            ));
+        };
+        let parameters = self.parameters(operation.package, &record.parameters)?;
+        self.validate_capability_arguments(requirement, &parameters, &arguments)?;
+        let arguments = arguments.into_iter().map(CheckedValue::release).collect();
         self.charge_capability_call(requirement)?;
         let capabilities = self
             .capabilities
             .ok_or_else(reference_capabilities_unbound)?;
         let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
+        let transactional = self.transactions.contains_key(&canonical);
         let value = if let Some(transaction) = self.transactions.get_mut(&canonical) {
             let policy = self
                 .capabilities
@@ -1831,8 +1919,11 @@ impl ReferenceState<'_> {
                 self.control,
             )?
         };
-        self.charge_value(&value)?;
-        Ok(value)
+        self.admit_raw(value, record.result, &BTreeMap::new(), Some(requirement), false).map_err(|error| {
+            if !transactional && record.external_visibility == crate::platform::kernel::ExternalVisibility::Possible {
+                ExecutionError::new(ExecutionFailureClass::PossibleVisibility, error.code, "reference adapter result failed admission after a possibly visible operation; inspect the outcome before retrying")
+            } else { error }
+        })
     }
 
     fn transaction(
@@ -1840,8 +1931,8 @@ impl ReferenceState<'_> {
         requirement: RequirementReference,
         binding: BindingId,
         body: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
-    ) -> Result<NormalizedValue, ExecutionError> {
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.binding(binding, BindingKind::Transaction)?;
         let capabilities = self
             .capabilities
@@ -1875,7 +1966,14 @@ impl ReferenceState<'_> {
             self.control,
         )?;
         self.next_transaction = next_generation;
-        debug_assert!(locals.insert(local, NormalizedValue::Unit).is_none());
+        debug_assert!(
+            locals
+                .insert(
+                    local,
+                    CheckedValue::primitive(&self.schema, NormalizedValue::Unit)?
+                )
+                .is_none()
+        );
         self.transactions.insert(
             canonical,
             ReferenceTransaction {
@@ -1885,7 +1983,7 @@ impl ReferenceState<'_> {
             },
         );
         let result = self.evaluate(body, locals);
-        let token = locals.remove(&local);
+        let token = locals.remove(&local).map(CheckedValue::release);
         let mut transaction = self.transactions.remove(&canonical).ok_or_else(|| {
             reference_error(
                 "normalized_reference_transaction_missing",
@@ -2015,6 +2113,10 @@ impl ReferenceState<'_> {
             ));
         }
         self.observation.allocated_bytes = next;
+        if bytes != 0 {
+            self.observation.allocation_charges =
+                self.observation.allocation_charges.saturating_add(1);
+        }
         Ok(())
     }
 
@@ -3066,33 +3168,6 @@ fn reference_map_key_bytes(key: &NormalizedMapKey) -> u64 {
         NormalizedMapKey::Bytes(value) => value.len() as u64,
         NormalizedMapKey::Text(value) => value.len() as u64,
         NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
-    }
-}
-
-fn reference_value_contains_resource(value: &NormalizedValue) -> bool {
-    match value {
-        NormalizedValue::Resource(handle) => handle.is_affine_capability(),
-        NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
-            fields.iter().any(reference_value_contains_resource)
-        }
-        NormalizedValue::Record(NormalizedRecord::Structural { fields }) => fields
-            .iter()
-            .any(|(_, value)| reference_value_contains_resource(value)),
-        NormalizedValue::Variant { payload, .. } => payload
-            .as_deref()
-            .is_some_and(reference_value_contains_resource),
-        NormalizedValue::Option(value) => value
-            .as_deref()
-            .is_some_and(reference_value_contains_resource),
-        NormalizedValue::List(items) => items.iter().any(reference_value_contains_resource),
-        NormalizedValue::Map(entries) => entries.values().any(reference_value_contains_resource),
-        NormalizedValue::Unit
-        | NormalizedValue::Bool(_)
-        | NormalizedValue::I64(_)
-        | NormalizedValue::Bytes(_)
-        | NormalizedValue::Text(_)
-        | NormalizedValue::StaticText(_)
-        | NormalizedValue::Function { .. } => false,
     }
 }
 

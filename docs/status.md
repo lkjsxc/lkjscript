@@ -104,17 +104,19 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.24`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.25`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
-and constant control space for eligible pure tail execution.
+constant control space for eligible pure tail execution, and preparation-bound checked execution
+values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
+raw admission, exact capability ownership and independent reference execution remain mandatory.
 Graph 10, validation witness 6, owner summary 5,
 validator 10, package 3, package interface 6, compiler-unit 5, bytecode 3, Artifact 15, resident
 runtime 3, function-definition projection 2, service receipt 10, distributed-HTTP receipt 4,
 outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 14, authored change 11,
 logical change plan 5, query 6,
-project creation 5, registry 11, CLI 25, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 12, CLI 26, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 

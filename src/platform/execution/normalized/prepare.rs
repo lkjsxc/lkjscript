@@ -248,7 +248,7 @@ pub enum NormalizedEntryPoint {
     #[cfg(test)]
     InstantiatedFunction(FunctionIndex, Arc<[TypeObjectDigest]>),
     Code(NormalizedCode),
-    PortExpression(NormalizedCode),
+    PortExpression(NormalizedCode, TypeObjectDigest),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -298,6 +298,8 @@ pub struct NormalizedTest {
 
 #[derive(Clone, Debug)]
 pub struct NormalizedProgram {
+    pub(super) value_origin: super::value::ValueOrigin,
+    pub(super) affine_variants: Arc<[bool]>,
     artifact: Arc<LoadedArtifact>,
     pub root_repository: RepositoryId,
     pub root_package: PackageId,
@@ -332,13 +334,33 @@ impl NormalizedProgram {
                     "normalized artifact has no exact root-package compilation manifest",
                 )
             })?;
-        let indexes = RuntimeIndexes::build(&units)?;
+        let value_origin = super::value::ValueOrigin::fresh().ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "normalized_value_origin_exhausted",
+                "prepared value identity space exhausted; restart the process",
+            )
+        })?;
+        let indexes = RuntimeIndexes::build(&units, value_origin)?;
         let runtime_owners = load_runtime_owners(&artifact, &mut work)?;
         let types = load_type_objects(&artifact, &mut work)?;
         let mut text_cache = BTreeMap::new();
 
         let records = prepare_records(&units, &indexes, &runtime_owners)?;
         let variants = prepare_variants(&units, &indexes, &runtime_owners)?;
+        let affine_variants = variants
+            .iter()
+            .map(|variant| {
+                variant.cases.iter().any(|case| {
+                    case.payload
+                        .and_then(|ty| types.get(&ty))
+                        .is_some_and(|object| {
+                            matches!(object.form, TypeForm::CapabilityResource { .. })
+                        })
+                })
+            })
+            .collect::<Vec<_>>()
+            .into();
         let requirements = prepare_requirements(&units, &indexes, &runtime_owners)?;
         let operations = prepare_operations(&indexes, &runtime_owners)?;
         let function_validation = FunctionValidationInputs {
@@ -389,6 +411,8 @@ impl NormalizedProgram {
             .sum();
         work.tests = tests.len() as u64;
         let program = Self {
+            value_origin,
+            affine_variants,
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
             root_revision: root_compilation.revision,
@@ -509,7 +533,10 @@ struct RuntimeIndexes {
 }
 
 impl RuntimeIndexes {
-    fn build(units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>) -> Result<Self, Diagnostic> {
+    fn build(
+        units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+        origin: super::value::ValueOrigin,
+    ) -> Result<Self, Diagnostic> {
         let mut function_refs = BTreeSet::new();
         let mut record_refs = BTreeSet::new();
         let mut variant_refs = BTreeSet::new();
@@ -578,9 +605,9 @@ impl RuntimeIndexes {
                 CompilationPayload::Test { .. } | CompilationPayload::Target { .. } => {}
             }
         }
-        let functions = dense_map(function_refs, FunctionIndex)?;
-        let records = dense_map(record_refs, RecordLayoutIndex)?;
-        let variants = dense_map(variant_refs, VariantLayoutIndex)?;
+        let functions = dense_map(function_refs, |index| FunctionIndex(index, origin))?;
+        let records = dense_map(record_refs, |index| RecordLayoutIndex(index, origin))?;
+        let variants = dense_map(variant_refs, |index| VariantLayoutIndex(index, origin))?;
         let requirements = dense_map(requirement_refs, RequirementIndex)?;
         let operations = dense_map(operation_refs, OperationIndex)?;
         let components = dense_map(component_refs, ComponentIndex)?;
@@ -1619,9 +1646,10 @@ fn prepare_components(
                     )?)
                 }
                 CompiledPortImplementation::Expression(code) => {
-                    NormalizedEntryPoint::PortExpression(translate_code(
-                        artifact, unit, code, indexes, text_cache, work,
-                    )?)
+                    NormalizedEntryPoint::PortExpression(
+                        translate_code(artifact, unit, code, indexes, text_cache, work)?,
+                        record.function_type,
+                    )
                 }
             };
             if ports[port_index.0 as usize]

@@ -5,12 +5,16 @@ use crate::platform::kernel::{TypeObject, TypeObjectDigest};
 use std::collections::BTreeMap;
 
 pub trait NormalizedValueSchema {
+    fn value_origin(&self) -> super::value::ValueOrigin;
     fn records(&self) -> &[NormalizedRecordLayout];
     fn variants(&self) -> &[NormalizedVariantLayout];
     fn types(&self) -> &BTreeMap<TypeObjectDigest, TypeObject>;
 }
 
 impl NormalizedValueSchema for NormalizedProgram {
+    fn value_origin(&self) -> super::value::ValueOrigin {
+        self.value_origin
+    }
     fn records(&self) -> &[NormalizedRecordLayout] {
         &self.records
     }

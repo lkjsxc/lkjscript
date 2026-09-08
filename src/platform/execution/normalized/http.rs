@@ -1089,7 +1089,7 @@ mod tests {
                 method: Arc::from("GET"),
                 selector,
                 port: PortIndex(port),
-                function: FunctionIndex(port),
+                function: FunctionIndex(port, Default::default()),
                 capture_parameters: Arc::from([]),
             }
         };

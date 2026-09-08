@@ -100,8 +100,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-11";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 11;
-pub const CLI_CONTRACT_VERSION: u16 = 25;
+pub const REGISTRY_CONTRACT_VERSION: u16 = 12;
+pub const CLI_CONTRACT_VERSION: u16 = 26;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -3617,6 +3617,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce pending non-tail recursion or express the loop with pure graph tail calls.",
         ),
         diagnostic(
+            "normalized_value_admission",
+            DiagnosticClass::Infrastructure,
+            "A raw runtime value failed its exact prepared shape, type, containment, or authority boundary.",
+            "Correct the invocation or adapter value against the selected program; do not assert an affine classification.",
+        ),
+        diagnostic(
+            "normalized_reference_value_admission",
+            DiagnosticClass::Infrastructure,
+            "A raw reference value disagrees with independent canonical type or ownership admission.",
+            "Correct the value against accepted canonical meaning and the selected invocation; do not reuse a foreign preparation.",
+        ),
+        diagnostic(
+            "normalized_value_depth",
+            DiagnosticClass::Resource,
+            "Raw production value admission exceeded depth 256 before installation.",
+            "Reduce input or adapter-result nesting and invoke again with the exact declared type.",
+        ),
+        diagnostic(
+            "normalized_reference_value_depth",
+            DiagnosticClass::Resource,
+            "Raw canonical-reference value admission exceeded depth 256 before installation.",
+            "Reduce input or host-result nesting and invoke again with the exact declared type.",
+        ),
+        diagnostic(
+            "normalized_value_origin_exhausted",
+            DiagnosticClass::Resource,
+            "Preparation exhausted its process-local value identity space.",
+            "Restart the owning process and prepare the same accepted artifact; never reuse a stale value identity.",
+        ),
+        diagnostic(
             "normalized_reference_call_depth",
             DiagnosticClass::Resource,
             "Canonical non-tail execution exceeded admitted live call frames.",
@@ -5937,6 +5967,51 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         ),
                     ],
                 )?);
+            }
+            records.push(compact_record(
+                "execution.values",
+                &[
+                    ("boundary", "private-per-evaluator-admission".to_owned()),
+                    (
+                        "classes",
+                        "affine-free,direct-capability,affine-nominal-variant".to_owned(),
+                    ),
+                    (
+                        "internal-eligibility",
+                        "constant-per-local-and-argument".to_owned(),
+                    ),
+                    ("depth", "256".to_owned()),
+                    ("aggregate-items", "1000000".to_owned()),
+                    ("cancellation", "each-admission-node".to_owned()),
+                    (
+                        "authority",
+                        "disposable-preparation-bound-derivation".to_owned(),
+                    ),
+                ],
+            )?);
+            for tier in ["production", "reference"] {
+                for (field, unit) in [
+                    ("input-admission-nodes", "raw-input-node"),
+                    ("raw-result-admission-nodes", "raw-result-node"),
+                    ("constructor-child-visits", "checked-immediate-child"),
+                    ("guard-descendants", "internal-affinity-descendant"),
+                    ("classification-decisions", "internal-root-classification"),
+                    ("allocated-bytes", "cumulative-byte"),
+                    ("allocation-charges", "successful-nonzero-byte-charge"),
+                    ("collection-items", "cumulative-item"),
+                ] {
+                    records.push(compact_record(
+                        "execution.observation",
+                        &[
+                            ("record", "execution".to_owned()),
+                            ("field", format!("{tier}-{field}")),
+                            ("scalar", "nonnegative-integer".to_owned()),
+                            ("maximum", u64::MAX.to_string()),
+                            ("unit", unit.to_owned()),
+                            ("permission", "none".to_owned()),
+                        ],
+                    )?);
+                }
             }
         }
         RegistrySection::Deployment => {

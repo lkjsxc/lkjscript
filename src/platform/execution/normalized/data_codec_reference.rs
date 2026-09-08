@@ -503,7 +503,7 @@ fn find_record(
         .and_then(|(position, layout)| {
             u32::try_from(position)
                 .ok()
-                .map(RecordLayoutIndex)
+                .map(|index| RecordLayoutIndex(index, program.value_origin()))
                 .map(|index| (index, layout))
         })
 }
@@ -520,7 +520,7 @@ fn find_variant(
         .and_then(|(position, layout)| {
             u32::try_from(position)
                 .ok()
-                .map(VariantLayoutIndex)
+                .map(|index| VariantLayoutIndex(index, program.value_origin()))
                 .map(|index| (index, layout))
         })
 }

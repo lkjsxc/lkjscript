@@ -17,6 +17,106 @@ const MAXIMUM_SECONDS: u64 = 900;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ValueWork {
+    input_admission_nodes: u64,
+    raw_result_admission_nodes: u64,
+    constructor_child_visits: u64,
+    internal_guard_descendant_visits: u64,
+    classification_decisions: u64,
+}
+
+impl ValueWork {
+    fn visits(&self) -> Result<u64, DevError> {
+        self.input_admission_nodes
+            .checked_add(self.raw_result_admission_nodes)
+            .and_then(|work| work.checked_add(self.constructor_child_visits))
+            .and_then(|work| work.checked_add(self.internal_guard_descendant_visits))
+            .ok_or_else(|| DevError::usage("affinity observation total overflowed"))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MatrixCell {
+    n: i64,
+    k: i64,
+    production: ValueWork,
+    reference: ValueWork,
+}
+
+fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevError> {
+    Ok(ValueWork {
+        input_admission_nodes: integer_field(records, &format!("{tier}-input-admission-nodes"))?,
+        raw_result_admission_nodes: integer_field(
+            records,
+            &format!("{tier}-raw-result-admission-nodes"),
+        )?,
+        constructor_child_visits: integer_field(
+            records,
+            &format!("{tier}-constructor-child-visits"),
+        )?,
+        internal_guard_descendant_visits: integer_field(
+            records,
+            &format!("{tier}-guard-descendants"),
+        )?,
+        classification_decisions: integer_field(
+            records,
+            &format!("{tier}-classification-decisions"),
+        )?,
+    })
+}
+
+fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
+    require(
+        matrix.len() == 9,
+        "forwarding matrix must contain all nine pairs",
+    )?;
+    for reference in [false, true] {
+        let select = |n, k| -> Result<&ValueWork, DevError> {
+            let mut entries = matrix.iter().filter(|entry| entry.n == n && entry.k == k);
+            let entry = entries
+                .next()
+                .ok_or_else(|| DevError::usage("forwarding pair is absent"))?;
+            require(entries.next().is_none(), "forwarding pair is duplicated")?;
+            Ok(if reference {
+                &entry.reference
+            } else {
+                &entry.production
+            })
+        };
+        for n in [1, 256, 4096] {
+            for k in [1, 64, 1024] {
+                let work = select(n, k)?;
+                require(
+                    work.input_admission_nodes > n as u64,
+                    "input admission observation omitted list nodes",
+                )?;
+                require(
+                    work.input_admission_nodes == select(n, 1)?.input_admission_nodes,
+                    "input admission multiplied with call count",
+                )?;
+                require(
+                    work.internal_guard_descendant_visits == 0,
+                    "internal affinity guard rescanned descendants",
+                )?;
+                require(
+                    work.classification_decisions == select(1, k)?.classification_decisions,
+                    "classification decisions grew with aggregate size",
+                )?;
+                let left = work.visits()?.checked_add(select(1, 1)?.visits()?);
+                let right = select(1, k)?.visits()?.checked_add(select(n, 1)?.visits()?);
+                require(
+                    left.is_some() && left == right,
+                    "aggregate admission or equivalent validation multiplied by calls",
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
     schema: String,
     status: String,
@@ -122,7 +222,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-1".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-2".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -224,7 +324,7 @@ impl Context {
         args: &[&str],
         expected_success: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
-        let timeout = self.bound()?;
+        let timeout = self.bound()?.min(Duration::from_secs(120));
         let mut command = vec![self.binary.display().to_string()];
         if let Some(project) = project {
             command.extend(["--project".to_owned(), project.display().to_string()]);
@@ -400,7 +500,7 @@ impl Context {
             integer_field(&records, "production-tail-transfers")?,
             integer_field(&records, "reference-tail-transfers")?,
         );
-        self.receipt.outcomes.insert(format!("run-{}-{target}",self.receipt.commands.len()), serde_json::json!({"expected":expected,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(&records,"production-instructions")?,"reference_expressions":integer_field(&records,"reference-expressions")?,"authority":before}));
+        self.receipt.outcomes.insert(format!("run-{}-{target}",self.receipt.commands.len()), serde_json::json!({"expected":expected,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(&records,"production-instructions")?,"reference_expressions":integer_field(&records,"reference-expressions")?,"production_value_work":value_work(&records,"production")?,"reference_value_work":value_work(&records,"reference")?,"production_allocated_bytes":integer_field(&records,"production-allocated-bytes")?,"production_allocation_charges":integer_field(&records,"production-allocation-charges")?,"reference_allocated_bytes":integer_field(&records,"reference-allocated-bytes")?,"reference_allocation_charges":integer_field(&records,"reference-allocation-charges")?,"production_collection_items":integer_field(&records,"production-collection-items")?,"reference_collection_items":integer_field(&records,"reference-collection-items")?,"authority":before}));
         Ok((production, reference))
     }
 
@@ -489,6 +589,49 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             .any(|record| record.operation == "execution.tail"),
         "discovery omitted pure-tail guarantee",
     )?;
+    require(
+        field(&discovery, "execution.values", "classes")?
+            == "affine-free,direct-capability,affine-nominal-variant"
+            && field(&discovery, "execution.values", "internal-eligibility")?
+                == "constant-per-local-and-argument",
+        "discovery omitted the checked-value guarantee",
+    )?;
+    let mut discovered = 0;
+    for tier in ["production", "reference"] {
+        for suffix in [
+            "input-admission-nodes",
+            "raw-result-admission-nodes",
+            "constructor-child-visits",
+            "guard-descendants",
+            "classification-decisions",
+            "allocated-bytes",
+            "allocation-charges",
+            "collection-items",
+        ] {
+            let name = format!("{tier}-{suffix}");
+            let records = discovery
+                .iter()
+                .filter(|record| {
+                    record.operation == "execution.observation"
+                        && record
+                            .fields
+                            .iter()
+                            .any(|field| field.name == "field" && field.value == name)
+                })
+                .collect::<Vec<_>>();
+            require(
+                records.len() == 1
+                    && record_field(records[0], "permission")? == "none"
+                    && !record_field(records[0], "unit")?.is_empty(),
+                "discovery omitted or duplicated a bounded value-work observation",
+            )?;
+            discovered += 1;
+        }
+    }
+    context.receipt.outcomes.insert(
+        "checked-value-discovery".to_owned(),
+        serde_json::json!({"observation_fields":discovered, "classification":"fresh passed"}),
+    );
     let records = context.cli(None, &["package", "builtin", "inspect"], true)?;
     let mut standard = Package {
         path: PathBuf::new(),
@@ -512,7 +655,14 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         true,
     )?;
-    for name in ["add", "subtract", "divide", "i64-equal", "list-fold-left"] {
+    for name in [
+        "add",
+        "subtract",
+        "divide",
+        "i64-equal",
+        "list-fold-left",
+        "list-length",
+    ] {
         let records = context.cli(
             None,
             &["package", "builtin", "query", "owners", "--name", name],
@@ -599,8 +749,46 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&library.path)?;
     fs::remove_file(&library.container)?;
     fs::remove_file(&standard.container)?;
+    for target in ["forward", "forward-generic"] {
+        let mut matrix = Vec::new();
+        for n in [1_i64, 256, 4096] {
+            for k in [1_i64, 64, 1024] {
+                let arguments =
+                    serde_json::to_string(&serde_json::json!([k, (1..=n).collect::<Vec<_>>()]))?;
+                context.run(&consumer, target, &arguments, &n.to_string())?;
+                let key = format!("run-{}-{target}", context.receipt.commands.len());
+                let outcome = &context.receipt.outcomes[&key];
+                matrix.push(MatrixCell {
+                    n,
+                    k,
+                    production: serde_json::from_value(outcome["production_value_work"].clone())?,
+                    reference: serde_json::from_value(outcome["reference_value_work"].clone())?,
+                });
+            }
+        }
+        verify_matrix(&matrix)?;
+        context.receipt.outcomes.insert(
+            format!("checked-value-{target}-matrix"),
+            serde_json::to_value(matrix)?,
+        );
+    }
+    for n in [256_i64, 1024, 4096] {
+        for sample in 0..4 {
+            let arguments = serde_json::to_string(&vec![(1..=n).collect::<Vec<_>>()])?;
+            context.run(&consumer, "sum", &arguments, &(n * (n + 1) / 2).to_string())?;
+            let key = format!("run-{}-sum", context.receipt.commands.len());
+            let outcome = context
+                .receipt
+                .outcomes
+                .get_mut(&key)
+                .ok_or_else(|| DevError::corrupt("measurement outcome is absent"))?;
+            outcome["sample"] = serde_json::json!(sample);
+            outcome["warmup"] = serde_json::json!(sample == 0);
+            outcome["items"] = serde_json::json!(n);
+        }
+    }
     let mut peak = None;
-    for count in [0_i64, 1, 256, 4096, 8192] {
+    for count in [0_i64, 1, 256, 1024, 4096, 8192] {
         let arguments = serde_json::to_string(&vec![(1..=count).collect::<Vec<_>>()])?;
         let observed = context.run(
             &consumer,
@@ -1308,7 +1496,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-1"
+        receipt.schema == "lkjscript-pure-tail-acceptance-2"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1341,7 +1529,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     for expected in [
-        "0", "1", "32896", "8390656", "33558528", "true", "false", "-17", "5", "-5",
+        "0", "1", "32896", "524800", "8390656", "33558528", "true", "false", "-17", "5", "-5",
     ] {
         require(
             receipt.outcomes.values().any(|observed| {
@@ -1355,6 +1543,34 @@ pub(crate) fn read_transferred_receipt(
             }),
             "pure-tail fixed public result or frame boundary missing",
         )?;
+    }
+    let discovery = receipt
+        .outcomes
+        .get("checked-value-discovery")
+        .ok_or_else(|| DevError::corrupt("checked-value discovery evidence missing"))?;
+    require(
+        discovery["observation_fields"] == 16 && discovery["classification"] == "fresh passed",
+        "checked-value discovery evidence missing",
+    )?;
+    for target in ["forward", "forward-generic"] {
+        let matrix = receipt
+            .outcomes
+            .get(&format!("checked-value-{target}-matrix"))
+            .ok_or_else(|| DevError::corrupt("checked-value matrix missing"))?;
+        verify_matrix(&serde_json::from_value::<Vec<MatrixCell>>(matrix.clone())?)?;
+    }
+    for n in [256, 1024, 4096] {
+        for sample in 0..4 {
+            let matches = receipt
+                .outcomes
+                .values()
+                .filter(|value| value["items"] == n && value["sample"] == sample)
+                .collect::<Vec<_>>();
+            require(
+                matches.len() == 1 && matches[0]["warmup"] == (sample == 0),
+                "bounded fold warm-up or measurement is missing or duplicated",
+            )?;
+        }
     }
     let stack = receipt
         .outcomes
@@ -1372,19 +1588,64 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("bounded-stack cases absent"))?;
     for case in cases {
         let observation = &case["observation"];
+        let admission_failure = case["failure"].is_object()
+            && matches!(
+                case["case"].as_str(),
+                Some(
+                    "input-admission-cancellation"
+                        | "deep-raw-rejection-stack-safe-disposal"
+                        | "raw-items-exact-fit-one-over"
+                )
+            );
         require(
             observation["maximum_call_depth"]
                 .as_u64()
                 .is_some_and(|peak| peak <= 8)
                 && observation["maximum_control_frames"]
                     .as_u64()
-                    .is_some_and(|peak| peak > 0)
+                    .is_some_and(|peak| peak > 0 || (admission_failure && case["host_calls"] == 0))
                 && observation["maximum_live_locals"].as_u64().is_some()
                 && observation["maximum_live_type_bindings"].as_u64().is_some()
                 && observation["live_call_frames_after"] == 0
-                && observation["live_transactions_after"] == 0,
+                && observation["live_transactions_after"] == 0
+                && observation["live_handles_after"] == 0,
             "actual control/local ownership or cleanup observation is missing",
         )?;
+    }
+    for tier in ["production", "canonical-reference"] {
+        require(
+            cases.iter().any(|case| {
+                case["tier"] == tier
+                    && case["case"] == "input-admission-cancellation"
+                    && case["failure"]["code"] == "execution_cancelled"
+                    && case["host_calls"] == 0
+                    && case["observation"]["value_work"]["input_admission_nodes"]
+                        .as_u64()
+                        .is_some_and(|nodes| nodes > 0 && nodes < 4097)
+            }),
+            "admission cancellation progress is missing",
+        )?;
+        require(
+            cases.iter().any(|case| {
+                case["tier"] == tier
+                    && case["case"] == "deep-raw-rejection-stack-safe-disposal"
+                    && case["raw_depth"] == 100_001
+                    && case["host_calls"] == 0
+                    && case["failure"].is_object()
+            }),
+            "stack-safe raw rejection is missing",
+        )?;
+        for count in [8, 9] {
+            require(
+                cases.iter().any(|case| {
+                    case["tier"] == tier
+                        && case["case"] == "raw-items-exact-fit-one-over"
+                        && case["items"] == count
+                        && case["failure"].is_object() == (count == 9)
+                }),
+                "raw collection exact-fit or one-over evidence is missing",
+            )?;
+        }
     }
     for code in [
         "normalized_call_depth",
@@ -1462,4 +1723,51 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     Ok(receipt)
+}
+
+#[cfg(test)]
+mod checked_value_tests {
+    use super::*;
+    #[test]
+    fn cost_oracle_rejects_restored_guards_and_equivalent_raw_result_readmission() {
+        let mut matrix = Vec::new();
+        for n in [1, 256, 4096] {
+            for k in [1, 64, 1024] {
+                let work = ValueWork {
+                    input_admission_nodes: n as u64 + 2,
+                    raw_result_admission_nodes: k as u64,
+                    constructor_child_visits: 0,
+                    internal_guard_descendant_visits: 0,
+                    classification_decisions: 10 * k as u64,
+                };
+                matrix.push(MatrixCell {
+                    n,
+                    k,
+                    production: work.clone(),
+                    reference: work,
+                });
+            }
+        }
+        assert!(verify_matrix(&matrix).is_ok());
+        for reference in [false, true] {
+            for replacement in [false, true] {
+                let mut corrupted = matrix.clone();
+                for entry in &mut corrupted {
+                    let work = if reference {
+                        &mut entry.reference
+                    } else {
+                        &mut entry.production
+                    };
+                    if replacement {
+                        work.raw_result_admission_nodes += (entry.n * entry.k) as u64;
+                    } else {
+                        work.internal_guard_descendant_visits = (entry.n * entry.k) as u64;
+                    }
+                }
+                assert!(verify_matrix(&corrupted).is_err());
+            }
+        }
+        matrix[0].production.input_admission_nodes = 0;
+        assert!(verify_matrix(&matrix).is_err());
+    }
 }

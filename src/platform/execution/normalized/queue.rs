@@ -526,7 +526,7 @@ impl LeaseStateCodec {
             }
         }
         Ok(Self {
-            layout: RecordIndex::variant(layout)?,
+            layout: RecordIndex::variant(program, layout)?,
             absent_case: absent_case.ok_or_else(|| {
                 queue_diagnostic(
                     "normalized_queue_lease_state_absent",
@@ -562,22 +562,29 @@ impl LeaseStateCodec {
 struct RecordIndex;
 
 impl RecordIndex {
-    fn record(index: usize) -> Result<RecordLayoutIndex, Diagnostic> {
-        u32::try_from(index).map(RecordLayoutIndex).map_err(|_| {
-            queue_diagnostic(
-                "normalized_queue_record_layout_index",
-                "queue record layout exceeds the runtime bound",
-            )
-        })
+    fn record(program: &NormalizedProgram, index: usize) -> Result<RecordLayoutIndex, Diagnostic> {
+        u32::try_from(index)
+            .map(|index| RecordLayoutIndex(index, program.value_origin))
+            .map_err(|_| {
+                queue_diagnostic(
+                    "normalized_queue_record_layout_index",
+                    "queue record layout exceeds the runtime bound",
+                )
+            })
     }
 
-    fn variant(index: usize) -> Result<VariantLayoutIndex, Diagnostic> {
-        u32::try_from(index).map(VariantLayoutIndex).map_err(|_| {
-            queue_diagnostic(
-                "normalized_queue_variant_layout_index",
-                "queue variant layout exceeds the runtime bound",
-            )
-        })
+    fn variant(
+        program: &NormalizedProgram,
+        index: usize,
+    ) -> Result<VariantLayoutIndex, Diagnostic> {
+        u32::try_from(index)
+            .map(|index| VariantLayoutIndex(index, program.value_origin))
+            .map_err(|_| {
+                queue_diagnostic(
+                    "normalized_queue_variant_layout_index",
+                    "queue variant layout exceeds the runtime bound",
+                )
+            })
     }
 }
 
@@ -708,7 +715,7 @@ impl<T: Copy> RecordCodec<T> {
             .collect();
         Self::prepare(
             program,
-            Some(RecordIndex::record(layout)?),
+            Some(RecordIndex::record(program, layout)?),
             fields,
             expected,
             label,

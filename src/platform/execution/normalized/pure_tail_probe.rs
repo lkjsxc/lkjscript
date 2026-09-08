@@ -85,13 +85,13 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         let control = ExecutionControl::uncancelled();
         let arguments = vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("cancelled"))];
         let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() })
-            .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index)), arguments, Some(resident.deployment().capabilities()), &control);
+            .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
         let observation = sink.into_inner().map_err(|_| failure("transaction observation poisoned"))?.ok_or_else(|| failure("transaction observation missing"))?;
         require(error.code == "execution_cancelled" && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
         let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing(&recovery_sink, &CoreNormalizedHost)
-            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index)), vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("after-cancel"))], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
+            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("after-cancel"))], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
         require(recovery.0 == NormalizedValue::I64(33_558_528) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
         Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_value":33_558_528,"host_calls":host.calls.load(Ordering::Relaxed),"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
@@ -171,7 +171,26 @@ fn invocation(
     policy: NormalizedRunPolicy,
     cancel_after: u64,
 ) -> Result<(Result<NormalizedValue, ExecutionError>, Value), Diagnostic> {
-    let control = ExecutionControl::uncancelled();
+    invocation_control(
+        prepared,
+        reference,
+        target,
+        arguments,
+        policy,
+        cancel_after,
+        &ExecutionControl::uncancelled(),
+    )
+}
+
+fn invocation_control(
+    prepared: &PreparedApplication,
+    reference: bool,
+    target: &str,
+    arguments: Vec<NormalizedValue>,
+    policy: NormalizedRunPolicy,
+    cancel_after: u64,
+    control: &ExecutionControl,
+) -> Result<(Result<NormalizedValue, ExecutionError>, Value), Diagnostic> {
     let host = ProgressHost {
         calls: AtomicU64::new(0),
         cancel_after,
@@ -185,7 +204,7 @@ fn invocation(
             policy,
         )
         .observing(&sink, &host)
-        .invoke_root_target(&name, arguments, None, &control);
+        .invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()
             .map_err(|_| failure("reference observation poisoned"))?
@@ -195,7 +214,8 @@ fn invocation(
                 && observed.live_control_frames_after == 0
                 && observed.live_local_scopes_after == 0
                 && observed.live_type_scopes_after == 0
-                && observed.live_transactions_after == 0,
+                && observed.live_transactions_after == 0
+                && observed.live_handles_after == 0,
             "reference retained owned execution state",
         )?;
         (result.map(|(value, _)| value), json!(observed))
@@ -203,7 +223,7 @@ fn invocation(
         let sink = Mutex::new(None);
         let result = NormalizedVm::new(&prepared.program, policy)
             .observing(&sink, &host)
-            .invoke_root_target(&name, arguments, None, &control);
+            .invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()
             .map_err(|_| failure("production observation poisoned"))?
@@ -213,7 +233,8 @@ fn invocation(
                 && observed.live_locals_after == 0
                 && observed.live_type_bindings_after == 0
                 && observed.live_operands_after == 0
-                && observed.live_transactions_after == 0,
+                && observed.live_transactions_after == 0
+                && observed.live_handles_after == 0,
             "production retained owned execution state",
         )?;
         (result.map(|(value, _)| value), json!(observed))
@@ -231,6 +252,97 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
     };
     let mut cases = Vec::new();
     for reference in [false, true] {
+        let control = ExecutionControl::cancel_after_checks(37);
+        let (result, mut observed) = invocation_control(
+            &prepared,
+            reference,
+            "sum",
+            vec![NormalizedValue::List(Arc::new(vec![
+                NormalizedValue::I64(1);
+                4096
+            ]))],
+            policy,
+            u64::MAX,
+            &control,
+        )?;
+        let error = result
+            .err()
+            .ok_or_else(|| failure("admission cancellation escaped"))?;
+        let nodes = observed["observation"]["value_work"]["input_admission_nodes"]
+            .as_u64()
+            .unwrap_or(0);
+        require(
+            error.code == "execution_cancelled"
+                && nodes > 0
+                && nodes < 4097
+                && observed["host_calls"] == 0,
+            "admission cancellation did not stop before callbacks",
+        )?;
+        observed["case"] = json!("input-admission-cancellation");
+        observed["failure"] = json!(error);
+        cases.push(observed);
+        let mut raw = NormalizedValue::I64(1);
+        for _ in 0..100_000 {
+            raw = NormalizedValue::Option(Some(Box::new(raw)));
+        }
+        let (result, mut observed) = invocation(
+            &prepared,
+            reference,
+            "sum",
+            vec![NormalizedValue::List(Arc::new(vec![raw]))],
+            policy,
+            u64::MAX,
+        )?;
+        let error = result
+            .err()
+            .ok_or_else(|| failure("deep malformed ingress escaped"))?;
+        require(
+            error.code
+                == if reference {
+                    "normalized_reference_value_admission"
+                } else {
+                    "normalized_value_admission"
+                },
+            "deep ingress has wrong admission failure",
+        )?;
+        require(
+            observed["host_calls"] == 0,
+            "malformed ingress called a host",
+        )?;
+        observed["case"] = json!("deep-raw-rejection-stack-safe-disposal");
+        observed["raw_depth"] = json!(100_001);
+        observed["failure"] = json!(error);
+        cases.push(observed);
+        for (count, success) in [(8, true), (9, false)] {
+            let (result, mut observed) = invocation(
+                &prepared,
+                reference,
+                "sum",
+                vec![NormalizedValue::List(Arc::new(vec![
+                    NormalizedValue::I64(1);
+                    count
+                ]))],
+                NormalizedRunPolicy {
+                    maximum_collection_items: 8,
+                    ..policy
+                },
+                u64::MAX,
+            )?;
+            require(
+                result.is_ok() == success,
+                "raw aggregate item admission is off by one",
+            )?;
+            if let Err(error) = result {
+                require(
+                    error.class == crate::platform::execution::ExecutionFailureClass::Resource,
+                    "raw item exhaustion has wrong class",
+                )?;
+                observed["failure"] = json!(error);
+            }
+            observed["case"] = json!("raw-items-exact-fit-one-over");
+            observed["items"] = json!(count);
+            cases.push(observed);
+        }
         let mut fold_peaks = None;
         for n in [256_i64, 4096, 8192] {
             let values = (1..=n).map(NormalizedValue::I64).collect::<Vec<_>>();

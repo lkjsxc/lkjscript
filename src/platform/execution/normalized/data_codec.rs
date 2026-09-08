@@ -507,7 +507,7 @@ fn record_layout(
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()
-                .map(super::value::RecordLayoutIndex)
+                .map(|index| super::value::RecordLayoutIndex(index, program.value_origin))
                 .map(|index| (index, layout))
         })
 }
@@ -524,7 +524,7 @@ fn variant_layout(
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()
-                .map(super::value::VariantLayoutIndex)
+                .map(|index| super::value::VariantLayoutIndex(index, program.value_origin))
                 .map(|index| (index, layout))
         })
 }

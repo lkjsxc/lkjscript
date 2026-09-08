@@ -361,5 +361,34 @@ pub(super) fn consumer(standard: &BTreeMap<String, String>, library: &str) -> St
         request.function(name, "i64", &body, &[]);
         request.target(name, "i64", &[]);
     }
+    let condition = request.test_zero(standard, "$forward_n");
+    let items = request.local("$forward_items");
+    let length = request.call(&standard["list-length"], &["i64"], &[items]);
+    let next = request.decrement(standard, "$forward_n");
+    let items = request.local("$forward_items");
+    let recurse = request.call("$forward", &[], &[next, items]);
+    let body = request.choose(&condition, &length, &recurse);
+    request.function(
+        "forward",
+        "i64",
+        &body,
+        &[("n", "i64"), ("items", "@items")],
+    );
+    request.target("forward", "i64", &["i64", "@items"]);
+    let callee = request.function_value(library);
+    request.types(&callee, &["@items", "bool"]);
+    let n = request.local("$forward-generic_n");
+    let items = request.local("$forward-generic_items");
+    let flag = request.expression("bool", "value=true");
+    let invocation = request.expression("invoke", &format!("function={callee}"));
+    request.arguments(&invocation, &[n, items, flag]);
+    let body = request.call(&standard["list-length"], &["i64"], &[invocation]);
+    request.function(
+        "forward-generic",
+        "i64",
+        &body,
+        &[("n", "i64"), ("items", "@items")],
+    );
+    request.target("forward-generic", "i64", &["i64", "@items"]);
     request.text
 }

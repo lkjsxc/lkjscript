@@ -468,6 +468,17 @@ the existing budgets; task bodies and pending non-tail work retain ordinary call
 Fuel, allocation, cancellation, and argument order remain binding. Failed execution emits a
 diagnostic without a successful value record or semantic `HEAD` change.
 
+The same record exposes `production-` and `reference-` observations with suffixes
+`input-admission-nodes`, `raw-result-admission-nodes`, `constructor-child-visits`,
+`guard-descendants`, `classification-decisions`, `allocated-bytes`, `allocation-charges`, and
+`collection-items`.
+Discovery lists the finite fields and their units. Admission counts include rejected-boundary
+progress in first-party failure receipts; they do not create a successful public result. Internal
+eligibility checks use construction-controlled, preparation-bound classifications and never walk
+admitted descendants. These observations do not assert constant total call cost: exact generic
+types, effects, live capability authority and accounting still apply. Normative counting coverage,
+independent fault sensitivity and the forwarding matrix are owned by the verification specification.
+
 The argument adapter accepts one strict bounded JSON array and converts it to typed runtime values.
 Run selects an exact root target by current public name, requires command runner kind and a pure
 entry, executes once in the normalized VM and once in the canonical reference interpreter, and

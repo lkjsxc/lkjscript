@@ -1536,6 +1536,7 @@ impl NormalizedCapabilityTransaction for UnitTransaction {
 
 #[derive(Default)]
 struct TransactionStats {
+    malformed_result: std::sync::atomic::AtomicBool,
     begins: AtomicU64,
     calls: AtomicU64,
     commits: AtomicU64,
@@ -1579,7 +1580,11 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
             .lock()
             .expect("tracking call policy lock")
             .push(policy.clone());
-        Ok(NormalizedValue::Unit)
+        if self.stats.malformed_result.load(Ordering::Relaxed) {
+            Ok(NormalizedValue::List(Arc::new(Vec::new())))
+        } else {
+            Ok(NormalizedValue::Unit)
+        }
     }
 
     fn begin_transaction(
@@ -3059,8 +3064,8 @@ fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     assert_eq!(receipt.result_json, b"null");
     assert_eq!(
         receipt.reference.canonical_owner_reads,
-        snapshot.owners.len() as u64 + 7,
-        "one independent layout inventory, followed by seven exact execution owner reads"
+        snapshot.owners.len() as u64 + 8,
+        "one independent layout inventory, one invocation admission read, and seven execution owner reads"
     );
     assert!(receipt.reference.canonical_map_pages_read > 0);
     assert!(
@@ -3170,8 +3175,13 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(pure_observation.capability_calls, 0);
 
     let (external, external_observation) = vm
-        .invoke(
-            declaration_named(&snapshot, "identity_external"),
+        .invoke_entry(
+            super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                program
+                    .function(declaration_named(&snapshot, "identity_external"))
+                    .expect("external index"),
+                Arc::from([program.functions[0].result]),
+            ),
             Vec::new(),
             None,
             &control,
@@ -3200,7 +3210,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph8_dense_bytecode_4");
+    assert_eq!(observation.production_tier, "graph8_dense_bytecode_5");
 }
 
 #[test]
@@ -3496,7 +3506,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph8_reference_records_3"
+        "graph8_reference_records_4"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -3638,7 +3648,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
-                    function: super::value::FunctionIndex(u32::MAX),
+                    function: super::value::FunctionIndex(u32::MAX, program.value_origin),
                     type_arguments: Arc::from([]),
                     arguments: 0,
                 },
@@ -3766,6 +3776,7 @@ fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
         let canonical_add = super::value::FunctionIndex(
             u32::try_from(schema.functions.binary_search(&add).expect("canonical add"))
                 .expect("bounded index"),
+            program.value_origin,
         );
         let reference = NormalizedReferenceInterpreter::from_reader(&snapshot, &program, policy)
             .invoke_instantiated(
@@ -3779,6 +3790,42 @@ fn pure_tail_preparation_executes_the_unchanged_maintained_standard_artifact() {
         assert_eq!(production.0, reference.0);
         assert!(production.1.maximum_call_depth <= 8 && reference.1.maximum_call_depth <= 8);
         assert!(production.1.tail_transfers >= n as u64 && reference.1.tail_transfers >= n as u64);
+        assert_eq!(production.1.value_work.internal_guard_descendant_visits, 0);
+        assert_eq!(reference.1.value_work.internal_guard_descendant_visits, 0);
+        if n == 256 {
+            let forced = super::value_oracle::force_rescan(|| {
+                NormalizedVm::new(&program, policy).invoke_entry(
+                    super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                        program.function(fold).expect("fold"),
+                        Arc::from([i64_type, i64_type]),
+                    ),
+                    arguments(program.function(add).expect("add")),
+                    None,
+                    &ExecutionControl::uncancelled(),
+                )
+            })
+            .expect("forced rescan keeps arithmetic");
+            let forced_reference = super::value_oracle::force_rescan(|| {
+                NormalizedReferenceInterpreter::from_reader(&snapshot, &program, policy)
+                    .invoke_instantiated(
+                        fold,
+                        &[i64_type, i64_type],
+                        arguments(canonical_add),
+                        &ExecutionControl::uncancelled(),
+                    )
+            })
+            .expect("independent forced rescan keeps arithmetic");
+            assert_eq!(forced.0, production.0);
+            assert_eq!(forced_reference.0, reference.0);
+            assert!(forced.1.value_work.internal_guard_descendant_visits > 256 * 256);
+            assert!(
+                forced_reference
+                    .1
+                    .value_work
+                    .internal_guard_descendant_visits
+                    > 256 * 256
+            );
+        }
     }
     assert_eq!(
         std::fs::read(root.join("generated/standard.lkja")).expect("artifact after"),
@@ -3812,7 +3859,10 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
         .expect("transaction instruction");
     let mut instructions = code.instructions[..=begin].to_vec();
     instructions.push(NormalizedInstruction::TailCall {
-        function: super::value::FunctionIndex(u32::try_from(callee).expect("callee index")),
+        function: super::value::FunctionIndex(
+            u32::try_from(callee).expect("callee index"),
+            program.value_origin,
+        ),
         type_arguments: Arc::from([]),
         arguments: 0,
     });
@@ -4163,13 +4213,25 @@ fn declaration_rename_and_move_do_not_change_dense_runtime_dispatch() {
     callee_record.module = destination;
     let after = prepare_snapshot(&moved);
 
-    assert_eq!(before.functions, after.functions);
+    // A fresh preparation owns a distinct process identity. Erase only that neutral
+    // debug token when comparing dense instruction meaning; runtime checks retain it.
+    let neutral = |origin: super::value::ValueOrigin, text: String| {
+        text.replace(&format!("{origin:?}"), "<preparation>")
+    };
+    assert_ne!(before.value_origin, after.value_origin);
+    assert_eq!(
+        neutral(before.value_origin, format!("{:?}", before.functions)),
+        neutral(after.value_origin, format!("{:?}", after.functions))
+    );
     assert_eq!(before.records, after.records);
     assert_eq!(before.variants, after.variants);
     assert_eq!(before.requirements, after.requirements);
     assert_eq!(before.operations, after.operations);
     assert_eq!(before.components, after.components);
-    assert_eq!(before.ports, after.ports);
+    assert_eq!(
+        neutral(before.value_origin, format!("{:?}", before.ports)),
+        neutral(after.value_origin, format!("{:?}", after.ports))
+    );
 
     let control = ExecutionControl::uncancelled();
     let target = Name::new("command").unwrap();
@@ -4182,4 +4244,121 @@ fn declaration_rename_and_move_do_not_change_dense_runtime_dispatch() {
         .invoke_root_target(&target, Vec::new(), Some(&after_capabilities), &control)
         .expect("renamed and moved dense target");
     assert_eq!(before_result, after_result);
+}
+
+#[test]
+fn raw_adapter_result_rejection_reports_prior_visibility_and_stops_next_effect() {
+    let mut snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
+    for record in snapshot.owners.values_mut() {
+        if let OwnerRecord::Operation(operation) = record {
+            operation.external_visibility = ExternalVisibility::Possible;
+        }
+    }
+    let caller = declaration_named(&snapshot, "caller");
+    let call = snapshot
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Expression(id), OwnerRecord::Expression(record))
+                if matches!(record.operation, ExpressionOperation::CapabilityCall { .. }) =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let next_call = ExpressionId::migrate(b"checked-value-adapter-downstream", 0);
+    let mut next_record = snapshot.owners[&OwnerKey::Expression(call)].clone();
+    let OwnerRecord::Expression(record) = &mut next_record else {
+        panic!("call expression")
+    };
+    record.id = next_call;
+    snapshot
+        .owners
+        .insert(OwnerKey::Expression(next_call), next_record);
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    let root = match &snapshot.owners[&OwnerKey::Declaration(caller.declaration)] {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            crate::platform::kernel::DeclarationPayload::Function(function) => function.body,
+            _ => panic!("function"),
+        },
+        _ => panic!("declaration"),
+    };
+    let OwnerRecord::Expression(record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(root))
+        .unwrap()
+    else {
+        panic!("expression")
+    };
+    let ExpressionOperation::Sequence { items } = &mut record.operation else {
+        panic!("root sequence")
+    };
+    let position = items.iter().position(|item| *item == call).unwrap();
+    items.insert(position + 1, next_call);
+    let program = prepare_snapshot(&snapshot);
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        let (capabilities, stats) = bind_tracking_capability(&program, 4, false);
+        stats.malformed_result.store(true, Ordering::Relaxed);
+        let (error, work) = if reference {
+            let observer = Mutex::new(None);
+            let error =
+                NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                    .observing(&observer, &super::reference::CoreNormalizedReferenceHost)
+                    .invoke(caller, Vec::new(), Some(&capabilities), &control)
+                    .unwrap_err();
+            let observation = observer.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_control_frames_after
+                    + observation.live_local_scopes_after
+                    + observation.live_type_scopes_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (error, observation.value_work)
+        } else {
+            let observer = Mutex::new(None);
+            let error = NormalizedVm::new(&program, Default::default())
+                .observing(&observer, &super::vm::CoreNormalizedHost)
+                .invoke(caller, Vec::new(), Some(&capabilities), &control)
+                .unwrap_err();
+            let observation = observer.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_locals_after
+                    + observation.live_type_bindings_after
+                    + observation.live_operands_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (error, observation.value_work)
+        };
+        assert_eq!(error.class, ExecutionFailureClass::PossibleVisibility);
+        assert!(error.possibly_visible);
+        assert_eq!(work.raw_result_admission_nodes, 1);
+        assert_eq!(stats.call_policies.lock().unwrap().len(), 1);
+        stats.malformed_result.store(false, Ordering::Relaxed);
+        if reference {
+            NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                .invoke(caller, Vec::new(), Some(&capabilities), &control)
+                .unwrap();
+        } else {
+            NormalizedVm::new(&program, Default::default())
+                .invoke(caller, Vec::new(), Some(&capabilities), &control)
+                .unwrap();
+        }
+        assert_eq!(stats.call_policies.lock().unwrap().len(), 3);
+        println!(
+            "{}",
+            serde_json::json!({"case":"raw-adapter-result", "reference": reference, "prior_effects": 1, "downstream_calls": 0, "cleanup_owned": 0, "healthy_reuse_calls": 2, "failure": error, "work": work})
+        );
+    }
 }

@@ -535,6 +535,17 @@ and configured count/byte exhaustion before execution.
 `NormalizedProgram` maps exact semantic owners and compiler operands to dense process-local
 indexes. Compiler local-load operands preserve unrestricted, borrow, and consume. These indexes and
 runtime handles are replaceable and never become semantic identity.
+VM and canonical reference locals and operands contain private checked values bound to the exact
+preparation. Each evaluator independently admits raw invocation, decoded, host and adapter data
+with bounded iterative shape/type/containment and live-authority checks. Production nominal
+affinity derives once from strict layouts; the reference derives its own table from canonical
+owners. An admitted ordinary aggregate proves all its descendants affine-free, so immutable
+sharing, ordinary copies and projections preserve proof without a subtree metadata cache. Direct
+handles and affine nominal variants retain distinct ownership; even an empty affine case moves.
+Core intrinsics combine checked children or return a checked projection. Arbitrary raw host
+results cross admission again. Raw runtime indexes carry a neutral, unpersisted preparation origin;
+that origin alone cannot certify a value. Failure destroys unadmitted owned data iteratively and
+releases invocation-owned resources; an adapter effect that already occurred remains visible.
 Pure commands and graph tests execute once in bytecode and once in the independently implemented
 reference interpreter with shared explicit limits; disagreement is failure. Live effects are not
 duplicated for differential acceptance.

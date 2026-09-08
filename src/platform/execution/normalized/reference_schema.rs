@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
+    pub(super) affine_variants: Vec<bool>,
     pub functions: Vec<DeclarationReference>,
     pub records: Vec<NormalizedRecordLayout>,
     pub variants: Vec<NormalizedVariantLayout>,
@@ -165,6 +166,22 @@ impl NormalizedReferenceSchema {
         schema.functions = functions.into_iter().collect();
         schema.records = records.into_values().collect();
         schema.variants = variants.into_values().collect();
+        schema.affine_variants = schema
+            .variants
+            .iter()
+            .map(|variant| {
+                let mut affine = false;
+                for case in variant.cases.iter() {
+                    if let Some(payload) = case.payload {
+                        let ty = schema.types.get(&payload).ok_or_else(|| {
+                            inventory_error("missing canonical affinity payload type")
+                        })?;
+                        affine |= matches!(ty.form, TypeForm::CapabilityResource { .. });
+                    }
+                }
+                Ok(affine)
+            })
+            .collect::<Result<_, ExecutionError>>()?;
         Ok(schema)
     }
 
@@ -174,10 +191,20 @@ impl NormalizedReferenceSchema {
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         depth: usize,
     ) -> Option<TypeObjectDigest> {
+        self.instantiated_identity(digest, substitutions, depth)
+            .filter(|resolved| self.types.contains_key(resolved))
+    }
+
+    pub(super) fn instantiated_identity(
+        &self,
+        digest: TypeObjectDigest,
+        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+    ) -> Option<TypeObjectDigest> {
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return None;
         }
-        let descend = |ty| self.substitute_type(ty, substitutions, depth.saturating_add(1));
+        let descend = |ty| self.instantiated_identity(ty, substitutions, depth.saturating_add(1));
         let form = match &self.types.get(&digest)?.form {
             TypeForm::TypeParameter { parameter } => {
                 let resolved = substitutions.get(parameter)?;
@@ -222,11 +249,15 @@ impl NormalizedReferenceSchema {
             form => form.clone(),
         };
         let (resolved, _) = encode_type_object(&TypeObject::new(form).ok()?).ok()?;
-        self.types.contains_key(&resolved).then_some(resolved)
+        Some(resolved)
     }
 }
 
 impl NormalizedValueSchema for NormalizedReferenceSchema {
+    fn value_origin(&self) -> super::value::ValueOrigin {
+        Default::default()
+    }
+
     fn records(&self) -> &[NormalizedRecordLayout] {
         &self.records
     }

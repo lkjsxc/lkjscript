@@ -644,12 +644,15 @@ impl VariantCodec {
             ));
         }
         Ok(Self {
-            layout: VariantLayoutIndex(u32::try_from(index).map_err(|_| {
-                data_diagnostic(
-                    "normalized_data_variant_index",
-                    "data variant layout exceeds the runtime representation",
-                )
-            })?),
+            layout: VariantLayoutIndex(
+                u32::try_from(index).map_err(|_| {
+                    data_diagnostic(
+                        "normalized_data_variant_index",
+                        "data variant layout exceeds the runtime representation",
+                    )
+                })?,
+                program.value_origin,
+            ),
             cases,
         })
     }
@@ -841,12 +844,15 @@ impl RecordCodec {
             ));
         }
         Ok(Self {
-            layout: RecordLayoutIndex(u32::try_from(index).map_err(|_| {
-                data_diagnostic(
-                    "normalized_data_record_index",
-                    "data record layout exceeds the runtime representation",
-                )
-            })?),
+            layout: RecordLayoutIndex(
+                u32::try_from(index).map_err(|_| {
+                    data_diagnostic(
+                        "normalized_data_record_index",
+                        "data record layout exceeds the runtime representation",
+                    )
+                })?,
+                program.value_origin,
+            ),
             fields: layout
                 .fields
                 .iter()

@@ -70,6 +70,7 @@ impl Default for RunPolicy {
 pub struct ExecutionControl {
     cancelled: Arc<AtomicBool>,
     deadline: Option<Instant>,
+    remaining_checks: Option<Arc<std::sync::atomic::AtomicU64>>,
 }
 
 impl ExecutionControl {
@@ -77,6 +78,7 @@ impl ExecutionControl {
         Self {
             cancelled: Arc::new(AtomicBool::new(false)),
             deadline: None,
+            remaining_checks: None,
         }
     }
 
@@ -84,6 +86,7 @@ impl ExecutionControl {
         Self {
             cancelled: Arc::new(AtomicBool::new(false)),
             deadline: Some(deadline),
+            remaining_checks: None,
         }
     }
 
@@ -99,7 +102,24 @@ impl ExecutionControl {
         self.deadline
     }
 
+    /// Contributor-only deterministic cancellation. Public controls never install this probe.
+    pub(crate) fn cancel_after_checks(count: u64) -> Self {
+        Self {
+            remaining_checks: Some(Arc::new(std::sync::atomic::AtomicU64::new(count))),
+            ..Self::uncancelled()
+        }
+    }
+
     pub fn check(&self) -> Result<(), ExecutionError> {
+        if let Some(remaining) = &self.remaining_checks
+            && remaining
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                    count.checked_sub(1)
+                })
+                .is_err()
+        {
+            self.cancel();
+        }
         if self.is_cancelled() {
             return Err(ExecutionError::new(
                 ExecutionFailureClass::Cancelled,

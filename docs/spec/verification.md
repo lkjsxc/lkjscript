@@ -48,6 +48,54 @@ invocation is limited to 900 wall seconds and 1,073,741,824 owned file bytes, ex
 receipts retain elapsed time, sampled RSS, work units, peaks, exact inputs, and cleanup. These
 prove constant control space for eligible tail chains, not constant heap or throughput.
 
+Checked-value execution extends this same owner and receipt to the complete forwarding matrix:
+runtime list length N in {1, 256, 4096}, countdown K in {1, 64, 1024}, direct calls and named generic
+invocation through a separately authored transported library whose producer is removed. Each
+result is independently N. Input admission depends on N and is equal across K; internal affinity
+guard descendant visits are exactly zero; checked-root classification decisions at fixed K are
+equal across N. With W equal to input admission nodes, raw-result admission nodes, constructor
+child visits and internal guard descendant visits, require
+`W(N,K)-W(1,K) = W(N,1)-W(1,1)` in each tier and each matrix. Moving an aggregate scan to result
+admission, type checking or another equivalent guard cannot evade this total. A retained
+instrumented predecessor must exhibit positive N-by-K descendant growth. Safe test-only restored
+scans preserve arithmetic but fail this oracle; a deliberately corrupted production classification
+must disagree with the independent structural oracle and canonical reference.
+
+Observation units are evaluator-local and cumulative for one invocation:
+
+| Observation suffix | Unit and coverage |
+| --- | --- |
+| `input-admission-nodes` | Raw value nodes inspected before installing invocation arguments, including the root and the node that rejects; shared child occurrences count separately. |
+| `raw-result-admission-nodes` | Raw host, adapter or decoded result nodes inspected before use; declared result types and effect visibility checks grant no certificate. |
+| `constructor-child-visits` | Immediate checked children combined by aggregate constructors and additions; existing admitted siblings and projections inherit their proof. |
+| `guard-descendants` | Descendant visits to rediscover internal eligibility, including equivalent replacement validation paths; required to be zero in ordinary execution. |
+| `classification-decisions` | Checked-root eligibility queries at local, call and constructor guards; raw-node classification is covered by admission nodes instead. Constant proof propagation is not a descendant visit. |
+| `allocated-bytes` | Cumulative evaluator allocation accounting in bytes, including checked-slot metadata, admission worklists, raw substitution bindings and the owning nominal-class inventory; no refunds. |
+| `allocation-charges` | Successful nonzero byte-allocation charges, including admission metadata; zero-byte requests and refused charges do not increment it. This counts the evaluator's accounting operations, not global allocator calls. |
+| `collection-items` | Cumulative collection element/field/entry allocation or admission charges; separate from bytes, instructions and reference expressions. |
+
+The counters saturate at u64 maximum and never grant work or relax an execution limit. New proof
+storage in values/locals and temporary admission metadata is charged before installation or
+growth. The prepared nominal-class inventory is conservatively charged to each invocation; the
+reference additionally charges its invocation schema binding. Reference accounting and expression
+units are derived separately. Serialization, copying and algorithmic work retain their existing
+bounds and are not claimed eliminated. A collection charge is not telemetry from a global heap
+allocator. First-party fold samples retain these units, one warm-up and three measurements for
+256, 1,024 and 4,096 items, wall seconds and sampled peak RSS bytes, with a 120-second bound per
+measurement. A timeout is retained as a failure.
+
+Source-bound fixtures independently cover scalar, nominal/structural record, ordinary/affine sum,
+option, list and internal map shapes, nested/shared children, foreign program/layout/callback
+identities, asserted ordinary classification, and a last-element live handle or empty affine sum.
+Both evaluators must reject raw violations before the next graph callback or capability. A small
+bounded test-only walker ignores classification metadata; it never runs as a production fallback.
+The existing bounded evaluator subprocess also retains admission cancellation progress, item
+exact-fit/one-over and deep rejected-value disposal on its 2 MiB thread. Source fixtures retain
+depth 256/257, item and allocation exact-fit/one-over, owned-state cleanup and healthy reuse.
+Raw adapter-result violations preserve actual prior visibility and stop subsequent effects;
+lexical transactions still roll back staged work. Effects are never replayed for public comparison.
+Transferred receipts validate these observations in addition to all inherited pure-tail gates.
+
 Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
 share bounded snapshot decoding but cannot share production provenance, transfer, consume,
 resource-call graph, or branch-merge logic or encoded expected results. It must agree on both

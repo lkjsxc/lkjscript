@@ -67,6 +67,34 @@ pub(crate) struct QueueLeaseReservation<'a> {
 }
 
 impl NormalizedResourceScope {
+    pub(super) fn validate_admission(
+        &self,
+        handle: NormalizedResourceHandle,
+        authority: Option<RequirementReference>,
+        interface: Option<DeclarationReference>,
+    ) -> Result<(), ExecutionError> {
+        self.validate_handle(handle, handle.kind, authority.unwrap_or(handle.authority))?;
+        if interface.is_some_and(|expected| expected != handle.interface) {
+            return Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_resource_interface",
+                "value admission requires the exact resource interface",
+            ));
+        }
+        match lock_unpoisoned(&self.state).entries.get(&handle.slot) {
+            Some(ResourceEntry::ByteStream(_))
+                if handle.kind == NormalizedResourceKind::ByteStream =>
+            {
+                Ok(())
+            }
+            Some(ResourceEntry::QueueLease(_))
+                if handle.kind == NormalizedResourceKind::QueueLease =>
+            {
+                Ok(())
+            }
+            _ => Err(closed_resource()),
+        }
+    }
     pub(crate) fn new() -> Result<Self, ExecutionError> {
         let id = NEXT_RESOURCE_SCOPE
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
@@ -287,7 +315,15 @@ impl NormalizedResourceScope {
         Ok(())
     }
 
-    #[cfg(test)]
+    pub(super) fn release_all(&self) {
+        let entries = std::mem::take(&mut lock_unpoisoned(&self.state).entries);
+        for entry in entries.into_values() {
+            if let ResourceEntry::ByteStream(lease) = entry {
+                lease.close_registered();
+            }
+        }
+    }
+
     pub(crate) fn live_resources(&self) -> usize {
         lock_unpoisoned(&self.state).entries.len()
     }

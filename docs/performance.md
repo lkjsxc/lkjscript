@@ -2,6 +2,47 @@
 
 Measurements are observations, not promises.
 
+## Checked-value execution, 2026-09-08
+
+The unchanged graph-owned standard fold and a separately authored forwarding library exercise
+both execution tiers. At N = 4,096 and K = 1,024, the predecessor's direct forwarding guards visit
+8,400,896 production and 12,595,200 reference descendants. The candidate visits zero, admits
+4,098 input nodes in each tier, and makes 11,271 production / 14,344 reference checked-root
+classification decisions. At fixed K those decisions are equal for N = 1, 256 and 4,096.
+Both direct and named generic invocation pass all nine pairs and the additive total-visit equation
+defined in the verification specification. No aggregate is readmitted by length or child lookup.
+
+Release-profile fold samples use one warm-up and three measurements per size on the same
+8-CPU, 8,589,934,592-byte-memory workspace, with no simultaneous owned build during these samples.
+Each process has a 120-second bound; neither run timed out. The complete public acceptance bounds
+remain 900 seconds and 1,073,741,824 owned file bytes. Sampled RSS is a process observation,
+separate from cumulative evaluator allocation accounting.
+
+| N | Predecessor measured wall seconds | Candidate measured wall seconds | Candidate sampled peak RSS range, bytes |
+| ---: | --- | --- | --- |
+| 256 | 0.500930, 0.498809, 0.500244 | 0.498717, 0.519624, 0.488874 | 22,999,040–23,527,424 |
+| 1,024 | 0.520593, 0.549698, 0.523964 | 0.499390, 0.499778, 0.488126 | 22,933,504–23,277,568 |
+| 4,096 | 0.807139, 0.782917, 0.800039 | 0.514988, 0.529439, 0.529916 | 23,461,888–23,920,640 |
+
+At 4,096 items, both versions execute 86,033 VM instructions and 40,969 reference expressions.
+The old fold performs 67,137,536 / 83,922,944 descendant visits; the candidate performs zero and
+admits 4,097 input nodes per tier. Candidate allocation accounting is 4,949,194 / 1,999,226 bytes,
+81,940 / 53,263 successful nonzero allocation charges and 4,096 collection items per tier.
+The predecessor records 2,523,928 / 0 bytes and 8,195 / 0 such charges. Its reference model did
+not charge pure arithmetic locals or have checked-value admission; absent admission observations
+are explicitly unavailable in the retained predecessor receipt, not measured zeroes.
+New ingress/proof accounting increases charged bytes and this sample's RSS; this is not an
+allocation optimization, heap-allocation census or universal speed guarantee.
+
+The first baseline and an earlier candidate are retained. A supplementary baseline added the
+previously missing allocation-charge count and explicit sample labels; it did not follow a timing
+timeout. The earlier candidate's workflow completed but its receipt reader still expected the
+predecessor schema, so that command remains failed. Later acceptance validates the updated receipt,
+all 16 discovery fields, admission progress, cleanup and inherited tail/transaction protections.
+Exact candidate/source identities, all warm-ups and measured samples, raw receipts and gate
+dispositions belong to
+[`202609081540-checked-value-execution.json`](evidence/202609081540-checked-value-execution.json).
+
 ## Graph-owned structured-session admission
 
 Campaign `202609032212` exercised the maintained `lkjournal-live-1` target through the exact

@@ -64,6 +64,31 @@ normalization-dependent identity. Maps permit bool, i64, bytes, or text keys and
 specified total order. Runtime values are bounded to depth 256 and 1,000,000 aggregate collection
 items.
 
+Execution admits raw values before installing any local or operand. Admission checks exact
+types, nominal and prepared-program identities, resource provenance and containment with an
+iterative traversal, checking cancellation at every node. Depth remains 256 and aggregate
+collection admission remains 1,000,000 items. Allocation includes newly allocated checked
+metadata and remains cumulative; rejected admission installs no partial value.
+
+Each evaluator carries its own construction-controlled classification: affine-free, direct
+capability resource, or affine nominal variant. A nominal variant with any direct capability
+resource case is affine even in an empty case. Aggregates cannot contain either affine class.
+These classifications are disposable execution derivations, never serialized or authored.
+Affine-free does not imply durable or serializable.
+
+Local and argument affine eligibility requires constant work per admitted value, independent
+of its descendants and of nominal case count. Internal constructors combine checked immediate
+children, sharing preserves the proof, and projections preserve the selected child's proof.
+Closed intrinsics preserve this boundary. Raw invocation, decoder, host, adapter and retained
+resident values require admission; a declared result type or a visibility check is not a
+certificate. Exact arity, type substitutions, effects, task scope and live-resource checks
+remain required. Legitimate algorithmic, codec and allocation-accounting work is not removed.
+
+An invalid raw result stops downstream execution and releases local resources. An already
+performed external effect retains its actual possible visibility; admission does not roll it
+back. Lexical transactions retain their existing rollback semantics. Failed admission neither
+advances semantic HEAD nor produces a successful result receipt.
+
 Live resources, secrets, streams, database transactions, queue leases, and runtime handles never
 enter durable graph values. A durable literal has one canonical typed encoding and an owning
 decoder bound.
