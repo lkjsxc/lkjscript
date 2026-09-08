@@ -1044,7 +1044,7 @@ fn run_oracles(
             elapsed_nanoseconds: tail.elapsed_nanoseconds,
             commands: tail_commands,
             runners: 1,
-            requests: 3,
+            requests: 4,
             cleanup_complete: tail.cleanup_complete,
             prerequisite: "pure-tail-execution".to_owned(),
         },
