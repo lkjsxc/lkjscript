@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-persistent-lists-evidence-1",
   "campaign": "202609091322-persistent-lists",
-  "status": "incomplete; implementation and focused proof retained, final full and musl admission not run",
+  "status": "incomplete; first full profile passed 24 of 26 gates, two remaining fixture bindings corrected; fresh full and exact target admission pending",
   "start": {
     "branch": "main",
     "commit": "7d3c36894828def605179c31a01958cfd3d2630a",
@@ -23,12 +23,8 @@
     "base": "e1a51cfc",
     "files": [
       {
-        "path": "Cargo.lock",
-        "sha256": "6045b58fd6d43f61a87f7c59c52cca3a0a5873cbf4bfb67412f6d81df1ce0653"
-      },
-      {
-        "path": "Cargo.toml",
-        "sha256": "5d60c45fe1a797ddd8a11f3b8fed05ec5e6d5fd0e02a6494ca6997e3cbfa5082"
+        "path": "applications/lkjournal/generated/lkjournal.lkja",
+        "sha256": "03a1dd375d9b4f615eee4b291d3902d8944003ea38520e7164e2db568826d9d6"
       },
       {
         "path": "applications/lkjournal/HEAD",
@@ -37,14 +33,6 @@
       {
         "path": "applications/lkjournal/PACKAGE-TRANSPORTS/CURRENT",
         "sha256": "d7bafb29e141548a6c131e4eeedd61d92984ff9d9504a7f23e35ae9b88bf3eb2"
-      },
-      {
-        "path": "applications/lkjournal/README.md",
-        "sha256": "a0faa6cb7f88a8f93de808854bbf708fd0c74fe008e10d6143467017cc24d907"
-      },
-      {
-        "path": "applications/lkjournal/generated/lkjournal.lkja",
-        "sha256": "03a1dd375d9b4f615eee4b291d3902d8944003ea38520e7164e2db568826d9d6"
       },
       {
         "path": "applications/lkjournal/packs/pack_0c7894f4532cf88693f079f2ee4bd3e34c2acd7070ea05ca5402c13120b2ea17.lkjp",
@@ -67,12 +55,16 @@
         "sha256": "f11f89bdf203e5019048830a20e87dd23b81a4ec0f438739806237605fc5a058"
       },
       {
-        "path": "packages/standard/HEAD",
-        "sha256": "fa0c66cf4b320906fb18aaf27a7ab974c76c7386a8cbf30558c2073af5b48719"
+        "path": "applications/lkjournal/README.md",
+        "sha256": "a0faa6cb7f88a8f93de808854bbf708fd0c74fe008e10d6143467017cc24d907"
       },
       {
-        "path": "packages/standard/README.md",
-        "sha256": "987494943d23dd7077447e2ddca64127e6c90179b2e5f171cf10d739368f6d43"
+        "path": "Cargo.lock",
+        "sha256": "6045b58fd6d43f61a87f7c59c52cca3a0a5873cbf4bfb67412f6d81df1ce0653"
+      },
+      {
+        "path": "Cargo.toml",
+        "sha256": "5d60c45fe1a797ddd8a11f3b8fed05ec5e6d5fd0e02a6494ca6997e3cbfa5082"
       },
       {
         "path": "packages/standard/generated/standard.lkja",
@@ -81,6 +73,10 @@
       {
         "path": "packages/standard/generated/standard.lkjp",
         "sha256": "d26ae7f15f42d9d3e4c3907237535e4e15eb2232ebfc3dc3242e2b2e588d1d32"
+      },
+      {
+        "path": "packages/standard/HEAD",
+        "sha256": "fa0c66cf4b320906fb18aaf27a7ab974c76c7386a8cbf30558c2073af5b48719"
       },
       {
         "path": "packages/standard/packs/pack_90a8012d37d2e0bd2d8c6e3a5b02d8cda05e26de8c1f36f400850c6baad889d9.lkjp",
@@ -93,6 +89,10 @@
       {
         "path": "packages/standard/packs/pack_dc3c3592a2ad9e796d98705c29d83511df50dda4a599496d7f03def39d9b1353.lkjp",
         "sha256": "87741b14f4269b796f262699af71b35de9b6b2f80df31639099494575b00f56b"
+      },
+      {
+        "path": "packages/standard/README.md",
+        "sha256": "987494943d23dd7077447e2ddca64127e6c90179b2e5f171cf10d739368f6d43"
       },
       {
         "path": "src/platform/builtin_standard.rs",
@@ -115,32 +115,32 @@
         "sha256": "1ceda3a166d380b6fa17871f355892c56b402fd2a42716b8689a180f3df8f3cb"
       },
       {
-        "path": "src/platform/execution/normalized/data.rs",
-        "sha256": "2ad48296fc9ecda07d148cf98faa294a03d985fd1d6524f0e248d9cf1b3ceb63"
+        "path": "src/platform/execution/normalized/data_codec_reference.rs",
+        "sha256": "43be611e48f106ff80cfc4c0298e2d9032ea92fa2f8cb5721b940e08ce4c4ec0"
       },
       {
         "path": "src/platform/execution/normalized/data_codec.rs",
         "sha256": "0ce0887eade4a262af2a0a26f73cee33406b40d1dcfdcf005e8438cac7f10e35"
       },
       {
-        "path": "src/platform/execution/normalized/data_codec_reference.rs",
-        "sha256": "43be611e48f106ff80cfc4c0298e2d9032ea92fa2f8cb5721b940e08ce4c4ec0"
-      },
-      {
-        "path": "src/platform/execution/normalized/http.rs",
-        "sha256": "ccf64326ff547470abf426b9c14f222a54010fb63eb406cde961e9a88ab7d25d"
+        "path": "src/platform/execution/normalized/data.rs",
+        "sha256": "2ad48296fc9ecda07d148cf98faa294a03d985fd1d6524f0e248d9cf1b3ceb63"
       },
       {
         "path": "src/platform/execution/normalized/http_client.rs",
         "sha256": "82e68516369ee80341701899d882669351c05923f5a9f84996876311ae5ed71c"
       },
       {
-        "path": "src/platform/execution/normalized/list.rs",
-        "sha256": "c56c687489a0790145e1da0c12d99d4c9217f9acd5e90dda62059124710b04c8"
+        "path": "src/platform/execution/normalized/http.rs",
+        "sha256": "ccf64326ff547470abf426b9c14f222a54010fb63eb406cde961e9a88ab7d25d"
       },
       {
         "path": "src/platform/execution/normalized/list_tests.rs",
         "sha256": "729c632782cdd75a9e334d32a7364c04ec826d5788333f196cfbb1bfa0f97cf0"
+      },
+      {
+        "path": "src/platform/execution/normalized/list.rs",
+        "sha256": "c56c687489a0790145e1da0c12d99d4c9217f9acd5e90dda62059124710b04c8"
       },
       {
         "path": "src/platform/execution/normalized/mod.rs",
@@ -167,10 +167,6 @@
         "sha256": "078bb7a16ebcf26c949f3ae56cb6ed0e34dd2dceef4488666dac7ca22b6e0599"
       },
       {
-        "path": "src/platform/execution/normalized/reference.rs",
-        "sha256": "20e0062d3902e78950dfba811190392d6a1e2e55bbe35bde9c36a8c6c66db583"
-      },
-      {
         "path": "src/platform/execution/normalized/reference_checked.rs",
         "sha256": "5b32f15e281f833f1f021cf91de1541e12cfd35b59e9bf51d6084675952818a6"
       },
@@ -187,6 +183,10 @@
         "sha256": "53f6ae3eb8f9b805b4c6c78c2ccc117399231358fb1d4db62e6215da6cc11973"
       },
       {
+        "path": "src/platform/execution/normalized/reference.rs",
+        "sha256": "20e0062d3902e78950dfba811190392d6a1e2e55bbe35bde9c36a8c6c66db583"
+      },
+      {
         "path": "src/platform/execution/normalized/session.rs",
         "sha256": "45f3de8aaace27d0b460e671f9bfb5d82c4c103f674dd111484b47e8eebff3ed"
       },
@@ -195,28 +195,28 @@
         "sha256": "c7b95ea80294383422ac7183d47060a92adaaa4ee60a82ad49ac5b0cd4544863"
       },
       {
-        "path": "src/platform/execution/normalized/value.rs",
-        "sha256": "d6566ef76f84b07d02026f6c5d65947801c9e6fde2c0172b1ca9cdc3d100f518"
-      },
-      {
         "path": "src/platform/execution/normalized/value_oracle.rs",
         "sha256": "b552d726feebb3f7b1444f0d41ee547c40d564ccb7ecea708f347e402d8c1e28"
       },
       {
-        "path": "src/platform/execution/normalized/vm.rs",
-        "sha256": "6e6219a895519dba53a285e3b1d117df0fa449d694d94cf01428770bcf90aee2"
-      },
-      {
-        "path": "src/platform/execution/normalized/vm_checked.rs",
-        "sha256": "813983fa9e036cc440dcfc16fb8d55945c8cc408b3feed532b4882d675508053"
+        "path": "src/platform/execution/normalized/value.rs",
+        "sha256": "d6566ef76f84b07d02026f6c5d65947801c9e6fde2c0172b1ca9cdc3d100f518"
       },
       {
         "path": "src/platform/execution/normalized/vm_checked_tests.rs",
         "sha256": "9ee1c7086a1fe1b66f7a047636c3192c805c06ee07d9071f96fa3fc59e60a291"
       },
       {
+        "path": "src/platform/execution/normalized/vm_checked.rs",
+        "sha256": "813983fa9e036cc440dcfc16fb8d55945c8cc408b3feed532b4882d675508053"
+      },
+      {
         "path": "src/platform/execution/normalized/vm_intrinsics.rs",
         "sha256": "de4191a82a1d115b5da6350b4efc11b4223b9cf45081b521a504d2577f99161b"
+      },
+      {
+        "path": "src/platform/execution/normalized/vm.rs",
+        "sha256": "6e6219a895519dba53a285e3b1d117df0fa449d694d94cf01428770bcf90aee2"
       },
       {
         "path": "src/platform/publication/repository_tests.rs",
@@ -227,16 +227,24 @@
         "sha256": "817d631b4e0e251d54f0bd69ff684a891c704e89796d7363e23b10e793030f1a"
       },
       {
+        "path": "tools/lkjscript-dev/src/distributed_http.rs",
+        "sha256": "0af994e8310004cbe51c7af41f0d55cc52e22eda7c286fb4f841f5be00b00d83"
+      },
+      {
         "path": "tools/lkjscript-dev/src/offline_packages.rs",
         "sha256": "9b1cf678c166f5545d8a7b8d9bffdadb24c64fbb4a91dc57a5e8bc30d9810946"
+      },
+      {
+        "path": "tools/lkjscript-dev/src/pure_tail_program.rs",
+        "sha256": "1f4110a6260b556df8c51d56d1ed3f1e9c83e02183614047db7c5da778b4eb5d"
       },
       {
         "path": "tools/lkjscript-dev/src/pure_tail.rs",
         "sha256": "58e7b817f1989b6c52abb69f3d903daa0ed5837e6e6ac133f42bc9a0c2eea702"
       },
       {
-        "path": "tools/lkjscript-dev/src/pure_tail_program.rs",
-        "sha256": "1f4110a6260b556df8c51d56d1ed3f1e9c83e02183614047db7c5da778b4eb5d"
+        "path": "tools/lkjscript-dev/src/service.rs",
+        "sha256": "fd1df7ca14b833538a2648329585b7d321ccc99c715c5bac6b9007bd5ab5bae5"
       }
     ],
     "meaning": "Exact SHA-256 of scoped implementation, canonical assets, fixtures and verifier inputs before the first implementation commit. The containing report is deliberately excluded; final commit/tree and post-record validation are reported out of band."
@@ -343,13 +351,12 @@
       "proof": "Logical length up to actual 1000000 ceiling, physical-slot and byte exact-fit/one-under, invalid indexing, partial path reservation failure, 256/257 admission and 20000-level iterative disposal on 2 MiB thread, hidden/absent affine and foreign identities, cancellation after real list work, unchanged aliases/zero leftovers/healthy reuse. Independent schedule fixes branch and handle costs. Inherited pure-tail/checked/binding negative matrices pass."
     },
     "LST-5": {
-      "classification": "incomplete",
-      "proof": "Offline separate consumer maps [1,2,4] to [7,8,10] using exported factory/private helper after producer removal. HTTP full mapped wire/data values, trap/cancel rollback and recovery passed; the strengthened independent physical data-revision census also passed, proving exactly one commit per successful request. Existing nominal/nested predecessor codec fixture re-encodes byte-identically; unchanged type/layout/owner identities and strict cache/canonical corruption behavior pass.",
-      "receipt": "offline-map-04/receipt.json",
-      "pending": "final maintained service/worker/session gates"
+      "classification": "fresh passed",
+      "proof": "Offline separate consumer maps [1,2,4] to [7,8,10] using exported factory/private helper after producer removal. HTTP full mapped wire/data values, trap/cancel rollback and recovery passed; the strengthened independent physical data-revision census also passed, proving exactly one commit per successful request. Existing nominal/nested predecessor codec fixture re-encodes byte-identically; unchanged type/layout/owner identities and strict cache/canonical corruption behavior pass. Maintained service, worker, session and data acceptance freshly passed after exact artifact binding cutover.",
+      "receipt": "offline-map-04/receipt.json"
     },
     "LST-6": {
-      "classification": "not run",
+      "classification": "failed",
       "required": [
         "cargo run --locked -p lkjscript-dev -- check full --fresh --machine",
         "lkjscript-dev release build --output ABSENT_ABSOLUTE_BINARY --receipt ABSENT_ABSOLUTE_JSON",
@@ -2324,6 +2331,172 @@
       "classification": "failed",
       "name": "focused-02",
       "reason": "Library/general service passed; old command graph-test count expected 25 instead of 29. Corrected and affected lifecycle freshly passed."
+    },
+    {
+      "classification": "failed",
+      "path": ".artifacts/lkjscript-dev/check/1788934934592443923-596771-0/receipt.json",
+      "sha256": "f0e111961cc13c1ea9f1af40656aa5d78ca8514fece225c7af8223142c74cb6f",
+      "digest": "verification_1c41d8ecfa2eb11f2164fd2ea760383dc39e12a551f65bd091db178393d10243",
+      "commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
+      "input_digest": "verification_5215008d8d2d27f74f8021a1341525bf1e6f074fe79d2d242328a328530aad97",
+      "input_stable": true,
+      "elapsed_nanoseconds": 501276832733,
+      "fresh_passed": 24,
+      "reused_passed": 0,
+      "unrun": [],
+      "gates": [
+        {
+          "name": "fmt",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "clippy",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "workspace_tests",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "release_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "release_command_lifecycle",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "distributed_http_application",
+          "status": "failed",
+          "execution": "fresh"
+        },
+        {
+          "name": "outbound_http_application",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "stateful_http_application",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "checker_self_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "rust_only_tooling",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "generated_public_guides",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "product_surface_audit",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_package_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_package_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_artifact_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_artifact_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_package_export",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_package_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_transport_export",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_transport_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_artifact_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_artifact_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "failed",
+          "execution": "fresh"
+        },
+        {
+          "name": "diff_check",
+          "status": "passed",
+          "execution": "fresh"
+        }
+      ],
+      "failures": [
+        "distributed_http_application: expected 25 old graph tests, actual 29 (28 standard + one fixture).",
+        "service_acceptance: expected old maintained artifact digest, actual canonical regenerated lkjournal digest."
+      ],
+      "disposition": "Retarget both exact fixture bindings; no budgets, assertions, or gates weakened."
+    },
+    {
+      "name": "distributed-fixture-02",
+      "classification": "fresh passed",
+      "receipt": "/home/coder/workspace/lkjscript/.artifacts/lkjscript-dev/distributed-http/1788935559750408290-607563-0/receipt.json",
+      "digest": "verification_cc99d68c6e1d5206f1ef89268ece76dcf1aa73edb1f4f7497b85c95dce6ec749",
+      "elapsed_nanoseconds": 4929135110,
+      "proof": "Corrected exact maintained fixture binding; complete executable acceptance and cleanup passed."
+    },
+    {
+      "name": "service-fixture-02",
+      "classification": "fresh passed",
+      "receipt": ".artifacts/lkjscript-dev/service/1788935558339302383-607564-0/receipt.json",
+      "digest": "verification_43d4a86e3f6290e3c0b510eced30446393c7f3fc38d50033051986449b651e19",
+      "elapsed_nanoseconds": 15006445112,
+      "proof": "Corrected exact maintained fixture binding; complete executable acceptance and cleanup passed."
     }
   ],
   "unsuccessful_attempts": [
@@ -2400,15 +2573,50 @@
     "deployment": "not run",
     "operational_data_mutation": "isolated owned fixtures only",
     "owned_services": "oracle receipts require process/port/transaction cleanup",
-    "predecessor_resource": "isolated detached measurement worktree retained pending final cleanup; patch and exact binary inputs retained",
+    "predecessor_resource": "Removed the owned detached predecessor worktree after byte-equal patch verification and reversal of only the retained owned instrumentation. Original exact binary, artifact, requests and measurements remain; no stash/reset/clean/restore operation.",
     "preserved": "historical stash, user work, unrelated services/projects, maintained operational data and historical assets"
   },
   "raw_evidence_root": ".artifacts/campaign/202609091322/",
   "final_verification": {
-    "classification": "not run",
-    "full": null,
-    "musl_build": null,
+    "classification": "failed",
+    "full": {
+      "classification": "failed",
+      "path": ".artifacts/lkjscript-dev/check/1788934934592443923-596771-0/receipt.json",
+      "digest": "verification_1c41d8ecfa2eb11f2164fd2ea760383dc39e12a551f65bd091db178393d10243",
+      "detail": "All 26 dispositions retained in iteration_checks; corrected distributed/service fixtures independently passed afterward. Fresh complete profile still required."
+    },
+    "musl_build": {
+      "classification": "fresh passed",
+      "path": ".artifacts/campaign/202609091322/musl-01-build.json",
+      "sha256": "b936910cf3b515f09d6eddacf6d7b7869cc374e567227c37575111d78b334b68",
+      "source_commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "elapsed_nanoseconds": 303669602073,
+      "candidate": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-01-lkjscript",
+        "byte_length": 20359424,
+        "mode": 493,
+        "sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+        "elf": {
+          "class": "ELF64",
+          "machine": "x86-64",
+          "object_type": "position-independent-executable",
+          "inspector": "lkjscript-elf64-little-endian-inspector-1",
+          "program_headers": 9,
+          "load_headers": 4,
+          "dynamic_entries": 21,
+          "interpreter_headers": 0,
+          "needed_libraries": 0,
+          "glibc_version_requirements": 0,
+          "position_independent": true,
+          "runtime_linkage": "static-musl"
+        }
+      },
+      "admission": "not run; known contributor fixture failures must be corrected and source-bound build receipt refreshed first"
+    },
     "musl_admission": null,
     "post_record": "Final containing commit/tree and actual revalidation will be reported out of band; no self-referential evidence hash."
-  }
+  },
+  "implementation_commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
+  "implementation_tree": "9f9ec4f407bd2bba9777beaa0df701f0b165ac0f"
 }
