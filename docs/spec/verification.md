@@ -500,7 +500,7 @@ application; artifacts from the two fresh applications have independently alloca
 identities and are not required to have the same digest. A required stale, reused, skipped,
 unavailable, failed, cancelled, or unrun observation is not public acceptance.
 
-The schema-4 private verifier handoff admits exactly release-verify, distributed-http, outbound-http,
+Version 4 of the private verifier handoff admits exactly release-verify, distributed-http, outbound-http,
 offline-packages, pure-tail, and stateful-http, in that order. Schema 3 and omitted, duplicate,
 foreign, or extra roles reject. The exact two-file inventory, canonical identity, externally expected
 verifier byte length/hash, source/tag, and safe executable mode are checked before transferred code

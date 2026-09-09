@@ -179,7 +179,7 @@ The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout j
 verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
 deterministic package, and uploads a three-file release handoff plus a two-file application-verifier
 handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
-commit, mode, and the schema-4 roles release-verify, distributed-http, outbound-http,
+commit, mode, and the roles in private handoff version 4 release-verify, distributed-http, outbound-http,
 offline-packages, pure-tail, and stateful-http.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies

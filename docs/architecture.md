@@ -122,7 +122,7 @@ build and the source-wide full receipt remain distinct from this exact-candidate
 
 The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
 handoff owns the archive, checksum, and private release receipt. The verifier handoff binds the exact
-host `lkjscript-dev` bytes and six schema-4 roles: release-verify, distributed-http, outbound-http,
+host `lkjscript-dev` bytes and six roles in private handoff version 4: release-verify, distributed-http, outbound-http,
 offline-packages, pure-tail, and stateful-http. Read-only jobs verify those
 bytes before restoring executable mode after artifact transport. The pre-publication job checks out
 no source, safely extracts and re-inspects the packaged candidate, then runs all five transferred

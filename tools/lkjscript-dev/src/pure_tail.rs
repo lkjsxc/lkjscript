@@ -5,7 +5,7 @@ use lkjscript::platform::contributor::offline_producer_inventory;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -1947,13 +1947,39 @@ pub(crate) fn read_transferred_receipt(
         receipt.commands.len() >= 50 && receipt.commands.len() <= 200,
         "pure-tail command inventory is incomplete or excessive",
     )?;
+    let isolated = Path::new(&receipt.isolated_root);
+    let mut probes = BTreeSet::new();
     for command in &receipt.commands {
         evidence::verify_process_files(&root, &command.observation)?;
-        require(
-            command.command.first().map(Path::new)
-                == Some(&Path::new(&receipt.isolated_root).join("lkjscript")),
-            "pure-tail command used a foreign executable",
-        )?;
+        if command.command.first().map(Path::new) != Some(&isolated.join("lkjscript")) {
+            require(
+                command.command.first().map(Path::new) == Some(verifier),
+                "pure-tail command used a foreign executable",
+            )?;
+            let probe = command.command.get(1).map(String::as_str);
+            let valid = match probe {
+                Some("pure-tail-probe") => {
+                    command.command.len() == 3
+                        && command.command.get(2).map(Path::new) == Some(&isolated.join("consumer"))
+                        && command.observation.stdout.path == "bounded-stack.stdout"
+                }
+                Some("pure-tail-transaction-probe") => {
+                    command.command.len() == 4
+                        && command.command.get(2).map(Path::new)
+                            == Some(&isolated.join("standalone/service.deployment.json"))
+                        && command
+                            .command
+                            .get(3)
+                            .is_some_and(|id| evidence::hex_identity(id, "decl_", 32))
+                        && command.observation.stdout.path == "transaction-cancellation.stdout"
+                }
+                _ => false,
+            };
+            require(
+                valid && probes.insert(probe),
+                "pure-tail source-bound probe is foreign or duplicated",
+            )?;
+        }
         require(
             if command.expected_success {
                 command.observation.status == process::ProcessStatus::Passed
@@ -1963,6 +1989,10 @@ pub(crate) fn read_transferred_receipt(
             "pure-tail command evidence did not pass its specified boundary",
         )?;
     }
+    require(
+        probes.len() == 2,
+        "pure-tail source-bound probe evidence omitted",
+    )?;
     require(
         receipt
             .outcomes
