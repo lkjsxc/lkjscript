@@ -1,0 +1,3306 @@
+{
+  "schema": "lkjscript-capture-safe-generics-evidence-1",
+  "campaign": "202609091625-capture-safe-generics",
+  "status": "complete at implementation boundary",
+  "capability": "Safe abstract runtime environments across generic library boundaries through the copied product.",
+  "start": {
+    "branch": "main",
+    "commit": "20aa43cef67bcbbfbfbe86ed44a973389bdb8fef",
+    "tree": "5bcb1d953f28db6ea99e1d35ab63734bd235e6ec",
+    "index": "clean",
+    "tracked_worktree": "clean",
+    "untracked": "supplied archive only",
+    "origin": "https://github.com/lkjsxc/lkjscript",
+    "fresh_start_divergence": [
+      0,
+      0
+    ],
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "guidance_sha256": "895e4a27e1560aaf7f1b13553a4f4c7605caf36021798052a7e016f312c9d3c5",
+    "initial_archive_sha256": "b13509bc3e75fae5a18f33a48fcfb6cee06851e06816f006ba31ef36db4746d5",
+    "predecessors": "202609090021 and 202609091322 implementation-complete; historical proof is not fresh at this source"
+  },
+  "implementation": {
+    "commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+    "tree": "10ee3fefeef3edd1cf8d9f2ee989bc6a32063be3",
+    "index": "clean",
+    "tracked_worktree": "clean",
+    "commits": [
+      {
+        "commit": "fd159a8c8fe759f2f0e701ec03783d7b1909af75",
+        "tree": "f51edf45e4ffea06be48ba216124a7fe1db4f9db",
+        "purpose": "Archive complete mandate/startup reconciliation and apply unchanged root guidance"
+      },
+      {
+        "commit": "75fb03130f776d5400b2478c80358d4212180bc7",
+        "tree": "1acedc7296caceb1bf79e7b62484f01930968b35",
+        "purpose": "Constraint authority, inference, authoring, interfaces, runtime, consumers and isolated migration"
+      },
+      {
+        "commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+        "tree": "10ee3fefeef3edd1cf8d9f2ee989bc6a32063be3",
+        "purpose": "Explicit public scope/arity negatives and HTTP oracle projection/test-count cutover"
+      }
+    ],
+    "files": [
+      {
+        "status": "M",
+        "path": "Cargo.lock",
+        "bytes": 73827,
+        "sha256": "bcf2e7819d63dcd276725525dbd81e796a7bdecb30b799d7306de2ab08743894"
+      },
+      {
+        "status": "M",
+        "path": "Cargo.toml",
+        "bytes": 1779,
+        "sha256": "40fa5039b06ba2bb0c40a16e134a8b26d614d955145e10fd3e378e426b713261"
+      },
+      {
+        "status": "M",
+        "path": "applications/lkjournal/HEAD",
+        "bytes": 135,
+        "sha256": "7441c03b7e9f3ee9d106a04d36405d4530ad240f2110acd61d86bf7f7e1b88b8"
+      },
+      {
+        "status": "M",
+        "path": "applications/lkjournal/PACKAGE-TRANSPORTS/CURRENT",
+        "bytes": 76,
+        "sha256": "1c2cba5c137ffa3969c7557d83c00f48085b0b3adc50d4949aea5ffdfd5132c1"
+      },
+      {
+        "status": "M",
+        "path": "applications/lkjournal/README.md",
+        "bytes": 11890,
+        "sha256": "825113a578c400b8d8f96586340473a35a55c3a41c6f9defd0050703761f7282"
+      },
+      {
+        "status": "M",
+        "path": "applications/lkjournal/generated/lkjournal.lkja",
+        "bytes": 1131294,
+        "sha256": "eeb3215ed6e4628724785211c8ce3ff778a0ee4c635d007e1b20fdbe613febbc"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_0c7894f4532cf88693f079f2ee4bd3e34c2acd7070ea05ca5402c13120b2ea17.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_11267b958dd711f85fec6cbb281d9bd645ded0bb61958e21ae3cac0e77771567.lkjp",
+        "bytes": 261908,
+        "sha256": "310f1a509e20041b3a2fce730ae02dc251483570f64f0c986627583ac73f0308"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_162d6fe0447e06c830215a7f7b24f88d32d8bd62869fc423f291d6c6585fb1ea.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_19937f00a1bdc45a5e624f5c4fccdf20b2a5f867f4bf9791eead8db303566004.lkjp",
+        "bytes": 261371,
+        "sha256": "bf637826602b5b88a338001557e25aff56324bd230facffe3c864c377cb843fe"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_1b187ad9c3eac9739b0c8fde589325683160d181596a441e459f41cf23ace924.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_26ba059ab6d8139062d963cc063020f474276c546466beddd0ec5c8d065c6ecd.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_39da34b3a6b3496b74a82c71de56751aff82385a5815ca7f92d584609ed04407.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_453a0db2f972b2999efc3231fe0ec5fc46f01c4e97bbfdacdf6c4688a915b828.lkjp",
+        "bytes": 96503,
+        "sha256": "77e55a26d9436d1588c473d491728d006a07d29a917e7d76370cf3994a8f1475"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_47373e493bf2d72884e4627949060a186a1b8441f1bace2d6cacd489624ad4d5.lkjp",
+        "bytes": 262013,
+        "sha256": "4cc397b78cd94a9d02f88faa9c10db417290c07112c72ff8cfa9347dae262ea4"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_4abd99f93eb8fe7cec6030b13176c41b088f9821b087dfc413d37824bdda4c05.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_4b6375a1aa4d57e0b7ea9e491a0f0e0495826c54ccd2421419dda18f1dbaf2fa.lkjp",
+        "bytes": 262038,
+        "sha256": "042811334fafae9175518d7a19a305f0845277f25397ac18ff0ec3ca7281fc4f"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_5006f811090d6ae82c6a6f8f7d7fdf526a84ebe93a4896c1c1901c63e0e69893.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_557da57cba3194033139985eab819a3fc38f46f96c8751e840c0a9b059facb5b.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_56c2889bb2f17a6e0d4d0cc749a0d8e22ef76b831598e3d3932623d62b41f031.lkjp",
+        "bytes": 262038,
+        "sha256": "0bce53aba1b3d8bc9757240c08f4e1ce89e025446560652d6744b4aadfe2421b"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_5c04b0afc831644ae625fb49cdcd2117bc5121bbccc9cfe80177a150b206fc88.lkjp",
+        "bytes": 261694,
+        "sha256": "7da432ec35e2363a9e74db604b93bd2a31db0a6f3c9d7061ccb92788bc531377"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_6970953d55d15ff837a48d57a45dc7544a28d790f5ab8acede031256b5f9f9fe.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_7151c37ccb4c95762e2ff0526bf118db3c784950997b0e82ff68e53c976c64ad.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_72ee1509be1e138055ac16c8f347885041ac825117bdbcd62a4829e75212d6ad.lkjp",
+        "bytes": 261978,
+        "sha256": "15535f843fe3d370e7ede222279bbacf85cbeda755f3c792f7a7287e3612dbd2"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_768240faf11ca6688c73dc4c58c8265a8f15bba9371703b0d3f884f03fcd8a0c.lkjp",
+        "bytes": 261864,
+        "sha256": "af5e77a7cb756340e533cea82bfeae086823de9fe5700f5126358e646522a2d8"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_7d7491b181b1d87f9a46ab50016e8bdc47cad6ab476994a913ffcaffa47f3091.lkjp",
+        "bytes": 155841,
+        "sha256": "0e624c944d69836fc3c6e3e60a02ee873d592ff8c251495af1e017393bd58713"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_8ea81aa85390ad1b2a15d8fef7022172d0423df9cab94880387399151343b6cf.lkjp",
+        "bytes": 261846,
+        "sha256": "db0dfef2586c5bea2619628a1a63bd3a051a21c267d018e2848a8c245908f3be"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_98a3b7a66ad75522c4c78e737397679e94452e01178a6cc4056f15019372b2fc.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_a1dcbf8008587125f860b712dadd3a47bd70a1cd024482fe47268d9ef77b1230.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_a52042385447f858f575749bca6ce3da0df4748e8b3d0f2ca94eef2462af7e16.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_ab97ce5b8ca12296c411e89edd88b4d659a7d3f8e27bf9c19f8d46ae5552b676.lkjp",
+        "bytes": 73281,
+        "sha256": "9338cd36748887835c65ec2730ccb548755ad57c30ad4f30df74f79b6f583f94"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_ae5436af2880eae57d7d102852c51bfb51dd4493e3c50cfafa363e5b4b2ea6f4.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_bb39f29762635a0e1bf38e349febe40282cc2baf2d5466abf50e35909f5650a5.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_d734a2f351b9e1f52bf07cb4f754bc9b203843f2115c1acbae30c37cb507df47.lkjp",
+        "bytes": 262040,
+        "sha256": "5b334d819a71f6c843166f41f0394e8557ff44428e40f2894b985bb7af57a6e6"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_d87c5a661a0b6d8288ab6eaf01986773fbe4f9cb42b8e9a8fb0655a57772f496.lkjp",
+        "bytes": 261989,
+        "sha256": "9fa58d4219788739f7d953f134337bdbbd513867963f8922f9bff528e4bdbf84"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_ea5c9998ee03050be1199831517d4d6ea16099c1d106050adf5653b1fabf9a14.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_eabdf75002a54d63ac70c36d5f0f0c615ffea57b44a0c4e036f85f2b467879b8.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_f833b6b139d40bbab52d913e4586726e5dc095d3e087d3282ecd8f349d292c0b.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_fc37b68e90a88a3b56c22514fc2519af4f7136685de3176c506340166ea11869.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "applications/lkjournal/packs/pack_fdb7f50ff1ddfc9cd323068117051cc3fe718a3f2abdf04ae7d77c969490e533.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "applications/lkjournal/packs/pack_ffa788f5ff6cb949f0c08ada93cef2aacef4204e0f3d81f36b84cac13e8a85db.lkjp",
+        "bytes": 257460,
+        "sha256": "bf2be9659e09a05ecde5fe39957dd8e7087d46305abba51288b2c76b36234704"
+      },
+      {
+        "status": "M",
+        "path": "docs/architecture.md",
+        "bytes": 49899,
+        "sha256": "52ee6e4f7556fc688c59bf9b1688b16e2739664b3eed7d092f3bbd7fabd4718c"
+      },
+      {
+        "status": "A",
+        "path": "docs/decisions/20260909-capture-safe-rank-one-abstraction.md",
+        "bytes": 4717,
+        "sha256": "492657bec07dc514bd3086fee195e3f29cfcd32742576d463cc5e06eceeeec7a"
+      },
+      {
+        "status": "M",
+        "path": "docs/decisions/20260909-explicit-pure-function-binding.md",
+        "bytes": 3459,
+        "sha256": "f9cb657621fe9fa8c3e88d6d825ecd630f0747cce5c6f98957b72d7315f24e3a"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/builtin-standard.md",
+        "bytes": 160685,
+        "sha256": "3eae322fa0bd25f5466824e67e667dcdc7ffb0eca84ff505cc7bce48e2135539"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/change-grammar.md",
+        "bytes": 51819,
+        "sha256": "01ec4c73247cb00e18f61e3711b1dab09aad6f4641afd57a81519a6f63677e73"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/deployment.md",
+        "bytes": 18409,
+        "sha256": "29cc1da08fe4dcf1b975ef460310d963997a5ce01cbe812cb0df7cfda3bd5ec2"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/diagnostics.md",
+        "bytes": 116729,
+        "sha256": "81bfafb6c57307c258078597a95b98074460cb05865f08827189970973c17655"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/function-definition.md",
+        "bytes": 16094,
+        "sha256": "19d9e69aa1616a4bd4141813f5574a1d276e97eef5e37a2e4c864c1be8d46892"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/nostr-relay-info-authoring.md",
+        "bytes": 2419,
+        "sha256": "048b4a9987f01e8a223e5fce9c4f2608d37f4222fd2c0b53829b0cb78137e84e"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/operations.md",
+        "bytes": 12946,
+        "sha256": "a4bc114f02cb4b98ce86936965cb14e4240ffbe2042bcbe66d0ed1356b651cd0"
+      },
+      {
+        "status": "M",
+        "path": "docs/generated/stateful-http-authoring.md",
+        "bytes": 4427,
+        "sha256": "1ebd6940d171801917fbacc8de8ba7f65f2c77d8ad31a2d5dfb9054213220612"
+      },
+      {
+        "status": "M",
+        "path": "docs/release.md",
+        "bytes": 16659,
+        "sha256": "df0afc9c00461103cf42574b5772774fff575862e56ad630ad70f2d9dd7c8d93"
+      },
+      {
+        "status": "M",
+        "path": "docs/spec/language.md",
+        "bytes": 27883,
+        "sha256": "6a3668448162a6a9001b47ad44e6c807e2ce92896f052c41119bdd6a5b1ab694"
+      },
+      {
+        "status": "M",
+        "path": "docs/spec/packages-components.md",
+        "bytes": 15422,
+        "sha256": "63307d19d8b93f997dbf3b8e2b1e0ccea016c53b6266526289a6baab6c78959c"
+      },
+      {
+        "status": "M",
+        "path": "docs/spec/product-surface.md",
+        "bytes": 5155,
+        "sha256": "819a1bbac4de9d96d7b266468a7acf51d289bf89156a68b56e51e73ee231139f"
+      },
+      {
+        "status": "M",
+        "path": "docs/spec/semantic-cli.md",
+        "bytes": 36380,
+        "sha256": "a53102d73cf12e043f48cc84b727a8b40e2af21b1a47e595dea10549624a7b8d"
+      },
+      {
+        "status": "M",
+        "path": "docs/spec/verification.md",
+        "bytes": 44131,
+        "sha256": "8835414dfb3e102b211011a9301726019c1a9453c01aa18cb8d59f8c41d75fc1"
+      },
+      {
+        "status": "M",
+        "path": "docs/status.md",
+        "bytes": 55472,
+        "sha256": "587a3d7f55acdd7df89a87942772e41ee286fc7e86d788b5923be8e8c6a9ac85"
+      },
+      {
+        "status": "M",
+        "path": "packages/standard/HEAD",
+        "bytes": 135,
+        "sha256": "b021478960171e60eae6d9ae2b4abb3668e7dd83e543f84a410bc09bfdef8bcb"
+      },
+      {
+        "status": "M",
+        "path": "packages/standard/README.md",
+        "bytes": 6304,
+        "sha256": "5f115bbbfd11a05f64bd710d0522a43190e75ee20cd3143f72f3cc991feaafef"
+      },
+      {
+        "status": "M",
+        "path": "packages/standard/generated/standard.lkja",
+        "bytes": 397334,
+        "sha256": "7ffe836adf786bcc65f66181d26cd168d5a709a18725c0d0afffd3cbf940d6ed"
+      },
+      {
+        "status": "M",
+        "path": "packages/standard/generated/standard.lkjp",
+        "bytes": 275085,
+        "sha256": "3ead1a17ab28bf52ae3fcfb13b29c86352836cc328f1ec15eda079c0f3dc5b0b"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_02e299fe88679fcab577a0b51420b4d7f9eb9fbb86e33d6fe2c875b731854aea.lkjp",
+        "bytes": 260647,
+        "sha256": "3e646fad396260059c3d269ec4ae18a2863d0374ce72056cbcc0664d918eaa65"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_114c5223ee99563edd73aaa3bacc88a325b7744e565bfb305f553915b4ce4d2e.lkjp",
+        "bytes": 255107,
+        "sha256": "f770511e3e9bdf43d22e60bd2cab0554c8489ec5a7efa545eeaa8415be709041"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_2ad6b86ef33b9f6f73966dd348c7ad25ccf299379a740ab14325791c447c395f.lkjp",
+        "bytes": 229973,
+        "sha256": "391c4fe210ea982c9310f97496b8328e45244806c5a2e702bc803fec165ed25e"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_39f8f4238a1b6faf2187cd21fb1ee0c35c54a9c827594faa8c48f959d28d3c30.lkjp",
+        "bytes": 13218,
+        "sha256": "1366d1f28a47bd850b783720ca48ff1ad123c553f63b32945c665a82a4b58c61"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_43b6cf2071c2776996d7bb726ddd82a700692031d95930388b74de37c01aac70.lkjp",
+        "bytes": 262019,
+        "sha256": "5abd73ee6f372c634b9f23591f66ca0dcb86c10ea04b910841f6d56c9f17f18f"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_4b8baac51243bd6a602721bc89efcb6b7e3038feff9e6c8be20bd065472e75f8.lkjp",
+        "bytes": 87467,
+        "sha256": "7abee22d1ceee6ebd9524c7a0e1306574a0a6edb1ed6ccd899a55c0ecdf89178"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_7117831c222eae6d308b42b5002c1b4219d347c22e690a95a1ecb14eabb2e638.lkjp",
+        "bytes": 162168,
+        "sha256": "9adc080fbea107e4a018d3edb891748e4ca01bf1b642ea95b4e20c04d627a8d3"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_77aa3214ff72d3bedbc409eb4a1df2b01e6a00436f672effadd4210a625ee38f.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_8caf5229cce1a4806cad37ad643596a06efcc32861906200d33fda2aa3da07ff.lkjp"
+      },
+      {
+        "status": "A",
+        "path": "packages/standard/packs/pack_8e365c26a84144cb1b4756dd606806133081f2161c5de0df7896846568e48fcc.lkjp",
+        "bytes": 184811,
+        "sha256": "4e9ab9864287509a773ff4b9154e2f033f0cb84fad39ec590e16b1a2274ef8dc"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_90a8012d37d2e0bd2d8c6e3a5b02d8cda05e26de8c1f36f400850c6baad889d9.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_993e34da9788c8225175ad3896b9f0e357db0a796204accc84e86083897bbff0.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_9c138f265d9ceabc51f3f9a76a212fdbcf42b52a35d40c7d4bdd89a330d45537.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_cbf006231497a05da8448eec02a1a5fc3af8b01952426071f39c6cc5f58bb54c.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_dc3c3592a2ad9e796d98705c29d83511df50dda4a599496d7f03def39d9b1353.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_ee0a57650b44d83abca2e6b0291984b587cbc5108be7998b102b41c2c2c02437.lkjp"
+      },
+      {
+        "status": "D",
+        "path": "packages/standard/packs/pack_f3f8d8f238a49cdf30d8d29baac9e45870580bb8cc7955f6fd0cfc3be2d5e796.lkjp"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/builtin_discovery.rs",
+        "bytes": 43435,
+        "sha256": "62967a0d34e48bdce1ef500fc85e565b995fb7ec44fdec429bcb875bca3bfc65"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/builtin_standard.rs",
+        "bytes": 41602,
+        "sha256": "3b756c562cf4816c42bc4d0527a5d67462a71a7b110fa9e6c59dfcaa81c96f93"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/change/request.rs",
+        "bytes": 76171,
+        "sha256": "b0c8ec26d4ad7e86c0b9010b8759062ec9b3df1999a42d7ca4c953f02de1c682"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/change/request/codec.rs",
+        "bytes": 63746,
+        "sha256": "41ffe6bdf0661c2e40b95530890cda5006d0921474c424cf2232a5c3495e429f"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/change/request/creation.rs",
+        "bytes": 42263,
+        "sha256": "e934e7565cdcf4816e78a7b816c770101887316dfc48b6775aa3a9ad43b71535"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/change/request/creation/declarations.rs",
+        "bytes": 20501,
+        "sha256": "4d0f1695a568fb552cb57617c9a0f602ec528a150bb7ab26308b31f26887922e"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/change/request/creation/mutation.rs",
+        "bytes": 26054,
+        "sha256": "9cfc2f3766703cf2d89de9b9b77e67de6bd8163053cc8896dc01c9b462268a2e"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/cli.rs",
+        "bytes": 278853,
+        "sha256": "39c1a3c1d6b3411f6c1000ae45efbf9ac93c012edf8042e00f08eb9dd8594d33"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/compiler/artifact.rs",
+        "bytes": 131884,
+        "sha256": "4fd68d4839debf45d1ec4504f27c02af1a93db24f495188eed061e9cc9a2810d"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/compiler/lower.rs",
+        "bytes": 70146,
+        "sha256": "f9ed002a6e61c85bac856406ff8a140dee46e31c5dbf9f0bf8f8bbdbe1a433bc"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/compiler/tests.rs",
+        "bytes": 103373,
+        "sha256": "f33d75a3c9a310184d26036c3b6765c2709447a84b03aaeebe43ad12d2b21af5"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/compiler/unit.rs",
+        "bytes": 55673,
+        "sha256": "7b73a92f4abea2888e55871acde3e4f1efbf59b1a1c56d3fd7a9ade28d2b0534"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/contract/registry.rs",
+        "bytes": 296371,
+        "sha256": "db1a29e02a1fe5d34304bbdb7be4d795131c9867e462cb97cb624deccd40b3e1"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/contributor.rs",
+        "bytes": 123035,
+        "sha256": "593b5c0cc72e21787e036c7a777d6967fae4c8f3cad6c97c0eefed8d17c1e66a"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/control/change.rs",
+        "bytes": 177061,
+        "sha256": "9a42db745f7f9826cedabc11350126008a965fa8476541bc62a14f5fdc6d0b54"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/prepare.rs",
+        "bytes": 103274,
+        "sha256": "a3bd53c434487c50495ab815b69e4cb5f9f602b1e82f9c9cb0ca61057323b18a"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/prepared_types.rs",
+        "bytes": 10559,
+        "sha256": "2e8af77821f7b26bec0d082075f64fe1a393dd458327ded14aaf15ba08372029"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/reference.rs",
+        "bytes": 134930,
+        "sha256": "0c9853aa348317014eada232dca043150390b1e264e9e148da0dc39719a105e4"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/reference_checked.rs",
+        "bytes": 56369,
+        "sha256": "e2599a35dde02d851e3db1a6ae0a332e8a0bdfe0a3d2cc6e813a5e7a5c9f6d90"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/reference_schema.rs",
+        "bytes": 12558,
+        "sha256": "6d7db111e5409d50a39b6949f59db6c6b86081f8cf4bfbdfe03e37f1b45776ee"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/reference_types.rs",
+        "bytes": 14009,
+        "sha256": "23193ca2e46deb0af681b3000c15b21f7a72a29c074e098359269686877915ee"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/tests.rs",
+        "bytes": 183426,
+        "sha256": "1b809bbc9f26879eeb191f3c5e3a7287101092d2f99f25f716fdcb9cd33b8fce"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/value.rs",
+        "bytes": 9212,
+        "sha256": "cd62e1adcdfb40aa2c1bdad9403aa4c898428a6ead83f20aed313ecddbd81d0d"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/vm.rs",
+        "bytes": 105484,
+        "sha256": "afd513bad5e2a3de320579f76c92afdb017943b13130a32579fc1638749cd788"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/vm_checked.rs",
+        "bytes": 51806,
+        "sha256": "55e0bfe66e2b9d97f0ee3a6185aa58f30951318c64c7b32ebe568ea24ae44333"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/vm_checked_tests.rs",
+        "bytes": 59126,
+        "sha256": "f1afe4f9ea239311da54cc7930932dc4e6e86b785fc4526f7dd1cab8fd608f64"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/execution/normalized/vm_intrinsics.rs",
+        "bytes": 19300,
+        "sha256": "a5ff3ac2dbf55f74143a780d29298b4307ca61e07d463bab2b267d3956491648"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/intrinsic_contract.rs",
+        "bytes": 19713,
+        "sha256": "f547ae217c0af2579a359b0062a469062a360b53bc7462e40f07d9d61928a511"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/affine.rs",
+        "bytes": 72591,
+        "sha256": "181b41edee4b17a1e9754734b806cb7bbf8a253b7a48c7b1eb665f1a9de4d6ef"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/contract.rs",
+        "bytes": 3378,
+        "sha256": "e6d107021d3cd18b2ac06266742968aa07ebf6252b6b9cc93727a24a1760439e"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/expression.rs",
+        "bytes": 16913,
+        "sha256": "c5006d8e16265956b655f5b1a3331eec5bac12fa26807a572a23f0321a50a1fe"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/infer.rs",
+        "bytes": 87288,
+        "sha256": "820455093e9f953dc06180250c66c1eb635fa261dcacabed9128ee72fc1440ac"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/owner.rs",
+        "bytes": 63548,
+        "sha256": "0e9c3ca69d2bb4188ce1027af4e9dffd1fc5ae8acd818e70413b9d4d3807ec3b"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/relation.rs",
+        "bytes": 31492,
+        "sha256": "c277fc89bdce9a2becfbb135b2fd0288887034f808a3683c03e50014506bb509"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/tests.rs",
+        "bytes": 87769,
+        "sha256": "ee1167852695365bcf99efa075511e4a8d3b411276b85550d64ad6f23f1301c5"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/kernel/validate.rs",
+        "bytes": 104272,
+        "sha256": "0267211aa7078bf558036effb287aba3dc807f31d0f5000a3430e73e993bd996"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/normalized_query.rs",
+        "bytes": 207118,
+        "sha256": "61ba392aab39ecb9cff871ed754b65a5377d7b8a14ed60d7002ec4b20472b2c3"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/package_interface.rs",
+        "bytes": 54210,
+        "sha256": "97f7e584d71d1a569d1031511771f1f559022dcfdde04036d9dff12fc592a15d"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/publication/repository_tests.rs",
+        "bytes": 343163,
+        "sha256": "1607b8a442d084dc1eecffcaef0bbbda67a178aff127001a2010ef37c55ea167"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/storage/contract.rs",
+        "bytes": 4205,
+        "sha256": "a20ad140f4bd4f476e9e8fa041134568970923a739d90a6e3d792233edb591d1"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/witness/contract.rs",
+        "bytes": 6043,
+        "sha256": "2514791fa56fbd5541dd9fab47aa6d627f32800d0f88efd350503c14cc882e7a"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/witness/summary_build.rs",
+        "bytes": 46252,
+        "sha256": "7025a2ec710d33c09e0bdc8e04c05c435f65cf15479d5c3098abd16f7cf7a28c"
+      },
+      {
+        "status": "M",
+        "path": "src/platform/witness/tests.rs",
+        "bytes": 18219,
+        "sha256": "81a77c2e93d731ffe0e13a156935121270fbbdabf03f83c05c38d7b0f93b5e21"
+      },
+      {
+        "status": "M",
+        "path": "tests/public_cli.rs",
+        "bytes": 387031,
+        "sha256": "d6bc52d5c82b5bb09fe4f358a1e7bf0da8688fa83592e097eb3a636e2e453962"
+      },
+      {
+        "status": "M",
+        "path": "tools/lkjscript-dev/src/distributed_http.rs",
+        "bytes": 135003,
+        "sha256": "fccae1edf1592c8de2b2ebbec9c7d4523ba3c72bb3efaeeba33a7799fa312da7"
+      },
+      {
+        "status": "M",
+        "path": "tools/lkjscript-dev/src/offline_packages.rs",
+        "bytes": 76624,
+        "sha256": "d3612a8a974117bb4b7d48fb4e9a931e93b141f9921bfe738eafa163c7b7ca0c"
+      },
+      {
+        "status": "M",
+        "path": "tools/lkjscript-dev/src/pure_tail.rs",
+        "bytes": 94811,
+        "sha256": "0824797eaacd184c3f7c493b9044f15b88f407a323a3f37ea4110fd2298a40b8"
+      },
+      {
+        "status": "M",
+        "path": "tools/lkjscript-dev/src/pure_tail_program.rs",
+        "bytes": 45178,
+        "sha256": "2b99daa429350b671dd37c134345348b9b494872464774a0859f4ae565c64091"
+      },
+      {
+        "status": "M",
+        "path": "tools/lkjscript-dev/src/service.rs",
+        "bytes": 272174,
+        "sha256": "78e061ecff8ee381fe28f390d4e5844c2fcb66655f5259f6bd3aef2d0ea78f16"
+      }
+    ],
+    "containing_record": "Final containing commit/tree and actual post-record verification are reported out of band, avoiding a self-referential hash."
+  },
+  "domains": {
+    "changed": {
+      "graph": 12,
+      "owner_magic": "LKJOWN12",
+      "dependency_magic": "LKJDEP12",
+      "retirement_magic": "LKJRET12",
+      "graph_envelopes_and_content_domains": 12,
+      "compiled_unit": 7,
+      "compiled_magic": "LKJCUN07",
+      "compilation_key": 7,
+      "package_interface": 8,
+      "package_interface_magic": "LKJPIF08",
+      "owner_summary": 7,
+      "owner_summary_envelope": 7,
+      "owner_summary_interface_dimension": 7,
+      "validator": 12,
+      "compact_change": 16,
+      "authored_intent": 13,
+      "registry": 15,
+      "cli": 29,
+      "function_definition_projection": 4,
+      "query": 7,
+      "pure_tail_receipt": 5,
+      "offline_packages_receipt": 3,
+      "product": "0.1.28"
+    },
+    "stable": {
+      "type_object": 10,
+      "type_magic": "LKJTYP10",
+      "type_envelope_and_digest_domains": 10,
+      "bytecode": 4,
+      "artifact": 16,
+      "package_container": 3,
+      "validation_witness": 7,
+      "summary_other_dimensions": 6,
+      "summary_magic": "LKJSUM11",
+      "semantic_root_magic": "LKJSMR01",
+      "semantic_state": 1,
+      "compiler_object_key_domain": "lkjscript.compiler-unit.v1",
+      "package_interface_object_key_domain": "lkjscript.package-interface-owner.v7",
+      "definition_digest_and_continuation_framing": 3,
+      "package_identity_migration_domain": 11,
+      "operational_data": "unchanged encodings/layouts",
+      "runtime_value": "unchanged flat immutable callable prefix"
+    },
+    "rationale": "Only changed meaning/representation owners advance. Stable framing hashes changed versioned content. Constraints have explicit u8 tags 0/1 and strict JSON closed sets. No enum-order identity, opcode, intrinsic factory, dictionary or persistent proof catalog."
+  },
+  "semantics": {
+    "authority": "Exact TypeParameterRecord/declaration; empty set unconstrained. Setter preserves ID/order; complete final candidate validates under GraphRepository publication ownership.",
+    "entailment": "All stored children/cases including absent containers participate. Pure Function is a leaf. Stored parameter requires the exact in-scope pure declaration assumption.",
+    "production_proof": "Bounded per-root visited traversal over compiled layouts and completed instantiated composite-type closure; rebuilt per validated preparation.",
+    "reference_proof": "Independent greatest-fixed-point elimination from canonical owners/layouts and independently completed composite closure; compiled flags cannot supply canonical proof.",
+    "runtime": "Resolved explicit arguments and actual runtime environments cross raw admission before locals/body. Checked retained descendants are not rescanned on repeated invocation. Work/proof storage are bounded and charged; actual admission checks cancellation during traversal and charges before growth.",
+    "shared_machinery": "Shared type/owner codecs, immutable raw representations and host adapters can conceal common faults. Fixed expectations, explicit tags, predecessor type/data bytes, metadata-erasure and restored-scan faults, independent wire/store observations constrain that risk. Live effects are executed once, never replayed for differential evidence."
+  },
+  "raw_evidence_root": ".artifacts/campaign/202609091625",
+  "migration": {
+    "method": "Retain isolated predecessor exports/bytes; materialize exact inventories through create-new GraphRepository; add empty constraints to existing parameters; validate before/after; publicly author standard addition; rebind exact standard dependency; canonical regenerate/compare before owned asset replacement.",
+    "standard": {
+      "old_owners": 688,
+      "new_owners": 723,
+      "old_exact_type_bytes": 105,
+      "retirements_preserved": 37,
+      "new_owners_added": 35,
+      "compiled_units": 126,
+      "graph_tests": 30,
+      "revision": "rev_06b6477bb1564352ddf42a0567371ed383d3d58725135d5edaebd54fd50bc5ef",
+      "semantic_state": "semantic_state_a96f15872291261b3c45f4b80648dba23a75a587a621c30d906449d6577fb259",
+      "package_revision": "package_revision_12e7d9a0ba281bd8e438acf80553fe405d05d5db3ca0c4e4fbb564cf8197e94b",
+      "transport": "package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1",
+      "artifact_bundle": "artifact_bundle_fb51f3f7ead2b7fce5f889c5280d75f0b2ae29b22ab2d1c727fe6afc12cf4e3f",
+      "assets": [
+        {
+          "path": "packages/standard/generated/standard.lkja",
+          "bytes": 397334,
+          "sha256": "7ffe836adf786bcc65f66181d26cd168d5a709a18725c0d0afffd3cbf940d6ed"
+        },
+        {
+          "path": "packages/standard/generated/standard.lkjp",
+          "bytes": 275085,
+          "sha256": "3ead1a17ab28bf52ae3fcfb13b29c86352836cc328f1ec15eda079c0f3dc5b0b"
+        }
+      ]
+    },
+    "lkjournal": {
+      "owners_preserved": 2040,
+      "own_types_preserved": 69,
+      "old_own_and_dependency_type_byte_witnesses": 160,
+      "retirements_preserved": 1058,
+      "exact_dependencies": 1,
+      "compiled_application_units": 90,
+      "total_units": 216,
+      "total_graph_tests": 37,
+      "revision": "rev_d07643ae5daa20e47582e8be62911a640b5f1338b791c34a47f35fb02729a130",
+      "semantic_state": "semantic_state_9083ae6473d929c830bc955e62a6ce464f1352a32f588025009371a63689a816",
+      "package_revision": "package_revision_ef67b17ffc62beb67db7c64031d4683ba1c26b44b5dbbc5f9bdd3565f6615132",
+      "transport": "package_transport_cbed4cc18989957cdd57d4ac2b2df1da9ab1d035d88ed6bfedb63b831e2cb531",
+      "artifact_bundle": "artifact_bundle_aaeda732e8687b4736f67d479521778889aa412ddb7604bb6b7f6751eb7bff17",
+      "asset": {
+        "path": "applications/lkjournal/generated/lkjournal.lkja",
+        "bytes": 1131294,
+        "sha256": "eeb3215ed6e4628724785211c8ce3ff778a0ee4c635d007e1b20fdbe613febbc"
+      }
+    },
+    "unchanged_fixture": {
+      "path": "tests/fixtures/graph10-unchanged-types-and-data.json",
+      "bytes": 576010,
+      "sha256": "04cf51f115e27b1ebef16db6d996889abc60a458d0607be3aef4c19508906767",
+      "type_byte_cases": 234,
+      "nominal_and_nested_data_cases": 89
+    },
+    "standard_public_changes": [
+      {
+        "path": ".artifacts/campaign/202609091625/standard-constant.lkjc",
+        "bytes": 1637,
+        "sha256": "02eb5f39f891ac2db709f82d50ddf6abf403791874808b39d1d4528070b4b0df",
+        "request": "request base=rev_66743c0a61e79cc984615b63ea640910251af773e7fff09aa5efa62c1ea33442 intent=capture-safe-constant-function idempotency=capture-safe-standard-constant\ntype.parameter as=@Value parameter=$Value\ntype.parameter as=@Argument parameter=$Argument\ntype.parameter as=@HelperValue parameter=$HelperValue\ntype.parameter as=@HelperArgument parameter=$HelperArgument\ntype.function as=@constant result=@Value\ntype.argument parent=@constant index=0 type=@Argument\nexpression.local as=$first value=$first-value\ncreate.function as=$first-helper module=core name=function-constant-first visibility=private result=@HelperValue effect=pure body=$first\nadd.type-parameter as=$HelperValue function=$first-helper name=Value\nadd.type-parameter as=$HelperArgument function=$first-helper name=Argument\nadd.parameter as=$first-value function=$first-helper name=value type=@HelperValue\nadd.parameter as=$first-argument function=$first-helper name=argument type=@HelperArgument\nexpression.function-value as=$first-callable function=$first-helper\ntype.argument parent=$first-callable index=0 type=@Value\ntype.argument parent=$first-callable index=1 type=@Argument\nexpression.local as=$capture value=$value\nexpression.bind as=$bound callee=$first-callable\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$constant module=core name=function-constant visibility=public result=@constant effect=pure body=$bound\nadd.type-parameter as=$Value function=$constant name=Value constraint=capture-safe\nadd.type-parameter as=$Argument function=$constant name=Argument\nadd.parameter as=$value function=$constant name=value type=@Value\n"
+      },
+      {
+        "path": ".artifacts/campaign/202609091625/standard-constant-tests.lkjc",
+        "bytes": 2537,
+        "sha256": "6926fdc286d5b6cfaf254a400fac5d59a4d04b82433389b42c7a7e695d102b1b"
+      }
+    ],
+    "inventories": [
+      {
+        "path": "capture_migration.rs",
+        "bytes": 5671,
+        "sha256": "5664c304203610b0bb83c0fc20269bb5b70886284961893dab1519143cb92b07",
+        "role": "Historical Graph 10-to-11 pattern inspected as reference, not the executed Graph 12 importer"
+      },
+      {
+        "path": "lkjournal-migration-02.log",
+        "bytes": 398,
+        "sha256": "0a8214e05b153aca853d757d0831de99de59e1fe3a31fdd8ad60f361bd00da62"
+      },
+      {
+        "path": "lkjournal-migration.json",
+        "bytes": 3117,
+        "sha256": "83e3f1e566d452a24108b78ab90ec1d8de45fce71915b035d90ea0b2ba921cb2"
+      },
+      {
+        "path": "lkjournal-migration.log",
+        "bytes": 702,
+        "sha256": "ee8c46df696269f74791dd3dc5cfcef967950e718a427e5fae120d94f680d79c"
+      },
+      {
+        "path": "lkjournal-predecessor.json",
+        "bytes": 2175742,
+        "sha256": "8e6a30c77989d8fdbd90175ca74ecbbf7397c6b252551e1fa6888faaef28d33a"
+      },
+      {
+        "path": "predecessor-export-build-02.log",
+        "bytes": 363,
+        "sha256": "3247ad39d8561f2ff3ffd171e2ce61dfef919fc11b22cddf3c57a06ef6ff3060"
+      },
+      {
+        "path": "predecessor-export-build.log",
+        "bytes": 2267,
+        "sha256": "63b2a537ba5870c87ddb2172d84d178a7b2f17735db77c6c9a6beb3b90328ba2"
+      },
+      {
+        "path": "predecessor-inventory.sha256",
+        "bytes": 804,
+        "sha256": "ad27d4fbf441cd296ff96808197f0fa769eba3ec6f22df25ef4461bfac731919"
+      },
+      {
+        "path": "standard-migration.json",
+        "bytes": 3108,
+        "sha256": "0a7b0266f1fb2c975ef76ce279cb857d8e0f3a335c50b8a5924d26dffc116e55"
+      },
+      {
+        "path": "standard-migration.log",
+        "bytes": 345,
+        "sha256": "2fd4686bf9ff63beed4381ff40f7961110e64e5b93c78ae684186db1623c79cb"
+      },
+      {
+        "path": "standard-predecessor.json",
+        "bytes": 574530,
+        "sha256": "b4029b6990751939e1e2f85818cf560fbbfd043173d769820c3a9fc49b5c2c11"
+      },
+      {
+        "path": "successor-migration.rs",
+        "bytes": 5944,
+        "sha256": "471aee13cf154657c6cb7115018e5ac573654c3370b5317cf19849d6fc5cb02f",
+        "role": "Executed temporary Graph 11-to-12 importer, removed from maintained source"
+      }
+    ],
+    "temporary_tooling": [
+      "e693388e8157d0184431f7a6e002622058c698356dde63db0f93cbc84158a831  .artifacts/campaign/202609091625/tooling-provenance/predecessor-additions.tar",
+      "1078368724a98bbc049790dc3d16ffe869ce771b11e47bc0feff4521a2a0b4b0  .artifacts/campaign/202609091625/tooling-provenance/predecessor.patch"
+    ],
+    "cleanup": "Temporary predecessor worktree and successor reader/module/example removed. Reader source/patches, predecessor exports, original assets and replaced owned packs remain only as ignored evidence. No operational store, queue or backup rewritten."
+  },
+  "acceptance": {
+    "CAP-1": {
+      "classification": "fresh passed",
+      "owners": [
+        "tests/public_cli.rs",
+        "tools/lkjscript-dev/src/pure_tail.rs",
+        "tools/lkjscript-dev/src/pure_tail_program.rs",
+        "packages/standard"
+      ],
+      "claims": [
+        "Copied discovery, plan/review/apply, complete definitions, check/build and execution of generic graph bodies",
+        "Runtime Env scale=3,bias=5 maps [1,2,4] to [8,11,17]; simultaneous scale=-2,bias=4 yields [2,0,-4] while first remains [8,11,17]",
+        "Runtime Text/List<Text> constants through standard map; empty input; repeated/complete binding; returned helpers; heterogeneous composition",
+        "Clearing captured Env constraint rejects without accepted publication"
+      ]
+    },
+    "CAP-2": {
+      "classification": "fresh passed",
+      "tests": [
+        "copied_binary_checks_capture_safe_instantiation_constraints_before_publication",
+        "copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity",
+        "copied_binary_rejects_unsafe_binding_meaning_before_publication",
+        "capture_constraint_set_has_stable_tags_and_strict_json"
+      ],
+      "oracle": "21 concrete stored types x direct/function-value; five open substitution cases x both forms; six wrong-scope/arity cases. Constrained target parameter is unused. Dead call checked by nominal invalidation fixture. Expected answers never call production entailment.",
+      "preserved": "Task/resource, hidden affinity, equality, serialization and session-retention negative owners remain passing."
+    },
+    "CAP-3": {
+      "classification": "fresh passed",
+      "tests": [
+        "copied_binary_constraint_edits_preserve_identity_and_validate_complete_callers",
+        "constraint_interface_edit_accounts_validation_and_cancels_review_without_publication",
+        "constraint_proofs_invalidate_when_named_type_layout_changes_without_type_identity_change"
+      ],
+      "claims": [
+        "Set/clear/rename preserve parameter ID; strengthened signature rejects unsafe caller; coherent caller/constraint edit succeeds",
+        "Stale reviewed apply, malformed/unknown/duplicate constraints, wrong owner, validation exhaustion/cancellation preserve authority inventories; healthy apply follows",
+        "Bound removal rejects capturing body. Secret nominal field edit rejects unreachable constrained call despite unchanged Named type digest",
+        "Safe nominal edit invalidates proofs; warm/clean artifacts match. Exact dependency rebind/staging, disposable corruption rebuild and canonical corruption rejection covered by package/tail/workspace owners."
+      ]
+    },
+    "CAP-4": {
+      "classification": "fresh passed",
+      "tests": [
+        "artifact_rejects_erased_or_forged_compiled_parameter_constraints",
+        "constrained_raw_factory_checks_types_and_real_environments_before_body"
+      ],
+      "owners": [
+        "tools/lkjscript-dev/src/offline_packages.rs",
+        "src/platform/compiler/tests.rs",
+        "src/platform/execution/normalized/vm_checked_tests.rs"
+      ],
+      "claims": [
+        "Non-built-in generic factory transports constraints after producer removal; independent consumer owns nominal Env and invokes returned private helper through map",
+        "Empty List<Secret> rejects. Valid-checksum missing, erased, and forged-unused compiled constraints reject against canonical owners",
+        "Unsatisfied/unresolved raw arguments, foreign provenance and hidden forbidden captures reject before body/downstream effect. Canonical reference rejects despite erased production metadata."
+      ]
+    },
+    "CAP-5": {
+      "classification": "fresh passed",
+      "tests": [
+        "bound_environment_cost_oracle_detects_real_per_invoke_rescanning",
+        "constrained_raw_factory_checks_types_and_real_environments_before_body",
+        "graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data"
+      ],
+      "claims": [
+        "N=1,256,4096 and K=1,64,1024 generic retained environment probes; no internal retained-descendant eligibility traversal/payload materialization; restored real scan fails oracle",
+        "Actual admission traversal cancellation, exact-fit/one-less byte limits, depth 256/257, cleanup and healthy reuse; unchanged tail/list gates",
+        "Standalone transactional HTTP maps runtime configuration with source directories absent. Independent wire/data observations show one success commit, hidden staged writes on trap/cancel and recovery; effects not replayed",
+        "Standard/lkjournal, HTTP, worker/session, unchanged type/data fixtures and temporary predecessor path deletion pass"
+      ]
+    },
+    "CAP-6": {
+      "classification": "fresh passed",
+      "required": [
+        "cargo run --locked -p lkjscript-dev -- check full --fresh --machine",
+        "lkjscript-dev release build --output PATH --receipt PATH",
+        "lkjscript-dev release admit --candidate PATH --build-receipt PATH --evidence-root ABSENT_ABSOLUTE_PATH"
+      ],
+      "bounds": {
+        "pure_tail_seconds_excluding_builds": 900,
+        "pure_tail_owned_file_bytes": 1073741824,
+        "type_depth": 256,
+        "execution_defaults": "unchanged",
+        "sampling": "existing owner policy unchanged"
+      },
+      "post_record": "Fresh final containing-record verification required; actual result reported out of band, not presumed passed."
+    }
+  },
+  "fault_sensitivity": {
+    "unconstrained_rule": {
+      "fault": "accept exact in-scope unconstrained parameters",
+      "original_sha256": "820455093e9f953dc06180250c66c1eb635fa261dcacabed9128ee72fc1440ac",
+      "faulty_sha256": "9bfb16092b1217780996e509ebb5ea6f5ba4c58c3f1446e40be22ed4e1bd499e",
+      "restored_sha256": "820455093e9f953dc06180250c66c1eb635fa261dcacabed9128ee72fc1440ac",
+      "status": {
+        "exit": 101,
+        "signal": null
+      },
+      "classification": "fresh passed negative oracle; deliberately faulty invocation failed",
+      "oracle": "copied_binary_checks_capture_safe_instantiation_constraints_before_publication",
+      "observation": "Unconstrained caller incorrectly accepted; fixed false expectation failed. Original source restored byte-identically before healthy focused/full checks.",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/constraint-fault-01.log",
+        "bytes": 2781,
+        "sha256": "7ae3bbac294fefc2bc9813eeb88e4bdcac7a58749b2ee9b97a73c5de6321a008"
+      }
+    },
+    "compiled_metadata": {
+      "classification": "fresh passed",
+      "cases": [
+        "missing vector",
+        "erased required Value constraint",
+        "forged unused Argument constraint"
+      ],
+      "expected_codes": [
+        "compiler_type_parameter_constraints",
+        "artifact_runtime_owner_semantics"
+      ],
+      "canonical_reference_fault": "Test erases prepared production metadata; canonical reference still rejects unsafe raw invocation before body."
+    },
+    "retained_scan": {
+      "classification": "fresh passed",
+      "mechanism": "Existing test-only restored descendant traversal performs real N*K work, detected by generic capture probe."
+    }
+  },
+  "verification": {
+    "full": {
+      "classification": "fresh passed",
+      "summary": {
+        "contract_version": 5,
+        "status": "passed",
+        "profile": "full",
+        "passed": 26,
+        "fresh": 26,
+        "reused": 0,
+        "selected": 26,
+        "elapsed_nanoseconds": 310668534713,
+        "receipt": ".artifacts/lkjscript-dev/check/1788947294878129582-92980-0/receipt.json",
+        "receipt_bytes": 61244,
+        "receipt_digest": "verification_64b42139a7352ba265b9a4909ce1d7397a7debdd75a9349c799376e00825624c",
+        "failure": null
+      },
+      "receipt": {
+        "path": ".artifacts/lkjscript-dev/check/1788947294878129582-92980-0/receipt.json",
+        "bytes": 61244,
+        "sha256": "546eebf388f4709570d9e97f385ddfe69d7279253045538f90da660c17ad04b4"
+      },
+      "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+      "input_digest": "verification_1c6fd81e5388f0485781a398dd2bd36884f001ce9753cdb279f1f40c0fa69c5d",
+      "final_input_digest": "verification_1c6fd81e5388f0485781a398dd2bd36884f001ce9753cdb279f1f40c0fa69c5d",
+      "input_stable": true,
+      "fresh_required": true,
+      "gates": [
+        {
+          "name": "fmt",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "clippy",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "workspace_tests",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "release_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "release_command_lifecycle",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "distributed_http_application",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "outbound_http_application",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "stateful_http_application",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "checker_self_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "rust_only_tooling",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "generated_public_guides",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "product_surface_audit",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_package_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_package_test",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_artifact_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "standard_artifact_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_package_export",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_package_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_transport_export",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "builtin_transport_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_artifact_build",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "application_artifact_compare",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "passed",
+          "execution": "fresh"
+        },
+        {
+          "name": "diff_check",
+          "status": "passed",
+          "execution": "fresh"
+        }
+      ],
+      "runtime": {
+        "digest": "verification_97370436dfad24d37dd7388e786b3583bcdc4f5f96770494466a30109970a5b4",
+        "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+        "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+        "platform": {
+          "operating_system": "linux",
+          "architecture": "x86_64",
+          "family": "unix",
+          "child_process_control": "linux_process_group_sigkill"
+        },
+        "environment_digest": "verification_57be6c5e1313658d2cac5709661e09dc3dfc22e24dc054da322558c3654d7ff1",
+        "environment_names": [
+          "CARGO_HOME",
+          "CARGO_NET_OFFLINE",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "PATH",
+          "RUSTUP_HOME",
+          "RUSTUP_TOOLCHAIN"
+        ],
+        "harness": {
+          "path": "/home/coder/workspace/lkjscript/target/debug/lkjscript-dev",
+          "kind": "file",
+          "mode": 488,
+          "bytes": 87018224,
+          "digest": "verification_24a7900ac0a199bb5924d24f787cdd3b7e916bf4fc5c497c0268bafac02c5917"
+        },
+        "command_executables": {
+          "$HARNESS": {
+            "path": "$HARNESS",
+            "kind": "file",
+            "mode": 488,
+            "bytes": 87018224,
+            "digest": "verification_24a7900ac0a199bb5924d24f787cdd3b7e916bf4fc5c497c0268bafac02c5917"
+          },
+          "/home/coder/workspace/lkjscript/target/release/lkjscript": {
+            "path": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+            "kind": "file",
+            "mode": 488,
+            "bytes": 20317040,
+            "digest": "verification_2881a12819af3f3317f2c1bc7650b05f1487bcb754171e5c7bbd3b13519ce3b4"
+          },
+          "cargo": {
+            "path": "cargo",
+            "kind": "symlink",
+            "mode": 511,
+            "bytes": 6,
+            "digest": "verification_f2514edd3269bcf268cb2ea43d511c134409c179a0eeec45edf4e6d548c810c5",
+            "link_target": "rustup"
+          },
+          "cmp": {
+            "path": "cmp",
+            "kind": "file",
+            "mode": 493,
+            "bytes": 43408,
+            "digest": "verification_2a5f88614c47900411d9b0b75bfa932f3cb6a789bf2b6a536be401d734438e9e"
+          },
+          "git": {
+            "path": "git",
+            "kind": "file",
+            "mode": 493,
+            "bytes": 4066232,
+            "digest": "verification_455cf6e599786fc752c75dd409f626ca9fc5ba8a7aed13bb96055c57b8711c88"
+          }
+        }
+      },
+      "workspace_tests": {
+        "library_passed": 522,
+        "service_tests_passed": 9,
+        "public_cli_passed": 37,
+        "contributor_tests_passed": 92,
+        "ignored": [
+          "cross_process_writer_helper: invoked by controlled subprocess proof",
+          "authored_owned_closure_scale_emits_complete_plan_under_default_admission: existing optional release-scale test not selected",
+          "reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope: existing optional release-scale test not selected"
+        ]
+      }
+    },
+    "target_build": {
+      "classification": "fresh passed",
+      "receipt": {
+        "path": ".artifacts/campaign/202609091625/musl-02/build-receipt.json",
+        "bytes": 2762,
+        "sha256": "53a974325daf0af4b15c29156432c83801e10d7f2934cdf7414574ccb9000f23"
+      },
+      "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+      "candidate": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-02/lkjscript",
+        "byte_length": 20457728,
+        "mode": 493,
+        "sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+        "elf": {
+          "class": "ELF64",
+          "machine": "x86-64",
+          "object_type": "position-independent-executable",
+          "inspector": "lkjscript-elf64-little-endian-inspector-1",
+          "program_headers": 9,
+          "load_headers": 4,
+          "dynamic_entries": 21,
+          "interpreter_headers": 0,
+          "needed_libraries": 0,
+          "glibc_version_requirements": 0,
+          "position_independent": true,
+          "runtime_linkage": "static-musl"
+        }
+      },
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--bin",
+        "lkjscript",
+        "--target",
+        "x86_64-unknown-linux-musl"
+      ],
+      "build_process": {
+        "status": "passed",
+        "exit_code": 0,
+        "signal": null,
+        "reason": null,
+        "elapsed_nanoseconds": 166669431,
+        "cpu_nanoseconds": 100000000,
+        "peak_rss_kib": 75624,
+        "stdout_limit_bytes": 8388608,
+        "stderr_limit_bytes": 33554432,
+        "stdout_limit_exhausted": false,
+        "stderr_limit_exhausted": false,
+        "stdout": {
+          "path": "build-receipt.cargo.stdout.log",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 0,
+          "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+        },
+        "stderr": {
+          "path": "build-receipt.cargo.stderr.log",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 218,
+          "digest": "verification_00f7d1200e7e149b0528eb3c1dd61b6bcb9dd74df5a2cbfc5e4527f90defdaa9"
+        }
+      },
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+      "musl_gcc": "x86_64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "installed_musl_packages": [
+        "musl=1.2.4-2:amd64",
+        "musl-dev=1.2.4-2:amd64",
+        "musl-tools=1.2.4-2:amd64"
+      ],
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152"
+    },
+    "target_admission": {
+      "classification": "fresh passed",
+      "summary": {
+        "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+        "cleanup_complete": true,
+        "oracles": 6,
+        "receipt": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/receipt.json",
+        "receipt_bytes": 74554,
+        "receipt_digest": "verification_2ac0df3dc50462e143249f0eef45893119cb14b5b3535085d57d00ca6be525bf",
+        "receipt_sha256": "6d80deb75f7c6958f0b9700078d4f5b9066deeb364613474e64b3d5136fde8d9",
+        "runtime_linkage": "static-musl",
+        "schema": {
+          "identity": "lkjscript-target-admission-receipt",
+          "version": 4
+        },
+        "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+        "status": "passed",
+        "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+        "target_triple": "x86_64-unknown-linux-musl",
+        "userlands": 2
+      },
+      "receipt": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/receipt.json",
+        "bytes": 74554,
+        "sha256": "6d80deb75f7c6958f0b9700078d4f5b9066deeb364613474e64b3d5136fde8d9"
+      },
+      "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+      "candidate": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-02/lkjscript",
+        "byte_length": 20457728,
+        "mode": 493,
+        "sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+        "elf": {
+          "class": "ELF64",
+          "machine": "x86-64",
+          "object_type": "position-independent-executable",
+          "inspector": "lkjscript-elf64-little-endian-inspector-1",
+          "program_headers": 9,
+          "load_headers": 4,
+          "dynamic_entries": 21,
+          "interpreter_headers": 0,
+          "needed_libraries": 0,
+          "glibc_version_requirements": 0,
+          "position_independent": true,
+          "runtime_linkage": "static-musl"
+        }
+      },
+      "verifier": {
+        "path": "/home/coder/workspace/lkjscript/target/debug/lkjscript-dev",
+        "byte_length": 87018224,
+        "mode": 488,
+        "sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6"
+      },
+      "classifications": [
+        {
+          "name": "static_linkage",
+          "classification": "fresh_passed",
+          "detail": "exact candidate passed first-party ELF inspection"
+        },
+        {
+          "name": "musl_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned musl userland"
+        },
+        {
+          "name": "older_glibc_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned older-glibc userland"
+        },
+        {
+          "name": "distributed_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary HTTP oracle passed"
+        },
+        {
+          "name": "outbound_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary deployment-bound outbound HTTP oracle passed"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh_passed",
+          "detail": "transferred public-authored offline package closure and standalone HTTP oracle passed"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh_passed",
+          "detail": "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed"
+        },
+        {
+          "name": "stateful_http",
+          "classification": "fresh_passed",
+          "detail": "transferred first-party-data BBS oracle passed"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh_passed",
+          "detail": "maintained lkjournal service oracle passed with the exact candidate"
+        }
+      ],
+      "userlands": [
+        {
+          "role": "musl",
+          "status": "passed",
+          "image": {
+            "requested": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "image_id": "sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "repository_digests": [
+              "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 3789228
+          },
+          "expected_libc": "musl-1.2",
+          "os_release_sha256": "11213d9953a7256acf4108d617411219dc05b17b251661cda0fa5bea33913b8d",
+          "os_release": [
+            "NAME=\"Alpine Linux\"",
+            "ID=alpine",
+            "VERSION_ID=3.22.5",
+            "PRETTY_NAME=\"Alpine Linux v3.22\"",
+            "HOME_URL=\"https://alpinelinux.org/\"",
+            "BUG_REPORT_URL=\"https://gitlab.alpinelinux.org/alpine/aports/-/issues\""
+          ],
+          "rootfs_archive_bytes": 8577024,
+          "rootfs_archive_sha256": "aa133db726b6a0229b2f37aa83b24cc20f6c78273bec3372dbbbf76e218332a5",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "candidate_mode": 493,
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "product_version": "0.1.28",
+          "capabilities_digest": "5834cc333c867df98e9eeda9d4a5e3f36baa8395b8eb7d0864161791d1fddc90",
+          "initial_revision": "rev_617001c2b5af096072311905bc32cdbba938094dcd1986913065d3e4c8e9d0d0",
+          "accepted_revision": "rev_4e8f298a16abd9e4da7275e9064f1053f0fe4f955f1399a5952916398755a5a7",
+          "artifact_bytes": 403700,
+          "artifact_sha256": "15d2921301b812dbecdd094f02234215e0e488498c16c1810a8920dc553ef361",
+          "clean_artifact_sha256": "15d2921301b812dbecdd094f02234215e0e488498c16c1810a8920dc553ef361",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        },
+        {
+          "role": "older-glibc",
+          "status": "passed",
+          "image": {
+            "requested": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "image_id": "sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "repository_digests": [
+              "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 30261201
+          },
+          "expected_libc": "glibc-2.31",
+          "os_release_sha256": "11f039f212d535c1d7e14fa8e6960c3d7724de5e0d4e71938d787496a5d08470",
+          "os_release": [
+            "PRETTY_NAME=\"Debian GNU/Linux 11 (bullseye)\"",
+            "NAME=\"Debian GNU/Linux\"",
+            "VERSION_ID=\"11\"",
+            "VERSION=\"11 (bullseye)\"",
+            "VERSION_CODENAME=bullseye",
+            "ID=debian",
+            "HOME_URL=\"https://www.debian.org/\"",
+            "SUPPORT_URL=\"https://www.debian.org/support\"",
+            "BUG_REPORT_URL=\"https://bugs.debian.org/\""
+          ],
+          "rootfs_archive_bytes": 84230144,
+          "rootfs_archive_sha256": "5d5b3803cbdae011aa2058d2fae9deb1fa83488effcf5b0d9abc5e29e876fd30",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "candidate_mode": 493,
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "product_version": "0.1.28",
+          "capabilities_digest": "5834cc333c867df98e9eeda9d4a5e3f36baa8395b8eb7d0864161791d1fddc90",
+          "initial_revision": "rev_d42f60df3920f6e6dbb8ef8fd141f2f3e57789459042fa27483da8d0a584fa7f",
+          "accepted_revision": "rev_c89a07e42e60a654e3fb4575f8b390c46ee91a604fcf840ee11881fa2ed331da",
+          "artifact_bytes": 403700,
+          "artifact_sha256": "6e1a380488ad4ed9692853df4ee0568d4f7925b7c4d6c527126c2aeacab6e88e",
+          "clean_artifact_sha256": "6e1a380488ad4ed9692853df4ee0568d4f7925b7c4d6c527126c2aeacab6e88e",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        }
+      ],
+      "oracles": [
+        {
+          "name": "distributed_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/distributed-http/receipt.json",
+            "byte_length": 80365,
+            "sha256": "82d16c38d83471f93501b8a81ecf8e45c6dbb608a305ede750d51265a10dc0f5"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 7067966695,
+          "commands": 46,
+          "runners": 2,
+          "requests": 14,
+          "cleanup_complete": true,
+          "prerequisite": "none"
+        },
+        {
+          "name": "outbound_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/outbound-http/receipt.json",
+            "byte_length": 59630,
+            "sha256": "2a969790927aa3b445670a04f8619ba49ff208c7b241c19e7b5dd5c0ab5a582c"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 15710352064,
+          "commands": 18,
+          "runners": 8,
+          "requests": 17,
+          "cleanup_complete": true,
+          "prerequisite": "http_client_adapter_1"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/offline-packages/receipt.json",
+            "byte_length": 2255666,
+            "sha256": "d55dd9f6e55692972c6439259cf97eb015e599f335e504031c95c1ff7f6ad15c"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 40456903332,
+          "commands": 104,
+          "runners": 1,
+          "requests": 1,
+          "cleanup_complete": true,
+          "prerequisite": "code_complete_package_container_1"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/pure-tail/receipt.json",
+            "byte_length": 4852962,
+            "sha256": "db8bbe5f61dbb7f5dfae97c540b667c9bc4ed55ad9aeccfb6734c271eb7ee547"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 195813284029,
+          "commands": 171,
+          "runners": 1,
+          "requests": 4,
+          "cleanup_complete": true,
+          "prerequisite": "pure-tail-execution"
+        },
+        {
+          "name": "stateful_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/musl-admission-02/stateful-http/receipt.json",
+            "byte_length": 331400,
+            "sha256": "a63c6cb7f0176e12f0614300315314df88aa8de942e0607464117b2d73a6c448"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 49829021403,
+          "commands": 235,
+          "runners": 3,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/lkjscript-dev/service/1788947651450449166-103391-0/receipt.json",
+            "byte_length": 175731,
+            "sha256": "56add882737ab7311e524e0c9c3fba2acc5b1876a00ad0cce8b47cec4acb5069"
+          },
+          "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+          "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+          "elapsed_nanoseconds": 18858517422,
+          "commands": 69,
+          "runners": 8,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        }
+      ],
+      "cleanup_complete": true
+    },
+    "post_record": {
+      "classification": "not run at record creation",
+      "requirement": "Final containing-commit full profile and exact local target build/admission are run after this record is committed; actual identities/dispositions reported out of band."
+    },
+    "numeric_observations": {
+      "classification": "fresh passed",
+      "reason": "Retain exact final-source assertion observations hidden by normal successful test capture; no broadened suite",
+      "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+      "command": "cargo test --locked --lib constrain -- --nocapture",
+      "passed": 5,
+      "log": {
+        "path": ".artifacts/campaign/202609091625/constraint-observations-final.log",
+        "bytes": 3453,
+        "sha256": "fb673192beb843b4930486688768b1e477acbb3c829f16f8034da568c2bc25f8"
+      },
+      "observations": [
+        "constraint-artifact-negative missing compiler_type_parameter_constraints",
+        "constraint-artifact-negative erased artifact_runtime_owner_semantics",
+        "constraint-artifact-negative forged-unused artifact_runtime_owner_semantics",
+        "constraint-raw false empty-list-secret ExecutionError { class: Infrastructure, code: \"normalized_value_admission\", message: \"capture type contains a secret, stream, resource, or unresolved stored parameter\", retryable: false, possibly_visible: false }",
+        "constraint-raw false unresolved ExecutionError { class: Infrastructure, code: \"normalized_runtime_type\", message: \"raw invocation requires fully resolved exact types\", retryable: false, possibly_visible: false }",
+        "constraint-raw false hidden-forbidden-environment ExecutionError { class: Infrastructure, code: \"normalized_value_admission\", message: \"invocation input value admission: capture type contains a secret, stream, resource, or unresolved stored parameter\", retryable: false, possibly_visible: false }",
+        "constraint-budget false exact_fit_bytes=25921 cancellation_nodes=49 healthy_reuse=true",
+        "constraint-raw true empty-list-secret ExecutionError { class: Infrastructure, code: \"normalized_reference_value_admission\", message: \"capture stores a secret, stream, resource, or unknown type parameter\", retryable: false, possibly_visible: false }",
+        "constraint-raw true unresolved ExecutionError { class: Infrastructure, code: \"normalized_reference_value_admission\", message: \"raw invocation requires resolved canonical type arguments\", retryable: false, possibly_visible: false }",
+        "constraint-raw true hidden-forbidden-environment ExecutionError { class: Infrastructure, code: \"normalized_reference_value_admission\", message: \"invocation input reference value admission: capture stores a secret, stream, resource, or unknown type parameter\", retryable: false, possibly_visible: false }",
+        "constraint-budget true exact_fit_bytes=22505 cancellation_nodes=95 healthy_reuse=true",
+        "constraint-reference-production-metadata-erasure rejected-before-body=true",
+        "constraint-publication exact_fit_expression_steps=59 one_over_rejected=true review_cancelled_after=5 same_owner=typeparam_585b16ab4b41c77fadd52a1432bf7107",
+        "constraint-nominal-invalidation unchanged_type=type_object_bdb5824a2cb21d6bd4a52218e767b5bda51a012841dd47607d3f047d4d5077ab unsafe_dead_call_rejected=true warm_clean_equal=true before=artifact_bundle_f43cf59c686cdfda8e341c28a518bee6a40a8cde00870f7a6848f65f581e8cd4 after=artifact_bundle_a66e746643f4688735110cf4c57da98e06943a3d64f84b5643fc6375577cb1a5"
+      ]
+    },
+    "binding_observations": {
+      "classification": "fresh passed",
+      "source_commit": "7fea892466b729a595d6b2bc76908d494ced139b",
+      "command": "cargo test --locked --lib bound_environment_cost_oracle_detects_real_per_invoke_rescanning -- --nocapture",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/binding-observations-final-02.log",
+        "bytes": 12399,
+        "sha256": "9e57f345b5459509c95ff925425c9b9da14626f4cd524cd86df81bd2096ff761"
+      },
+      "regular": [
+        {
+          "n": 1,
+          "k": 1,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 11827,
+          "elapsed_nanoseconds": 270309,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 1,
+          "k": 64,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 94987,
+          "elapsed_nanoseconds": 1006864,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 1,
+          "k": 1024,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 1362187,
+          "elapsed_nanoseconds": 15159969,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 1,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 136667,
+          "elapsed_nanoseconds": 858184,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 64,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 219827,
+          "elapsed_nanoseconds": 1589551,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 1024,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 1487027,
+          "elapsed_nanoseconds": 15752784,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 1,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 2018587,
+          "elapsed_nanoseconds": 9480976,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 64,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 2101747,
+          "elapsed_nanoseconds": 10315536,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 1024,
+          "reference": false,
+          "frames": 2,
+          "allocated_bytes": 3368947,
+          "elapsed_nanoseconds": 24410672,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 1,
+          "k": 1,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 6779,
+          "elapsed_nanoseconds": 1799294,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 1,
+          "k": 64,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 38216,
+          "elapsed_nanoseconds": 3784740,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 1,
+          "k": 1024,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 517256,
+          "elapsed_nanoseconds": 40538120,
+          "capture_admission_nodes": 7,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 1,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 101529,
+          "elapsed_nanoseconds": 1903771,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 64,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 132966,
+          "elapsed_nanoseconds": 4276245,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 256,
+          "k": 1024,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 612006,
+          "elapsed_nanoseconds": 40901664,
+          "capture_admission_nodes": 517,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 1,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 1530329,
+          "elapsed_nanoseconds": 10716480,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 64,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 1561766,
+          "elapsed_nanoseconds": 12913002,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        },
+        {
+          "n": 4096,
+          "k": 1024,
+          "reference": true,
+          "frames": 3,
+          "allocated_bytes": 2040806,
+          "elapsed_nanoseconds": 49542158,
+          "capture_admission_nodes": 8197,
+          "retained_descendant_visits": 0,
+          "full_materializations": 0
+        }
+      ],
+      "faults": [
+        {
+          "n": 4096,
+          "k": 1024,
+          "reference": false,
+          "regular_separable": true,
+          "restored_scan_separable": false,
+          "regular_descendant_visits": 0,
+          "restored_descendant_visits": 50419722
+        },
+        {
+          "n": 4096,
+          "k": 1024,
+          "reference": true,
+          "regular_separable": true,
+          "restored_scan_separable": false,
+          "regular_descendant_visits": 0,
+          "restored_descendant_visits": 46217226
+        }
+      ]
+    }
+  },
+  "environment": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "host_platform": {
+      "operating_system": "linux",
+      "architecture": "x86_64",
+      "family": "unix",
+      "child_process_control": "linux_process_group_sigkill"
+    },
+    "toolchain_configuration": "Pinned rust-toolchain.toml, locked workspace; PATH selects existing /home/coder/.cargo/bin; CARGO_PROFILE_DEV_DEBUG=0 for debug verifier/candidate size",
+    "limits": {
+      "cgroup_memory_bytes": 12884901888,
+      "host_swap_bytes": 4294967296
+    },
+    "observations": "Memory/swap/disk are this environment, not a minimum resource claim. Existing installed musl target/musl-gcc/Docker used without host package/global configuration changes.",
+    "harness_environment_digest": "verification_57be6c5e1313658d2cac5709661e09dc3dfc22e24dc054da322558c3654d7ff1"
+  },
+  "observations": {
+    "pure_tail": {
+      "receipt": {
+        "path": ".artifacts/campaign/202609091625/musl-admission-02/pure-tail/receipt.json",
+        "bytes": 4852962,
+        "sha256": "db8bbe5f61dbb7f5dfae97c540b667c9bc4ed55ad9aeccfb6734c271eb7ee547"
+      },
+      "schema": "lkjscript-pure-tail-acceptance-5",
+      "status": "fresh passed",
+      "elapsed_seconds": 195.813284029,
+      "peak_owned_file_bytes": 31520257,
+      "commands": 171,
+      "cleanup_complete": true,
+      "fixed_cases": {
+        "capture-safe-constraint-clear": {
+          "authority": {
+            "bytes": 430514,
+            "files": 6,
+            "head_sha256": "cd0b57b62881de6ddcd117bd816307b9a72216ca030015a7a56d0bf648186e4e",
+            "inventory_sha256": "b1fbf6e7933ae55502a1e4cd1e9936b54451fe5838c87a6903a5bf69619fb090"
+          },
+          "classification": "fresh passed",
+          "code": "kernel_type_bind_capture",
+          "parameter": "typeparam_f989bf620edd1bfad2c7977e8da476ab"
+        },
+        "run-61-constant-text": {
+          "authority": {
+            "bytes": 1357908,
+            "files": 10,
+            "head_sha256": "f8854dd955506ec7a840cb65932a5eec152d5c7bb75a63f2135fbad97651ed40",
+            "inventory_sha256": "bc12572c757292fda1a298b11d7e725871f730f915116b2c34facef593fec153"
+          },
+          "expected": "[\"runtime text\",\"runtime text\",\"runtime text\"]",
+          "production_allocated_bytes": 22246,
+          "production_allocation_charges": 145,
+          "production_collection_items": 102,
+          "production_instructions": 106,
+          "production_peak_call_frames": 3,
+          "production_tail_transfers": 6,
+          "production_value_work": {
+            "capture_admission_nodes": 6,
+            "classification_decisions": 162,
+            "constructor_child_visits": 6,
+            "input_admission_nodes": 5,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 3,
+              "element_handle_copies": 3,
+              "element_slots_reserved": 96,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 8,
+              "nodes_allocated": 3
+            },
+            "raw_result_admission_nodes": 0
+          },
+          "reference_allocated_bytes": 11996,
+          "reference_allocation_charges": 155,
+          "reference_collection_items": 102,
+          "reference_expressions": 58,
+          "reference_peak_call_frames": 3,
+          "reference_tail_transfers": 6,
+          "reference_value_work": {
+            "capture_admission_nodes": 6,
+            "classification_decisions": 182,
+            "constructor_child_visits": 6,
+            "input_admission_nodes": 5,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 3,
+              "element_handle_copies": 3,
+              "element_slots_reserved": 96,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 9,
+              "nodes_allocated": 3
+            },
+            "raw_result_admission_nodes": 0
+          }
+        },
+        "run-62-constant-text": {
+          "authority": {
+            "bytes": 1357908,
+            "files": 10,
+            "head_sha256": "f8854dd955506ec7a840cb65932a5eec152d5c7bb75a63f2135fbad97651ed40",
+            "inventory_sha256": "bc12572c757292fda1a298b11d7e725871f730f915116b2c34facef593fec153"
+          },
+          "expected": "[]",
+          "production_allocated_bytes": 12942,
+          "production_allocation_charges": 59,
+          "production_collection_items": 3,
+          "production_instructions": 31,
+          "production_peak_call_frames": 2,
+          "production_tail_transfers": 3,
+          "production_value_work": {
+            "capture_admission_nodes": 6,
+            "classification_decisions": 45,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 2,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 0,
+              "element_handle_copies": 0,
+              "element_slots_reserved": 0,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 0,
+              "nodes_allocated": 0
+            },
+            "raw_result_admission_nodes": 0
+          },
+          "reference_allocated_bytes": 7096,
+          "reference_allocation_charges": 63,
+          "reference_collection_items": 3,
+          "reference_expressions": 16,
+          "reference_peak_call_frames": 2,
+          "reference_tail_transfers": 3,
+          "reference_value_work": {
+            "capture_admission_nodes": 6,
+            "classification_decisions": 47,
+            "constructor_child_visits": 0,
+            "input_admission_nodes": 2,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 0,
+              "element_handle_copies": 0,
+              "element_slots_reserved": 0,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 0,
+              "nodes_allocated": 0
+            },
+            "raw_result_admission_nodes": 0
+          }
+        },
+        "run-63-constant-lists": {
+          "authority": {
+            "bytes": 1357908,
+            "files": 10,
+            "head_sha256": "f8854dd955506ec7a840cb65932a5eec152d5c7bb75a63f2135fbad97651ed40",
+            "inventory_sha256": "bc12572c757292fda1a298b11d7e725871f730f915116b2c34facef593fec153"
+          },
+          "expected": "[[\"first\",\"second\"],[\"first\",\"second\"]]",
+          "production_allocated_bytes": 21723,
+          "production_allocation_charges": 134,
+          "production_collection_items": 75,
+          "production_instructions": 81,
+          "production_peak_call_frames": 3,
+          "production_tail_transfers": 5,
+          "production_value_work": {
+            "capture_admission_nodes": 16,
+            "classification_decisions": 123,
+            "constructor_child_visits": 4,
+            "input_admission_nodes": 6,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 2,
+              "element_handle_copies": 1,
+              "element_slots_reserved": 64,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 8,
+              "nodes_allocated": 2
+            },
+            "raw_result_admission_nodes": 0
+          },
+          "reference_allocated_bytes": 12569,
+          "reference_allocation_charges": 142,
+          "reference_collection_items": 75,
+          "reference_expressions": 44,
+          "reference_peak_call_frames": 3,
+          "reference_tail_transfers": 5,
+          "reference_value_work": {
+            "capture_admission_nodes": 16,
+            "classification_decisions": 137,
+            "constructor_child_visits": 4,
+            "input_admission_nodes": 6,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 2,
+              "element_handle_copies": 1,
+              "element_slots_reserved": 64,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 9,
+              "nodes_allocated": 2
+            },
+            "raw_result_admission_nodes": 0
+          }
+        },
+        "run-64-generic-pair": {
+          "authority": {
+            "bytes": 1357908,
+            "files": 10,
+            "head_sha256": "f8854dd955506ec7a840cb65932a5eec152d5c7bb75a63f2135fbad97651ed40",
+            "inventory_sha256": "bc12572c757292fda1a298b11d7e725871f730f915116b2c34facef593fec153"
+          },
+          "expected": "{\"again\":[8,11,17],\"first\":[8,11,17],\"second\":[2,0,-4]}",
+          "production_allocated_bytes": 60082,
+          "production_allocation_charges": 552,
+          "production_collection_items": 321,
+          "production_instructions": 413,
+          "production_peak_call_frames": 4,
+          "production_tail_transfers": 24,
+          "production_value_work": {
+            "capture_admission_nodes": 56,
+            "classification_decisions": 647,
+            "constructor_child_visits": 21,
+            "input_admission_nodes": 10,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 9,
+              "element_handle_copies": 9,
+              "element_slots_reserved": 288,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 22,
+              "nodes_allocated": 9
+            },
+            "raw_result_admission_nodes": 0
+          },
+          "reference_allocated_bytes": 31656,
+          "reference_allocation_charges": 574,
+          "reference_collection_items": 321,
+          "reference_expressions": 257,
+          "reference_peak_call_frames": 5,
+          "reference_tail_transfers": 24,
+          "reference_value_work": {
+            "capture_admission_nodes": 56,
+            "classification_decisions": 705,
+            "constructor_child_visits": 21,
+            "input_admission_nodes": 10,
+            "internal_guard_descendant_visits": 0,
+            "lists": {
+              "branch_slot_copies": 0,
+              "branch_slots_reserved": 0,
+              "element_handle_allocations": 9,
+              "element_handle_copies": 9,
+              "element_slots_reserved": 288,
+              "full_materializations": 0,
+              "materialized_elements": 0,
+              "node_visits": 23,
+              "nodes_allocated": 9
+            },
+            "raw_result_admission_nodes": 0
+          }
+        }
+      },
+      "retained_environment_matrix": [
+        {
+          "n": 1,
+          "k": 1,
+          "production": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 1,
+          "k": 64,
+          "production": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 1,
+          "k": 1024,
+          "production": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 9,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 256,
+          "k": 1,
+          "production": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 256,
+          "k": 64,
+          "production": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 256,
+          "k": 1024,
+          "production": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 519,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 4096,
+          "k": 1,
+          "production": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 4096,
+          "k": 64,
+          "production": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        },
+        {
+          "n": 4096,
+          "k": 1024,
+          "production": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          },
+          "reference": {
+            "capture_admission_nodes": 8199,
+            "internal_guard_descendant_visits": 0,
+            "payload_materializations": 0,
+            "materialized_elements": 0
+          }
+        }
+      ],
+      "bounded_stack": {
+        "classification": "fresh passed",
+        "stack_bytes": 2097152,
+        "call_frame_limit": 8,
+        "cases": 111,
+        "cleanup_complete": true
+      },
+      "standalone_http": {
+        "after_configured_changes": 3,
+        "after_recovery_changes": 2,
+        "after_trap_changes": 1,
+        "artifact_sha256": "81baf62ac9a3285747741fba15812c03ba79df3119ebeb875e3f1935c6c63a52",
+        "configured_request": {
+          "bias": 5,
+          "items": [
+            1,
+            2,
+            4
+          ],
+          "scale": 3
+        },
+        "configured_response": "[8,11,17]",
+        "fixed_response_length": 8192,
+        "fixed_response_sum": 100691968,
+        "initial_committed_changes": 1,
+        "initial_data_revisions": 1,
+        "mapped_data_equals_wire": true,
+        "maximum_live_transactions": 1,
+        "project_directories_absent": true,
+        "pure_effects_replayed": false,
+        "trap": "integer overflow inside the final fold callback after staging"
+      },
+      "cancellation": {
+        "cancelled_key_absent": true,
+        "committed_changes_after_recovery": 4,
+        "execution": {
+          "cancellation_checks": 20000,
+          "classification": "fresh passed",
+          "cleanup_complete": true,
+          "effects_replayed": false,
+          "failure": {
+            "class": "cancelled",
+            "code": "execution_cancelled",
+            "message": "execution was cancelled by its owning task scope",
+            "possibly_visible": false,
+            "retryable": false
+          },
+          "observation": {
+            "allocated_bytes": 2081730,
+            "allocation_charges": 2447,
+            "calls": 623,
+            "capability_calls": 2,
+            "collection_items": 10188,
+            "external_calls": 370,
+            "instructions": 2198,
+            "live_call_frames_after": 0,
+            "live_handles_after": 0,
+            "live_locals_after": 0,
+            "live_operands_after": 0,
+            "live_transactions_after": 0,
+            "live_type_bindings_after": 0,
+            "maximum_call_depth": 5,
+            "maximum_control_frames": 5,
+            "maximum_live_locals": 20,
+            "maximum_live_transactions": 1,
+            "maximum_live_type_bindings": 7,
+            "maximum_value_stack": 5,
+            "production_tier": "graph12_dense_bytecode_7",
+            "tail_transfers": 125,
+            "value_work": {
+              "capture_admission_nodes": 22,
+              "classification_decisions": 3568,
+              "constructor_child_visits": 126,
+              "input_admission_nodes": 8196,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 62,
+                "element_handle_copies": 902,
+                "element_slots_reserved": 1984,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 838,
+                "nodes_allocated": 62
+              },
+              "raw_result_admission_nodes": 1
+            }
+          },
+          "recovery_length": 8192,
+          "recovery_observation": {
+            "allocated_bytes": 31267714,
+            "allocation_charges": 311932,
+            "calls": 81932,
+            "capability_calls": 4,
+            "collection_items": 285713,
+            "external_calls": 49157,
+            "instructions": 286796,
+            "live_call_frames_after": 0,
+            "live_handles_after": 0,
+            "live_locals_after": 0,
+            "live_operands_after": 0,
+            "live_transactions_after": 0,
+            "live_type_bindings_after": 0,
+            "maximum_call_depth": 5,
+            "maximum_control_frames": 5,
+            "maximum_live_locals": 20,
+            "maximum_live_transactions": 1,
+            "maximum_live_type_bindings": 7,
+            "maximum_value_stack": 5,
+            "production_tier": "graph12_dense_bytecode_7",
+            "tail_transfers": 16387,
+            "value_work": {
+              "capture_admission_nodes": 22,
+              "classification_decisions": 467038,
+              "constructor_child_visits": 16393,
+              "input_admission_nodes": 8196,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 5042,
+                "branch_slots_reserved": 15264,
+                "element_handle_allocations": 8196,
+                "element_handle_copies": 126976,
+                "element_slots_reserved": 262272,
+                "full_materializations": 1,
+                "materialized_elements": 8192,
+                "node_visits": 42124,
+                "nodes_allocated": 8673
+              },
+              "raw_result_admission_nodes": 6
+            }
+          },
+          "recovery_sum": 33558528,
+          "stack_bytes": 2097152
+        }
+      },
+      "retained_requests_and_inventories": [
+        {
+          "path": "clear-required-constraint.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 181,
+          "digest": "verification_cbb1d14493b6abe1ee0d2a65edcb1b4c7da3532e9e7ca473f34be7251bd4d4f7"
+        },
+        {
+          "path": "consumer-inventory.json",
+          "kind": "file",
+          "mode": 384,
+          "bytes": 95024,
+          "digest": "verification_b58815e0e11f051e8ca1fa22b639f9f234d381314fe254ff3dc8fe30290942f6"
+        },
+        {
+          "path": "http-inventory.json",
+          "kind": "file",
+          "mode": 384,
+          "bytes": 16990,
+          "digest": "verification_472047c46cc9e8b232fd854ba21088f4849435d946a54d6785b0201d7d0d1271"
+        },
+        {
+          "path": "invalid-map-false.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 746,
+          "digest": "verification_470305a555c58c21e8833701d3b0540ea20fa4dc88a2a8bb9eb5accc97f22fe2"
+        },
+        {
+          "path": "invalid-map-true.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 944,
+          "digest": "verification_a4d613149fddf9365caa1956f37a7652934a493c4a667b772140190f27157e05"
+        },
+        {
+          "path": "producer-inventory.json",
+          "kind": "file",
+          "mode": 384,
+          "bytes": 12664,
+          "digest": "verification_c7f3a684b7bf7fe35ea684ecb6a906e97df705caf40e9c7519a41918d6c7b0c0"
+        },
+        {
+          "path": "request-132.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 759,
+          "digest": "verification_ec23c7f65a45126c2165c20b74470f7d253fe89e70b6cd332dbf4a916a90b9ab"
+        },
+        {
+          "path": "request-16.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 6966,
+          "digest": "verification_7067c83e76b973786482e8981026969e0fe562249018f887d7e69d57f29c9ecf"
+        },
+        {
+          "path": "request-165.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 10238,
+          "digest": "verification_60e31e5aee9542fa0f5c0c627ac6c2e1686c676bd83db70723eed4cf1afd81c3"
+        },
+        {
+          "path": "request-25.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 63370,
+          "digest": "verification_6f580378ba7ad636949659c915b7f92675e6fa834e1ce1472a9a763cacefe355"
+        }
+      ],
+      "exact_io": [
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/producer",
+            "inspect",
+            "owner",
+            "pure_function",
+            "decl_a415dcc20d7f1ca33fb10846c00d3978",
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0019.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 18381,
+            "digest": "verification_d38dfaad9230f25192d7fa546bf3212ed9030897844fd4e82723bc918fa8cc2e"
+          },
+          "stderr": {
+            "path": "command-0019.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/producer",
+            "inspect",
+            "owner",
+            "pure_function",
+            "decl_810bf2305fd7c4801da31e0a482a2696",
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0020.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 19298,
+            "digest": "verification_c65a97f1b5e92d46ff826b41c4b098161eda176a24a1ab3481dcd3287f2705f7"
+          },
+          "stderr": {
+            "path": "command-0020.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "inspect",
+            "owner",
+            "pure_function",
+            "decl_8ce58f84b0290633a5de38b6beb2e929",
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0028.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 12237,
+            "digest": "verification_1d217c3f935682c56db840fbb73caeb8cc174530ae0581f1d9de942474148390"
+          },
+          "stderr": {
+            "path": "command-0028.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "inspect",
+            "owner",
+            "pure_function",
+            "decl_2c0373dcb8f6d5d1c6693e1036bd9101",
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0029.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 22508,
+            "digest": "verification_aa3a2bba04e740d9f97231352e5dc17cf0a654e39de7f7d777fbdbd53a079001"
+          },
+          "stderr": {
+            "path": "command-0029.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "run",
+            "constant-text",
+            "--arguments",
+            "[\"runtime text\",[1,2,4]]"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0060.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 2416,
+            "digest": "verification_bf7a55ef0d9962a35d272eea9fcd80579321c19554fa73bf7225f8a525d11e52"
+          },
+          "stderr": {
+            "path": "command-0060.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "run",
+            "constant-text",
+            "--arguments",
+            "[\"runtime text\",[]]"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0061.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 2354,
+            "digest": "verification_05c595fe1bd1ace2da830ab5aeb1c4567238edb521d48bd2376fb738329b035d"
+          },
+          "stderr": {
+            "path": "command-0061.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "run",
+            "constant-lists",
+            "--arguments",
+            "[[\"first\",\"second\"],[1,2]]"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0062.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 2411,
+            "digest": "verification_12dbb98f3991b87c72e0f86cd1086c7a13636bccbc64c2c6a04a84e259713200"
+          },
+          "stderr": {
+            "path": "command-0062.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/consumer",
+            "run",
+            "generic-pair",
+            "--arguments",
+            "[{\"scale\":3,\"bias\":5},{\"scale\":-2,\"bias\":4},[1,2,4]]"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0063.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 2437,
+            "digest": "verification_6c711a657a1f45b661846cf0b41db781fa73c095e536e48213d0f660d9f58eee"
+          },
+          "stderr": {
+            "path": "command-0063.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        },
+        {
+          "command": [
+            "/tmp/lkjscript-pure-tail-BfdFO5/lkjscript",
+            "--project",
+            "/tmp/lkjscript-pure-tail-BfdFO5/http",
+            "inspect",
+            "owner",
+            "task_function",
+            "decl_81a739675b45db6949af1d82ceae6a9b",
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576"
+          ],
+          "status": "passed",
+          "stdout": {
+            "path": "command-0164.stdout",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 15524,
+            "digest": "verification_49b1978c755df0e2e7317e1cc7f11b47e2d0b37d4478677a2193944b004702fe"
+          },
+          "stderr": {
+            "path": "command-0164.stderr",
+            "kind": "file",
+            "mode": 416,
+            "bytes": 0,
+            "digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+          }
+        }
+      ]
+    },
+    "offline_packages": {
+      "receipt": {
+        "path": ".artifacts/campaign/202609091625/musl-admission-02/offline-packages/receipt.json",
+        "bytes": 2255666,
+        "sha256": "d55dd9f6e55692972c6439259cf97eb015e599f335e504031c95c1ff7f6ad15c"
+      },
+      "schema": "lkjscript-offline-packages-acceptance-3",
+      "status": "fresh passed",
+      "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+      "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+      "elapsed_seconds": 40.456903332,
+      "commands": 104,
+      "cleanup_complete": true,
+      "selected": {
+        "artifact-a1-corrupt-cache": "838d7be2624ea20942327ec0f8c8503eb64887f42dd252ba1bb7f394a41d7341",
+        "artifact-a2-corrupt-cache": "ead919c736b964d26abc3c7988f48719b5bb709ee6729a2b6d56d48c4ff1f152",
+        "bound_private_factory": "returned-rebound-invoked-after-producer-removal",
+        "canonical_body_corruption": "pack_entry_checksum",
+        "fixed_results": "11,11,12",
+        "generic_capture_factory": "capture-safe;private-generic-helper;consumer-nominal-env",
+        "imported_capture_constraint": "capture-safe;unsafe-empty-container-rejected",
+        "post-replacement-compiled": "2",
+        "post-replacement-manifest": "compilation_manifest_c9f15e4d97d1033deeb04b1f96bfda570db66c2ad9d208791d876de7f21f175d",
+        "post-replacement-removed": "0",
+        "post-replacement-reused": "5",
+        "private_factory_map": "[7,8,10];both-tiers;producers-absent",
+        "producers_absent_before_execution": "true",
+        "rejection-kernel_type_constraint": "7801099e742f56ea595a583cc00076a1558c72bf9713d85bc5a9aede3667fa73"
+      },
+      "request_files": [
+        {
+          "path": "altered-replacement.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 609,
+          "digest": "verification_2263698824d98a7ca31289a8245fb24e414bd776402f9fffa8a9ea6f6d5afffd"
+        },
+        {
+          "path": "conflict.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 332,
+          "digest": "verification_9c3ddf28e582ce2b9d2c3a2df972a2351e3e2371e702344fb3944cbf9bc2bb30"
+        },
+        {
+          "path": "forbidden-35.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 409,
+          "digest": "verification_2bcd3435bc9dde6ff2359d6c344bbc70d1e40503c28ef80ecb5dfc0fe967d581"
+        },
+        {
+          "path": "forbidden-54.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 409,
+          "digest": "verification_0792a225746b1744de463e56b166b20e28e29109bc752235d2e6c249dd752225"
+        },
+        {
+          "path": "imported-unsafe-instantiation.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 625,
+          "digest": "verification_de44131e69a6aeb1b1a5018487cabdebe5be923478d3229512447af094516c7c"
+        },
+        {
+          "path": "request-100.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 520,
+          "digest": "verification_e4b48e7a05388d02340043bcdd88808f418113fafe05173392e18960a9ff5c6e"
+        },
+        {
+          "path": "request-11.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 633,
+          "digest": "verification_ea1b7fa259ece398e5c06cb3a6322875e6370ce07fb743d6dad55206cd65858b"
+        },
+        {
+          "path": "request-13.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 316,
+          "digest": "verification_ce902c7a9ae5c096a7c5e65886a88d981fd9a839f0ea6bec605a08fb615f81db"
+        },
+        {
+          "path": "request-15.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 651,
+          "digest": "verification_68afca43cd4eccc9bc3fe04c850f0eca99636a50edff62ead68f8c6b95895ff9"
+        },
+        {
+          "path": "request-17.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 2287,
+          "digest": "verification_c5d22d83b18a295d5cf030c2e5cf97eb464e1db035460bbd5546083860ea50e7"
+        },
+        {
+          "path": "request-24.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 2308,
+          "digest": "verification_3b86e6080f3a2bde7ba507e2246cd1b9074be42659f941bd7dfcc6a9ca167c29"
+        },
+        {
+          "path": "request-28.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 1582,
+          "digest": "verification_91484463c2217c535f247c37dbc26907c3943c9c09ef63ee91f1dfbf6344fdea"
+        },
+        {
+          "path": "request-31.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 2461,
+          "digest": "verification_d74a07aa1b2bd9f1aebd95e520f8350fc0c01720b70920fd6c8e1910f2613c85"
+        },
+        {
+          "path": "request-49.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 2155,
+          "digest": "verification_38d4a6e4746e00651cae4a8af37c76ba9bcf5812d00f33d4f0594da4119f5163"
+        },
+        {
+          "path": "request-51.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 1052,
+          "digest": "verification_992e2c4d9a3fc5d7ac5b699dbfab6e0a10b3bcd64c5181a3cda6b925a64c94f0"
+        },
+        {
+          "path": "request-55.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 520,
+          "digest": "verification_4c48e44df22bf4a810b2a9bbfec4ae7c733e7f013e0b1361c9d9fa398579fd21"
+        },
+        {
+          "path": "request-59.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 355,
+          "digest": "verification_1fa7621d0380a24a28d0474c0d856484229eddcedf0f943de74a9bb808998b6d"
+        },
+        {
+          "path": "request-63.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 355,
+          "digest": "verification_12381fe111f9416fd80403af64841ed578f07f9f16ec7c190a9236503c6d1121"
+        },
+        {
+          "path": "request-87.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 605,
+          "digest": "verification_70b19748ba1c9d7588403d8448c75d0811c838cbf7442a556f83fc525371e5eb"
+        },
+        {
+          "path": "request-9.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 1297,
+          "digest": "verification_e74d595ff93428ac712f82f26264783c6bad64181592e668bf08cb80c3eb291b"
+        },
+        {
+          "path": "stale-replacement.lkjc",
+          "kind": "file",
+          "mode": 416,
+          "bytes": 582,
+          "digest": "verification_af46402c6eb37ddc79e2b54e5751d3466c29e815ddeac08fe337f8cedd8a606a"
+        }
+      ]
+    },
+    "measurement_policy": "Advisory nanosecond/KiB observations only. Existing sampling policy and 900-second/1GiB invocation bounds unchanged; builds excluded. Exact raw receipts retain units, workloads, inputs/outputs and negative diagnostics. This report selects bounded observations, not a new verifier."
+  },
+  "attempts": [
+    {
+      "name": "baseline constraint negative",
+      "classification": "failed as expected at predecessor; capability missing",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/baseline-constraint-negative.log",
+        "bytes": 1069,
+        "sha256": "c44bd390f426bcbdf98ac1256ea5e0e171476deeafcd33ae0aa848a55e24a3a5"
+      }
+    },
+    {
+      "name": "focused-01",
+      "classification": "fresh passed at prior implementation inputs; superseded for final-source proof",
+      "summary": {
+        "contract_version": 5,
+        "status": "passed",
+        "profile": "focused",
+        "passed": 6,
+        "fresh": 6,
+        "reused": 0,
+        "selected": 6,
+        "elapsed_nanoseconds": 183832890448,
+        "receipt": ".artifacts/lkjscript-dev/check/1788946105100804749-73440-0/receipt.json",
+        "receipt_bytes": 15202,
+        "receipt_digest": "verification_6362eccd7d45616621db897022d20f84702f9c3b620523164b655ea565c1e69a",
+        "failure": null
+      }
+    },
+    {
+      "name": "full-01",
+      "classification": "failed",
+      "summary": {
+        "contract_version": 5,
+        "status": "failed",
+        "profile": "full",
+        "passed": 25,
+        "fresh": 25,
+        "reused": 0,
+        "selected": 26,
+        "elapsed_nanoseconds": 659566870700,
+        "receipt": ".artifacts/lkjscript-dev/check/1788946427694766175-78246-0/receipt.json",
+        "receipt_bytes": 62180,
+        "receipt_digest": "verification_99fa4b83142ea68fabc65f79adf0b783160b01eb73a991bded53ca07cc946ac0",
+        "failure": {
+          "owner": "distributed_http_application",
+          "status": "failed",
+          "reason": "nonzero_exit"
+        }
+      },
+      "diagnosis": "25 gates fresh passed; distributed HTTP reader retained projection 3. Reader also had old standard test count; corrected before full-02."
+    },
+    {
+      "name": "musl-build-01",
+      "classification": "failed",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/musl-build-01.log",
+        "bytes": 181,
+        "sha256": "9c1b4c98f21490c8f5663cd455732f9adbc94ab2735f435d3e2219897cdcba7a"
+      },
+      "diagnosis": "Output parent did not exist; no build executed. Created owned parent, then owner build passed."
+    },
+    {
+      "name": "musl-admission-01",
+      "classification": "failed",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/musl-admission-01-summary.json",
+        "bytes": 118,
+        "sha256": "77bc9e6694bd17faf8da7ffa42f552682ef4822bda792323c8ec2a4b66cf369e"
+      },
+      "diagnosis": "Static linkage and two pinned userlands passed; distributed HTTP oracle failed projection-version expectation; no final admission receipt was produced."
+    },
+    {
+      "name": "distributed-reader-fix-01",
+      "classification": "failed",
+      "summary": {
+        "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+        "commands": 35,
+        "elapsed_nanoseconds": 4094901642,
+        "receipt": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/distributed-reader-fix-01/receipt.json",
+        "receipt_bytes": 51299,
+        "receipt_digest": "verification_d174474194b32ebad448b7b751455d8384e83f367cbd564c03e6632b9dd7e1f0",
+        "receipt_sha256": "5ef4e6f964b212a0a6cd7663b1c7ffeac934fa8d6d8fd08d30a5e88fb84ee0ae",
+        "runners": 0,
+        "schema": {
+          "identity": "lkjscript-distributed-http-acceptance",
+          "version": 4
+        },
+        "status": "failed",
+        "verifier_sha256": "f09f52fe4877eb498b03144d2787f6de41f8c858909d0c34192cb504eb0eb773",
+        "workflow": "distributed-http-application"
+      },
+      "diagnosis": "Projection assertion corrected; standard test count still expected 29 rather than 31."
+    },
+    {
+      "name": "distributed-reader-fix-02",
+      "classification": "fresh passed",
+      "summary": {
+        "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+        "commands": 46,
+        "elapsed_nanoseconds": 6781669656,
+        "receipt": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/distributed-reader-fix-02/receipt.json",
+        "receipt_bytes": 80352,
+        "receipt_digest": "verification_6a3c68078c1e754636f270b2d01a7fa5c48c401de68ae73720bfaf64efeb29ab",
+        "receipt_sha256": "c28a20884960f568fea534977878d8b461fed0c09fa73f885c86ccf43f5c49a9",
+        "runners": 2,
+        "schema": {
+          "identity": "lkjscript-distributed-http-acceptance",
+          "version": 4
+        },
+        "status": "passed",
+        "verifier_sha256": "79d00c46a7de330b5327118bc77b334c95853d23fd9bb63fcf55bee7888e05d6",
+        "workflow": "distributed-http-application"
+      }
+    },
+    {
+      "name": "pure-tail-01",
+      "classification": "failed",
+      "diagnosis": "Public graph callback exposed private nominal Env; corrected fixture visibility."
+    },
+    {
+      "name": "pure-tail-02",
+      "classification": "failed",
+      "diagnosis": "Old independent collection accounting assumed 9 prefix/record slots; generic factory requires 11. Corrected explicit derived schedule; no runtime limit relaxed."
+    },
+    {
+      "name": "pure-tail-03",
+      "classification": "failed",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/pure-tail-03-summary.json",
+        "bytes": 74,
+        "sha256": "d291c918c01e659f1ec54edaae4519bb15cd42c82771c6b7aada4e7c1a89fe00"
+      },
+      "diagnosis": "All 171 workload commands passed, cleanup complete, 384.636853806 seconds. Transferred reader rejected foreign executable binding after mutable build-path rebuild. Workload pass is not relabelled invocation success."
+    },
+    {
+      "name": "offline-packages-01",
+      "classification": "failed",
+      "diagnosis": "Expected 32 combined graph tests; two new standard tests make 34."
+    },
+    {
+      "name": "offline-packages-02",
+      "classification": "fresh passed at iteration candidate; superseded for final source",
+      "summary": {
+        "classification": "fresh passed",
+        "digest": "verification_87ccbf0d9e9978f7854433b5b5520717e2c98219bbd10b535a78dc5319d69415",
+        "failure": null,
+        "receipt": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091625/offline-packages-02/receipt.json",
+        "status": "passed"
+      }
+    },
+    {
+      "name": "binding-observations-final",
+      "classification": "not run",
+      "log": {
+        "path": ".artifacts/campaign/202609091625/binding-observations-final.log",
+        "bytes": 257,
+        "sha256": "16f3d4ecb0fb1c26f9d9f4686b56fdb1d03186f2bbe5fee670ee25d1fd5bd0db"
+      },
+      "diagnosis": "Short name with --exact selected zero fully qualified tests; not counted as proof. Rerun without --exact selects the one intended test."
+    }
+  ],
+  "iterative_diagnostic_logs": [
+    {
+      "path": ".artifacts/campaign/202609091625/artifact-constraint-test-01.log",
+      "bytes": 1224,
+      "sha256": "7097ac2e334836d02e4ae7dcf21fb0861c1c01f4a03f8f8137a67dc53dd7720d",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/build-witness-01.log",
+      "bytes": 124,
+      "sha256": "17fd682b20e0f1baeffdf835a25c518fa31001f9755d4215ae4536f38f72f8f7",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/check-01.log",
+      "bytes": 1533,
+      "sha256": "d33005ebd0d77b4015725d5f99143872a52a89a11763ecbceae71420826a533f",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/lib-tests-01.log",
+      "bytes": 181173,
+      "sha256": "607ea125332189ec8734c6ac9b38af55dc21399cd850d5cf04ebb0026eabd6db",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/nominal-invalidation-01.log",
+      "bytes": 1390,
+      "sha256": "fe8f030752e56ce521c8018991b01d3d91577a4320c7790e9d5d9e1016c0fb8b",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/nominal-invalidation-02.log",
+      "bytes": 1857,
+      "sha256": "ff20c1e4e9064031c01981d5f14f717aaffb358d8d375589f1e3c7c14f97ddd9",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/parse-check-01.log",
+      "bytes": 515,
+      "sha256": "c2da2ad712a00e61ff3f9c2d24b1d757f58d703e5c709415a8434000acb463e3",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/predecessor-export-build.log",
+      "bytes": 2267,
+      "sha256": "63b2a537ba5870c87ddb2172d84d178a7b2f17735db77c6c9a6beb3b90328ba2",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/public-cli-01.log",
+      "bytes": 4418,
+      "sha256": "b04aa5274560ec230951636ee191d1dc0204a4c85316eb4bee52b3c94f927465",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/public-cli-02.log",
+      "bytes": 4109,
+      "sha256": "f76cc873ffefff21eb29a756de9d274ae1e8073c797f3998e78eefc16f2924a9",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/public-edits-01.log",
+      "bytes": 976,
+      "sha256": "1633c7e4edf42178dcef6f100437e013bb0c2c32a396856ae41a7458c8006d5a",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/public-matrix-01.log",
+      "bytes": 1070,
+      "sha256": "d5c6bfbb030965d579634204f46820745a7914678454bdfd8dd78bf346900ffc",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    },
+    {
+      "path": ".artifacts/campaign/202609091625/raw-constraints-01.log",
+      "bytes": 1781,
+      "sha256": "f7e71faf052b629581f527b567f31490467aa6907970a4592758ea3840fb7b11",
+      "classification": "failed iterative compile/test attempt; repaired and superseded by mandatory final proof"
+    }
+  ],
+  "deviations": [
+    "No semantic/public scope deviation. Closed constraint set uses explicit tags, avoiding per-owner heap sets; separate bounded production/reference algorithms retain identical contract.",
+    "Completed HTTP consumer projection/test-count cutover and added explicit constrained foreign-scope/type-arity negatives during final audit.",
+    "Early mutable-binary pure-tail handoff failed; final authoritative owners bind stable exact binaries.",
+    "Early iteration diagnostic logs are not labelled final-source proof."
+  ],
+  "limitations": [
+    "Newly proved callback family, not previous application adoption.",
+    "No general traits, generic nominal declarations/tasks, lambdas, implicit constraints, resource polymorphism, specialization/JIT, equality/serialization constraints or application policy.",
+    "Only exact local x86_64-unknown-linux-musl admission claimed; no general portability, sandboxing, signing, reproducibility, multi-tenant isolation or publication claim.",
+    "Timing/RSS are bounded advisory observations, not speedup gates or production workload measurements."
+  ],
+  "cleanup": {
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "unknown_user_projects": "untouched",
+    "temporary_reader": "removed from production/maintained paths",
+    "owned_worktrees": "predecessor removed; main only",
+    "owned_runners_and_containers": "all required receipts report cleanup; no product process or running container observed after admission",
+    "raw_files": "retained only as campaign evidence; no persistent services",
+    "operational_data": "isolated disposable test data only; no user/live data mutation"
+  },
+  "external_actions": {
+    "origin_start_fetch": "read-only; zero divergence",
+    "normal_push": "not performed; optional, not a completion gate",
+    "workflow_dispatch": "not performed",
+    "publication_tags_releases_deployments_settings_credentials": "not performed",
+    "local_commits": "explicit scoped paths staged and reviewed",
+    "local_services_and_containers": "authorized disposable loopback and pinned-userland proof only"
+  },
+  "record_created_utc": "2026-09-09T10:01:24.498Z"
+}

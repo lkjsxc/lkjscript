@@ -56,8 +56,11 @@ Existing type/data bytes and owner identities are preserved. This is a new reusa
 capability; no generic tasks, user-defined traits, equality/serialization constraints, resource
 polymorphism or application feature was added.
 
-Final campaign proof is in progress. The campaign and bounded evidence will record exact source,
-candidate and verification dispositions without relabelling earlier results as fresh.
+CAP-1–CAP-6 pass at implementation commit `7fea8924`: 26 fresh full-profile gates and nine fresh
+local musl admission classifications. The [campaign](campaigns/202609091625.md) and
+[bounded evidence](evidence/202609091625-capture-safe-generics.json) retain exact source/candidate
+bindings, migration inventories, negative faults, failed attempts and cleanup. Final containing-record
+revalidation is reported out of band; earlier results are not relabelled as fresh.
 
 ## Public binary release
 
