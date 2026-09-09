@@ -423,6 +423,10 @@ removed producer's private helper and a transactional HTTP mapped wire/data sequ
 flat-Vec histories, fixed node/handle charges, and wrong-tail/restored-prefix-copy faults establish
 the shared carrier claim separately from VM/reference agreement. Full and exact-target completion
 dispositions are recorded in the [campaign evidence](evidence/202609091322-persistent-lists.json).
+At implementation commit `737e9a63`, all LST-1 through LST-6 acceptance obligations, all 26 fresh
+full-profile gates, and all nine fresh local musl classifications pass. The exact static candidate
+is 20,359,424 bytes, SHA-256 `8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0`.
+This is local distribution proof; 0.1.27 remains unreleased.
 
 Normalized production and reference execution support pure commands and graph tests. Public `run`
 deliberately rejects non-command runners and effectful command entry points. Public `serve` and

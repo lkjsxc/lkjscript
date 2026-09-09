@@ -1,6 +1,6 @@
 # Persistent immutable lists and graph-owned mapping
 
-Status: implementation selected; final campaign acceptance is recorded in
+Status: accepted; complete implementation acceptance is recorded in
 [`202609091322-persistent-lists.json`](../evidence/202609091322-persistent-lists.json).
 
 Repeated immutable append previously allocated and copied every preceding value occurrence.

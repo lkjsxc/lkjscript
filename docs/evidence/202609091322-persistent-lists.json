@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-persistent-lists-evidence-1",
   "campaign": "202609091322-persistent-lists",
-  "status": "incomplete; first full profile passed 24 of 26 gates, two remaining fixture bindings corrected; fresh full and exact target admission pending",
+  "status": "complete at implementation boundary",
   "start": {
     "branch": "main",
     "commit": "7d3c36894828def605179c31a01958cfd3d2630a",
@@ -247,7 +247,7 @@
         "sha256": "fd1df7ca14b833538a2648329585b7d321ccc99c715c5bac6b9007bd5ab5bae5"
       }
     ],
-    "meaning": "Exact SHA-256 of scoped implementation, canonical assets, fixtures and verifier inputs before the first implementation commit. The containing report is deliberately excluded; final commit/tree and post-record validation are reported out of band."
+    "meaning": "Exact SHA-256 of scoped runtime, canonical asset, fixture and verifier inputs at the completed implementation boundary. Final record-only containing commit/tree and post-record checks are reported out of band; this report does not hash itself."
   },
   "contracts": {
     "changed": {
@@ -330,7 +330,7 @@
         "tools/lkjscript-dev/src/pure_tail.rs",
         "tools/lkjscript-dev/src/pure_tail_program.rs"
       ],
-      "receipt": "public-map-07/receipt.json"
+      "receipt": "musl-02-admission/pure-tail/receipt.json"
     },
     "LST-2": {
       "classification": "fresh passed",
@@ -353,15 +353,16 @@
     "LST-5": {
       "classification": "fresh passed",
       "proof": "Offline separate consumer maps [1,2,4] to [7,8,10] using exported factory/private helper after producer removal. HTTP full mapped wire/data values, trap/cancel rollback and recovery passed; the strengthened independent physical data-revision census also passed, proving exactly one commit per successful request. Existing nominal/nested predecessor codec fixture re-encodes byte-identically; unchanged type/layout/owner identities and strict cache/canonical corruption behavior pass. Maintained service, worker, session and data acceptance freshly passed after exact artifact binding cutover.",
-      "receipt": "offline-map-04/receipt.json"
+      "receipt": "musl-02-admission/offline-packages/receipt.json"
     },
     "LST-6": {
-      "classification": "failed",
+      "classification": "fresh passed",
       "required": [
         "cargo run --locked -p lkjscript-dev -- check full --fresh --machine",
         "lkjscript-dev release build --output ABSENT_ABSOLUTE_BINARY --receipt ABSENT_ABSOLUTE_JSON",
         "lkjscript-dev release admit --candidate ABSOLUTE_BINARY --build-receipt ABSOLUTE_JSON --evidence-root ABSENT_ABSOLUTE_DIRECTORY"
-      ]
+      ],
+      "proof": "All 26 authoritative full gates passed freshly with stable source inputs, zero reuse and zero unrun gates. Fresh local musl build/admission passed all nine classifications on the exact 20359424-byte candidate, both pinned userlands, all six strict transferred oracles, and complete cleanup."
     }
   },
   "storage_oracle": {
@@ -534,7 +535,11 @@
           "collection_items": 33157,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 259,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 7998,
+          "instructions": 7451,
+          "calls": 2309,
+          "tail_transfers": 258
         }
       },
       {
@@ -550,7 +555,11 @@
           "collection_items": 33157,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 259,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 5939,
+          "expressions": 3854,
+          "calls": 2309,
+          "tail_transfers": 258
         }
       },
       {
@@ -566,7 +575,11 @@
           "collection_items": 525829,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 1027,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 31806,
+          "instructions": 29723,
+          "calls": 9221,
+          "tail_transfers": 1026
         }
       },
       {
@@ -582,7 +595,11 @@
           "collection_items": 525829,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 1027,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 23603,
+          "expressions": 15374,
+          "calls": 9221,
+          "tail_transfers": 1026
         }
       },
       {
@@ -604,7 +621,11 @@
           "collection_items": 998856,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 4099,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 43790,
+          "instructions": 40933,
+          "calls": 12701,
+          "tail_transfers": 1412
         }
       },
       {
@@ -626,7 +647,11 @@
           "collection_items": 998856,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 4099,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 32496,
+          "expressions": 21174,
+          "calls": 12701,
+          "tail_transfers": 1412
         }
       },
       {
@@ -648,7 +673,11 @@
           "collection_items": 998725,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 8195,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 43697,
+          "instructions": 40846,
+          "calls": 12674,
+          "tail_transfers": 1409
         }
       },
       {
@@ -670,7 +699,11 @@
           "collection_items": 998725,
           "all_reported_leftovers_zero": true,
           "input_admission_nodes": 8195,
-          "guard_descendants": 0
+          "guard_descendants": 0,
+          "allocation_charges": 32427,
+          "expressions": 21129,
+          "calls": 12674,
+          "tail_transfers": 1409
         }
       }
     ],
@@ -1292,7 +1325,8 @@
       "owned_concurrent_builds_during_samples": 0,
       "included": "Process setup, repository preparation, raw ingress, both pure tiers/equality, and JSON output.",
       "failure_policy": "Predecessor 4096/8192 exhaustion retained; no limit increase and no fabricated successful time."
-    }
+    },
+    "successor_source_reconstruction": "Use the recorded implementation runtime inputs, with the list_value size-overflow diagnostic string in src/platform/execution/normalized/reference_checked.rs spelled normalized_reference_list_storage instead of normalized_list_storage; build the pinned release lkjscript binary. No list/storage/accounting/typing behavior differs in the admitted measurement domain."
   },
   "boundary_observations": {
     "verifier": "d6fb34ede3ea9daa5e72f63c93fda2c0cce5886c2f574f97aa63b8e24bf0ecfd",
@@ -1614,17 +1648,18 @@
   },
   "public_proof": {
     "pure_tail": {
-      "path": ".artifacts/campaign/202609091322/public-map-07/receipt.json",
-      "sha256": "58dc2f043665deb9df726b67c4c124c70ccec20504aee5e1e5bb6bb187300180",
+      "path": ".artifacts/campaign/202609091322/musl-02-admission/pure-tail/receipt.json",
+      "sha256": "67bf42a48be4e0cbb12c8dfdb7ddb6a14cd03a9f2f74603962e4f61af24fef44",
       "schema": "lkjscript-pure-tail-acceptance-4",
       "status": "fresh passed",
-      "candidate_sha256": "f4283832dd8aca276c273bd6893d7a34cc0c15486bfe4fc03b0108c8ebd6593e",
-      "verifier_sha256": "4eb212b5ebc8f7f6f926c0f8d8fde86a14c90ea980498cd1659879d9d7161661",
-      "elapsed_nanoseconds": 321310808170,
-      "peak_owned_file_bytes": 94267025,
-      "commands": 163,
+      "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+      "copied_candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+      "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+      "elapsed_nanoseconds": 144101959719,
+      "peak_owned_file_bytes": 30501934,
       "cleanup_complete": true,
-      "failure": null
+      "failure": null,
+      "commands": 163
     },
     "mapping": {
       "aliases_unchanged": true,
@@ -2122,52 +2157,51 @@
       }
     ],
     "offline": {
-      "path": ".artifacts/campaign/202609091322/offline-map-04/receipt.json",
-      "bytes": 2136036,
-      "sha256": "7e90f3366ced336dbce59267687ae74757c2bd1ccaed863c790c21cbf595ab53",
+      "path": ".artifacts/campaign/202609091322/musl-02-admission/offline-packages/receipt.json",
+      "sha256": "68a1db837be96ab523c3716b27dbbcc9f4f0ba941bd7d46e71cdca79cd21f5cc",
       "schema": "lkjscript-offline-packages-acceptance-2",
       "status": "fresh passed",
-      "candidate_sha256": "8a2af969efe3c9a74235da8578b5a3e10a71133eb3d8a88b1397f0441afd6614",
-      "copied_candidate_sha256": "8a2af969efe3c9a74235da8578b5a3e10a71133eb3d8a88b1397f0441afd6614",
-      "verifier_sha256": "d6fb34ede3ea9daa5e72f63c93fda2c0cce5886c2f574f97aa63b8e24bf0ecfd",
-      "elapsed_nanoseconds": 22980420855,
+      "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+      "copied_candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+      "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+      "elapsed_nanoseconds": 36047987728,
       "cleanup_complete": true,
       "failure": null,
       "commands": 101
     },
     "offline_observations": {
-      "artifact-a1-corrupt-cache": "05f0b6bc9358a690f09ddc0a8897f40450270d15cc64be1079562b746a43644f",
-      "artifact-a1-exact": "05f0b6bc9358a690f09ddc0a8897f40450270d15cc64be1079562b746a43644f",
-      "artifact-a1-missing-cache": "05f0b6bc9358a690f09ddc0a8897f40450270d15cc64be1079562b746a43644f",
-      "artifact-a2-corrupt-cache": "1afa5805dfec5a18e26d031519ced78f6034a890a5ee3dbe09b59aac576446c7",
-      "artifact-a2-exact": "1afa5805dfec5a18e26d031519ced78f6034a890a5ee3dbe09b59aac576446c7",
-      "artifact-a2-missing-cache": "1afa5805dfec5a18e26d031519ced78f6034a890a5ee3dbe09b59aac576446c7",
+      "artifact-a1-corrupt-cache": "51c30cfc759da585bdd518666b5fae23aa18d766cd725077b4d7013806445fbe",
+      "artifact-a1-exact": "51c30cfc759da585bdd518666b5fae23aa18d766cd725077b4d7013806445fbe",
+      "artifact-a1-missing-cache": "51c30cfc759da585bdd518666b5fae23aa18d766cd725077b4d7013806445fbe",
+      "artifact-a2-corrupt-cache": "6241b3b524117442f0b38c0f912545aa3d6d4728a1f75808c48e742fb50ce731",
+      "artifact-a2-exact": "6241b3b524117442f0b38c0f912545aa3d6d4728a1f75808c48e742fb50ce731",
+      "artifact-a2-missing-cache": "6241b3b524117442f0b38c0f912545aa3d6d4728a1f75808c48e742fb50ce731",
       "bound_private_factory": "returned-rebound-invoked-after-producer-removal",
       "canonical_body_corruption": "pack_entry_checksum",
       "diamond_package_ids_distinct": "true",
       "fixed_results": "11,11,12",
       "imported_nominal_and_rank_one_generic": "fresh passed",
       "post-replacement-compiled": "2",
-      "post-replacement-manifest": "compilation_manifest_2ab4af9607e5fd1ab799045a12545e0b86bcbbbaf6f3ec346a2ae5b1ebe5dc19",
+      "post-replacement-manifest": "compilation_manifest_2f5adc2a1e21b6a0ed380ada2f46d718a5d5d5b70b64b026a718ea554e317167",
       "post-replacement-removed": "0",
       "post-replacement-reused": "5",
       "private_factory_map": "[7,8,10];both-tiers;producers-absent",
       "producers_absent_before_execution": "true",
-      "rejection-builtin_continuation_foreign": "ff4fe658415485bb2f55e78f8b794eebb14b40ab1df6280512e938d9b4d2bebb",
-      "rejection-builtin_continuation_selector": "ff4fe658415485bb2f55e78f8b794eebb14b40ab1df6280512e938d9b4d2bebb",
-      "rejection-builtin_continuation_stale": "9d28da8bc5e4025d7d7bb24c537c92be8e54c602fe70fbac466912067f39b96a",
-      "rejection-builtin_query_bytes": "ff4fe658415485bb2f55e78f8b794eebb14b40ab1df6280512e938d9b4d2bebb",
-      "rejection-change_authored_stale_base": "0b5c1b05c44b2dabc25fa9ced171f297ed63f2a370ee576f181e4abd6c68de69",
-      "rejection-change_plan_output_type": "35dd6465adef717ec029a2b5c3badd780775ae40c89275c58fbd968f69eba736",
-      "rejection-change_request_commitment_mismatch": "35dd6465adef717ec029a2b5c3badd780775ae40c89275c58fbd968f69eba736",
-      "rejection-kernel_type_dependency_owner_missing": "0554984e9be0c08889f1534481220dea62fc390ff64c7e3ef6d34f35d8473d8f",
-      "rejection-output_conflict": "35dd6465adef717ec029a2b5c3badd780775ae40c89275c58fbd968f69eba736",
-      "rejection-package_container_contract": "afb8620321c4668448ff0c96f92f8fdd589a37cc0bd20dcea7c52d1773712da9",
-      "rejection-package_container_root": "afb8620321c4668448ff0c96f92f8fdd589a37cc0bd20dcea7c52d1773712da9",
-      "rejection-package_revision_closure_package_conflict": "0e3c85c09cc4d7bac7c7b178014ef05a89d03aa196106d505febfb085f9743c6",
-      "rejection-read_type": "ff4fe658415485bb2f55e78f8b794eebb14b40ab1df6280512e938d9b4d2bebb",
-      "rejection-witness_dependency_target": "5ba98394e6e739d8880e09f59fa6933469cc88abc124cda4aa2b132c44751c6c",
-      "standalone_artifact": "artifact_bundle_d0886ddd9b8cb73f963e9ae05c1257a48da725a5ac07886bbe7bce9092b3b170",
+      "rejection-builtin_continuation_foreign": "f26cdf6eee9e098c742dd552e9a4a0a5c68e72ec2303ab84ffe67fc90cdd7fc9",
+      "rejection-builtin_continuation_selector": "f26cdf6eee9e098c742dd552e9a4a0a5c68e72ec2303ab84ffe67fc90cdd7fc9",
+      "rejection-builtin_continuation_stale": "593d1dfaa6ae51e66fddf76e3e6f956b84bf5ec4f6cc0277281d0b8ba5060430",
+      "rejection-builtin_query_bytes": "f26cdf6eee9e098c742dd552e9a4a0a5c68e72ec2303ab84ffe67fc90cdd7fc9",
+      "rejection-change_authored_stale_base": "19996073bf0131d645cd1f244b394027b8b682c3d785171b6eb1ad592e17c5be",
+      "rejection-change_plan_output_type": "d33eea091a979929575c01fb42ea31e1690e3b1957db5b3c3dd90dcba7ae5b71",
+      "rejection-change_request_commitment_mismatch": "d33eea091a979929575c01fb42ea31e1690e3b1957db5b3c3dd90dcba7ae5b71",
+      "rejection-kernel_type_dependency_owner_missing": "449fc4101da3c9736ab8a857699beed7c9a0e069b82c3f11a5bfbfb4d8d1b206",
+      "rejection-output_conflict": "d33eea091a979929575c01fb42ea31e1690e3b1957db5b3c3dd90dcba7ae5b71",
+      "rejection-package_container_contract": "40de746def523970698ea82b63d52d54b2edd9281c44111962dd8de63de020d4",
+      "rejection-package_container_root": "40de746def523970698ea82b63d52d54b2edd9281c44111962dd8de63de020d4",
+      "rejection-package_revision_closure_package_conflict": "614ccc745ca2d780424ce822162ff9f4b30c80381fe7c434525916a4b591627a",
+      "rejection-read_type": "f26cdf6eee9e098c742dd552e9a4a0a5c68e72ec2303ab84ffe67fc90cdd7fc9",
+      "rejection-witness_dependency_target": "399528c9f36439907c92e88b113c9be976799c02373bee860c775855c8cafaff",
+      "standalone_artifact": "artifact_bundle_f178e86f4ee896ac3fdb1173e589e54d5b520cfc11338af77758b7f7823c1347",
       "standalone_http_body": "offline-package-closure",
       "unavailable_transitive_source": "pack_file_missing"
     },
@@ -2214,7 +2248,7 @@
       "after_configured_changes": 3,
       "after_recovery_changes": 2,
       "after_trap_changes": 1,
-      "artifact_sha256": "7144066d6cf2df4a34a15d3db6d460afd5299f88fd40ad074ddec5e72a298e20",
+      "artifact_sha256": "87b52f1cf3187e708a84f82dc732b7994360cb3ac8c436d113b258d8d89e5bb2",
       "configured_request": {
         "bias": 5,
         "items": [
@@ -2229,11 +2263,11 @@
         "bytes_read": 456442,
         "objects": 4,
         "records": 3,
-        "revision": "data_revision_926a609cc092f68600842b8cdaa7434a947c96e4cf3cc512f4788641483a2cdf",
+        "revision": "data_revision_2f3adc29bc84e623daf03ac7d4d3d7f33a108829b81b75ae7b0bd1beddbcade6",
         "revisions": 4,
         "schemas": 0,
         "staging_leftovers": 0,
-        "store": "data_store_d5c04c743fd8c3af8646930f8cb21fdd2d328a03ca38dd1f72155340e9666bcd"
+        "store": "data_store_73d9ee4341e4bd384d8edbb1dea76f6debfa21ad6961ba40c129392a5e0258cb"
       },
       "fixed_response_length": 8192,
       "fixed_response_sum": 100691968,
@@ -2251,13 +2285,26 @@
           "bytes_read": 718908,
           "objects": 5,
           "records": 4,
-          "revision": "data_revision_bd3585ba5dbf8622b01cca906b55588a0f1ee16cf175b5f2863ac562381fd579",
+          "revision": "data_revision_934ecb439199b511dbe012fb2394524c071eb2a4b6896cf05b8a1d9c1b2f3f11",
           "revisions": 5,
           "schemas": 0,
           "staging_leftovers": 0,
-          "store": "data_store_d5c04c743fd8c3af8646930f8cb21fdd2d328a03ca38dd1f72155340e9666bcd"
+          "store": "data_store_73d9ee4341e4bd384d8edbb1dea76f6debfa21ad6961ba40c129392a5e0258cb"
         }
       }
+    },
+    "development_receipt": {
+      "path": ".artifacts/campaign/202609091322/public-map-07/receipt.json",
+      "sha256": "58dc2f043665deb9df726b67c4c124c70ccec20504aee5e1e5bb6bb187300180",
+      "schema": "lkjscript-pure-tail-acceptance-4",
+      "status": "fresh passed",
+      "candidate_sha256": "f4283832dd8aca276c273bd6893d7a34cc0c15486bfe4fc03b0108c8ebd6593e",
+      "verifier_sha256": "4eb212b5ebc8f7f6f926c0f8d8fde86a14c90ea980498cd1659879d9d7161661",
+      "elapsed_nanoseconds": 321310808170,
+      "peak_owned_file_bytes": 94267025,
+      "commands": 163,
+      "cleanup_complete": true,
+      "failure": null
     }
   },
   "codec": {
@@ -2497,6 +2544,13 @@
       "digest": "verification_43d4a86e3f6290e3c0b510eced30446393c7f3fc38d50033051986449b651e19",
       "elapsed_nanoseconds": 15006445112,
       "proof": "Corrected exact maintained fixture binding; complete executable acceptance and cleanup passed."
+    },
+    {
+      "classification": "fresh passed",
+      "name": "first local musl build at 7747e6ef",
+      "path": ".artifacts/campaign/202609091322/musl-01-build.json",
+      "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+      "admission": "not run at that source boundary; superseded by the fixture correction and fresh musl-02 build/admission, with unchanged runtime binary bytes."
     }
   ],
   "unsuccessful_attempts": [
@@ -2563,7 +2617,7 @@
     "Removes whole-prefix immutable-list rebuilding; bounded tail/spine copying, ordered traversal, encoding, indexed path visits, and metadata remain.",
     "No constant-time append, universal speedup, heap-allocation census, production-throughput claim, extra target portability, sandbox/security/signing, or new capture permission is inferred.",
     "Both tiers share storage; independent Vec and cost/fault oracles carry the storage claim.",
-    "Timing successor is explicitly intermediate; final candidate/source/receipt identities will be recorded separately."
+    "Timing successor is explicitly intermediate; final candidate/source/receipt identities are bound separately below."
   ],
   "external_state": {
     "local_commits_only": true,
@@ -2572,28 +2626,345 @@
     "release_publication": "not run",
     "deployment": "not run",
     "operational_data_mutation": "isolated owned fixtures only",
-    "owned_services": "oracle receipts require process/port/transaction cleanup",
-    "predecessor_resource": "Removed the owned detached predecessor worktree after byte-equal patch verification and reversal of only the retained owned instrumentation. Original exact binary, artifact, requests and measurements remain; no stash/reset/clean/restore operation.",
-    "preserved": "historical stash, user work, unrelated services/projects, maintained operational data and historical assets"
+    "owned_services": "All full-profile and exact-target oracle receipts report cleanup complete. Independent docker ps -a found no container after admission. Owned test roots, process groups, listeners, handles and transactions were cleaned; retained evidence files and the matched accepted closure remain intentionally.",
+    "predecessor_resource": "Removed the owned detached predecessor worktree after byte-equal patch verification and reversal of only the retained instrumentation. Original binary/artifact/requests/measurements and reproducible patches remain. No reset, clean, restore, rebase, or stash removal.",
+    "preserved": "historical stash, user work, unrelated services/projects, maintained operational data and historical assets",
+    "git_worktree": "clean main at 737e9a632199375b34d39ba97af8a982a107339f before assembling terminal metadata",
+    "read_only_external_actions": "Fetched origin for startup reconciliation; inspected GitHub workflow state; target admission read/pulled pinned public userland images and used disposable local containers/network namespaces. No workflow dispatch or publication."
   },
   "raw_evidence_root": ".artifacts/campaign/202609091322/",
   "final_verification": {
-    "classification": "failed",
+    "classification": "fresh passed",
     "full": {
-      "classification": "failed",
-      "path": ".artifacts/lkjscript-dev/check/1788934934592443923-596771-0/receipt.json",
-      "digest": "verification_1c41d8ecfa2eb11f2164fd2ea760383dc39e12a551f65bd091db178393d10243",
-      "detail": "All 26 dispositions retained in iteration_checks; corrected distributed/service fixtures independently passed afterward. Fresh complete profile still required."
+      "path": ".artifacts/lkjscript-dev/check/1788935636299331676-608670-0/receipt.json",
+      "sha256": "5a4cf3fa173d1a2e50d5f0c090e65f5bad1dd8040659495ce422d4c6ef8a2d7e",
+      "digest": "verification_bf0b463e5526ef439cd60d84b29798946c83add3dfdd170653d1fdb6f5ba3d41",
+      "commit": "737e9a632199375b34d39ba97af8a982a107339f",
+      "input_digest": "verification_307bf570bde58b225dea0257fc32a126ef37116a4b31c6d2c7240c386ed2c9c5",
+      "final_input_digest": "verification_307bf570bde58b225dea0257fc32a126ef37116a4b31c6d2c7240c386ed2c9c5",
+      "input_stable": true,
+      "elapsed_nanoseconds": 303087848492,
+      "selected": 26,
+      "fresh_passed": 26,
+      "reused_passed": 0,
+      "unrun": [],
+      "runtime": {
+        "digest": "verification_a1675bbff87d875c5469f6bc627f9c1046a1a26268c39a283e8d8f053e6ecebf",
+        "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+        "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+        "platform": {
+          "operating_system": "linux",
+          "architecture": "x86_64",
+          "family": "unix",
+          "child_process_control": "linux_process_group_sigkill"
+        },
+        "environment_digest": "verification_53b4d4ef8117edd54d78cac7caf9a46a21c7091c38c235a09b38dd6a78033025",
+        "environment_names": [
+          "CARGO_BUILD_JOBS",
+          "CARGO_HOME",
+          "CARGO_NET_OFFLINE",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "PATH",
+          "RUSTUP_HOME",
+          "RUSTUP_TOOLCHAIN"
+        ],
+        "harness": {
+          "path": "/home/coder/workspace/lkjscript/target/debug/lkjscript-dev",
+          "kind": "file",
+          "mode": 488,
+          "bytes": 86808864,
+          "digest": "verification_cf429c6b2548e944b0c26addbaa2af226dd10a837c6b2c4d8d99f178695f838b"
+        },
+        "command_executables": {
+          "$HARNESS": {
+            "path": "$HARNESS",
+            "kind": "file",
+            "mode": 488,
+            "bytes": 86808864,
+            "digest": "verification_cf429c6b2548e944b0c26addbaa2af226dd10a837c6b2c4d8d99f178695f838b"
+          },
+          "/home/coder/workspace/lkjscript/target/release/lkjscript": {
+            "path": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+            "kind": "file",
+            "mode": 488,
+            "bytes": 20219312,
+            "digest": "verification_c14ffc2cfbd9cf15cf9cc6328b28a3a08fccce37a8a8d486c46b6ced336d6ca2"
+          },
+          "cargo": {
+            "path": "cargo",
+            "kind": "symlink",
+            "mode": 511,
+            "bytes": 6,
+            "digest": "verification_f2514edd3269bcf268cb2ea43d511c134409c179a0eeec45edf4e6d548c810c5",
+            "link_target": "rustup"
+          },
+          "cmp": {
+            "path": "cmp",
+            "kind": "file",
+            "mode": 493,
+            "bytes": 43408,
+            "digest": "verification_2a5f88614c47900411d9b0b75bfa932f3cb6a789bf2b6a536be401d734438e9e"
+          },
+          "git": {
+            "path": "git",
+            "kind": "file",
+            "mode": 493,
+            "bytes": 4066232,
+            "digest": "verification_455cf6e599786fc752c75dd409f626ca9fc5ba8a7aed13bb96055c57b8711c88"
+          }
+        }
+      },
+      "gates": [
+        {
+          "name": "fmt",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_b60deff270201977f42be56b2080ab5b020941ef6e9f3706879770a2e044ffe7",
+          "evidence_digest": "verification_bbfeda8dd5104d06e67694cfd02643b2cdef7276895163a61536fdf8d38624bb"
+        },
+        {
+          "name": "clippy",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_f60669766bbc98916a31051f1c8c20dde2cd6cbb672b61ddb1cd7f0fd7d60aca",
+          "evidence_digest": "verification_09b31f39629260219791fcebec2fef9456d090a8ff8954e8bfb392c458c8731f"
+        },
+        {
+          "name": "workspace_tests",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_60d9d2a56af25f178b02bc42a2d8bed06802a874ad79a0fb836ae03be9e24af9",
+          "evidence_digest": "verification_bd710eefe32013201ed8889d03b28b88244c01bf256cccbca6083762c2ba33a8"
+        },
+        {
+          "name": "release_build",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_32f40f7d7da37a92f23be5ea81331611ec78a9ef35f278e076064fa79340e607",
+          "evidence_digest": "verification_b3f9d5dd149404c366888d906aadaec10929c4cd847394ee1b5de3e172c9b11c"
+        },
+        {
+          "name": "release_command_lifecycle",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_8626b65f42abcd51a832c0865319e572a98b538511508cd716eefa2635a431f5",
+          "evidence_digest": "verification_5ea3ed187a9c92b17e2e333b2bcf01fe723a13c6e188eee0bd4aeea5b0897b84"
+        },
+        {
+          "name": "distributed_http_application",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_dfc52aa840133807a46d625b68b2ae99b820d1c538fb053d8e6c8525b1a036ca",
+          "evidence_digest": "verification_6713b19257eec9cfe039e4208f584180a487787752426559ba098e8bcae04a88"
+        },
+        {
+          "name": "outbound_http_application",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_b39343ef6c724b8624275d6adc371766c93e800d3ff2291905796122c64d2a77",
+          "evidence_digest": "verification_dc3d878308dc0b54e4ebdc9fc6ff39376e798adf55835cfc9810dfd06af0fee6"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_d54855e7f5ff2a7579a12e7538e83479c73d4a715c2391f0e0384b2d064c2a26",
+          "evidence_digest": "verification_45ad44c48989cc884d502801a3aa416fb53a5e205eab54f5f9df99d5db5809bf"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_e2f147a0deb71f04b05f24fe4fe2a32f024bdbf8a032f53ff1a146a4a7a128d7",
+          "evidence_digest": "verification_287029bfe8db818e339ea9239d39d465f8e0a2ff2b571834f16b097e90874175"
+        },
+        {
+          "name": "stateful_http_application",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_fd7e460d06f136f4c489025c477bbd2d8e1839d7e38a6421d3fbabee1aaf7ae2",
+          "evidence_digest": "verification_739cd8da8abc675308cf79354be3d87221e787352ae64b3ca0b9d0d81949b71a"
+        },
+        {
+          "name": "checker_self_test",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_2b8faa98762c892be68100bcbbbddb8c1c1c5f4383735633f4f8bcd353e12f1f",
+          "evidence_digest": "verification_f440c5609ca700b917c62923c93e7bb3790eccb325575745888692acef2ddf89"
+        },
+        {
+          "name": "rust_only_tooling",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_3e7080dd74a494f372f8eec0283e258b40eb74bfa15636426cdf27ad37ddb8a6",
+          "evidence_digest": "verification_178964029d76db71828f1dd9101270ed1cdc87845d50e048175df170107bc1b9"
+        },
+        {
+          "name": "generated_public_guides",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_c205906de59af74d66a41e6bcdd3cb03bcae04f7c24da9810c839625099f7b0b",
+          "evidence_digest": "verification_de2e2f3fa41b219c25e10fdbf32bcf06175a650af1155212257fc4efb7f4113d"
+        },
+        {
+          "name": "product_surface_audit",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_518b1496738b30add5268c18004b5d132b5fe6de17862e3e496280be773082dd",
+          "evidence_digest": "verification_542befbbfa493ee1cc77b15e60c7f55114a4bded48e8d3b4daf358ebe0af3e88"
+        },
+        {
+          "name": "standard_package_test",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_79404c20180b897fec45aa8c8ba706fcf0b834d9e495a3c5b627fb4be4029460",
+          "evidence_digest": "verification_122ab4bf03547d835fc35d7dbe7044125c373feb50198e73304e0b7666e2d4bc"
+        },
+        {
+          "name": "application_package_test",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_bce2a7aa93ff1bb1e0e1e4e2c1580bb02a84e399079493503ac8ab6b5eb51a48",
+          "evidence_digest": "verification_57bed580ca07a4a6c244965791f1b754d3fc218a0ae2ce3f4944c0a6b894d160"
+        },
+        {
+          "name": "standard_artifact_build",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_21d8718e327eb7a44818964e1281f93ee5e3c16f4012a2eb1dca879d8f67f51c",
+          "evidence_digest": "verification_2923c52b349c10ee81bca197aa02c2855b77950c8744bab35adbbeb913d468e7"
+        },
+        {
+          "name": "standard_artifact_compare",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_3a103bc0bf40692ac9990ca06fca04b5b1e33e0dd2f603cd530b7123a4f40436",
+          "evidence_digest": "verification_150a648e2ce126dd25939604971a4a6123aa325cb1516bb3dbc28986c80a2a5f"
+        },
+        {
+          "name": "builtin_package_export",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_3c256067f186d1d1feb2847de97398cc2938dbdbfe634922a9307309f100f072",
+          "evidence_digest": "verification_b0b49aab791a22d05a11a35a63f66850aff93ce6aa0bf8b3e969d5bdb3ea53f5"
+        },
+        {
+          "name": "builtin_package_compare",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_b05b12d7ef7abc4210252c40704276b84431cc090d5b5beea99abf9511dce4c7",
+          "evidence_digest": "verification_7a8ee9fe0c49b1398af8040a597a4f0dce2a7d40b253b0954235d9ae7085a298"
+        },
+        {
+          "name": "builtin_transport_export",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_e333f2ab5ca0d86dd9288b43a0cc85e740520c2b43c30d2994b3b01fb9b29a86",
+          "evidence_digest": "verification_2fbae53f34e0936f33580e51f32a2cc8375b86d1706f22724125efbcb1aad29a"
+        },
+        {
+          "name": "builtin_transport_compare",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_b46e312192d8df29f41713f7ba18c5f467bd5703d027405d91e2503b94b41bb1",
+          "evidence_digest": "verification_3f7f3a0c5534c238279787c310909883d5e9a0120691a25a643cad775f7943bc"
+        },
+        {
+          "name": "application_artifact_build",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_ee4b191af94569a3a17dca6aa87aad20a2feccd45509435b53e9833a9d3f481c",
+          "evidence_digest": "verification_2103ede513dc2f0e4350108dbc45765584497a3500941c67266bd474e0498774"
+        },
+        {
+          "name": "application_artifact_compare",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_1fd0223e81a5868438c2ba347178f755049a95c563ae9bee825e86269433482e",
+          "evidence_digest": "verification_39b202fbb56d385e5d171252e91a64d9d70817471623561a8b1194f20179b43b"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_f431e91ea69ea529773aa1cd433f23532e38c71c73ba7321e342f436f254e20f",
+          "evidence_digest": "verification_8ded55f4e1ad1f1d982a3db61f2a6da97170ff6211688b2c0761d9f06a608fa9"
+        },
+        {
+          "name": "diff_check",
+          "status": "passed",
+          "execution": "fresh",
+          "input_fingerprint": "verification_0ef1c83de1f684acd589b821cc986dee54527616d6c7c2a5aae926030948ff74",
+          "evidence_digest": "verification_ccaeb5ee3488a3d02cee075fe23a119c31dffc41805de1c26c3bd5eed1b90639"
+        }
+      ]
     },
     "musl_build": {
       "classification": "fresh passed",
-      "path": ".artifacts/campaign/202609091322/musl-01-build.json",
-      "sha256": "b936910cf3b515f09d6eddacf6d7b7869cc374e567227c37575111d78b334b68",
-      "source_commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
+      "path": ".artifacts/campaign/202609091322/musl-02-build.json",
+      "sha256": "81d1d6542e7a84cd6173f92a0b967ac976896b4211e23b1f5b23e6bf4b48f56c",
+      "source_commit": "737e9a632199375b34d39ba97af8a982a107339f",
       "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
-      "elapsed_nanoseconds": 303669602073,
+      "elapsed_nanoseconds": 106433658437,
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--bin",
+        "lkjscript",
+        "--target",
+        "x86_64-unknown-linux-musl"
+      ],
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+      "musl_gcc_dumpmachine": "x86_64-linux-gnu",
+      "installed_musl_packages": [
+        "musl=1.2.4-2:amd64",
+        "musl-dev=1.2.4-2:amd64",
+        "musl-tools=1.2.4-2:amd64"
+      ],
       "candidate": {
-        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-01-lkjscript",
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-lkjscript",
+        "byte_length": 20359424,
+        "mode": 493,
+        "sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+        "elf": {
+          "class": "ELF64",
+          "machine": "x86-64",
+          "object_type": "position-independent-executable",
+          "inspector": "lkjscript-elf64-little-endian-inspector-1",
+          "program_headers": 9,
+          "load_headers": 4,
+          "dynamic_entries": 21,
+          "interpreter_headers": 0,
+          "needed_libraries": 0,
+          "glibc_version_requirements": 0,
+          "position_independent": true,
+          "runtime_linkage": "static-musl"
+        }
+      }
+    },
+    "musl_admission": {
+      "classification": "fresh passed",
+      "path": ".artifacts/campaign/202609091322/musl-02-admission/receipt.json",
+      "sha256": "bba2637e0d6ea16d683b613341b6ba7fbddd25e7fa246d67624f8d343c06ac04",
+      "digest": "verification_849fe6d459fcac15e7a8fc19181a371c7c66c3b080bd07e934a6c250b2ed98c1",
+      "source_commit": "737e9a632199375b34d39ba97af8a982a107339f",
+      "target_triple": "x86_64-unknown-linux-musl",
+      "runtime_linkage": "static-musl",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "elapsed_nanoseconds": 303020459761,
+      "verifier": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/iteration-08-verifier",
+        "byte_length": 86808864,
+        "mode": 488,
+        "sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe"
+      },
+      "candidate": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-lkjscript",
         "byte_length": 20359424,
         "mode": 493,
         "sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
@@ -2612,11 +2983,232 @@
           "runtime_linkage": "static-musl"
         }
       },
-      "admission": "not run; known contributor fixture failures must be corrected and source-bound build receipt refreshed first"
+      "classifications": [
+        {
+          "name": "static_linkage",
+          "classification": "fresh_passed",
+          "detail": "exact candidate passed first-party ELF inspection"
+        },
+        {
+          "name": "musl_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned musl userland"
+        },
+        {
+          "name": "older_glibc_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned older-glibc userland"
+        },
+        {
+          "name": "distributed_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary HTTP oracle passed"
+        },
+        {
+          "name": "outbound_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary deployment-bound outbound HTTP oracle passed"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh_passed",
+          "detail": "transferred public-authored offline package closure and standalone HTTP oracle passed"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh_passed",
+          "detail": "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed"
+        },
+        {
+          "name": "stateful_http",
+          "classification": "fresh_passed",
+          "detail": "transferred first-party-data BBS oracle passed"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh_passed",
+          "detail": "maintained lkjournal service oracle passed with the exact candidate"
+        }
+      ],
+      "cleanup_complete": true,
+      "userlands": [
+        {
+          "role": "musl",
+          "status": "passed",
+          "image": {
+            "requested": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "image_id": "sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "repository_digests": [
+              "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 3789228
+          },
+          "expected_libc": "musl-1.2",
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "product_version": "0.1.27",
+          "capabilities_digest": "6c44e52a0210e98bbb54971411d25b3203c15b66b109c6d34c3b015e228774f5",
+          "artifact_sha256": "cb27de49517e893b0a74c81ae9dbe41726151e931846becec81d3c292a661289",
+          "clean_artifact_sha256": "cb27de49517e893b0a74c81ae9dbe41726151e931846becec81d3c292a661289",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        },
+        {
+          "role": "older-glibc",
+          "status": "passed",
+          "image": {
+            "requested": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "image_id": "sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "repository_digests": [
+              "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 30261201
+          },
+          "expected_libc": "glibc-2.31",
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "product_version": "0.1.27",
+          "capabilities_digest": "6c44e52a0210e98bbb54971411d25b3203c15b66b109c6d34c3b015e228774f5",
+          "artifact_sha256": "89824aa786afb9533e388ec90d570a7822852fc9c4672b94e2119b9aeab33b63",
+          "clean_artifact_sha256": "89824aa786afb9533e388ec90d570a7822852fc9c4672b94e2119b9aeab33b63",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        }
+      ],
+      "oracles": [
+        {
+          "name": "distributed_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-admission/distributed-http/receipt.json",
+            "byte_length": 80390,
+            "sha256": "1b64345028a8b01a74d1c87eed44dfcd0adcd1d6023860b394eb052a7b6b74e2"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 6539228076,
+          "commands": 46,
+          "runners": 2,
+          "requests": 14,
+          "cleanup_complete": true,
+          "prerequisite": "none"
+        },
+        {
+          "name": "outbound_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-admission/outbound-http/receipt.json",
+            "byte_length": 59657,
+            "sha256": "dbddf99c17052fedb231142af7b1f6baee5af55232f32196cf466c67ecfca6c5"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 15596363066,
+          "commands": 18,
+          "runners": 8,
+          "requests": 17,
+          "cleanup_complete": true,
+          "prerequisite": "http_client_adapter_1"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-admission/offline-packages/receipt.json",
+            "byte_length": 2137330,
+            "sha256": "68a1db837be96ab523c3716b27dbbcc9f4f0ba941bd7d46e71cdca79cd21f5cc"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 36047987728,
+          "commands": 101,
+          "runners": 1,
+          "requests": 1,
+          "cleanup_complete": true,
+          "prerequisite": "code_complete_package_container_1"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-admission/pure-tail/receipt.json",
+            "byte_length": 4830353,
+            "sha256": "67bf42a48be4e0cbb12c8dfdb7ddb6a14cd03a9f2f74603962e4f61af24fef44"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 144101959719,
+          "commands": 163,
+          "runners": 1,
+          "requests": 4,
+          "cleanup_complete": true,
+          "prerequisite": "pure-tail-execution"
+        },
+        {
+          "name": "stateful_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609091322/musl-02-admission/stateful-http/receipt.json",
+            "byte_length": 331366,
+            "sha256": "8d479cbf6e24587a163ce993982d2d20cfcf2f291835985beafb1d96f2fef0e1"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 47504634923,
+          "commands": 235,
+          "runners": 3,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/lkjscript-dev/service/1788936253539738192-619430-0/receipt.json",
+            "byte_length": 175751,
+            "sha256": "b5bfe6710c0eaf77372e4765af0149e8a03bd5502668aa10abd0a5a7b97ad25f"
+          },
+          "verifier_sha256": "f088009b2763d362fa8c42bb62d352b05d44f419a746c87ecf988e2bb738c2fe",
+          "candidate_sha256": "8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0",
+          "elapsed_nanoseconds": 18932005897,
+          "commands": 69,
+          "runners": 8,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        }
+      ]
     },
-    "musl_admission": null,
-    "post_record": "Final containing commit/tree and actual revalidation will be reported out of band; no self-referential evidence hash."
+    "post_record": {
+      "classification": "not run at record assembly",
+      "requirement": "Fresh full profile and fresh local exact-target build/admission will run after the containing record commit. Their actual dispositions and final containing commit/tree are reported out of band; record edits are not treated as exempt."
+    }
   },
-  "implementation_commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
-  "implementation_tree": "9f9ec4f407bd2bba9777beaa0df701f0b165ac0f"
+  "implementation_commit": "737e9a632199375b34d39ba97af8a982a107339f",
+  "implementation_tree": "7a2d8cbf0755b677a0acee5059d2c53068c6c173",
+  "commits": [
+    {
+      "commit": "e1a51cfc672fc9b51ce94a6213d5d7c90383d1a5",
+      "purpose": "Archive the supplied initial mandate and reconcile startup."
+    },
+    {
+      "commit": "7747e6ef5909cd020b588d5a6c81729dd297615b",
+      "purpose": "Persistent carrier, independent type closure, graph-owned standard map, maintained cutover, public/probe oracles, contracts and initial evidence."
+    },
+    {
+      "commit": "737e9a632199375b34d39ba97af8a982a107339f",
+      "purpose": "Correct remaining distributed/service exact fixture bindings and preserve the first full-profile failure."
+    }
+  ]
 }
