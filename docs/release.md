@@ -5,22 +5,24 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.21`, release `382657212`, is the current supported release. Release run
-`33862293249` completed 24 fresh source gates, four-oracle target verification, all three no-checkout
-pre-publication application oracles, isolated publication, and independent anonymous exact/latest
-distributed, stateful-from-`minimal`, and outbound application oracles on attempt 1. Its exact
-candidate is bound by service-receipt contract 9 and distributed-receipt contract 4 to exact HTTP
-routes, structured sessions, identity-preserving extraction, exact-requirement affine handoff,
-catalog recovery, complete definition paging, and the maintained application/service boundaries.
-Exact identities and receipts are in
-[`202609041625-v0.1.21-consolidated-release.json`](evidence/202609041625-v0.1.21-consolidated-release.json).
-Immutable `v0.1.8` remains the unmodified historical recovery point for the workflow-only
-cross-application equality defect described in the historical campaign evidence.
+Immutable `v0.1.28`, release `385653688`, is the current supported release. Annotated tag
+`c317df24fe90edff1acbd7440dd0c4c6b3e5f488` selects source
+`221beca0df7b31dbf10c9b22fe35c6db3af1b903`. Dry run `34361011045` and tag-driven release run
+`34366733245` passed on attempt 1. Each ran 26 fresh source gates, static inspection, both pinned
+userlands, all six named target oracles, strict packaging, and all five transferred behavioral owners.
+Only the tag run published. Its exact-version and latest anonymous downloads independently passed
+checksums, GitHub asset digests, release/asset attestations, strict extraction, and five fresh
+behavioral owners before byte comparison. Exact identities and bounded proof are in the
+[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
 
-Current product source is unreleased 0.1.28 and immutable public latest remains v0.1.21. Its annotated tag
-selects release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`; v0.1.16 and every older
-tag, release, asset, and attestation remain unchanged. No installer, registry package, second target,
-deployment, or hosted application state was created by this release.
+The release delivers the already implemented capture-safe compositional core. The only settings
+write bound the existing `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA` variable to that exact tag
+after a fresh enabled-immutability administrator read and prior-value check. The read/check/write/
+readback sequence is not atomic. Earlier tags, releases, and assets remain unchanged. Immutable
+`v0.1.8` remains the historical recovery point documented by its campaign; the prior supported
+[v0.1.21 record](evidence/202609041625-v0.1.21-consolidated-release.json) remains historical evidence.
+No installer, registry package, second target, deployment, or hosted application state was created.
+The later reporting commit does not replace the tagged release-source identity.
 
 ## Identity and authority
 

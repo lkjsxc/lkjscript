@@ -14,10 +14,11 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
-The active source snapshot is unreleased product 0.1.28. Immutable public latest remains v0.1.21;
-its tag, release, assets, and metadata continue to identify product 0.1.21. A source package version
-does not imply a tag or public release, and distribution cannot select the newer source snapshot
-until its independently authorized publication path closes.
+The active source snapshot and immutable public latest are product 0.1.28. Its release-source commit
+is `221beca0df7b31dbf10c9b22fe35c6db3af1b903`; independent exact-version and latest-download acceptance
+are recorded in the [public milestone evidence](../evidence/202609092050-capture-safe-public-milestone.json).
+A source package version alone does not imply a tag or public release. Older tags, releases, assets,
+and metadata continue to identify their original snapshots.
 
 ## Public projection
 

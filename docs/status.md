@@ -64,48 +64,55 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
-Current 0.1.28 source includes version 4 of the private verifier handoff and one typed five-owner transferred
-acceptance command. Target admission rereads all six named oracle receipts. The current release
-campaign requires fresh local, hosted dry-run, tag-driven and independent exact/latest admission;
-these tooling changes do not establish a new public release by themselves.
-
-[`v0.1.21`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.21) is the current public and
-supported release. Its annotated tag object
-`fd6e87acf987d1d4722845e69d2108de4705ed49` selects exact release-source commit
-`6380117363ca2c69d4bf84e512a57d03ce9ea74e`; GitHub reports release `382657212` as immutable,
-latest, non-draft, and non-prerelease. The sole current target is
-`x86_64-unknown-linux-musl`. The 18,462,944-byte executable is ELF64 x86-64 and has no ELF
-interpreter, `DT_NEEDED` runtime library, or GLIBC symbol-version requirement.
+[`v0.1.28`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.28) is the current public and
+supported release. Annotated tag object `c317df24fe90edff1acbd7440dd0c4c6b3e5f488` selects
+release-source commit `221beca0df7b31dbf10c9b22fe35c6db3af1b903`, tree
+`c19f5c9713665a87acaa05fde82f79f32844e605`. GitHub reports release `385653688` as
+immutable, latest, non-draft, and non-prerelease. The sole admitted target is
+`x86_64-unknown-linux-musl`. Its 20,445,440-byte executable has SHA-256
+`d169a6739f9ad9a5c2acfeb792aef1f1f3989c707a0f332d293b114681b1c3cb`, with no ELF interpreter, `DT_NEEDED` library, or GLIBC
+symbol-version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 8,293,246 | `a2b36ab0f856b75b5686ddbc42433a2bbd8ae98e8b5d52675825bd33721fea32` |
-| `SHA256SUMS` | 109 | `aee7da6f5e7beb79632aea8947413c9e53ceeb0a654bf407cbeebe0ef308755e` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 9,237,176 | `4ca67c32697034d0893b8c6feaab0de2cc301b2a35bb552f879aeedaa9cfc1e4` |
+| `SHA256SUMS` | 109 | `a74ccdff06e3e582a0f32f4166a83acd7fbca2d510599d83176d758e82883d8e` |
 
-Release workflow
-[`33862293249`](https://github.com/lkjsxc/lkjscript/actions/runs/33862293249) passed all four jobs on
-attempt 1. Tagged source passed 24/24 fresh full gates with zero reuse. Exact target admission
-directly inspected static linkage, completed 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2
-and Debian 11/glibc 2.31 userlands without candidate network or host-library mounts, and passed
-distributed HTTP, outbound HTTPS/TLS/DNS, stateful HTTP, and maintained `lkjournal` service
-oracles. The service oracle binds service-receipt contract 9 and proves maintained exact route
-ownership, structured interactive sessions, identity-preserving extraction, exact-requirement-bound
-affine handoff, the resource-owned queue lifecycle, restart, unchanged semantic authority, and
-cleanup. Bounded catalog health and missing/predecessor/incomplete recovery also pass without
-promoting derived catalog state to authority.
+[Dry run 34361011045](https://github.com/lkjsxc/lkjscript/actions/runs/34361011045) and
+[tag run 34366733245](https://github.com/lkjsxc/lkjscript/actions/runs/34366733245) each passed
+26 fresh full gates with zero reuse at that source. Each independently built and admitted its exact
+musl candidate: static ELF inspection, 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2 and
+Debian 11/glibc 2.31 userlands, and six named distributed HTTP, outbound HTTP, offline-package,
+pure-tail, stateful HTTP, and maintained `lkjournal` service oracles. All cleanup checks passed.
+The private verifier handoff admits release verification plus the five transferred behavioral owners.
+The typed target reader validates complete named receipts; obsolete count-only admission is removed.
 
-A no-checkout job verified both handoffs and ran current distributed-receipt contract 4 plus
-stateful and outbound application oracles before the write-isolated publication job. Anonymous
-exact-tag and `releases/latest` downloads independently passed checksums, GitHub asset digests and
-attestations, strict extraction, static inspection, and all three transferred application oracles.
-Each independently proved clean/incremental equality, failure and cancellation behavior, unchanged
-authority, redaction, and cleanup; exact and latest archive, checksum, candidate, and manifest bytes
-were compared only after both behavioral runs. The release consolidates the completed 0.1.17
-exact-requirement affine handoff, 0.1.18 identity-preserving `extract.function`, 0.1.19 incremental
-catalog, 0.1.20 structured sessions, and 0.1.21 exact HTTP routes without adding graph meaning or
-touching deployment state. Exact identities, classifications, resources, negatives, and raw-evidence
-pointers are retained in
-[`202609041625-v0.1.21-consolidated-release.json`](evidence/202609041625-v0.1.21-consolidated-release.json).
+The tag run completed all four jobs on attempt 1. Before its isolated publication job, a job without
+a checkout strictly extracted the package and freshly ran all five transferred owners. Anonymous
+exact-version and latest archive/checksum pairs independently passed transport checksums, GitHub
+asset digests, release and asset attestations, strict extraction and static inspection, followed by
+five fresh behavioral owners on each extraction. Exact/latest archive, checksum, manifest, and
+executable bytes were compared only after both complete runs. All aggregate and child cleanup passed.
+Authenticated metadata and attestation reads are separate from token-free downloads.
+
+The downloaded executable can publicly author and inspect a constrained generic factory and its
+private graph helper, transport the exact offline closure, retain Text and nested lists, and run
+independent configured callbacks. Mapping [1,2,4] with {scale:3,bias:5} produces [8,11,17]; a second
+retained {scale:-2,bias:4} factory produces [2,0,-4] while the first remains unchanged. Each public
+run checks every ordered mapped value for 8,192 inputs and the fixed sum 100,691,968, package diamond
+results 11/11/12 after producer removal, capture-constraint rejection without a changed HEAD, and
+transactional HTTP wire/data equality with failure cleanup and healthy recovery. Retained evaluator
+and cancellation probes are explicitly source/verifier-bound. No live effect is replayed for evidence.
+
+The release incorporates the already completed route, checked-value, offline-package, tail,
+binding, persistent-list, and capture-safe consumer cutovers; distribution work changed no product
+source, maintained semantic owner, or generated consumer bytes. Bounded identities, outcomes,
+204 actual transfer-fault rejections, cancellation recovery, failed local attempts, resources,
+settings actions, and cleanup are in the
+[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
+The historical [v0.1.21 record](evidence/202609041625-v0.1.21-consolidated-release.json) remains
+unchanged, as do every earlier tag and public asset. This campaign performed no deployment or
+operational-data mutation. The later reporting commit is distinct from the release source above.
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -126,8 +133,8 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.28`; immutable public latest remains `v0.1.21` at the
-exact release-input source commit named above. The source retains the exact-requirement-bound affine
+Current product source and immutable public latest are `0.1.28`, published from the
+exact release-input source commit named above. The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure tail execution, and preparation-bound checked execution
@@ -434,8 +441,8 @@ The persistent 32-way trie/tail list carrier replaces whole-vector immutable app
 evaluators and raw intrinsic dispatch. Shared element handles preserve old aliases without cloning
 their payloads. Length, traversal and indexing retain logical flat sequence semantics; physical
 storage reservations now charge bounded copied/reserved slots and metadata before allocation.
-The default execution limits and Graph 11/TypeObject 10/compiler-unit 6/bytecode 4/Artifact 16
-encodings remain unchanged. Independent composite type derivation handles generic fold states
+At the 0.1.27 list cutover, default execution limits and Graph 11/TypeObject 10/compiler-unit 6/bytecode 4/Artifact 16
+encodings remained unchanged. The later capture-safe cutover is recorded above. Independent composite type derivation handles generic fold states
 such as `List<Output>` without storing new editable type authority.
 
 The graph-owned standard map maps runtime `[1,2,4]` through `3*x+5` to `[8,11,17]`, preserves

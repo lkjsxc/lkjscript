@@ -141,23 +141,23 @@ bind the human-facing product snapshot while internal compatibility identities r
 owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.21` closes this path at release-source commit
-`6380117363ca2c69d4bf84e512a57d03ce9ea74e`. Its exact and latest downloads independently passed
-strict package and static inspection plus transferred distributed HTTP, deployment-bound outbound
-HTTPS/TLS/DNS, and first-party-data stateful HTTP acceptance. Distributed-receipt contract 4 proves
-exact route owners and complete function-definition projection; service-receipt contract 9 proves
-the maintained structured session, exact routes, identity-preserving extraction, and
-exact-requirement affine worker handoff. Each public application path proves clean/incremental
-equality, failure and cancellation behavior, unchanged semantic authority, and cleanup before exact
-and latest bytes are compared.
+Immutable `v0.1.28` closes this path at release-source commit
+`221beca0df7b31dbf10c9b22fe35c6db3af1b903`. A transferred job without a checkout runs distributed
+HTTP, outbound HTTP, offline packages, pure-tail execution, and stateful HTTP before the isolated
+publication job. Exact-version and latest downloads independently repeat all five owners after
+checksums, GitHub asset digests, release/asset attestations, strict package extraction, and static
+inspection. Their bytes are compared only after both complete behavioral runs.
 
-The release consolidates the completed 0.1.17 affine handoff, 0.1.18 graph-native function
-extraction, 0.1.19 catalog contract 2, 0.1.20 structured-session contract 1, and 0.1.21 exact HTTP
-routes. It carries canonical standard session types, one exact relational `interactive` target, a
-bounded RFC 6455 server adapter, and maintained `lkjournal-live-1` through the existing distribution
-path without adding graph meaning or selecting deployment or operational data. Target admission
-binds the exact candidate, service/worker behavior, catalog recovery, and maintained application
-proof through the manifest, receipts, transferred verifier, and accepted exact/latest extractions.
+The public executable retains runtime configuration through graph-owned constrained generic
+factories, private helpers, exact offline closures, and standard function-constant/compose/fold/map.
+The fixed public witnesses prove independent retained callbacks, ordered 8,192-item mapping under
+unchanged defaults, and transactional wire/data equality with trap/cancellation recovery. Target
+admission additionally binds the exact candidate to the maintained service/worker oracle and both
+pinned userlands. Internal evaluator-thread and cancellation probes remain source/verifier-bound;
+they do not claim additional downloaded-target portability. Current semantic and maintained-consumer
+cutovers preceded this distribution repair. Exact source, candidate, receipt, artifact, and publication
+identities are retained in the
+[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
 
 Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
 but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery

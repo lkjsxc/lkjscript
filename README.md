@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.21 executable provides offline command, exact-route inbound HTTP, structured
+The supported v0.1.28 executable provides offline command, signature-indexed inbound HTTP, structured
 interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
 lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
 accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
@@ -14,8 +14,8 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.28`; immutable supported release `v0.1.21` remains at exact
-release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
+Current source and immutable supported release are `0.1.28`, published from exact
+release-source commit `221beca0df7b31dbf10c9b22fe35c6db3af1b903`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -25,7 +25,7 @@ through the same typed authored-operation engine and preserve their application 
 project-creation boundary. The release also includes one
 deployment-bound outbound `HttpClient.get` capability and
 a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-Unreleased source retains the 0.1.22 extension of each graph-owned HTTP route with an exact-path or bounded
+Release 0.1.28 includes the 0.1.22 extension of each graph-owned HTTP route with an exact-path or bounded
 whole-segment-pattern selector. Capture names index the handler's ordered unrestricted `Text`
 parameter suffix; ambiguous overlap and signature drift reject before publication. The maintained
 resource routes now use `/resource/{id}` patterns rather than query-selected identifiers while
@@ -72,7 +72,7 @@ failure. Raw attempt/worker transition tokens are no longer graph or adapter inp
 and backup formats remain unchanged. Immutable `v0.1.15` publishes these semantics through the
 same copied-binary authoring, build, service, and worker boundaries.
 
-Both the current source and immutable v0.1.21 binary include public explicit type-parameter,
+The public binary includes explicit type-parameter,
 named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
 maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
 complete first-party ordered-data cutover are also public. The executable exposes data
@@ -81,7 +81,7 @@ initialize/verify/backup/restore, canonical typed application values, and
 separate. Public product surfaces expose the root product version and opaque capabilities digest
 without separate subsystem generation numbers.
 
-Unreleased source also includes explicit `bind` expressions with immutable runtime prefixes and graph-owned
+The public binary also includes explicit `bind` expressions with immutable runtime prefixes and graph-owned
 `function-compose<A,B,C>`. Factories can return pure functions over runtime configuration and other
 pure callables after their own frame ends. Capture-safe type-parameter constraints permit generic
 runtime environments; unconstrained parameters, secrets, streams, and resources remain outside the
@@ -89,10 +89,11 @@ capture-safe subset. Graph 12 preserves unchanged TypeObject 10 bytes
 and persisted typed-data layouts; the maintained application retains its existing semantic owners.
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
-maintained-consumer cutover. The distribution cutover requires fresh five-owner acceptance before
-publication and independently on exact and latest downloads.
+maintained-consumer cutover. The [public milestone evidence](docs/evidence/202609092050-capture-safe-public-milestone.json)
+records fresh five-owner acceptance before publication and independently on exact and latest downloads.
 
-Unreleased 0.1.27 adds graph-owned `list-map<Input,Output>` and a persistent immutable list carrier.
+Product 0.1.27 introduced graph-owned `list-map<Input,Output>` and a persistent immutable list carrier,
+now published in v0.1.28.
 Aliased append copies a bounded tail or branch spine; it does not rebuild the complete old prefix.
 Configured mapping of 8,192 items runs under the unchanged default execution limits. Indexed access
 and metadata costs differ from contiguous vectors. The normative contract and independent storage
@@ -101,8 +102,9 @@ proof are described in the [list decision](docs/decisions/20260909-persistent-li
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
 completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands, and its distributed, first-party-data, and outbound HTTPS workflows passed independently
-from both exact-tag and latest downloads. These observations do not claim a minimum kernel, every
+userlands. Distributed HTTP, outbound HTTPS, offline packages, pure-tail execution, and stateful HTTP
+passed independently from both exact-tag and latest downloads; target admission additionally passed
+the maintained `lkjournal` service oracle. These observations do not claim a minimum kernel, every
 x86-64 environment, or broader Linux portability.
 
 ## Download
@@ -123,10 +125,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.21` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.21) owns the immutable
+[`v0.1.28` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.28) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.21/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.21/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.28/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.28/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -163,7 +165,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.21 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.28 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -202,7 +204,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.21 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.28 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -231,7 +233,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.21 download exposes the complete first-party boundary and topology authoring
+The immutable v0.1.28 download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -243,7 +245,7 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.21`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.28`.
 
 Public compact change records can add an exact staged built-in dependency,
 components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
@@ -260,7 +262,7 @@ add.http-route as=$ROUTE target=TARGET method=METHOD path=PATH port=PORT
 set.http-route route=HTTP_ROUTE method=METHOD path=PATH port=PORT
 ```
 
-The unreleased source also exposes the selector-indexed forms:
+The public binary also exposes the selector-indexed forms:
 
 ```text
 add.http-route as=$ROUTE target=TARGET method=METHOD pattern="/literal/{capture}" port=PORT
@@ -361,7 +363,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.21 executable can obtain one complete admitted local neighborhood
+The public v0.1.28 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -376,7 +378,7 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-The public v0.1.21 executable can project one complete accepted local function definition through
+The public v0.1.28 executable can project one complete accepted local function definition through
 stateless pages:
 
 ```sh
@@ -445,11 +447,11 @@ frames and successful tail transfers under unchanged budgets; task frames retain
 resource ownership. Discovery and the [generated operation guide](docs/generated/operations.md)
 describe the observations.
 
-Unreleased source includes code-complete offline package composition. A copied executable can
+The public binary includes code-complete offline package composition. A copied executable can
 export the current immutable graph and its exact transitive closure, including private bodies;
 stage it without changing HEAD; inspect staged public signatures; and review/apply exact dependency
 bindings. Check/build/run compile the admitted canonical code without producer directories. Public
-release v0.1.21 predates this general package workflow.
+release v0.1.28 includes this general package workflow.
 
 ```sh
 ./lkjscript --project ./library package current export --kind transport --output ./library.lkjp
