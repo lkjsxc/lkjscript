@@ -4226,6 +4226,82 @@ fn copied_binary_checks_capture_safe_instantiation_constraints_before_publicatio
 }
 
 #[test]
+fn copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("constraint-scope");
+    compact_success_at(
+        &copied,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "command",
+            "--name",
+            "constraints",
+        ],
+    );
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let inventory = content_inventory(&project);
+    for (name, supplied, expected) in [
+        (
+            "foreign-bound",
+            "type.argument parent=$site index=0 type=@U\n",
+            "kernel_type_constraint",
+        ),
+        ("missing-type", "", "kernel_type_argument_count"),
+        (
+            "extra-type",
+            "type.argument parent=$site index=0 type=i64\ntype.argument parent=$site index=1 type=text\n",
+            "kernel_type_argument_count",
+        ),
+    ] {
+        for invocation in ["call", "function-value"] {
+            let request = format!(
+                "request base={base}\n\
+                type.parameter as=@U parameter=$U\n\
+                expression.unit as=$other-unit\n\
+                create.function as=$other module=application name=other visibility=private result=unit effect=pure body=$other-unit\n\
+                add.type-parameter as=$U function=$other name=U constraint=capture-safe\n\
+                expression.unit as=$unit\n\
+                create.function as=$target module=application name=target visibility=private result=unit effect=pure body=$unit\n\
+                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                expression.{invocation} as=$site function=$target\n{supplied}\
+                type.function as=@thunk result=unit\n\
+                create.function as=$caller module=application name=caller visibility=private result={} effect=pure body=$site\n",
+                if invocation == "call" {
+                    "unit"
+                } else {
+                    "@thunk"
+                },
+            );
+            let output = command_at(
+                &copied,
+                temporary.path(),
+                &[
+                    "--project",
+                    path(&project),
+                    "change",
+                    "plan",
+                    "--input",
+                    &request,
+                ],
+            );
+            assert!(!output.status.success(), "{name}/{invocation} was accepted");
+            let records = parse_records("constraint scope rejection", &output.stdout).unwrap();
+            assert_eq!(
+                compact_field(compact_record(&records, "diagnostic"), "code"),
+                Some(expected),
+                "{name}/{invocation}: {records:?}",
+            );
+            assert_eq!(inventory, content_inventory(&project));
+        }
+    }
+}
+
+#[test]
 fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecessors() {
     let temporary = tempfile::TempDir::new().expect("isolated affine-resource workspace");
     let copied_binary = temporary.path().join("lkjscript");
