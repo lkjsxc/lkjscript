@@ -2,6 +2,48 @@
 
 Measurements are observations, not promises.
 
+## Persistent lists, 2026-09-09
+
+A single predecessor-authored fold/bind/append program produces exactly the same artifact bytes
+on the predecessor and successor: SHA-256 `a789f0f2114dd8b652f60a33869d90a30d076ec61b3131cbeed4b95893ed0d61`.
+The new standard map is tested separately. On the matched workload, the predecessor copies 32,640
+prior value occurrences at N=256 and 523,776 at N=1,024 in each evaluator. At N=4,096 it exhausts
+after 1,410 appends (993,345 copies); at N=8,192 it exhausts after 1,407 (989,121 copies). Both
+tiers report collection exhaustion under the unchanged one-million-item limit. The source-derived
+33,550,336-copy cost of a completed 8,192-element vector build is hypothetical; that predecessor
+execution does not complete. The successor completes all four sizes.
+
+Release-profile public-process observations use one warm-up and three measurements per size,
+Rust 1.98.0, the same Linux x86-64 workspace, and no simultaneous owned build during the samples.
+Numbers include preparation, ingress, execution, equality, and JSON output. Failed predecessor
+times describe exhaustion, not completed-work throughput. RSS is sampled process memory, not
+cumulative charged allocation or a heap-allocation census.
+
+| N | Predecessor wall seconds, measured samples | Successor wall seconds, measured samples | Successor RSS range, KiB |
+| ---: | --- | --- | ---: |
+| 256 | 0.206274, 0.211152, 0.211204 | 0.208528, 0.208953, 0.206583 | 18880–19676 |
+| 1,024 | 0.227486, 0.240559, 0.222922 | 0.224592, 0.219665, 0.216726 | 19652–20144 |
+| 4,096 | 0.217188, 0.216790, 0.216983 (exhausted) | 0.266766, 0.283140, 0.262838 | 19736–20152 |
+| 8,192 | 0.216511, 0.220991, 0.216815 (exhausted) | 0.327987, 0.324450, 0.367050 | 20164–20448 |
+
+At N=8,192 standard mapping allocates 8,192 element handles and copies 126,976 tail handles;
+it reserves 262,144 leaf slots and 15,264 branch slots, with no whole-prefix materialization in
+either evaluator. The independent schedule fixes 280 bytes per 32-slot node and 104 bytes per
+new element handle on this target. Forwarding preserves zero list allocation/materialization and
+an additive physical traversal relation. A restored-prefix-copy fault returns correct values at
+length 33 but fails the independent schedule: 96 slots/4,376 bytes versus 32 slots/384 bytes.
+
+Ordered traversal of 8,192 elements visits 265 nodes; all indexed reads visit 24,512 nodes
+(8,160 prefix items times three nodes, plus 32 tail items). A contiguous Vec requires one indexing
+step per read. Boundary construction, JSON conversion, and paired one-pass indexing observations
+are retained separately in the bounded-stack receipt; these short samples are advisory, not a
+latency distribution. JSON output materializes one 8,192-element external array, while ordinary
+append, calls, capture invocation, and length/lookup retain the carrier. Small lists reserve a
+full tail and element metadata, so the result removes quadratic copying without claiming that
+every program is faster or smaller. Exact candidate/verifier identities, all warm-ups, failed
+attempts, physical observations, and reproduction inputs are in the
+[campaign evidence](evidence/202609091322-persistent-lists.json).
+
 ## Checked-value execution, 2026-09-08
 
 The unchanged graph-owned standard fold and a separately authored forwarding library exercise

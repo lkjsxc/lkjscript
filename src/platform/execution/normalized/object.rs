@@ -308,12 +308,12 @@ impl NormalizedCapabilityAdapter for NormalizedObjectStorageAdapter {
                         "reconcile-put has no prepared exact receipt codec",
                     )
                 })?;
-                Ok(NormalizedValue::List(Arc::new(
+                Ok(NormalizedValue::list(
                     receipts
                         .into_iter()
                         .map(|receipt| codec.encode_put(receipt))
                         .collect(),
-                )))
+                )?)
             }
             ObjectOperation::Delete => {
                 let [NormalizedValue::Text(key)] = arguments.as_slice() else {

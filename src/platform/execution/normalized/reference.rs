@@ -185,6 +185,22 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
+        if implementation.as_str() == "core.list.append" {
+            let mut raw = arguments.into_iter();
+            let list = raw
+                .next()
+                .ok_or_else(|| reference_type_error("raw append is missing its list"))?;
+            let item = raw
+                .next()
+                .ok_or_else(|| reference_type_error("raw append is missing its item"))?;
+            let NormalizedValue::List(list) = list else {
+                return Err(reference_type_error("raw append received a foreign list"));
+            };
+            if raw.next().is_some() {
+                return Err(reference_type_error("raw append has foreign arity"));
+            }
+            return Ok(NormalizedValue::List(list.raw_append(item, control)?));
+        }
         reference_intrinsic(
             schema,
             function,
@@ -259,6 +275,14 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             host: None,
             observer: None,
         }
+    }
+
+    pub(super) fn observing_checked(
+        mut self,
+        observer: &'a std::sync::Mutex<Option<NormalizedReferenceObservation>>,
+    ) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     pub(super) fn observing(
@@ -456,6 +480,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             value_origin: self.program.value_origin,
         });
         let schema_work = schema.work;
+        let list_work = super::list::Work::current();
         let mut state = ReferenceState {
             authority: self.authority,
             binding,
@@ -531,6 +556,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         state.observation.live_local_scopes_after = state.local_counts.len();
         state.observation.live_type_scopes_after = state.type_scopes.len();
         state.observation.live_transactions_after = state.transactions.len();
+        state.observation.value_work.lists = list_work.since();
         if let Some(observer) = self.observer {
             let mut observed = observer.lock().map_err(|_| {
                 reference_error(
@@ -2585,18 +2611,6 @@ fn reference_intrinsic(
             }
             _ => Err(reference_type_error("list lookup received foreign values")),
         },
-        "core.list.append" => match arguments.as_slice() {
-            [NormalizedValue::List(values), value] => {
-                let next = values.len().checked_add(1).ok_or_else(|| {
-                    reference_resource("reference_list_length", "list length overflowed")
-                })?;
-                let mut output = Vec::with_capacity(next);
-                output.extend_from_slice(values);
-                output.push(value.clone());
-                Ok(NormalizedValue::List(Arc::new(output)))
-            }
-            _ => Err(reference_type_error("list append received foreign values")),
-        },
         "core.option.some" => match arguments.as_slice() {
             [value] => Ok(NormalizedValue::Option(Some(Box::new(value.clone())))),
             _ => Err(reference_type_error(
@@ -2867,7 +2881,7 @@ fn reference_map_intrinsic(
                 ("value", value.clone()),
             ])?);
         }
-        return Ok(NormalizedValue::List(Arc::new(output)));
+        return NormalizedValue::list(output);
     }
     let Some(key_value) = arguments.get(1) else {
         return Err(reference_type_error("map intrinsic omitted its key"));
@@ -2995,7 +3009,18 @@ pub(crate) fn reference_equal(
             Ok(left_case == right_case && contents)
         }
         (NormalizedValue::List(left), NormalizedValue::List(right)) => {
-            reference_equal_sequence(left, right)
+            let mut equal = left.len() == right.len();
+            for (left, right) in left.iter().zip(right.iter()) {
+                equal &= reference_equal(left, right)?;
+            }
+            for value in left
+                .iter()
+                .skip(right.len())
+                .chain(right.iter().skip(left.len()))
+            {
+                reference_equal(value, value)?;
+            }
+            Ok(equal)
         }
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
             let mut equal = left.len() == right.len();

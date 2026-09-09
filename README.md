@@ -14,7 +14,7 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.26`; immutable supported release `v0.1.21` remains at exact
+Current product source is unreleased `0.1.27`; immutable supported release `v0.1.21` remains at exact
 release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
@@ -88,6 +88,12 @@ resources remain outside the capture-safe subset. Graph 11 preserves unchanged T
 and persisted typed-data layouts; the maintained application retains its existing semantic owners.
 The [binding evidence](docs/evidence/202609090021-pure-function-binding.json) records public-path
 verification, retained-value costs, migration equivalence, and exact-target admission.
+
+Unreleased 0.1.27 adds graph-owned `list-map<Input,Output>` and a persistent immutable list carrier.
+Aliased append copies a bounded tail or branch spine; it does not rebuild the complete old prefix.
+Configured mapping of 8,192 items runs under the unchanged default execution limits. Indexed access
+and metadata costs differ from contiguous vectors. The normative contract and independent storage
+proof are described in the [list decision](docs/decisions/20260909-persistent-lists.md).
 
 The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
 runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary

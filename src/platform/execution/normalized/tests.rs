@@ -116,7 +116,7 @@ fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             .iter()
             .filter(|(key, _)| !old_owners.contains_key(&key.to_string()))
             .collect::<Vec<_>>();
-        assert_eq!(additions.len(), if type_count == 85 { 68 } else { 0 });
+        assert_eq!(additions.len(), if type_count == 85 { 138 } else { 0 });
         let new_declarations = additions
             .iter()
             .filter_map(|(_, owner)| match owner {
@@ -135,6 +135,15 @@ fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
                     "function-compose-reverse",
                     "function-compose-i64-bool-text-true",
                     "function-compose-i64-bool-text-false",
+                    "list-map",
+                    "list-map-step",
+                    "list-map-test-identity",
+                    "list-map-test-configured",
+                    "list-map-test-bool-text",
+                    "list-map-empty",
+                    "list-map-singleton",
+                    "list-map-multiple",
+                    "list-map-heterogeneous",
                 ])
             } else {
                 BTreeSet::new()
@@ -1797,7 +1806,7 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
             .expect("tracking call policy lock")
             .push(policy.clone());
         if self.stats.malformed_result.load(Ordering::Relaxed) {
-            Ok(NormalizedValue::List(Arc::new(Vec::new())))
+            Ok(NormalizedValue::list(Vec::new()).expect("bounded raw list"))
         } else {
             Ok(NormalizedValue::Unit)
         }
@@ -3967,7 +3976,8 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
         ..Default::default()
     };
     for n in [256_i64, 4096, 8192] {
-        let list = NormalizedValue::List(Arc::new((1..=n).map(NormalizedValue::I64).collect()));
+        let list = NormalizedValue::list((1..=n).map(NormalizedValue::I64).collect())
+            .expect("bounded raw list");
         let arguments = |index| {
             vec![
                 list.clone(),
@@ -4677,7 +4687,8 @@ add.parameter as=$entry-items function=$entry name=items type=@items
                     let run = || {
                         let arguments = vec![
                             NormalizedValue::I64(k),
-                            NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); n])),
+                            NormalizedValue::list(vec![NormalizedValue::I64(1); n])
+                                .expect("bounded raw list"),
                         ];
                         if reference {
                             let (value, observation) =

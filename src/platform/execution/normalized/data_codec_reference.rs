@@ -291,7 +291,13 @@ fn read_value(
             for _ in 0..count {
                 values.push(read_value(program, *item, input, budget, depth + 1)?);
             }
-            Ok(NormalizedValue::List(Arc::new(values)))
+            Ok(NormalizedValue::list(values).map_err(|error| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "normalized_list_storage",
+                    error.message,
+                )
+            })?)
         }
         TypeForm::Map { key, value } => {
             let count = input.read_count("normalized_data_map_count")?;

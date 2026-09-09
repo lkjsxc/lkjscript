@@ -37,11 +37,13 @@ impl NormalizedReferenceSchema {
         let mut records = BTreeMap::new();
         let mut variants = BTreeMap::new();
         let mut visited = 0_usize;
+        let mut inputs = Vec::new();
         for snapshot in snapshots {
             let package = snapshot.root.package_id;
             if !packages.insert(package) || packages.len() > 10_000 {
                 return Err(inventory_error("duplicate or excessive canonical packages"));
             }
+            inputs.push(snapshot);
             visited = visited
                 .checked_add(snapshot.owners.len())
                 .and_then(|count| count.checked_add(snapshot.types.len()))
@@ -182,6 +184,7 @@ impl NormalizedReferenceSchema {
                 Ok(affine)
             })
             .collect::<Result<_, ExecutionError>>()?;
+        super::reference_types::complete(&mut schema, &inputs)?;
         Ok(schema)
     }
 

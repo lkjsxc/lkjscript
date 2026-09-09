@@ -344,12 +344,12 @@ impl NormalizedDataAdapter {
                 let schema = transaction
                     .schema_read(space)
                     .map_err(|error| map_data_error(error, false))?;
-                Ok(NormalizedValue::List(Arc::new(
+                Ok(NormalizedValue::list(
                     schema
                         .into_iter()
                         .map(|schema| self.codecs.schema.encode_schema(schema))
                         .collect(),
-                )))
+                )?)
             }
             DataOperation::SchemaSet => {
                 let [NormalizedValue::StaticText(space), expected, next] = arguments else {
@@ -375,12 +375,12 @@ impl NormalizedDataAdapter {
                 let entry = transaction
                     .get(space, &key)
                     .map_err(|error| map_data_error(error, false))?;
-                Ok(NormalizedValue::List(Arc::new(
+                Ok(NormalizedValue::list(
                     entry
                         .into_iter()
                         .map(|entry| self.codecs.entry.encode_entry(entry))
                         .collect(),
-                )))
+                )?)
             }
             DataOperation::Scan => {
                 let [
@@ -720,8 +720,8 @@ impl VariantCodec {
             .map_err(|error| map_data_error(error, false))
     }
 
-    fn encode_key(&self, key: DataKey) -> NormalizedValue {
-        NormalizedValue::List(Arc::new(
+    fn encode_key(&self, key: DataKey) -> Result<NormalizedValue, ExecutionError> {
+        NormalizedValue::list(
             key.parts()
                 .iter()
                 .map(|part| {
@@ -747,7 +747,7 @@ impl VariantCodec {
                     }
                 })
                 .collect(),
-        ))
+        )
     }
 
     fn decode_expectation(
@@ -949,7 +949,7 @@ impl RecordCodec {
         key: &VariantCodec,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.encode_fields(BTreeMap::from([
-            ("key", key.encode_key(item.key)),
+            ("key", key.encode_key(item.key)?),
             (
                 "revision",
                 NormalizedValue::bytes(item.revision.bytes().to_vec()),
@@ -977,7 +977,7 @@ impl RecordCodec {
                 "continuation",
                 NormalizedValue::bytes(page.continuation.unwrap_or_default()),
             ),
-            ("items", NormalizedValue::List(Arc::new(items))),
+            ("items", NormalizedValue::list(items)?),
             ("work", NormalizedValue::I64(work)),
         ]))
     }

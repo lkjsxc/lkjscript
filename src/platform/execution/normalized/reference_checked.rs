@@ -253,11 +253,49 @@ impl ReferenceState<'_> {
 
     pub(super) fn list_value(&mut self, items: Vec<Value>) -> Result<Value, ExecutionError> {
         self.ordinary_children(&items)?;
+        self.charge_allocation(
+            items
+                .len()
+                .checked_mul(std::mem::size_of::<NormalizedValue>())
+                .ok_or_else(|| {
+                    reference_resource(
+                        "normalized_list_storage",
+                        "list construction metadata overflowed",
+                    )
+                })? as u64,
+        )?;
+        let list = super::super::list::List::from_items(
+            items.into_iter().map(Value::release).collect(),
+            self.policy.maximum_collection_items,
+            &mut |charge| self.reserve_list(charge),
+        )?;
         Ok(Value {
-            datum: NormalizedValue::List(Arc::new(items.into_iter().map(Value::release).collect())),
+            datum: NormalizedValue::List(list),
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
         })
+    }
+
+    fn reserve_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let slots = self
+            .observation
+            .collection_items
+            .checked_add(charge.slots)
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_collection_items",
+                    "list slot accounting overflowed",
+                )
+            })?;
+        if slots > self.policy.maximum_collection_items {
+            return Err(reference_resource(
+                "normalized_reference_collection_items",
+                "list storage exceeds collection items",
+            ));
+        }
+        self.observation.collection_items = slots;
+        self.charge_allocation(charge.bytes)
     }
 
     pub(super) fn record_value(
@@ -405,10 +443,13 @@ impl ReferenceState<'_> {
         let NormalizedValue::List(items) = list.datum else {
             return Err(reference_type_error("list append received a foreign value"));
         };
-        let mut output = items.as_ref().clone();
-        output.push(child.release());
+        let output = items.append(
+            child.release(),
+            self.policy.maximum_collection_items,
+            &mut |charge| self.reserve_list(charge),
+        )?;
         Ok(Value {
-            datum: NormalizedValue::List(Arc::new(output)),
+            datum: NormalizedValue::List(output),
             preparation: list.preparation,
             ownership: Ownership::Ordinary,
         })
@@ -680,7 +721,9 @@ impl ReferenceState<'_> {
                         items.len(),
                         std::mem::size_of::<NormalizedValue>(),
                     )?;
+                    self.charge_allocation(items.metadata_bytes()?)?;
                     for child in items.iter().rev() {
+                        self.control.check()?;
                         visits.push((
                             child,
                             *item,

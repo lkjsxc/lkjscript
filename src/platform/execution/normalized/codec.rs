@@ -146,7 +146,13 @@ fn from_json(
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(NormalizedValue::List(Arc::new(values)))
+            Ok(NormalizedValue::list(values).map_err(|error| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "normalized_list_storage",
+                    error.message,
+                )
+            })?)
         }
         TypeForm::Map { key, value: item } => {
             let entries = value
@@ -373,6 +379,7 @@ fn to_json(
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
             state.charge(values.len(), path)?;
+            super::list::materialized(values.len());
             Ok(JsonValue::Array(
                 values
                     .iter()

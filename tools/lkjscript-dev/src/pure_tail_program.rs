@@ -161,18 +161,64 @@ pub(super) fn http(
     let task_scale = request.local("$task-scale");
     let task_bias = request.local("$task-bias");
     let pure_fold = request.call(helper, &[], &[task_items, task_scale, task_bias]);
-    request.text.push_str(&format!("create.function as=$task-fold module={} name=task-fold visibility=private result=i64 effect=task body={pure_fold}\nadd.parameter as=$task-items function=$task-fold name=items type=@items\nadd.parameter as=$task-scale function=$task-fold name=scale type=i64\nadd.parameter as=$task-bias function=$task-fold name=bias type=i64\n", bindings["module"]));
+    request.text.push_str(&format!("create.function as=$task-fold module={} name=task-fold visibility=private result=@items effect=task body={pure_fold}\nadd.parameter as=$task-items function=$task-fold name=items type=@items\nadd.parameter as=$task-scale function=$task-fold name=scale type=i64\nadd.parameter as=$task-bias function=$task-fold name=bias type=i64\n", bindings["module"]));
     let items = request.local("$write-items");
     let scale = request.local("$write-scale");
     let bias = request.local("$write-bias");
     let folded = request.call("$task-fold", &[], &[items, scale, bias]);
+    let space = request.expression("static-text", "value=tail");
+    let key = request.local("$write-key");
+    let part = request.expression(
+        "variant",
+        &format!("case={} payload={key}", standard["DataKeyPart.Text"]),
+    );
+    let key = request.expression("list", "item=@key-part");
+    request.arguments(&key, &[part]);
+    let value = request.local("$mapped-output");
+    let bytes = request.call(&standard["json-encode"], &["@items"], &[value]);
+    request.text.push_str(&format!(
+        "type.named as=@data-entry declaration={}\n",
+        standard["DataEntry"]
+    ));
+    let read_space = request.expression("static-text", "value=tail");
+    let read_key = request.local("$write-key");
+    let read_part = request.expression(
+        "variant",
+        &format!("case={} payload={read_key}", standard["DataKeyPart.Text"]),
+    );
+    let read_key = request.expression("list", "item=@key-part");
+    request.arguments(&read_key, &[read_part]);
+    let entries = request.capability("$data", &standard["DataStore.get"], &[read_space, read_key]);
+    let zero = request.integer(0);
+    let entry = request.call(&standard["list-get"], &["@data-entry"], &[entries, zero]);
+    let revision = request.expression(
+        "field",
+        &format!("value={entry} field={}", standard["DataEntry.revision"]),
+    );
+    let exact = request.expression(
+        "variant",
+        &format!(
+            "case={} payload={revision}",
+            standard["DataExpectation.Exact"]
+        ),
+    );
+    let save = request.capability(
+        "$data",
+        &standard["DataStore.put"],
+        &[space, key, bytes, exact],
+    );
+    let value = request.local("$mapped-output");
+    let saved = request.expression("sequence", "");
+    request.arguments(&saved, &[save, value]);
+    let returned = request.expression("let", &format!("body={saved}"));
+    request.text.push_str(&format!("expression.binding parent={returned} index=0 as=$mapped-output name=mapped value={folded} type=@items\n"));
     let steps = request.expression("sequence", "");
-    request.arguments(&steps, &[put, folded]);
+    request.arguments(&steps, &[put, returned]);
     let transaction = request.expression(
         "transaction",
         &format!("requirement=$data binding=$transaction name=transaction body={steps}"),
     );
-    request.text.push_str(&format!("create.function as=$write-fold module={} name=write-fold visibility=private result=i64 effect=task body={transaction}\neffect.requirement parent=$write-fold index=0 requirement=$data\nadd.parameter as=$write-items function=$write-fold name=items type=@items\nadd.parameter as=$write-key function=$write-fold name=key type=text\nadd.parameter as=$write-scale function=$write-fold name=scale type=i64\nadd.parameter as=$write-bias function=$write-fold name=bias type=i64\n",bindings["module"]));
+    request.text.push_str(&format!("create.function as=$write-fold module={} name=write-fold visibility=private result=@items effect=task body={transaction}\neffect.requirement parent=$write-fold index=0 requirement=$data\nadd.parameter as=$write-items function=$write-fold name=items type=@items\nadd.parameter as=$write-key function=$write-fold name=key type=text\nadd.parameter as=$write-scale function=$write-fold name=scale type=i64\nadd.parameter as=$write-bias function=$write-fold name=bias type=i64\n",bindings["module"]));
 
     let input = request.local(&bindings["parameter"]);
     let stream = request.field(&input, "body");
@@ -210,7 +256,7 @@ pub(super) fn http(
     let input = request.local(&bindings["parameter"]);
     let key = request.field(&input, "query");
     let sum = request.call("$write-fold", &[], &[items, key, scale, bias]);
-    let body = request.call(&standard["json-encode"], &["i64"], &[sum]);
+    let body = request.call(&standard["json-encode"], &["@items"], &[sum]);
     request.text.push_str("type.structural-record as=@header\ntype.field parent=@header index=0 name=name type=text\ntype.field parent=@header index=1 name=value type=bytes\n");
     let headers = request.expression("list", "item=@header");
     let status = request.integer(200);
@@ -457,7 +503,88 @@ pub(super) fn consumer(
     );
     request.target("forward-generic", "i64", &["i64", "@items"]);
     binding_consumer(&mut request, standard, factory);
+    mapping_consumer(&mut request, standard, factory);
     request.text
+}
+
+fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, factory: &str) {
+    // The imported factory retains a private producer helper; further binding makes
+    // its reducer a unary mapper, using only the ordinary public language forms.
+    let scale = request.local("$map_scale");
+    let bias = request.local("$map_bias");
+    let returned = request.call(factory, &[], &[scale, bias]);
+    let zero = request.integer(0);
+    let mapper = request.bind(&returned, &[zero]);
+    let input = request.local("$map_items");
+    let body = request.call(&standard["list-map"], &["i64", "i64"], &[input, mapper]);
+    request.function(
+        "map",
+        "@items",
+        &body,
+        &[("items", "@items"), ("scale", "i64"), ("bias", "i64")],
+    );
+    request.target("map", "@items", &["@items", "i64", "i64"]);
+
+    request.text.push_str("type.structural-record as=@aliases\ntype.field parent=@aliases index=0 name=left type=@items\ntype.field parent=@aliases index=1 name=mapped type=@items\ntype.field parent=@aliases index=2 name=original type=@items\ntype.field parent=@aliases index=3 name=right type=@items\n");
+    let items = request.local("$map-aliases_items");
+    let three = request.integer(3);
+    let five = request.integer(5);
+    let mapped = request.call("$map", &[], &[items, three, five]);
+    let mut values = Vec::new();
+    for (name, extra) in [
+        ("left", Some(99)),
+        ("mapped", None),
+        ("original", None),
+        ("right", Some(-7)),
+    ] {
+        let base = request.local(if name == "original" {
+            "$map-aliases_items"
+        } else {
+            "$mapped-list"
+        });
+        let value = if let Some(extra) = extra {
+            let extra = request.integer(extra);
+            request.call(&standard["list-append"], &["i64"], &[base, extra])
+        } else {
+            base
+        };
+        values.push((name, value));
+    }
+    let record = request.expression("record", "");
+    for (index, (name, value)) in values.iter().enumerate() {
+        request.text.push_str(&format!(
+            "expression.record-field parent={record} index={index} name={name} value={value}\n"
+        ));
+    }
+    let body = request.expression("let", &format!("body={record}"));
+    request.text.push_str(&format!("expression.binding parent={body} index=0 as=$mapped-list name=mapped value={mapped} type=@items\n"));
+    request.function("map-aliases", "@aliases", &body, &[("items", "@items")]);
+    request.target("map-aliases", "@aliases", &["@items"]);
+
+    request.text.push_str("type.list as=@texts item=text\n");
+    let label = request.function_value("$binding-label");
+    let equal = request.function_value(&standard["i64-equal"]);
+    let answer = request.integer(42);
+    let predicate = request.bind(&equal, &[answer]);
+    let items = request.local("$map-types_items");
+    let booleans = request.call(&standard["list-map"], &["i64", "bool"], &[items, predicate]);
+    let text = request.call(&standard["list-map"], &["bool", "text"], &[booleans, label]);
+    request.function("map-types", "@texts", &text, &[("items", "@items")]);
+    request.target("map-types", "@texts", &["@items"]);
+
+    let equal = request.function_value(&standard["i64-equal"]);
+    let answer = request.integer(42);
+    let inner = request.bind(&equal, &[answer]);
+    let outer = request.function_value("$binding-label");
+    let mapper = request.call(
+        &standard["function-compose"],
+        &["i64", "bool", "text"],
+        &[outer, inner],
+    );
+    let items = request.local("$map-composed_items");
+    let body = request.call(&standard["list-map"], &["i64", "text"], &[items, mapper]);
+    request.function("map-composed", "@texts", &body, &[("items", "@items")]);
+    request.target("map-composed", "@texts", &["@items"]);
 }
 
 fn binding_consumer(request: &mut Request, standard: &BTreeMap<String, String>, factory: &str) {

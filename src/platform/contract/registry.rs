@@ -99,9 +99,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-13";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 13;
-pub const CLI_CONTRACT_VERSION: u16 = 27;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-14";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 14;
+pub const CLI_CONTRACT_VERSION: u16 = 28;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -589,7 +589,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-27",
+            identity: "lkjscript-cli-28",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -3673,6 +3673,42 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Correct the value against accepted canonical meaning and the selected invocation; do not reuse a foreign preparation.",
         ),
         diagnostic(
+            "normalized_list_storage",
+            DiagnosticClass::Resource,
+            "A persistent list exceeds its checked logical length or cumulative physical slot/byte budget.",
+            "Reduce the input or construction work; old list aliases and semantic HEAD remain unchanged.",
+        ),
+        diagnostic(
+            "normalized_list_shape",
+            DiagnosticClass::Infrastructure,
+            "A private immutable list carrier has an invalid internal shape.",
+            "Preserve the exact candidate and input and report the invariant failure.",
+        ),
+        diagnostic(
+            "normalized_instantiation_work",
+            DiagnosticClass::Resource,
+            "Disposable composite type instantiation exceeded the bounded validation work inventory.",
+            "Reduce the statically selected generic call closure and retry preparation.",
+        ),
+        diagnostic(
+            "normalized_instantiation_scope",
+            DiagnosticClass::Corrupt,
+            "Derived composite instantiation is missing an exact function, type, or substitution.",
+            "Preserve the exact artifact and report the preparation invariant failure.",
+        ),
+        diagnostic(
+            "reference_instantiation_work",
+            DiagnosticClass::Resource,
+            "Independent canonical composite type derivation exceeded its bounded work inventory.",
+            "Reduce the statically selected generic call closure and retry preparation.",
+        ),
+        diagnostic(
+            "reference_instantiation_scope",
+            DiagnosticClass::Infrastructure,
+            "Independent canonical type derivation is missing an exact owner, type, or substitution.",
+            "Preserve the exact accepted graph and report the reference invariant failure.",
+        ),
+        diagnostic(
             "normalized_value_depth",
             DiagnosticClass::Resource,
             "Raw production value admission exceeded depth 256 before installation.",
@@ -6078,6 +6114,37 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("tail-invoke", "ultimate-graph-target".to_owned()),
                 ],
             )?);
+            records.push(compact_record(
+                "execution.list",
+                &[
+                    (
+                        "carrier",
+                        "immutable-32-way-index-trie-with-tail".to_owned(),
+                    ),
+                    ("maximum-logical-length", "1000000".to_owned()),
+                    ("tail-slots", "32".to_owned()),
+                    ("maximum-branch-height", "3".to_owned()),
+                    (
+                        "collection-charge",
+                        "32-slots-per-new-leaf-or-branch-including-unused-capacity".to_owned(),
+                    ),
+                    (
+                        "byte-charge",
+                        "node-or-element-size-plus-two-usize-refcount-words-before-allocation"
+                            .to_owned(),
+                    ),
+                    (
+                        "raw-ingress",
+                        "validate-and-charge-all-logical-occurrences-plus-owned-metadata"
+                            .to_owned(),
+                    ),
+                    (
+                        "sharing",
+                        "no-type-origin-affinity-or-serialization-permission".to_owned(),
+                    ),
+                    ("identity", "logical-flat-sequence-only".to_owned()),
+                ],
+            )?);
             for tier in ["production", "reference"] {
                 for (field, unit) in [
                     ("input-admission-nodes", "raw-input-node"),
@@ -6089,6 +6156,33 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("allocated-bytes", "cumulative-byte"),
                     ("allocation-charges", "successful-nonzero-byte-charge"),
                     ("collection-items", "cumulative-item"),
+                    ("list-node-visits", "physical-node-visits"),
+                    (
+                        "list-element-handle-copies",
+                        "physical-element-handle-copies",
+                    ),
+                    (
+                        "list-element-handle-allocations",
+                        "physical-element-handle-allocations",
+                    ),
+                    (
+                        "list-element-slots-reserved",
+                        "physical-element-slots-reserved",
+                    ),
+                    ("list-branch-slot-copies", "physical-branch-slot-copies"),
+                    (
+                        "list-branch-slots-reserved",
+                        "physical-branch-slots-reserved",
+                    ),
+                    ("list-nodes-allocated", "physical-nodes-allocated"),
+                    (
+                        "list-full-materializations",
+                        "physical-full-materializations",
+                    ),
+                    (
+                        "list-materialized-elements",
+                        "physical-materialized-elements",
+                    ),
                 ] {
                     records.push(compact_record(
                         "execution.observation",

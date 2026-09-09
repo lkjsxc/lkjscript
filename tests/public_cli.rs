@@ -1509,7 +1509,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("31")
+        Some("35")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2631,7 +2631,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("25"));
+    assert_eq!(compact_field(tests, "passed"), Some("29"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -2699,7 +2699,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("25")
+        Some("29")
     );
 
     let artifact = temporary.path().join("sample.lkja");
@@ -3314,6 +3314,238 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
         current_revision_at(&copied_binary, temporary.path(), &project),
         accepted
     );
+}
+
+#[test]
+fn copied_binary_maps_runtime_values_and_rejects_invalid_mapper_before_publication() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("mapping");
+    let run = |args: &[&str]| compact_success_at(&copied, temporary.path(), args);
+    run(&[
+        "new",
+        path(&project),
+        "--template",
+        "command",
+        "--name",
+        "mapping",
+    ]);
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let module = run(&[
+        "--project",
+        path(&project),
+        "query",
+        "find",
+        "module",
+        "application",
+    ]);
+    let module = compact_field(compact_record(&module, "owner"), "id").unwrap();
+    let mut standard = BTreeMap::new();
+    for name in ["list-map", "function-compose", "multiply", "add"] {
+        let found = run(&["package", "builtin", "query", "owners", "--name", name]);
+        standard.insert(
+            name,
+            compact_field(compact_record(&found, "owner"), "reference")
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let map = &standard["list-map"];
+    let compose = &standard["function-compose"];
+    let multiply = &standard["multiply"];
+    let add = &standard["add"];
+    let request = format!(
+        r#"request base={base}
+type.list as=@items item=i64
+expression.function-value as=$multiply function={multiply}
+expression.local as=$scale value=$scale-param
+expression.bind as=$scaled callee=$multiply
+expression.argument parent=$scaled index=0 expression=$scale
+expression.function-value as=$add function={add}
+expression.local as=$bias value=$bias-param
+expression.bind as=$biased callee=$add
+expression.argument parent=$biased index=0 expression=$bias
+expression.call as=$mapper function={compose}
+type.argument parent=$mapper index=0 type=i64
+type.argument parent=$mapper index=1 type=i64
+type.argument parent=$mapper index=2 type=i64
+expression.argument parent=$mapper index=0 expression=$biased
+expression.argument parent=$mapper index=1 expression=$scaled
+expression.local as=$items value=$items-param
+expression.call as=$mapped function={map}
+type.argument parent=$mapped index=0 type=i64
+type.argument parent=$mapped index=1 type=i64
+expression.argument parent=$mapped index=0 expression=$items
+expression.argument parent=$mapped index=1 expression=$mapper
+create.function as=$map module={module} name=map visibility=private result=@items effect=pure body=$mapped
+add.parameter as=$items-param function=$map name=items type=@items
+add.parameter as=$scale-param function=$map name=scale type=i64
+add.parameter as=$bias-param function=$map name=bias type=i64
+type.function as=@entry result=@items
+type.argument parent=@entry index=0 type=@items
+type.argument parent=@entry index=1 type=i64
+type.argument parent=@entry index=2 type=i64
+create.component as=$component module={module} name=mapping visibility=package
+add.port as=$port component=$component name=map type=@entry function=$map
+create.target as=$target name=map component=$component port=$port runner=command
+"#
+    );
+    let request_path = temporary.path().join("mapping.lkjc");
+    std::fs::write(&request_path, request).unwrap();
+    let inventory = content_inventory(&project);
+    let review = temporary.path().join("mapping.lkjplan");
+    let plan = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+        "--output",
+        path(&review),
+    ]);
+    assert_eq!(inventory, content_inventory(&project));
+    let token = compact_field(compact_record(&plan, "plan"), "token").unwrap();
+    let applied = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&request_path),
+        "--plan",
+        token,
+    ]);
+    let function = compact_field(
+        applied
+            .iter()
+            .find(|record| {
+                record.operation == "identity" && compact_field(record, "symbol") == Some("$map")
+            })
+            .unwrap(),
+        "id",
+    )
+    .unwrap();
+    let projection = run(&[
+        "--project",
+        path(&project),
+        "inspect",
+        "owner",
+        "pure_function",
+        function,
+        "--detail",
+        "definition",
+        "--limit",
+        "1000",
+        "--bytes",
+        "1048576",
+    ]);
+    assert!(
+        projection
+            .iter()
+            .any(|record| compact_field(record, "form") == Some("bind"))
+    );
+    run(&["--project", path(&project), "check"]);
+    let bundle = temporary.path().join("mapping.lkja");
+    run(&[
+        "--project",
+        path(&project),
+        "build",
+        "--output",
+        path(&bundle),
+    ]);
+    let accepted = content_inventory(&project);
+    let stale = compact_failure_output_with_status(
+        command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "apply",
+                "--input-file",
+                path(&request_path),
+                "--plan",
+                token,
+            ],
+        ),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+    assert_eq!(accepted, content_inventory(&project));
+    for n in [0_i64, 1, 3, 8192] {
+        let input = if n == 3 {
+            vec![1, 2, 4]
+        } else {
+            (0..n).collect::<Vec<_>>()
+        };
+        let expected = input.iter().map(|x| 3 * x + 5).collect::<Vec<_>>();
+        let arguments = serde_json::to_string(&serde_json::json!([input, 3, 5])).unwrap();
+        let records = run(&[
+            "--project",
+            path(&project),
+            "run",
+            "map",
+            "--arguments",
+            &arguments,
+        ]);
+        let execution = compact_record(&records, "execution");
+        let actual: Vec<i64> =
+            serde_json::from_str(compact_field(execution, "value").unwrap()).unwrap();
+        assert_eq!(actual, expected);
+        if n == 8192 {
+            assert_eq!(actual.iter().sum::<i64>(), 100_691_968);
+        }
+        assert_eq!(compact_field(execution, "differential"), Some("equal"));
+        for tier in ["production", "reference"] {
+            assert_eq!(
+                compact_field(execution, &format!("{tier}-list-full-materializations")),
+                Some("0")
+            );
+            assert_eq!(
+                compact_field(execution, &format!("{tier}-guard-descendants")),
+                Some("0")
+            );
+        }
+    }
+    let current = current_revision_at(&copied, temporary.path(), &project);
+    for task in [false, true] {
+        let mapper = if task {
+            "$bad-mapper".to_owned()
+        } else {
+            multiply.to_owned()
+        };
+        let declaration = if task {
+            format!(
+                "expression.i64 as=$task-body value=0\ncreate.function as=$bad-mapper module={module} name=bad-mapper visibility=private result=i64 effect=task body=$task-body\nadd.parameter as=$task-item function=$bad-mapper name=item type=i64\n"
+            )
+        } else {
+            String::new()
+        };
+        let bad = format!(
+            "request base={current}\ntype.list as=@items item=i64\n{declaration}expression.list as=$empty item=i64\nexpression.function-value as=$callback function={mapper}\nexpression.call as=$bad function={map}\ntype.argument parent=$bad index=0 type=i64\ntype.argument parent=$bad index=1 type=i64\nexpression.argument parent=$bad index=0 expression=$empty\nexpression.argument parent=$bad index=1 expression=$callback\ncreate.function as=$bad-function module={module} name=bad-map visibility=private result=@items effect=pure body=$bad\n"
+        );
+        std::fs::write(&request_path, bad).unwrap();
+        let failed = command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&request_path),
+            ],
+        );
+        assert!(!failed.status.success());
+        assert_eq!(accepted, content_inventory(&project));
+    }
 }
 
 #[test]

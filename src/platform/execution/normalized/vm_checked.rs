@@ -184,12 +184,28 @@ impl Value {
         program: &NormalizedProgram,
         children: Vec<Self>,
         work: &mut ValueWork,
+        maximum_length: u64,
+        reserve: &mut impl FnMut(super::super::list::Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         Self::free_children(program, &children, work)?;
+        reserve(super::super::list::Charge {
+            slots: 0,
+            bytes: children
+                .len()
+                .checked_mul(std::mem::size_of::<NormalizedValue>())
+                .ok_or_else(|| {
+                    resource_error(
+                        "normalized_list_storage",
+                        "list construction metadata overflowed",
+                    )
+                })? as u64,
+        })?;
         Ok(Self {
-            raw: NormalizedValue::List(Arc::new(
+            raw: NormalizedValue::List(super::super::list::List::from_items(
                 children.into_iter().map(Self::into_raw).collect(),
-            )),
+                maximum_length,
+                reserve,
+            )?),
             origin: program.value_origin,
             class: Class::Free,
         })
@@ -364,16 +380,15 @@ impl Value {
         program: &NormalizedProgram,
         child: Self,
         work: &mut ValueWork,
+        maximum_length: u64,
+        reserve: &mut impl FnMut(super::super::list::Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         Self::free_children(program, std::slice::from_ref(&self), work)?;
         Self::free_children(program, std::slice::from_ref(&child), work)?;
         let NormalizedValue::List(values) = &mut self.raw else {
             return Err(type_error("list append received a foreign value"));
         };
-        let mut output = Vec::with_capacity(values.len().saturating_add(1));
-        output.extend(values.iter().cloned());
-        output.push(child.raw);
-        *values = Arc::new(output);
+        *values = values.append(child.raw, maximum_length, reserve)?;
         Ok(self)
     }
 
@@ -889,7 +904,9 @@ impl Admission<'_> {
                 }
                 (NormalizedValue::List(values), TypeForm::List { item }) => {
                     self.collection(values.len())?;
+                    self.allocate(values.metadata_bytes()?)?;
                     for value in values.iter() {
+                        self.control.check()?;
                         children.push((value, *item, false));
                     }
                 }

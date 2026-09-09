@@ -4,6 +4,42 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
+source-bound evaluator owners. Receipt contracts are pure-tail 4 and offline-packages 2. Transferred
+receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
+mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
+removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its
+900-second and 1,073,741,824-owned-file-byte bounds, excluding builds, and one warm-up plus three
+measurements per size. Its new mapping sizes are 256, 1,024, 4,096, and 8,192. The last expected
+sequence is independently calculated as `3*i+5` for `i=0..8191`, with sum 100,691,968.
+
+Both evaluators share the neutral sequence carrier. Their agreement therefore cannot prove its
+storage semantics. A separate bounded flat-Vec oracle compares every retained root in deterministic
+branching histories, all tail/root growth boundaries, multiple construction histories, nested
+nominal/option/list values, and transient callables. Seeds are `0x18a919bf0721`, `0x8a17ff094201`,
+and `0x329aeda0971f`. A test-only wrong-tail mutation must fail it. An independent source-derived
+allocation schedule fixes 32 slots per node, node bytes as 35 pointer words, and element bytes as
+the raw value size plus two pointer words on the admitted target. Exact-fit and one-over probes
+must detect missing handle or branch charges, preserve aliases after partial construction failure,
+and leave no evaluator-owned state. Raw admission, depth 256/257, foreign origin, absent affine
+variants, durable callable rejection, tail and binding negative matrices remain required.
+
+Physical observations count actual node visits, element-handle copies/allocations, reserved leaf
+slots, branch copies/reservations, allocated nodes, and full materializations with element counts.
+For each append the independent schedule in the language contract bounds work even with aliased
+roots; cumulative work must satisfy the sum of those bounds. Full traversal and indexed reads are
+measured separately. Ordinary append/forward/invoke may not materialize a whole prefix. A disposable
+restored prefix-copy implementation must fail the work oracle despite correct values. Preserve its
+patch identity and actual failed result. Boundary input construction and output conversion are
+reported separately from evaluator work; no counter may change fuel, admission, or permissions.
+
+Cost comparisons retain an isolated source-bound predecessor and a single predecessor-authored
+fold/bind/append program with exactly the same accepted code closure and artifact on both versions.
+The new standard map declaration is tested separately. Predecessor exhaustion at default limits
+is retained, and timing/RSS observations are advisory with failures and indexing/metadata trade-offs.
+Final acceptance requires a fresh full profile and separate fresh exact local musl candidate build
+and admission. Host evidence cannot replace target execution; these checks authorize no release.
+
 Complete typed meaning graph reconstruction and validation is the semantic oracle. Sparse
 repository reads, witness-maintained changes, package interfaces, compiler selection, and query projection
 must agree with it. Physical pack/catalog layout, persistent-map partitioning, derived cache state,

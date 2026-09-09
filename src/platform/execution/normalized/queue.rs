@@ -460,12 +460,12 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
                         "inspect has no prepared exact snapshot codec",
                     )
                 })?;
-                Ok(NormalizedValue::List(Arc::new(
+                Ok(NormalizedValue::list(
                     snapshot
                         .into_iter()
                         .map(|snapshot| codec.encode_snapshot(snapshot))
                         .collect(),
-                )))
+                )?)
             }
         }
     }

@@ -419,7 +419,7 @@ impl NormalizedProgram {
             .map(|target| target.http_routes.len() as u64)
             .sum();
         work.tests = tests.len() as u64;
-        let program = Self {
+        let mut program = Self {
             value_origin,
             affine_variants,
             root_repository: root_compilation.repository_id,
@@ -442,6 +442,7 @@ impl NormalizedProgram {
             tests,
             types,
         };
+        super::prepared_types::complete(&mut program)?;
         super::session::validate_program_interactive_targets(&program)?;
         Ok(program)
     }

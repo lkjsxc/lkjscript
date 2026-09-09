@@ -21,12 +21,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_e235829aa34183eeb80affe127feddf7300a8ed2540c0282885cc3f14ffecc6e`;
-- package revision: `package_revision_b3d0bf609bfdf87f22a39a1c3758bd04086285e269f424cbff56f90fb8a29135`;
-- package transport: `package_transport_b1c0065d6e74ce3bd4a14295a6ba93381393e73d8c1ae1ea5c04d8349cfd7ccb`;
-- artifact manifest: `artifact_manifest_c53e75fecf545a896031e6b29fddb890490b01a7352c10b9e8d6b21a58834cd7`;
-- artifact bundle: `artifact_bundle_286a32c340ad10c7b54576960d7bb2cd2afb830fd9d5ead6e8f5b6e21b81b230`;
-- 618 live semantic owners, 113 compiler units, and 24 graph tests.
+- semantic revision: `rev_8cd2a310d5ba4bfe3a42be15d4e201a3dae52b71143c1655dce4830120c3bf09`;
+- package revision: `package_revision_7b9cd7fae489906bcdb9bf12ffa2b8dd80fb346fe9f980ddf2c9037907918b24`;
+- package transport: `package_transport_1b4880be8f7173b7cf39874bb62c1fa1b5892d21551c9f6888815042db4c7914`;
+- artifact manifest: `artifact_manifest_b90cbe36b91a23e1140d73537a897b63d3099ca7a19b4ee4ed2af38053feb7c8`;
+- artifact bundle: `artifact_bundle_bd8eded19156913baa1804c51684874f1b5a77495139195f152308a9dee79cfc`;
+- 688 live semantic owners, 122 compiler units, and 28 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -55,6 +55,13 @@ instantiations are graph-owned tests, and the maintained stateful HTTP workflow 
 predicate as a named function value. Exact type parameters, signatures, implementation-free
 references, and the rest of the public interface are executable-generated in
 [`docs/generated/builtin-standard.md`](../../docs/generated/builtin-standard.md).
+
+`list-map<Input,Output>(List<Input>, Function(Input)->Output) -> List<Output>` binds its mapper
+into a private generic fold step. The graph invokes the mapper once per item in ascending index
+order, appends successful results, and stops at the first failure. Empty input invokes no mapper.
+Four additional graph tests cover empty, singleton, configured multi-item and heterogeneous maps.
+The shared runtime carrier preserves old aliases through bounded tail/spine copying and leaves
+existing list types, encodings, callback eligibility, and default execution limits unchanged.
 
 `function-compose<A,B,C>(outer: Function(B)->C, inner: Function(A)->B) -> Function(A)->C`
 uses `bind` over its private generic graph helper. Four maintained graph tests fix composition

@@ -4,6 +4,59 @@ Status: normative for the typed meaning graph.
 
 ## Representation and evaluation
 
+Runtime lists are immutable flat logical sequences. Their private carrier is a bounded 32-way
+index trie with a tail of at most 32 elements. Length and handle sharing are O(1); indexing is
+O(log_32(N+1)); ordered traversal is O(N). Append copies the changed branch spine and a bounded
+tail of shallow immutable element handles. It never visits or copies a complete old prefix above
+that tail, even when old roots remain aliased. Internal levels do not increase language value
+depth. Shape, capacity, pointers, and sharing never affect equality, type/layout identities,
+semantic digests, artifacts, or typed-data bytes. The carrier confers no origin, affinity, capture,
+serialization, or retention permission.
+
+The logical length ceiling is 1,000,000 under the existing collection bound. Each newly reserved
+leaf or branch charges 32 collection slots, including unused capacity. Its allocation byte charge
+is the in-memory node size plus two `usize` reference-count words; each new element handle charges
+the value payload size plus two reference-count words. The inline list header is part of its value
+slot. Checked bulk construction also charges its temporary raw-value conversion buffer. Raw ingress
+still validates and charges every logical occurrence, including repeated shared children, and
+separately charges owned carrier metadata. Sharing does not waive admission. All reservations use
+checked arithmetic before allocation, are cumulative without refunds, and depend on no observed
+reference counts. Other collection costs and default limits remain unchanged.
+
+For old length L, let P = floor((L-1)/32) for L > 0, otherwise zero, and let H be the least
+nonnegative height with P <= 32^H. Every append reserves one leaf and one new element handle.
+Only a full tail is promoted: it reserves no branches if P=0, H+1 branches if P=32^H,
+and H branches otherwise. Thus at most 32(H+2) slots are reserved per append. An ordinary tail
+append copies at most 31 existing element handles; a promoted tail copies none. Each copied
+branch has at most 32 shared child slots. Untouched subtrees incur no new allocation charge.
+
+Construction and raw traversal check cancellation independently of observations, including before
+result installation. Failure preserves old aliases and releases temporary execution ownership.
+Iterative raw disposal remains stack safe for over-depth rejected values with shared list leaves.
+JSON output explicitly creates a bounded contiguous JSON array; typed-data encoding traverses the
+carrier directly. Physical work observations distinguish node visits, reserved and copied slots,
+element handles, nodes, and full external-buffer materializations. Counters grant no fuel or
+admission and are separate from logical validation visits.
+
+The standard pure graph function
+`list-map<Input,Output>(items: List<Input>, mapper: Function(Input)->Output) -> List<Output>`
+uses `list-fold-left`, an empty output, and a private generic step bound to the mapper. The step
+invokes its mapper once and appends the successful result. Caller arguments evaluate left to right;
+callbacks run once per item in ascending index order, and never for empty input. Task mappers and
+wrong signatures reject before semantic acceptance, including for empty input. Traps, exhaustion,
+and cancellation stop later callbacks and produce no successful partial list. Nested maps retain
+their callback and failure order. For total callbacks with sufficient budgets, mapping identity
+preserves values and mapping `function-compose(f,g)` equals mapping g then f by values.
+Function signatures containing type parameters remain capture-safe leaves; this introduces no
+capture of a bare unconstrained type parameter. Ordinary transient callable list elements retain
+their existing restrictions on equality, persistence, and resource containment.
+
+Instantiated composite types are disposable derivations of exact rank-one call substitutions.
+Production preparation derives its finite closure from bytecode calls; the canonical evaluator
+independently derives it from accepted owners. Both use the existing bounded validation-work and
+type-depth limits. Derived types use unchanged canonical TypeObject identities and are never a
+second editable or serialized type authority.
+
 Language constructs are typed semantic records in canonical owner objects. There is no maintained
 source grammar. Executable-discovered compact change records describe bounded authored intent; the
 request and logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own

@@ -92,7 +92,9 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
     let length_closure = |ty, elements| NormalizedValue::Function {
         function: length,
         type_arguments: Arc::from([ty]),
-        bound_arguments: Some(Arc::new(vec![NormalizedValue::List(Arc::new(elements))])),
+        bound_arguments: Some(Arc::new(vec![
+            NormalizedValue::list(elements).expect("bounded raw list"),
+        ])),
     };
     let (affine_index, affine_variant) = program
         .variants
@@ -183,7 +185,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         value
     };
     let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
-        let arguments = vec![NormalizedValue::List(Arc::new(vec![value]))];
+        let arguments = vec![NormalizedValue::list(vec![value]).expect("bounded raw list")];
         if reference {
             let sink = std::sync::Mutex::new(None);
             let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
@@ -488,7 +490,7 @@ fn aggregate_equality_cannot_skip_a_callable_after_an_unequal_prefix_or_shape() 
         type_arguments: Arc::from([]),
         bound_arguments: None,
     };
-    let list = |values| NormalizedValue::List(Arc::new(values));
+    let list = |values| NormalizedValue::list(values).expect("bounded raw list");
     let cases = [
         (
             list(vec![NormalizedValue::I64(1), callable.clone()]),
@@ -579,7 +581,8 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     let items = (0..32)
         .map(|n| Value::scalar(&program, NormalizedValue::I64(n)).expect("scalar"))
         .collect();
-    let list = Value::list(&program, items, &mut work).expect("checked list");
+    let list =
+        Value::list(&program, items, &mut work, 1_000_000, &mut |_| Ok(())).expect("checked list");
     let option = Value::option(&program, Some(list), &mut work).expect("checked option");
     let map = Value::map(
         &program,
@@ -687,7 +690,7 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     );
     assert!(Value::scalar(&program, owner.into_raw()).is_err());
     let owner = Value::variant(&program, layout, empty, None, &mut work).unwrap();
-    assert!(Value::list(&program, vec![owner], &mut work).is_err());
+    assert!(Value::list(&program, vec![owner], &mut work, 1_000_000, &mut |_| Ok(())).is_err());
 }
 
 #[derive(Default)]
@@ -706,7 +709,7 @@ impl super::super::NormalizedHost for RejectingHost {
         _: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
-        Ok(NormalizedValue::List(Arc::new(Vec::new())))
+        Ok(NormalizedValue::list(Vec::new()).expect("bounded raw list"))
     }
 }
 impl NormalizedReferenceHost for RejectingHost {
@@ -720,7 +723,7 @@ impl NormalizedReferenceHost for RejectingHost {
         _: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
-        Ok(NormalizedValue::List(Arc::new(Vec::new())))
+        Ok(NormalizedValue::list(Vec::new()).expect("bounded raw list"))
     }
 }
 
@@ -803,7 +806,7 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
     for last in negatives {
         let mut values = vec![NormalizedValue::I64(1); 4095];
         values.push(last);
-        let arguments = vec![NormalizedValue::List(Arc::new(values))];
+        let arguments = vec![NormalizedValue::list(values).expect("bounded raw list")];
         let host = RejectingHost::default();
         let vm_sink = std::sync::Mutex::new(None);
         let reference_sink = std::sync::Mutex::new(None);
@@ -849,9 +852,8 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
     assert_eq!(scope.live_resources(), 0);
     for reference in [false, true] {
         let host = RejectingHost::default();
-        let arguments = vec![NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(
-            1,
-        )]))];
+        let arguments =
+            vec![NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")];
         if reference {
             let sink = std::sync::Mutex::new(None);
             let error = NormalizedReferenceInterpreter::new(
@@ -896,9 +898,9 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
         super::super::NormalizedVm::new(&program, super::super::NormalizedRunPolicy::default())
             .invoke_entry(
                 entry,
-                vec![NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(
-                    1
-                )]))],
+                vec![
+                    NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")
+                ],
                 None,
                 &control
             )
@@ -973,7 +975,9 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
             (result, observation.value_work, observation.allocated_bytes)
         }
     };
-    let list = |count| NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); count]));
+    let list = |count| {
+        NormalizedValue::list(vec![NormalizedValue::I64(1); count]).expect("bounded raw list")
+    };
     for reference in [false, true] {
         let control = ExecutionControl::uncancelled();
         let policy = super::super::NormalizedRunPolicy {
@@ -1022,7 +1026,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
             let result = invoke(
                 reference,
                 nested_types[depth],
-                NormalizedValue::List(Arc::new(vec![value])),
+                NormalizedValue::list(vec![value]).expect("bounded raw list"),
                 Default::default(),
                 &control,
             );
@@ -1110,7 +1114,7 @@ fn corrupt_production_layout_class_is_caught_by_canonical_reference_and_oracle()
         Affinity::Variant
     );
     Arc::make_mut(&mut program.affine_variants)[layout] = false; // Safe fault in disposable production metadata only.
-    let arguments = vec![NormalizedValue::List(Arc::new(vec![raw]))];
+    let arguments = vec![NormalizedValue::list(vec![raw]).expect("bounded raw list")];
     let production = super::super::NormalizedVm::new(&program, Default::default())
         .invoke_entry(
             super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
@@ -1248,7 +1252,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
                 .0,
             Affinity::Free
         );
-        let raw = NormalizedValue::List(Arc::new(vec![value.into_raw()]));
+        let raw = NormalizedValue::list(vec![value.into_raw()]).expect("bounded raw list");
         let production = super::super::NormalizedVm::new(&program, Default::default())
             .invoke_entry(
                 super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
@@ -1304,7 +1308,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
     for reference in [false, true] {
         let host = RejectingHost::default();
         let args = vec![
-            NormalizedValue::List(Arc::new(Vec::new())),
+            NormalizedValue::list(Vec::new()).expect("bounded raw list"),
             NormalizedValue::I64(0),
             invalid_callback.clone(),
         ];

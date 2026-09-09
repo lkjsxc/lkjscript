@@ -96,7 +96,7 @@ impl NormalizedCapabilityAdapter for NormalizedHttpClientAdapter {
             .collect::<Result<Vec<_>, _>>()?;
         structural_record([
             ("body", NormalizedValue::bytes(response.body)),
-            ("headers", NormalizedValue::List(Arc::new(headers))),
+            ("headers", NormalizedValue::list(headers)?),
             ("status", NormalizedValue::I64(i64::from(response.status))),
         ])
     }

@@ -124,7 +124,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-1".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-2".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -419,10 +419,10 @@ impl Context {
     fn check(&mut self, target: &Package) -> Result<(), DevError> {
         let records = self.cli(Some(&target.path), &["check"], true)?;
         require(
-            field(&records, "tests", "passed")? == "28"
+            field(&records, "tests", "passed")? == "32"
                 && field(&records, "tests", "failed")? == "0"
                 && field(&records, "tests", "differential")? == "equal",
-            "each of five selected packages must be tested exactly once (24+1+1+1+1)",
+            "each of five selected packages must be tested exactly once (28+1+1+1+1)",
         )?;
         require(
             field(&records, "artifact", "packages")? == "5",
@@ -557,6 +557,23 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             .symbols
             .insert(name.to_owned(), field(&owners, "owner", "reference")?);
     }
+    let map = context.cli(
+        None,
+        &[
+            "package",
+            "builtin",
+            "query",
+            "owners",
+            "--kind",
+            "pure_function",
+            "--name",
+            "list-map",
+        ],
+        true,
+    )?;
+    standard
+        .symbols
+        .insert("list-map".to_owned(), field(&map, "owner", "reference")?);
     let mut d = context.new_package("producer-d")?;
     context.stage(&d, &standard)?;
     context.apply(
@@ -588,6 +605,18 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         d.symbols["$helper"], d.symbols["$module"]
     );
     context.apply(&mut d, &factory)?;
+    let mapping_factory = format!(
+        "type.function as=@mapper result=i64\ntype.argument parent=@mapper index=0 type=i64\nexpression.local as=$map-item value=$map-item-parameter\nexpression.local as=$map-bias value=$map-bias-parameter\n{}{}create.function as=$map-helper module={} name=map-helper visibility=private result=i64 effect=pure body=$map-result\nadd.parameter as=$map-bias-parameter function=$map-helper name=bias type=i64\nadd.parameter as=$map-item-parameter function=$map-helper name=item type=i64\nexpression.function-value as=$map-helper-value function=$map-helper\nexpression.local as=$factory-bias value=$mapper-bias\nexpression.bind as=$bound-mapper callee=$map-helper-value\nexpression.argument parent=$bound-mapper index=0 expression=$factory-bias\ncreate.function as=$mapper-factory module={} name=mapper-factory visibility=public result=@mapper effect=pure body=$bound-mapper\nadd.parameter as=$mapper-bias function=$mapper-factory name=bias type=i64\n",
+        call("$map-offset", &d.symbols["$helper"], &["$map-item"]),
+        call(
+            "$map-result",
+            &standard.symbols["add"],
+            &["$map-offset", "$map-bias"]
+        ),
+        d.symbols["$module"],
+        d.symbols["$module"]
+    );
+    context.apply(&mut d, &mapping_factory)?;
     let d1_inventory = context.export(&mut d)?;
     let d1 = d.clone();
     let mut b = context.new_package("producer-b")?;
@@ -625,6 +654,22 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             call("$body", &standard.symbols[operator], &["$factor", "$offset"]), graph_test()))?;
         context.export(package)?;
     }
+    let mapped = format!(
+        "type.list as=@mapped-items item=i64\nexpression.local as=$mapped-input value=$mapped-parameter\nexpression.i64 as=$mapped-bias value=5\n{}{}type.argument parent=$mapped-body index=0 type=i64\ntype.argument parent=$mapped-body index=1 type=i64\ncreate.function as=$mapped module={} name=mapped visibility=public result=@mapped-items effect=pure body=$mapped-body\nadd.parameter as=$mapped-parameter function=$mapped name=items type=@mapped-items\n",
+        call(
+            "$mapper",
+            &reference(&d, "$mapper-factory")?,
+            &["$mapped-bias"]
+        ),
+        call(
+            "$mapped-body",
+            &standard.symbols["list-map"],
+            &["$mapped-input", "$mapper"]
+        ),
+        b.symbols["$module"]
+    );
+    context.apply(&mut b, &mapped)?;
+    context.export(&mut b)?;
     let b1 = b.clone();
     let c1 = c.clone();
     context.forbidden_reference(
@@ -788,6 +833,17 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     context.apply(&mut a, &format!("{}{}{}{}{}expression.local as=$arg value=$x\nexpression.local as=$arg2 value=$x\n{}{}{}{}{}",
         binding("add", &standard), binding("add", &b), binding("add", &c), module(), unary("$entry", "sum", "private", "$body", "$x"),
         call("$left", &reference(&b, "$entry")?, &["$arg"]), call("$right", &reference(&c, "$entry")?, &["$arg2"]), call("$body", &standard.symbols["add"], &["$left", "$right"]), target(), graph_test()))?;
+    let mapped_consumer = format!(
+        "type.list as=@mapped-items item=i64\nexpression.local as=$mapped-input value=$mapped-parameter\n{}create.function as=$mapped module={} name=mapped visibility=private result=@mapped-items effect=pure body=$mapped-body\nadd.parameter as=$mapped-parameter function=$mapped name=items type=@mapped-items\ntype.function as=@mapped-entry result=@mapped-items\ntype.argument parent=@mapped-entry index=0 type=@mapped-items\ncreate.component as=$mapped-component module={} name=mapping visibility=package\nadd.port as=$mapped-port component=$mapped-component name=main type=@mapped-entry function=$mapped\ncreate.target as=$mapped-target name=map component=$mapped-component port=$mapped-port runner=command\n",
+        call(
+            "$mapped-body",
+            &reference(&b, "$mapped")?,
+            &["$mapped-input"]
+        ),
+        a.symbols["$module"],
+        a.symbols["$module"]
+    );
+    context.apply(&mut a, &mapped_consumer)?;
     let first = context.export(&mut a)?;
     require(
         first.packages.len() == 5 && first.edges == 8,
@@ -846,6 +902,20 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     );
     context.check(&a)?;
     context.run(&a, 11)?;
+    let mapped = context.cli(
+        Some(&a.path),
+        &["run", "map", "--arguments", "[[1,2,4]]"],
+        true,
+    )?;
+    require(
+        field(&mapped, "execution", "value")? == "[7,8,10]"
+            && field(&mapped, "execution", "differential")? == "equal",
+        "offline returned private mapper lost its exact code closure",
+    )?;
+    context.receipt.observations.insert(
+        "private_factory_map".to_owned(),
+        "[7,8,10];both-tiers;producers-absent".to_owned(),
+    );
     context.receipt.observations.insert(
         "bound_private_factory".to_owned(),
         "returned-rebound-invoked-after-producer-removal".to_owned(),
@@ -1472,7 +1542,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-1"
+        receipt.schema == "lkjscript-offline-packages-acceptance-2"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1489,6 +1559,10 @@ pub(crate) fn read_transferred_receipt(
         ("diamond_package_ids_distinct", "true"),
         ("producers_absent_before_execution", "true"),
         (
+            "private_factory_map",
+            "[7,8,10];both-tiers;producers-absent",
+        ),
+        (
             "bound_private_factory",
             "returned-rebound-invoked-after-producer-removal",
         ),
@@ -1496,8 +1570,8 @@ pub(crate) fn read_transferred_receipt(
         ("standalone_http_body", "offline-package-closure"),
         ("canonical_body_corruption", "pack_entry_checksum"),
         ("unavailable_transitive_source", "pack_file_missing"),
-        ("post-replacement-compiled", "1"),
-        ("post-replacement-reused", "3"),
+        ("post-replacement-compiled", "2"),
+        ("post-replacement-reused", "5"),
         ("post-replacement-removed", "0"),
     ] {
         require(
@@ -1584,9 +1658,9 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 9
-            && receipt.transport_digests.len() == 9
-            && receipt.producer_inventories.len() == 9,
+        receipt.inventories.len() == 10
+            && receipt.transport_digests.len() == 10
+            && receipt.producer_inventories.len() == 10,
         "complete producer, replacement, and HTTP source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -1608,11 +1682,11 @@ pub(crate) fn read_transferred_receipt(
     )?;
     let d2_producer = receipt
         .producer_inventories
-        .get(4)
+        .get(5)
         .ok_or_else(|| DevError::corrupt("D2 producer inventory missing"))?;
     let d2_revision = receipt
         .inventories
-        .get(4)
+        .get(5)
         .and_then(|inventory| {
             inventory
                 .packages

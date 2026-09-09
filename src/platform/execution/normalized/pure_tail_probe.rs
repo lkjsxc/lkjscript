@@ -81,20 +81,19 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         .ok_or_else(|| failure("exact public helper is absent"))?;
     let worker = std::thread::Builder::new().name("pure-tail-transaction".to_owned()).stack_size(STACK_BYTES).spawn(move || {
         let sink = Mutex::new(None);
-        let host = ProgressHost { calls: AtomicU64::new(0), cancel_after: 37 };
-        let control = ExecutionControl::uncancelled();
-        let arguments = vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
+        let control = ExecutionControl::cancel_after_checks(20_000);
+        let arguments = vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
         let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() })
-            .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
+            .observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
         let observation = sink.into_inner().map_err(|_| failure("transaction observation poisoned"))?.ok_or_else(|| failure("transaction observation missing"))?;
         require(error.code == "execution_cancelled" && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
-        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing(&recovery_sink, &CoreNormalizedHost)
-            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![NormalizedValue::List(Arc::new((1..=8192).map(NormalizedValue::I64).collect())), NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
+        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing_checked(&recovery_sink)
+            .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
-        require(recovery.0 == NormalizedValue::I64(33_558_528) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
-        Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_value":33_558_528,"host_calls":host.calls.load(Ordering::Relaxed),"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
+        require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| *value == NormalizedValue::I64(index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
+        Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_length":8192,"recovery_sum":33_558_528,"cancellation_checks":20_000,"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
     }).map_err(|error| failure(&format!("transaction probe thread: {error}")))?;
     worker
         .join()
@@ -116,9 +115,27 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
 struct ProgressHost {
     calls: AtomicU64,
     cancel_after: u64,
+    mapper_items: Mutex<Vec<i64>>,
 }
 
 impl ProgressHost {
+    fn mapper(
+        &self,
+        implementation: &ImplementationName,
+        arguments: &[NormalizedValue],
+    ) -> Result<(), ExecutionError> {
+        if implementation.as_str() == "core.i64.multiply"
+            && let Some(NormalizedValue::I64(item)) = arguments.get(1)
+        {
+            let mut items = self.mapper_items.lock().map_err(|_| {
+                ExecutionError::resource("probe_lock", "mapper observation lock poisoned")
+            })?;
+            if items.len() < 16 {
+                items.push(*item);
+            }
+        }
+        Ok(())
+    }
     fn progress(&self, control: &ExecutionControl) {
         if self.calls.fetch_add(1, Ordering::Relaxed).saturating_add(1) == self.cancel_after {
             control.cancel();
@@ -137,6 +154,7 @@ impl NormalizedHost for ProgressHost {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.progress(control);
+        self.mapper(implementation, &arguments)?;
         CoreNormalizedHost.call(program, function, implementation, types, arguments, control)
     }
 }
@@ -152,6 +170,7 @@ impl NormalizedReferenceHost for ProgressHost {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.progress(control);
+        self.mapper(implementation, &arguments)?;
         CoreNormalizedReferenceHost.call(
             schema,
             function,
@@ -194,17 +213,22 @@ fn invocation_control(
     let host = ProgressHost {
         calls: AtomicU64::new(0),
         cancel_after,
+        mapper_items: Mutex::new(Vec::new()),
     };
     let name = Name::new(target)?;
     let (result, observation) = if reference {
         let sink = Mutex::new(None);
-        let result = NormalizedReferenceInterpreter::from_reader(
+        let evaluator = NormalizedReferenceInterpreter::from_reader(
             &prepared.reference,
             &prepared.program,
             policy,
-        )
-        .observing(&sink, &host)
-        .invoke_root_target(&name, arguments, None, control);
+        );
+        let evaluator = if target == "map" && cancel_after == u64::MAX {
+            evaluator.observing_checked(&sink)
+        } else {
+            evaluator.observing(&sink, &host)
+        };
+        let result = evaluator.invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()
             .map_err(|_| failure("reference observation poisoned"))?
@@ -221,9 +245,13 @@ fn invocation_control(
         (result.map(|(value, _)| value), json!(observed))
     } else {
         let sink = Mutex::new(None);
-        let result = NormalizedVm::new(&prepared.program, policy)
-            .observing(&sink, &host)
-            .invoke_root_target(&name, arguments, None, control);
+        let evaluator = NormalizedVm::new(&prepared.program, policy);
+        let evaluator = if target == "map" && cancel_after == u64::MAX {
+            evaluator.observing_checked(&sink)
+        } else {
+            evaluator.observing(&sink, &host)
+        };
+        let result = evaluator.invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()
             .map_err(|_| failure("production observation poisoned"))?
@@ -241,7 +269,7 @@ fn invocation_control(
     };
     Ok((
         result,
-        json!({"tier":if reference {"canonical-reference"} else {"production"},"target":target,"observation":observation,"host_calls":host.calls.load(Ordering::Relaxed),"cancelled":control.is_cancelled()}),
+        json!({"tier":if reference {"canonical-reference"} else {"production"},"target":target,"observation":observation,"host_calls":host.calls.load(Ordering::Relaxed),"cancelled":control.is_cancelled(),"mapper_items":host.mapper_items.into_inner().map_err(|_| failure("mapper trace poisoned"))?}),
     ))
 }
 
@@ -251,7 +279,187 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         ..NormalizedRunPolicy::default()
     };
     let mut cases = Vec::new();
+    let list_type = prepared
+        .program
+        .types
+        .iter()
+        .find_map(|(identity, object)| {
+            if let crate::platform::kernel::TypeForm::List { item } = object.form
+                && matches!(
+                    prepared.program.types.get(&item).map(|ty| &ty.form),
+                    Some(crate::platform::kernel::TypeForm::I64)
+                )
+            {
+                Some(*identity)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| failure("public mapping List<I64> type absent"))?;
+    for n in [1, 32, 33, 256, 1024, 4096, 8192] {
+        let started = std::time::Instant::now();
+        let before = super::list::Work::current();
+        let input = raw_list((0..n).map(NormalizedValue::I64).collect())?;
+        let input_work = before.since();
+        let input_nanoseconds = started.elapsed().as_nanos();
+        let started = std::time::Instant::now();
+        let before = super::list::Work::current();
+        let encoded =
+            super::codec::encode_typed(&prepared.program, &input, list_type, Default::default())?;
+        let output_work = before.since();
+        let output_nanoseconds = started.elapsed().as_nanos();
+        require(
+            encoded
+                == serde_json::to_vec(&(0..n).collect::<Vec<_>>())
+                    .map_err(|_| failure("independent boundary sequence encoding"))?,
+            "list boundary encoding changed order",
+        )?;
+        require(
+            input_work.element_handle_allocations == n as u64
+                && input_work.element_handle_copies == 0
+                && output_work.full_materializations == 1
+                && output_work.materialized_elements == n as u64,
+            "boundary conversion work was hidden or bulk construction copied payloads",
+        )?;
+        let NormalizedValue::List(items) = &input else {
+            return Err(failure("list boundary shape"));
+        };
+        let started = std::time::Instant::now();
+        let before = super::list::Work::current();
+        let mut indexed_sum = 0_i64;
+        for i in 0..n as usize {
+            if let Some(NormalizedValue::I64(item)) = items.get(i) {
+                indexed_sum += *item;
+            }
+        }
+        let indexed_work = before.since();
+        let indexed_nanoseconds = started.elapsed().as_nanos();
+        let flat = (0..n).collect::<Vec<_>>();
+        let started = std::time::Instant::now();
+        let flat_sum: i64 = (0..n as usize)
+            .map(|i| std::hint::black_box(&flat)[i])
+            .sum();
+        let flat_indexed_nanoseconds = started.elapsed().as_nanos();
+        require(
+            indexed_sum == n * (n - 1) / 2
+                && flat_sum == indexed_sum
+                && indexed_work.node_visits <= 4 * n as u64,
+            "indexed list work or independent sum changed",
+        )?;
+        cases.push(json!({"case":"list-boundary-storage-work","n":n,"input_work":input_work,"output_work":output_work,"indexed_work":indexed_work,"input_nanoseconds":input_nanoseconds,"output_nanoseconds":output_nanoseconds,"indexed_nanoseconds":indexed_nanoseconds,"flat_indexed_nanoseconds":flat_indexed_nanoseconds,"output_bytes":encoded.len(),"sum":indexed_sum}));
+    }
     for reference in [false, true] {
+        for (input, expected, trap) in [
+            (vec![], vec![], false),
+            (vec![1, 2, 4], vec![1, 2, 4], false),
+            (vec![1, i64::MAX, 4], vec![1, i64::MAX], true),
+        ] {
+            let (result, mut observed) = invocation(
+                &prepared,
+                reference,
+                "map",
+                vec![
+                    raw_list(input.into_iter().map(NormalizedValue::I64).collect())?,
+                    NormalizedValue::I64(3),
+                    NormalizedValue::I64(5),
+                ],
+                policy,
+                u64::MAX - 1,
+            )?;
+            require(
+                result.is_err() == trap && observed["mapper_items"] == json!(expected),
+                "mapper callback count, ascending order, or trap boundary changed",
+            )?;
+            observed["case"] = json!("list-mapper-ordered-callbacks");
+            observed["expected_callbacks"] = json!(expected);
+            if let Err(error) = result {
+                observed["failure"] = json!(error);
+            }
+            cases.push(observed);
+        }
+        let arguments = vec![
+            raw_list((0..1057).map(NormalizedValue::I64).collect())?,
+            NormalizedValue::I64(3),
+            NormalizedValue::I64(5),
+        ];
+        let (result, measured) = invocation(
+            &prepared,
+            reference,
+            "map",
+            arguments.clone(),
+            policy,
+            u64::MAX,
+        )?;
+        require(result.is_ok_and(|value| matches!(value, NormalizedValue::List(ref items) if items.len() == 1057 && items.iter().enumerate().all(|(i,v)| *v == NormalizedValue::I64(3 * i as i64 + 5)))), "mapping fixed sequence failed before budget probes")?;
+        let items = measured["observation"]["collection_items"]
+            .as_u64()
+            .ok_or_else(|| failure("list item charge absent"))?;
+        let bytes = measured["observation"]["allocated_bytes"]
+            .as_u64()
+            .ok_or_else(|| failure("list byte charge absent"))?;
+        for (slot_limit, byte_limit, success) in [
+            (items, bytes, true),
+            (items - 1, bytes, false),
+            (items, bytes - 1, false),
+        ] {
+            let bounded = NormalizedRunPolicy {
+                maximum_collection_items: slot_limit,
+                maximum_allocated_bytes: byte_limit,
+                ..policy
+            };
+            let (result, mut observed) = invocation(
+                &prepared,
+                reference,
+                "map",
+                arguments.clone(),
+                bounded,
+                u64::MAX,
+            )?;
+            require(
+                result.is_ok() == success,
+                "list evaluator exact-fit or one-over budget disagrees",
+            )?;
+            observed["case"] = json!("list-evaluator-exact-bound");
+            observed["slot_limit"] = json!(slot_limit);
+            observed["byte_limit"] = json!(byte_limit);
+            observed["success"] = json!(success);
+            if let Err(error) = result {
+                observed["failure"] = json!(error);
+            }
+            cases.push(observed);
+        }
+        let (result, mut observed) = invocation_control(
+            &prepared,
+            reference,
+            "map",
+            arguments.clone(),
+            policy,
+            u64::MAX,
+            &ExecutionControl::cancel_after_checks(5000),
+        )?;
+        let error = result
+            .err()
+            .ok_or_else(|| failure("mapping cancellation did not interrupt"))?;
+        require(
+            error.code == "execution_cancelled"
+                && observed["observation"]["value_work"]["lists"]["element_handle_allocations"]
+                    .as_u64()
+                    .is_some_and(|n| n > 0),
+            "mapping cancellation missed real construction progress",
+        )?;
+        observed["case"] = json!("list-construction-cancellation");
+        observed["failure"] = json!(error);
+        cases.push(observed);
+        require(
+            matches!(&arguments[0], NormalizedValue::List(items) if items.iter().enumerate().all(|(i,v)| *v == NormalizedValue::I64(i as i64))),
+            "failed mapping changed an old alias",
+        )?;
+        require(
+            invocation(&prepared, reference, "map", arguments, policy, u64::MAX)?
+                .0
+                .is_ok(),
+            "healthy mapping failed after cancellation",
+        )?;
         for (target, expected, calls) in [
             ("binding-thunk-created", 42, 0),
             ("binding-capture-once", 9, 3),
@@ -277,7 +485,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     "bound-forward",
                     vec![
                         NormalizedValue::I64(k),
-                        NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); n])),
+                        raw_list(vec![NormalizedValue::I64(1); n])?,
                     ],
                     policy,
                     u64::MAX,
@@ -312,11 +520,11 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             "bound-forward",
             vec![
                 NormalizedValue::I64(64),
-                NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+                raw_list(vec![NormalizedValue::I64(1); 256])?,
             ],
             policy,
             u64::MAX,
-            &ExecutionControl::cancel_after_checks(400),
+            &ExecutionControl::cancel_after_checks(700),
         )?;
         let error = result
             .err()
@@ -338,7 +546,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             "bound-forward",
             vec![
                 NormalizedValue::I64(1),
-                NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+                raw_list(vec![NormalizedValue::I64(1); 256])?,
             ],
             policy,
             u64::MAX,
@@ -363,7 +571,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 "bound-forward",
                 vec![
                     NormalizedValue::I64(1),
-                    NormalizedValue::List(Arc::new(vec![NormalizedValue::I64(1); 256])),
+                    raw_list(vec![NormalizedValue::I64(1); 256])?,
                 ],
                 NormalizedRunPolicy {
                     maximum_allocated_bytes: byte_limit,
@@ -393,10 +601,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             &prepared,
             reference,
             "sum",
-            vec![NormalizedValue::List(Arc::new(vec![
-                NormalizedValue::I64(1);
-                4096
-            ]))],
+            vec![raw_list(vec![NormalizedValue::I64(1); 4096])?],
             policy,
             u64::MAX,
             &control,
@@ -425,7 +630,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             &prepared,
             reference,
             "sum",
-            vec![NormalizedValue::List(Arc::new(vec![raw]))],
+            vec![raw_list(vec![raw])?],
             policy,
             u64::MAX,
         )?;
@@ -454,10 +659,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 &prepared,
                 reference,
                 "sum",
-                vec![NormalizedValue::List(Arc::new(vec![
-                    NormalizedValue::I64(1);
-                    count
-                ]))],
+                vec![raw_list(vec![NormalizedValue::I64(1); count])?],
                 NormalizedRunPolicy {
                     maximum_collection_items: 8,
                     ..policy
@@ -486,7 +688,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 &prepared,
                 reference,
                 "sum",
-                vec![NormalizedValue::List(Arc::new(values))],
+                vec![raw_list(values)?],
                 policy,
                 u64::MAX,
             )?;
@@ -866,4 +1068,14 @@ fn require(condition: bool, message: &str) -> Result<(), Diagnostic> {
 
 fn failure(message: &str) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Infrastructure, "pure_tail_probe", message)
+}
+
+fn raw_list(items: Vec<NormalizedValue>) -> Result<NormalizedValue, Diagnostic> {
+    NormalizedValue::list(items).map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "normalized_list_storage",
+            error.message,
+        )
+    })
 }

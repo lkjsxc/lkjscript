@@ -606,6 +606,70 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                     .to_string(),
             ),
             (
+                "production-list-node-visits",
+                run.production.value_work.lists.node_visits.to_string(),
+            ),
+            (
+                "production-list-element-handle-copies",
+                run.production
+                    .value_work
+                    .lists
+                    .element_handle_copies
+                    .to_string(),
+            ),
+            (
+                "production-list-element-handle-allocations",
+                run.production
+                    .value_work
+                    .lists
+                    .element_handle_allocations
+                    .to_string(),
+            ),
+            (
+                "production-list-element-slots-reserved",
+                run.production
+                    .value_work
+                    .lists
+                    .element_slots_reserved
+                    .to_string(),
+            ),
+            (
+                "production-list-branch-slot-copies",
+                run.production
+                    .value_work
+                    .lists
+                    .branch_slot_copies
+                    .to_string(),
+            ),
+            (
+                "production-list-branch-slots-reserved",
+                run.production
+                    .value_work
+                    .lists
+                    .branch_slots_reserved
+                    .to_string(),
+            ),
+            (
+                "production-list-nodes-allocated",
+                run.production.value_work.lists.nodes_allocated.to_string(),
+            ),
+            (
+                "production-list-full-materializations",
+                run.production
+                    .value_work
+                    .lists
+                    .full_materializations
+                    .to_string(),
+            ),
+            (
+                "production-list-materialized-elements",
+                run.production
+                    .value_work
+                    .lists
+                    .materialized_elements
+                    .to_string(),
+            ),
+            (
                 "production-allocated-bytes",
                 run.production.allocated_bytes.to_string(),
             ),
@@ -651,6 +715,70 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 run.reference
                     .value_work
                     .classification_decisions
+                    .to_string(),
+            ),
+            (
+                "reference-list-node-visits",
+                run.reference.value_work.lists.node_visits.to_string(),
+            ),
+            (
+                "reference-list-element-handle-copies",
+                run.reference
+                    .value_work
+                    .lists
+                    .element_handle_copies
+                    .to_string(),
+            ),
+            (
+                "reference-list-element-handle-allocations",
+                run.reference
+                    .value_work
+                    .lists
+                    .element_handle_allocations
+                    .to_string(),
+            ),
+            (
+                "reference-list-element-slots-reserved",
+                run.reference
+                    .value_work
+                    .lists
+                    .element_slots_reserved
+                    .to_string(),
+            ),
+            (
+                "reference-list-branch-slot-copies",
+                run.reference
+                    .value_work
+                    .lists
+                    .branch_slot_copies
+                    .to_string(),
+            ),
+            (
+                "reference-list-branch-slots-reserved",
+                run.reference
+                    .value_work
+                    .lists
+                    .branch_slots_reserved
+                    .to_string(),
+            ),
+            (
+                "reference-list-nodes-allocated",
+                run.reference.value_work.lists.nodes_allocated.to_string(),
+            ),
+            (
+                "reference-list-full-materializations",
+                run.reference
+                    .value_work
+                    .lists
+                    .full_materializations
+                    .to_string(),
+            ),
+            (
+                "reference-list-materialized-elements",
+                run.reference
+                    .value_work
+                    .lists
+                    .materialized_elements
                     .to_string(),
             ),
             (

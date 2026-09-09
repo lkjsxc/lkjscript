@@ -3,6 +3,37 @@
 use super::*;
 
 impl Machine<'_> {
+    fn charge_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let next = self
+            .observation
+            .collection_items
+            .checked_add(charge.slots)
+            .filter(|next| *next <= self.policy.maximum_collection_items)
+            .ok_or_else(|| {
+                resource_error(
+                    "normalized_collection_items",
+                    "persistent list storage exceeds collection items",
+                )
+            })?;
+        self.observation.collection_items = next;
+        self.charge_allocation(charge.bytes)
+    }
+
+    pub(super) fn construct_list(
+        &mut self,
+        items: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let mut work = std::mem::take(&mut self.observation.value_work);
+        let program = self.program;
+        let maximum = self.policy.maximum_collection_items;
+        let result = CheckedValue::list(program, items, &mut work, maximum, &mut |charge| {
+            self.charge_list(charge)
+        });
+        self.observation.value_work = work;
+        result
+    }
+
     pub(super) fn admit(
         &mut self,
         raw: NormalizedValue,
@@ -201,14 +232,14 @@ impl Machine<'_> {
                 let [list, child]: [CheckedValue; 2] = arguments
                     .try_into()
                     .map_err(|_| type_error("list append received a foreign arity"))?;
-                let NormalizedValue::List(values) = list.raw() else {
-                    return Err(type_error("list append received a foreign value"));
-                };
-                self.charge_collection(
-                    values.len().saturating_add(1),
-                    std::mem::size_of::<NormalizedValue>(),
-                )?;
-                list.append(self.program, child, &mut self.observation.value_work)
+                let mut work = std::mem::take(&mut self.observation.value_work);
+                let program = self.program;
+                let maximum = self.policy.maximum_collection_items;
+                let result = list.append(program, child, &mut work, maximum, &mut |charge| {
+                    self.charge_list(charge)
+                });
+                self.observation.value_work = work;
+                result
             }
             "core.option.some" => {
                 let [child]: [CheckedValue; 1] = arguments
@@ -347,7 +378,7 @@ impl Machine<'_> {
                     ("value", value),
                 ])?);
             }
-            return CheckedValue::list(self.program, children, &mut self.observation.value_work);
+            return self.construct_list(children);
         }
         let key = arguments
             .next()

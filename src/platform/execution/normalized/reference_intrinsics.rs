@@ -84,15 +84,6 @@ impl ReferenceState<'_> {
                 let [list, item]: [CheckedValue; 2] = arguments
                     .try_into()
                     .map_err(|_| reference_type_error("list append has foreign arity"))?;
-                let NormalizedValue::List(items) = list.raw() else {
-                    return Err(reference_type_error(
-                        "list append received another value type",
-                    ));
-                };
-                self.charge_items(
-                    items.len().saturating_add(1),
-                    std::mem::size_of::<NormalizedValue>(),
-                )?;
                 self.append_value(list, item)
             }
             "core.option.none" => {

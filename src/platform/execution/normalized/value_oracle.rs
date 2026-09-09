@@ -68,8 +68,8 @@ pub(super) fn inspect(
         }
         let form = &schema.types.get(&ty).ok_or("foreign exact type")?.form;
         let count = match value {
-            NormalizedValue::List(values)
-            | NormalizedValue::Record(NormalizedRecord::Nominal { fields: values, .. }) => {
+            NormalizedValue::List(values) => values.len(),
+            NormalizedValue::Record(NormalizedRecord::Nominal { fields: values, .. }) => {
                 values.len()
             }
             NormalizedValue::Record(NormalizedRecord::Structural { fields }) => fields.len(),
@@ -237,8 +237,10 @@ pub(super) fn forced_descendant_work(value: &NormalizedValue, work: &mut super::
             break;
         }
         match value {
-            NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. })
-            | NormalizedValue::List(fields) => pending.extend(fields.iter()),
+            NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+                pending.extend(fields.iter())
+            }
+            NormalizedValue::List(fields) => pending.extend(fields.iter()),
             NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
                 pending.extend(fields.iter().map(|(_, value)| value))
             }

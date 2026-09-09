@@ -19,6 +19,7 @@ pub(crate) struct ValueWork {
     pub constructor_child_visits: u64,
     pub internal_guard_descendant_visits: u64,
     pub classification_decisions: u64,
+    pub lists: super::list::Work,
 }
 
 impl ValueOrigin {
@@ -82,7 +83,7 @@ pub enum NormalizedValue {
         success: bool,
         value: Box<NormalizedValue>,
     },
-    List(Arc<Vec<NormalizedValue>>),
+    List(super::list::List),
     Map(Arc<BTreeMap<NormalizedMapKey, NormalizedValue>>),
     Function {
         function: FunctionIndex,
@@ -93,6 +94,26 @@ pub enum NormalizedValue {
 }
 
 impl NormalizedValue {
+    /// Bounded raw boundary construction. Evaluators separately admit all logical
+    /// occurrences and metadata; this constructor confers no semantic eligibility.
+    pub fn list(items: Vec<Self>) -> Result<Self, crate::platform::execution::ExecutionError> {
+        let mut bytes = 0_u64;
+        super::list::List::from_items(items, super::list::MAXIMUM_LENGTH as u64, &mut |charge| {
+            bytes = bytes
+                .checked_add(charge.bytes)
+                .filter(|n| *n <= 268_435_456)
+                .ok_or_else(|| {
+                    crate::platform::execution::ExecutionError::new(
+                        crate::platform::execution::ExecutionFailureClass::Resource,
+                        "normalized_list_storage",
+                        "raw list construction exceeds its owned storage bound",
+                    )
+                })?;
+            Ok(())
+        })
+        .map(Self::List)
+    }
+
     pub fn text(value: impl Into<Arc<str>>) -> Self {
         Self::Text(value.into())
     }
@@ -221,7 +242,6 @@ pub(super) fn release_raw_values(mut values: Vec<NormalizedValue>) {
                 bound_arguments: Some(children),
                 ..
             }
-            | NormalizedValue::List(children)
             | NormalizedValue::Record(NormalizedRecord::Nominal {
                 fields: children, ..
             }) => {
@@ -233,6 +253,7 @@ pub(super) fn release_raw_values(mut values: Vec<NormalizedValue>) {
                     }
                 }
             }
+            NormalizedValue::List(mut list) => list.drain_unique(&mut values),
             NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
                 if let Some(fields) = Arc::into_inner(fields) {
                     values.extend(fields.into_iter().map(|(_, value)| value));

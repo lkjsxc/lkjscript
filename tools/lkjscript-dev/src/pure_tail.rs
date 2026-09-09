@@ -24,6 +24,44 @@ struct ValueWork {
     constructor_child_visits: u64,
     internal_guard_descendant_visits: u64,
     classification_decisions: u64,
+    lists: ListWork,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListWork {
+    node_visits: u64,
+    element_handle_copies: u64,
+    element_handle_allocations: u64,
+    element_slots_reserved: u64,
+    branch_slot_copies: u64,
+    branch_slots_reserved: u64,
+    nodes_allocated: u64,
+    full_materializations: u64,
+    materialized_elements: u64,
+}
+
+// Independent fixed-fanout model; do not call the runtime carrier's charge producer.
+fn mapping_collection_items(n: u64) -> u64 {
+    let mut slots = 0;
+    for length in 0..n {
+        let prefix_leaves = length.saturating_sub(1) / 32;
+        let mut height = 0;
+        let mut capacity = 1;
+        while prefix_leaves > capacity {
+            capacity *= 32;
+            height += 1;
+        }
+        let branches = if length > 0 && length.is_multiple_of(32) && prefix_leaves > 0 {
+            height + u64::from(prefix_leaves == capacity)
+        } else {
+            0
+        };
+        slots += 32 * (branches + 1);
+    }
+    // Raw items plus the factory's 2-slot prefix, its 3-slot rebind, and standard
+    // step's 1-slot prefix whose callable admission traverses the retained 3 slots.
+    n + 2 + 3 + 1 + 3 + slots
 }
 
 impl ValueWork {
@@ -48,6 +86,35 @@ struct MatrixCell {
 
 fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevError> {
     Ok(ValueWork {
+        lists: ListWork {
+            node_visits: integer_field(records, &format!("{tier}-list-node-visits"))?,
+            element_handle_copies: integer_field(
+                records,
+                &format!("{tier}-list-element-handle-copies"),
+            )?,
+            element_handle_allocations: integer_field(
+                records,
+                &format!("{tier}-list-element-handle-allocations"),
+            )?,
+            element_slots_reserved: integer_field(
+                records,
+                &format!("{tier}-list-element-slots-reserved"),
+            )?,
+            branch_slot_copies: integer_field(records, &format!("{tier}-list-branch-slot-copies"))?,
+            branch_slots_reserved: integer_field(
+                records,
+                &format!("{tier}-list-branch-slots-reserved"),
+            )?,
+            nodes_allocated: integer_field(records, &format!("{tier}-list-nodes-allocated"))?,
+            full_materializations: integer_field(
+                records,
+                &format!("{tier}-list-full-materializations"),
+            )?,
+            materialized_elements: integer_field(
+                records,
+                &format!("{tier}-list-materialized-elements"),
+            )?,
+        },
         input_admission_nodes: integer_field(records, &format!("{tier}-input-admission-nodes"))?,
         raw_result_admission_nodes: integer_field(
             records,
@@ -108,6 +175,25 @@ fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
                 require(
                     work.internal_guard_descendant_visits == 0,
                     "internal affinity guard rescanned descendants",
+                )?;
+                require(
+                    work.lists.full_materializations == 0
+                        && work.lists.materialized_elements == 0
+                        && work.lists.element_handle_allocations == 0
+                        && work.lists.element_handle_copies == 0
+                        && work.lists.branch_slots_reserved == 0
+                        && work.lists.element_slots_reserved == 0,
+                    "forwarding rebuilt or materialized a retained list",
+                )?;
+                require(
+                    work.lists
+                        .node_visits
+                        .checked_add(select(1, 1)?.lists.node_visits)
+                        == select(n, 1)?
+                            .lists
+                            .node_visits
+                            .checked_add(select(1, k)?.lists.node_visits),
+                    "physical list traversal multiplied aggregate size by invocation count",
                 )?;
                 require(
                     work.classification_decisions == select(1, k)?.classification_decisions,
@@ -232,7 +318,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-3".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-4".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -630,6 +716,15 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             "allocated-bytes",
             "allocation-charges",
             "collection-items",
+            "list-node-visits",
+            "list-element-handle-copies",
+            "list-element-handle-allocations",
+            "list-element-slots-reserved",
+            "list-branch-slot-copies",
+            "list-branch-slots-reserved",
+            "list-nodes-allocated",
+            "list-full-materializations",
+            "list-materialized-elements",
         ] {
             let name = format!("{tier}-{suffix}");
             let records = discovery
@@ -687,6 +782,8 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "i64-equal",
         "list-fold-left",
         "list-length",
+        "list-map",
+        "list-append",
     ] {
         let records = context.cli(
             None,
@@ -752,22 +849,63 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         true,
     )?;
     let sum = consumer.symbols["$sum"].clone();
-    context.cli(
-        Some(&consumer.path),
-        &[
-            "inspect",
-            "owner",
-            "pure_function",
-            &sum,
-            "--detail",
-            "definition",
-            "--limit",
-            "1000",
-            "--bytes",
-            "1048576",
-        ],
-        true,
-    )?;
+    for definition in [sum, consumer.symbols["$map"].clone()] {
+        context.cli(
+            Some(&consumer.path),
+            &[
+                "inspect",
+                "owner",
+                "pure_function",
+                &definition,
+                "--detail",
+                "definition",
+                "--limit",
+                "1000",
+                "--bytes",
+                "1048576",
+            ],
+            true,
+        )?;
+    }
+    let accepted = authority::observe_graph_authority(&consumer.path)?;
+    for task in [false, true] {
+        let module = &consumer.symbols["$module"];
+        let declaration = if task {
+            format!(
+                "expression.i64 as=$task-value value=0\ncreate.function as=$task-mapper module={module} name=task-mapper visibility=private result=i64 effect=task body=$task-value\nadd.parameter as=$task-input function=$task-mapper name=item type=i64\n"
+            )
+        } else {
+            String::new()
+        };
+        let mapper = if task {
+            "$task-mapper"
+        } else {
+            &standard.symbols["multiply"]
+        };
+        let request = context.output.join(format!("invalid-map-{task}.lkjc"));
+        fs::write(
+            &request,
+            format!(
+                "request base={}\ntype.list as=@items item=i64\n{declaration}expression.list as=$empty item=i64\nexpression.function-value as=$mapper function={mapper}\nexpression.call as=$bad-map function={}\ntype.argument parent=$bad-map index=0 type=i64\ntype.argument parent=$bad-map index=1 type=i64\nexpression.argument parent=$bad-map index=0 expression=$empty\nexpression.argument parent=$bad-map index=1 expression=$mapper\ncreate.function as=$invalid module={module} name=invalid-map visibility=private result=@items effect=pure body=$bad-map\n",
+                consumer.revision, standard.symbols["list-map"]
+            ),
+        )?;
+        let rejected = context.cli(
+            Some(&consumer.path),
+            &[
+                "change",
+                "plan",
+                "--input-file",
+                &request.display().to_string(),
+            ],
+            false,
+        )?;
+        require(
+            authority::observe_graph_authority(&consumer.path)? == accepted,
+            "invalid mapper changed accepted inventory",
+        )?;
+        context.receipt.outcomes.insert(format!("invalid-map-{task}"),serde_json::json!({"classification":"fresh passed","code":field(&rejected,"diagnostic","code")?,"unchanged_inventory":accepted}));
+    }
     context.cli(Some(&consumer.path), &["check"], true)?;
     let clean = context.build(&consumer, "clean")?;
     let exact = context.build(&consumer, "exact")?;
@@ -775,6 +913,94 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&library.path)?;
     fs::remove_file(&library.container)?;
     fs::remove_file(&standard.container)?;
+    for (target, arguments, expected) in [
+        ("map", "[[],3,5]", "[]"),
+        ("map", "[[1],3,5]", "[8]"),
+        ("map", "[[1,2,4],3,5]", "[8,11,17]"),
+        ("map", "[[1,2,4],1,0]", "[1,2,4]"),
+        (
+            "map-aliases",
+            "[[1,2,4]]",
+            r#"{"left":[8,11,17,99],"mapped":[8,11,17],"original":[1,2,4],"right":[8,11,17,-7]}"#,
+        ),
+        ("map-types", "[[42,1,42]]", r#"["true","false","true"]"#),
+        ("map-composed", "[[42,1,42]]", r#"["true","false","true"]"#),
+    ] {
+        context.run(&consumer, target, arguments, expected)?;
+    }
+    for n in [256_i64, 1024, 4096, 8192] {
+        for sample in 0..4 {
+            let input = (0..n).collect::<Vec<_>>();
+            let expected = (0..n).map(|x| 3 * x + 5).collect::<Vec<_>>();
+            if n == 8192 {
+                require(
+                    expected.iter().sum::<i64>() == 100691968,
+                    "independent map sum",
+                )?;
+            }
+            context.run(
+                &consumer,
+                "map",
+                &serde_json::to_string(&serde_json::json!([input, 3, 5]))?,
+                &serde_json::to_string(&expected)?,
+            )?;
+            let key = format!("run-{}-map", context.receipt.commands.len());
+            let outcome = context
+                .receipt
+                .outcomes
+                .get_mut(&key)
+                .ok_or_else(|| DevError::corrupt("mapping sample absent"))?;
+            outcome["items"] = serde_json::json!(n);
+            outcome["sample"] = serde_json::json!(sample);
+            outcome["warmup"] = serde_json::json!(sample == 0);
+            for tier in ["production", "reference"] {
+                let work: ValueWork =
+                    serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
+                require(
+                    outcome[format!("{tier}_collection_items")]
+                        == mapping_collection_items(n as u64),
+                    "mapping ledger omitted an independently calculated list or capture slot charge",
+                )?;
+                require(
+                    work.internal_guard_descendant_visits == 0
+                        && work.lists.full_materializations == 0
+                        && work.lists.materialized_elements == 0
+                        && work.lists.element_handle_allocations == n as u64
+                        && work.lists.element_handle_copies <= 31 * n as u64
+                        && work.lists.element_slots_reserved == 32 * n as u64
+                        && work.lists.branch_slots_reserved <= 128 * (n as u64 / 32)
+                        && work.lists.node_visits <= 12 * n as u64,
+                    "persistent mapping exceeded derived physical work bounds",
+                )?;
+            }
+        }
+    }
+    let before = authority::observe_graph_authority(&consumer.path)?;
+    let failed = context.cli(
+        Some(&consumer.path),
+        &[
+            "run",
+            "map",
+            "--arguments",
+            "[[1,9223372036854775807,4],3,5]",
+        ],
+        false,
+    )?;
+    require(
+        field(&failed, "diagnostic", "code")? == "normalized_integer_overflow"
+            && !failed.iter().any(|record| record.operation == "execution")
+            && authority::observe_graph_authority(&consumer.path)? == before,
+        "mapping trap installed a result or changed meaning",
+    )?;
+    context.receipt.outcomes.insert(
+        "persistent-map".to_owned(),
+        serde_json::json!({
+            "classification":"fresh passed", "large_length":8192, "large_sum":100691968,
+            "configured":[8,11,17], "aliases_unchanged":true, "producer_removed":true,
+            "generic_heterogeneous_composition":true, "overflow_no_partial_result":true,
+            "samples_per_size":4, "sizes":[256,1024,4096,8192]
+        }),
+    );
     context.run(
         &consumer,
         "configured",
@@ -954,6 +1180,8 @@ fn standalone_http(
         "json-encode",
         "DataKeyPart",
         "DataExpectation",
+        "DataEntry",
+        "list-get",
         "DataStore",
         "ByteStream",
     ] {
@@ -969,6 +1197,7 @@ fn standalone_http(
     for (name, kind, member) in [
         ("DataKeyPart", "variant", "case"),
         ("DataExpectation", "variant", "case"),
+        ("DataEntry", "record", "field"),
         ("DataStore", "interface", "operation"),
         ("ByteStream", "interface", "operation"),
     ] {
@@ -1089,7 +1318,7 @@ fn standalone_http(
             )?,
         ),
     ]);
-    let sum = format!("{}/{}", consumer.id, consumer.symbols["$configured-fold"]);
+    let sum = format!("{}/{}", consumer.id, consumer.symbols["$map"]);
     context.apply(
         &mut http,
         &format!(
@@ -1224,7 +1453,7 @@ fn standalone_http(
                     &[],
                     DataScanDirection::Forward,
                     10,
-                    4096,
+                    1_048_576,
                     1000,
                     None,
                 )
@@ -1234,22 +1463,33 @@ fn standalone_http(
             data_scan()?.items.is_empty(),
             "isolated data was not initially empty",
         )?;
-        let values = (1_i64..=8192).collect::<Vec<_>>();
+        let initial_revisions = store
+            .verify()
+            .map_err(|error| DevError::corrupt(error.to_string()))?
+            .revisions;
+        let values = (0_i64..8192).collect::<Vec<_>>();
+        let mapped = values.iter().map(|x| 3 * x + 5).collect::<Vec<_>>();
+        let expected_body = serde_json::to_vec(&mapped)?;
         let response = crate::http_probe::request(
             address,
             "GET",
             "/?success",
-            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":1,"bias":0}))?,
+            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":3,"bias":5}))?,
             &[],
         )?;
         require(
-            response.status == 200 && response.body == b"33558528",
+            response.status == 200 && response.body == expected_body,
             "HTTP transaction did not return the fixed long-fold result",
         )?;
         let committed = data_scan()?;
         require(
             committed.items.len() == 1
-                && committed.items[0].value == b"written"
+                && committed.items[0].value == expected_body
+                && store
+                    .verify()
+                    .map_err(|error| DevError::corrupt(error.to_string()))?
+                    .revisions
+                    == initial_revisions + 1
                 && committed.continuation.is_none(),
             "independent data read did not observe exactly one committed write",
         )?;
@@ -1262,7 +1502,7 @@ fn standalone_http(
             address,
             "GET",
             "/?trapped",
-            &serde_json::to_vec(&serde_json::json!({"items":trapping,"scale":1,"bias":0}))?,
+            &serde_json::to_vec(&serde_json::json!({"items":trapping,"scale":3,"bias":5}))?,
             &[],
         )?;
         require(
@@ -1277,11 +1517,18 @@ fn standalone_http(
             address,
             "GET",
             "/?recovery",
-            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":1,"bias":0}))?,
+            &serde_json::to_vec(&serde_json::json!({"items":values,"scale":3,"bias":5}))?,
             &[],
         )?;
         require(
-            response.status == 200 && response.body == b"33558528" && data_scan()?.items.len() == 2,
+            response.status == 200
+                && response.body == expected_body
+                && data_scan()?.items.len() == 2
+                && store
+                    .verify()
+                    .map_err(|error| DevError::corrupt(error.to_string()))?
+                    .revisions
+                    == initial_revisions + 2,
             "transaction state leaked after helper failure",
         )?;
         let configured = serde_json::json!({"items":[1,2,4],"scale":3,"bias":5});
@@ -1293,10 +1540,21 @@ fn standalone_http(
             &[],
         )?;
         require(
-            response.status == 200 && response.body == b"36" && data_scan()?.items.len() == 3,
+            response.status == 200
+                && response.body == b"[8,11,17]"
+                && data_scan()?.items.len() == 3
+                && store
+                    .verify()
+                    .map_err(|error| DevError::corrupt(error.to_string()))?
+                    .revisions
+                    == initial_revisions + 3
+                && data_scan()?
+                    .items
+                    .iter()
+                    .any(|item| item.value == response.body),
             "request-configured bound reducer did not commit exactly once",
         )?;
-        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response":"33558528","initial_committed_changes":1,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"36","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
+        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response_length":8192,"fixed_response_sum":100691968,"mapped_data_equals_wire":true,"initial_committed_changes":1,"initial_data_revisions":initial_revisions,"final_data_verification":store.verify().map_err(|error| DevError::corrupt(error.to_string()))?,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"[8,11,17]","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
         Ok(())
     })();
     control.interrupt();
@@ -1349,11 +1607,22 @@ fn standalone_http(
         cancellation["classification"] == "fresh passed"
             && cancellation["failure"]["code"] == "execution_cancelled"
             && cancellation["cleanup_complete"] == true
-            && cancellation["recovery_value"] == 33_558_528,
+            && cancellation["recovery_length"] == 8192
+            && cancellation["recovery_sum"] == 33_558_528
+            && cancellation["observation"]["value_work"]["lists"]["element_handle_allocations"]
+                .as_u64()
+                .is_some_and(|n| n > 1),
         "transaction cancellation or healthy recovery evidence missing",
     )?;
     let store = DataStore::open(&data_root, "tail", DataLimits::default())
         .map_err(|error| DevError::corrupt(error.to_string()))?;
+    let final_data_verification = store
+        .verify()
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    require(
+        final_data_verification.revisions == 5,
+        "transaction cancellation or recovery produced an extra data commit",
+    )?;
     let after = store
         .begin()
         .map_err(|error| DevError::corrupt(error.to_string()))?
@@ -1362,7 +1631,7 @@ fn standalone_http(
             &[],
             DataScanDirection::Forward,
             10,
-            4096,
+            1_048_576,
             1000,
             None,
         )
@@ -1377,7 +1646,7 @@ fn standalone_http(
             }),
         "cancelled staged write became durable or healthy recovery did not commit once",
     )?;
-    context.receipt.outcomes.insert("transaction_cancellation".to_owned(), serde_json::json!({"execution":cancellation,"after":after,"cancelled_key_absent":true,"committed_changes":4}));
+    context.receipt.outcomes.insert("transaction_cancellation".to_owned(), serde_json::json!({"execution":cancellation,"after":after,"data_verification":final_data_verification,"cancelled_key_absent":true,"committed_changes":4}));
     require(
         digest(&artifact)? == artifact_sha256,
         "HTTP execution changed artifact",
@@ -1568,7 +1837,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-3"
+        receipt.schema == "lkjscript-pure-tail-acceptance-4"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1654,9 +1923,72 @@ pub(crate) fn read_transferred_receipt(
         .get("checked-value-discovery")
         .ok_or_else(|| DevError::corrupt("checked-value discovery evidence missing"))?;
     require(
-        discovery["observation_fields"] == 18 && discovery["classification"] == "fresh passed",
+        discovery["observation_fields"] == 36 && discovery["classification"] == "fresh passed",
         "checked-value discovery evidence missing",
     )?;
+    let mapping = &receipt.outcomes["persistent-map"];
+    for task in [false, true] {
+        require(
+            receipt
+                .outcomes
+                .get(&format!("invalid-map-{task}"))
+                .is_some_and(|outcome| {
+                    outcome["classification"] == "fresh passed"
+                        && outcome["code"]
+                            .as_str()
+                            .is_some_and(|code| !code.is_empty())
+                        && outcome["unchanged_inventory"].is_object()
+                }),
+            "wrong-signature or empty-input task mapper rejection is missing",
+        )?;
+    }
+    require(
+        mapping["classification"] == "fresh passed"
+            && mapping["large_length"] == 8192
+            && mapping["large_sum"] == 100691968
+            && mapping["configured"] == serde_json::json!([8, 11, 17])
+            && mapping["aliases_unchanged"] == true
+            && mapping["producer_removed"] == true
+            && mapping["generic_heterogeneous_composition"] == true
+            && mapping["overflow_no_partial_result"] == true,
+        "persistent mapping fixed outcomes are missing",
+    )?;
+    for n in [256_u64, 1024, 4096, 8192] {
+        let expected = serde_json::to_string(&(0..n).map(|x| 3 * x + 5).collect::<Vec<_>>())?;
+        for sample in 0..4 {
+            let mut matches = receipt.outcomes.iter().filter(|(key, value)| {
+                key.ends_with("-map") && value["items"] == n && value["sample"] == sample
+            });
+            let (_, outcome) = matches
+                .next()
+                .ok_or_else(|| DevError::corrupt("mapping sample absent"))?;
+            require(
+                matches.next().is_none()
+                    && outcome["warmup"] == (sample == 0)
+                    && outcome["expected"] == expected,
+                "mapping sample is duplicated or differs from the independent ordered sequence",
+            )?;
+            for tier in ["production", "reference"] {
+                let work: ValueWork =
+                    serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
+                require(
+                    outcome[format!("{tier}_collection_items")] == mapping_collection_items(n),
+                    "transferred list ledger differs from the independent charge schedule",
+                )?;
+                require(
+                    work.internal_guard_descendant_visits == 0
+                        && work.lists.full_materializations == 0
+                        && work.lists.materialized_elements == 0
+                        && work.lists.element_handle_allocations == n
+                        && work.lists.element_handle_copies <= 31 * n
+                        && work.lists.element_slots_reserved == 32 * n
+                        && work.lists.branch_slots_reserved <= 128 * (n / 32)
+                        && work.lists.node_visits <= 12 * n,
+                    "transferred mapping work exceeds the independent storage bound",
+                )?;
+            }
+        }
+    }
     for target in ["forward", "forward-generic", "bound-forward"] {
         let matrix = receipt
             .outcomes
@@ -1668,8 +2000,11 @@ pub(crate) fn read_transferred_receipt(
         for sample in 0..4 {
             let matches = receipt
                 .outcomes
-                .values()
-                .filter(|value| value["items"] == n && value["sample"] == sample)
+                .iter()
+                .filter(|(key, value)| {
+                    key.ends_with("-sum") && value["items"] == n && value["sample"] == sample
+                })
+                .map(|(_, value)| value)
                 .collect::<Vec<_>>();
             require(
                 matches.len() == 1 && matches[0]["warmup"] == (sample == 0),
@@ -1691,7 +2026,44 @@ pub(crate) fn read_transferred_receipt(
     let cases = stack["cases"]
         .as_array()
         .ok_or_else(|| DevError::corrupt("bounded-stack cases absent"))?;
+    for n in [1, 32, 33, 256, 1024, 4096, 8192] {
+        let mut found = cases
+            .iter()
+            .filter(|case| case["case"] == "list-boundary-storage-work" && case["n"] == n);
+        let case = found
+            .next()
+            .ok_or_else(|| DevError::corrupt("list boundary conversion evidence missing"))?;
+        require(
+            found.next().is_none()
+                && case["input_work"]["element_handle_allocations"] == n
+                && case["input_work"]["element_handle_copies"] == 0
+                && case["output_work"]["full_materializations"] == 1
+                && case["output_work"]["materialized_elements"] == n
+                && case["sum"] == n * (n - 1) / 2,
+            "list boundary construction/output work or independent sum changed",
+        )?;
+    }
     for tier in ["production", "canonical-reference"] {
+        require(
+            cases
+                .iter()
+                .filter(|case| case["tier"] == tier && case["case"] == "list-evaluator-exact-bound")
+                .count()
+                == 3
+                && cases.iter().any(|case| {
+                    case["tier"] == tier
+                        && case["case"] == "list-construction-cancellation"
+                        && case["failure"]["code"] == "execution_cancelled"
+                })
+                && cases
+                    .iter()
+                    .filter(|case| {
+                        case["tier"] == tier && case["case"] == "list-mapper-ordered-callbacks"
+                    })
+                    .count()
+                    == 3,
+            "mapping bounds, progress cancellation, or ordered callback matrix missing",
+        )?;
         for n in [1, 256, 4096] {
             for k in [1, 64, 1024] {
                 require(
@@ -1728,6 +2100,9 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     for case in cases {
+        if case["case"] == "list-boundary-storage-work" {
+            continue;
+        }
         let observation = &case["observation"];
         let admission_failure = case["failure"].is_object()
             && matches!(
@@ -1819,11 +2194,17 @@ pub(crate) fn read_transferred_receipt(
         .get("standalone_http")
         .ok_or_else(|| DevError::corrupt("standalone HTTP evidence missing"))?;
     require(
-        http["fixed_response"] == "33558528"
+        http["fixed_response_length"] == 8192
+            && http["fixed_response_sum"] == 100691968
+            && http["mapped_data_equals_wire"] == true
             && http["initial_committed_changes"] == 1
+            && http["initial_data_revisions"]
+                .as_u64()
+                .zip(http["final_data_verification"]["revisions"].as_u64())
+                .is_some_and(|(initial, final_count)| final_count == initial + 3)
             && http["after_trap_changes"] == 1
             && http["after_recovery_changes"] == 2
-            && http["configured_response"] == "36"
+            && http["configured_response"] == "[8,11,17]"
             && http["after_configured_changes"] == 3
             && http["project_directories_absent"] == true,
         "standalone transaction boundary incomplete",
@@ -1837,7 +2218,8 @@ pub(crate) fn read_transferred_receipt(
             && cancellation["execution"]["cleanup_complete"] == true
             && cancellation["execution"]["observation"]["maximum_live_transactions"] == 1
             && cancellation["cancelled_key_absent"] == true
-            && cancellation["committed_changes"] == 4,
+            && cancellation["committed_changes"] == 4
+            && cancellation["data_verification"]["revisions"] == 5,
         "transaction cancellation boundary incomplete",
     )?;
     require(
@@ -1883,6 +2265,7 @@ mod checked_value_tests {
                     constructor_child_visits: 0,
                     internal_guard_descendant_visits: 0,
                     classification_decisions: 10 * k as u64,
+                    lists: ListWork::default(),
                 };
                 matrix.push(MatrixCell {
                     n,

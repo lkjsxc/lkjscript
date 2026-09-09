@@ -399,7 +399,19 @@ privilege. All dependencies compile bottom-up from immutable package views throu
 compiler/linker, without writable shadow projects. A separate closure oracle reconstructs owners,
 edges, and interfaces for canonical reference evaluation, independently of production selection and
 bytecode. Canonical owners independently supply reference callable/signature, nominal-layout, type,
-target, test, and blob access; only neutral value-schema access is shared with boundary codecs.
+target, test, and blob access; neutral value-schema access is shared with boundary codecs.
+Runtime lists share the neutral immutable 32-way trie/tail carrier in `normalized/list.rs`.
+It owns only shape, length, indexed traversal, and immutable handles. Each evaluator independently
+owns type/origin/affinity and capture decisions, cancellation, calls, and the cumulative ledger
+that admits a carrier reservation before allocation. Calls, locals, environments, and intrinsic
+forwarding preserve the same carrier. JSON output explicitly materializes a bounded external array;
+typed-data codecs traverse directly. Internal levels never become language depth or serialized
+authority. Independent flat-Vec storage and charge oracles cover the shared carrier.
+
+Rank-one composite instantiations absent from stored type objects are derived into disposable
+preparation tables. `normalized/prepared_types.rs` follows bytecode calls, while
+`normalized/reference_types.rs` independently follows accepted owners. Their unchanged canonical
+type identities are never written back to graph meaning or transported as new accepted types.
 The compiler test inventory must equal the canonical inventory, and each selected package's tests
 run once; target selection stays root-scoped.
 Public bounded staged/builtin query and detail expose only public interfaces and exact references;

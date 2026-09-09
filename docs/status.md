@@ -22,23 +22,23 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_e235829aa34183eeb80affe127feddf7300a8ed2540c0282885cc3f14ffecc6e`; state `semantic_state_d926cd106e6bafef668aa16d9906757127da06eaf2d0f534e334a4ab6ebd6b81` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_eb655c7951c01fbd935856dadbc69401472c9008ffb2e0824db7c356ca3d1313`; state `semantic_state_d4021e79731eb17b0d1eb752aa297f040c7b831588920e27c4851b133c234bce` |
-| built-in standard dependency | package revision `package_revision_b3d0bf609bfdf87f22a39a1c3758bd04086285e269f424cbff56f90fb8a29135`; transport `package_transport_b1c0065d6e74ce3bd4a14295a6ba93381393e73d8c1ae1ea5c04d8349cfd7ccb`; artifact manifest `artifact_manifest_c53e75fecf545a896031e6b29fddb890490b01a7352c10b9e8d6b21a58834cd7` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_8cd2a310d5ba4bfe3a42be15d4e201a3dae52b71143c1655dce4830120c3bf09`; state `semantic_state_2a94174319134b60f44c113903443de36eaa56f660bf2e46b32035bf878aa7fe` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_dd4ee1abb738132bbcc14d4289ddb5d6bac134c6d392e5b3e3b3d28f18631915`; state `semantic_state_b9765530c27f817ed850a49ca7f9dad23313638810c9daaffbf42fd34c684632` |
+| built-in standard dependency | package revision `package_revision_7b9cd7fae489906bcdb9bf12ffa2b8dd80fb346fe9f980ddf2c9037907918b24`; transport `package_transport_1b4880be8f7173b7cf39874bb62c1fa1b5892d21551c9f6888815042db4c7914`; artifact manifest `artifact_manifest_b90cbe36b91a23e1140d73537a897b63d3099ca7a19b4ee4ed2af38053feb7c8` |
 
-The standard package owns 618 live semantic owners, 113 compiler units, and 24 graph tests. Its
-current artifact has 1,149 closure objects and 355,305 bytes. `lkjournal` owns 2,040 live semantic
-owners and one exact standard dependency; its two-package artifact has 203 compiler units, 3,630
-closure objects, and 1,089,205 bytes. Its complete dependency closure runs 31 graph tests. Both
+The standard package owns 688 live semantic owners, 122 compiler units, and 28 graph tests. Its
+current artifact has 1,244 closure objects and 383,223 bytes. `lkjournal` owns 2,040 live semantic
+owners and one exact standard dependency; its two-package artifact has 212 compiler units, 3,725
+closure objects, and 1,117,156 bytes. Its complete dependency closure runs 35 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 248,606 bytes | `07d62d211e64ada35b836369fdb7bab0b10c57328cfa8dae012e37d839302c46` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 355,305 bytes | `eb8595aac1cba0c1642cfcc283d4c0cb071bc5f285ec8ff07903d2c2a36b1cb9` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,089,205 bytes | `f97a029cad60dff52604c22f511c9b1fdf6d37b6de1c8b513f0bff02fca443f0` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 266,003 bytes | `d26ae7f15f42d9d3e4c3907237535e4e15eb2232ebfc3dc3242e2b2e588d1d32` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 383,223 bytes | `0135a9fc1e0ec1f1f5d59dd442822138bbdc122ed980defaf741bfeef0baf95b` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,117,156 bytes | `03a1dd375d9b4f615eee4b291d3902d8944003ea38520e7164e2db568826d9d6` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -104,7 +104,7 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.26`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.27`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
@@ -116,7 +116,7 @@ validator 11, package 3, package interface 7, compiler-unit 6, bytecode 4, Artif
 runtime 3, function-definition projection 3, service receipt 10, distributed-HTTP receipt 4,
 outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 15, authored change 12,
 logical change plan 5, query 6,
-project creation 5, registry 13, CLI 27, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 14, CLI 28, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
@@ -142,7 +142,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`e22fcdbd0d9554ccdfbeedef94fd47c0bc6e0fd4eabb1f9c85a0f932713dbbd3` in current source.
+`6c44e52a0210e98bbb54971411d25b3203c15b66b109c6d34c3b015e228774f5` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,
@@ -407,6 +407,22 @@ classifications, observations, and limitations are retained in
 [`202609031354-incremental-object-catalog.json`](evidence/202609031354-incremental-object-catalog.json).
 
 ## Runtime boundary
+
+The persistent 32-way trie/tail list carrier replaces whole-vector immutable append in both
+evaluators and raw intrinsic dispatch. Shared element handles preserve old aliases without cloning
+their payloads. Length, traversal and indexing retain logical flat sequence semantics; physical
+storage reservations now charge bounded copied/reserved slots and metadata before allocation.
+The default execution limits and Graph 11/TypeObject 10/compiler-unit 6/bytecode 4/Artifact 16
+encodings remain unchanged. Independent composite type derivation handles generic fold states
+such as `List<Output>` without storing new editable type authority.
+
+The graph-owned standard map maps runtime `[1,2,4]` through `3*x+5` to `[8,11,17]`, preserves
+original and separately appended branches, and produces the ordered 8,192-item sequence with sum
+100,691,968 under defaults. These are new public witnesses, including a returned mapper over a
+removed producer's private helper and a transactional HTTP mapped wire/data sequence. Independent
+flat-Vec histories, fixed node/handle charges, and wrong-tail/restored-prefix-copy faults establish
+the shared carrier claim separately from VM/reference agreement. Full and exact-target completion
+dispositions are recorded in the [campaign evidence](evidence/202609091322-persistent-lists.json).
 
 Normalized production and reference execution support pure commands and graph tests. Public `run`
 deliberately rejects non-command runners and effectful command entry points. Public `serve` and

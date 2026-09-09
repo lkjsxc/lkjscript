@@ -10,13 +10,16 @@ mod data_codec_reference;
 mod deployment;
 mod http;
 mod http_client;
+mod list;
 mod object;
 mod password;
 mod prepare;
+mod prepared_types;
 pub(crate) mod pure_tail_probe;
 mod queue;
 mod reference;
 mod reference_schema;
+mod reference_types;
 pub(crate) use reference::{
     NormalizedReferenceBinding, NormalizedReferenceOwnerRead, NormalizedReferenceRead,
     NormalizedReferenceReadWork,

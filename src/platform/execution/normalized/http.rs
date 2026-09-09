@@ -872,14 +872,12 @@ fn request_value(
     let query_parameters = query_parameters
         .into_iter()
         .map(|(name, values)| {
-            (
+            Ok((
                 NormalizedMapKey::Text(name),
-                NormalizedValue::List(Arc::new(
-                    values.into_iter().map(NormalizedValue::text).collect(),
-                )),
-            )
+                NormalizedValue::list(values.into_iter().map(NormalizedValue::text).collect())?,
+            ))
         })
-        .collect();
+        .collect::<Result<_, ExecutionError>>()?;
     let headers = headers_value(request.headers)?;
     structural([
         ("body", body),
@@ -904,7 +902,7 @@ fn headers_value(headers: Vec<HttpHeader>) -> Result<NormalizedValue, ExecutionE
             ])
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NormalizedValue::List(Arc::new(headers)))
+    NormalizedValue::list(headers)
 }
 
 fn structural<const N: usize>(

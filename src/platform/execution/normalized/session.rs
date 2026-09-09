@@ -1974,7 +1974,7 @@ fn headers_value(headers: Vec<HttpHeader>) -> Result<NormalizedValue, ExecutionE
             ])
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NormalizedValue::List(Arc::new(values)))
+    NormalizedValue::list(values)
 }
 
 fn decode_headers(

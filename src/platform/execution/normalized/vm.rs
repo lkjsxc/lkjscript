@@ -106,6 +106,15 @@ impl NormalizedHost for CoreNormalizedHost {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
+        if implementation.as_str() == "core.list.append" {
+            let [NormalizedValue::List(list), item]: [NormalizedValue; 2] = arguments
+                .try_into()
+                .map_err(|_| type_error("raw append has foreign arity"))?
+            else {
+                return Err(type_error("raw append requires a list"));
+            };
+            return list.raw_append(item, control).map(NormalizedValue::List);
+        }
         call_core_intrinsic(
             program,
             function,
@@ -124,6 +133,14 @@ pub struct NormalizedVm<'a> {
 }
 
 impl<'a> NormalizedVm<'a> {
+    pub(super) fn observing_checked(
+        mut self,
+        observer: &'a std::sync::Mutex<Option<NormalizedRunObservation>>,
+    ) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
     pub fn new(program: &'a NormalizedProgram, policy: NormalizedRunPolicy) -> Self {
         Self {
             program,
@@ -320,6 +337,7 @@ impl<'a> NormalizedVm<'a> {
         let arguments = super::value::RawArguments::new(arguments);
         validate_policy(self.policy)?;
         control.check()?;
+        let list_work = super::list::Work::current();
         let mut machine = Machine {
             program: self.program,
             policy: self.policy,
@@ -414,6 +432,7 @@ impl<'a> NormalizedVm<'a> {
         machine.observation.live_operands_after = machine.stack.len();
         machine.observation.live_transactions_after = machine.transactions.len();
         machine.observation.live_handles_after = resources.live_resources();
+        machine.observation.value_work.lists = list_work.since();
         if let Some(observer) = self.observer {
             let mut observed = observer.lock().map_err(|_| {
                 runtime_error(
@@ -712,8 +731,7 @@ impl Machine<'_> {
                 NormalizedInstruction::List { items } => {
                     let items = self.pop_many(items as usize)?;
                     self.charge_collection(items.len(), std::mem::size_of::<NormalizedValue>())?;
-                    let value =
-                        CheckedValue::list(self.program, items, &mut self.observation.value_work)?;
+                    let value = self.construct_list(items)?;
                     self.push(value)?;
                 }
                 NormalizedInstruction::Map { entries } => {
@@ -2171,18 +2189,6 @@ fn call_core_intrinsic(
                 .cloned()
                 .ok_or_else(|| trap_error("normalized_list_index", "list index is out of bounds"))
         }
-        "core.list.append" => {
-            let [NormalizedValue::List(values), value] = arguments.as_slice() else {
-                return Err(type_error("list append received foreign values"));
-            };
-            let capacity = values.len().checked_add(1).ok_or_else(|| {
-                resource_error("normalized_list_length", "list length overflowed")
-            })?;
-            let mut output = Vec::with_capacity(capacity);
-            output.extend(values.iter().cloned());
-            output.push(value.clone());
-            Ok(NormalizedValue::List(Arc::new(output)))
-        }
         "core.option.some" => {
             let [value] = arguments.as_slice() else {
                 return Err(type_error("option constructor received a foreign arity"));
@@ -2351,7 +2357,7 @@ fn normalized_map_intrinsic(
                 normalized_structural_record([("key", key.to_value()), ("value", value.clone())])
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(NormalizedValue::List(Arc::new(entries)));
+        return NormalizedValue::list(entries);
     }
     let key = arguments
         .get(1)
@@ -2468,7 +2474,19 @@ pub(crate) fn normalized_equal(
                 value: right,
             },
         ) => Ok(normalized_equal(left, right)? && left_case == right_case),
-        (NormalizedValue::List(left), NormalizedValue::List(right)) => equal_sequences(left, right),
+        (NormalizedValue::List(left), NormalizedValue::List(right)) => {
+            let mut equal = left.len() == right.len();
+            let mut left = left.iter();
+            let mut right = right.iter();
+            loop {
+                let pair = (left.next(), right.next());
+                if pair == (None, None) {
+                    break;
+                }
+                equal &= equal_optional(pair.0, pair.1)?;
+            }
+            Ok(equal)
+        }
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
             let mut equal = left.len() == right.len();
             for (key, left) in left.iter() {

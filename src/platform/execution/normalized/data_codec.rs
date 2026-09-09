@@ -303,7 +303,13 @@ fn decode_value(
             for _ in 0..count {
                 output.push(decode_value(program, *item, cursor, state, depth + 1)?);
             }
-            Ok(NormalizedValue::List(Arc::new(output)))
+            Ok(NormalizedValue::list(output).map_err(|error| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "normalized_list_storage",
+                    error.message,
+                )
+            })?)
         }
         TypeForm::Map { key, value } => {
             let count = cursor.count("normalized_data_map_count")?;
