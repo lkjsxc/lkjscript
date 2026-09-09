@@ -1,0 +1,373 @@
+{
+  "schema": "lkjscript-composable-core-release-evidence-1",
+  "campaign": "202609091945-composable-core-release",
+  "status": "blocked/incomplete at startup",
+  "record_created_utc": "2026-09-09T11:05:35Z",
+  "raw_evidence_root": ".artifacts/campaign/202609091945/",
+  "mandate": {
+    "archive": "docs/campaigns/202609091945.md",
+    "initial_bytes": 26641,
+    "initial_sha256": "0b6abfa327ebd16666e9b7e0593f07fb1a1f9b31cafaec81cd452efcb656aac9",
+    "initial_body_preserved": true,
+    "inspected_baseline_commit": "20aa43cef67bcbbfbfbe86ed44a973389bdb8fef",
+    "inspected_baseline_tree": "5bcb1d953f28db6ea99e1d35ab63734bd235e6ec",
+    "selected_initial_tag": "v0.1.27",
+    "selected_target": "x86_64-unknown-linux-musl"
+  },
+  "start": {
+    "branch": "main",
+    "commit": "8db09c26f623e2c64a0252a6a16ccf5465d2bb33",
+    "tree": "5597fa9c47d875248c7c61567cdf1a28d28cc4ed",
+    "index": "clean",
+    "tracked_worktree": "clean",
+    "untracked": [
+      "docs/campaigns/202609091945.md"
+    ],
+    "origin": "https://github.com/lkjsxc/lkjscript",
+    "freshly_fetched_origin_main": "20aa43cef67bcbbfbfbe86ed44a973389bdb8fef",
+    "ahead": 4,
+    "behind": 0,
+    "preserved_commits": [
+      "fd159a8c8fe759f2f0e701ec03783d7b1909af75",
+      "75fb03130f776d5400b2478c80358d4212180bc7",
+      "7fea892466b729a595d6b2bc76908d494ced139b",
+      "8db09c26f623e2c64a0252a6a16ccf5465d2bb33"
+    ],
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb"
+  },
+  "guidance": {
+    "root_bytes": 13499,
+    "root_git_blob": "bb665e96d09b9c63a615cc3ea32e15b3466d18e8",
+    "root_sha256": "895e4a27e1560aaf7f1b13553a4f4c7605caf36021798052a7e016f312c9d3c5",
+    "other_applicable_guidance_found": false,
+    "configured_project_doc_max_bytes": null,
+    "configured_project_doc_fallback_filenames": null,
+    "documented_default_project_doc_max_bytes": 32768,
+    "codex_cli": "0.153.4",
+    "official_loading_source": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+    "official_loading_source_observed_date": "2026-09-09",
+    "application": "Supplied root guidance and mandate applied explicitly; configuration unchanged; no reload inferred."
+  },
+  "blocker": {
+    "kind": "material_semantic_redesign_since_planning_baseline",
+    "authority": "Supplied mandate sections 1, 3, 4 and 6: material semantic redesign requires a bounded blocked record; v0.1.27 is selected only while source remains 0.1.27; preserve later legitimate work and do not silently select another release.",
+    "observed": "The completed capture-safe rank-one abstraction campaign is already committed locally. It implements the alternative explicitly deferred by this release mandate, changes supported graph/compiler/package meaning, migrates both maintained consumers, and selects source 0.1.28.",
+    "release_owner": "tools/lkjscript-dev/src/release/mod.rs::validate_strict_tag requires the tag to equal v plus the exact Cargo.toml product version.",
+    "disposition": "Preserve the completed implementation and stop release implementation/publication at the startup gate. No rewind, downgrade, new tag selection, or format migration.",
+    "smallest_resumption_condition": "Explicitly reconcile this campaign to the existing 0.1.28 / Graph 12 / compiler-unit 7 / package-interface 8 source and authorize its exact release identity (v0.1.28 if freshly confirmed unused), retaining REL-1 through REL-6 and all independent capability, format-rejection, trust and cleanup requirements."
+  },
+  "reconciled_drift": {
+    "predecessor_campaign": "docs/campaigns/202609091625.md",
+    "predecessor_status": "complete at implementation boundary; containing-record proof remains separately identified",
+    "predecessor_lifecycle_sha256": "e89f85bc2e3752e1c24b3b43a5e9cc206f21e609208eb15deabe0d0e3765b0fa",
+    "predecessor_evidence": "docs/evidence/202609091625-capture-safe-generics.json",
+    "predecessor_evidence_sha256": "ea51e4b53775de3d0d248a31148914df75a9ca94e493240c467d5b62a3839774",
+    "decision": "docs/decisions/20260909-capture-safe-rank-one-abstraction.md",
+    "changed_files_since_baseline": 130,
+    "domains": [
+      {
+        "owner": "product source",
+        "baseline": "0.1.27",
+        "observed": "0.1.28"
+      },
+      {
+        "owner": "Graph",
+        "baseline": 11,
+        "observed": 12
+      },
+      {
+        "owner": "compiler unit",
+        "baseline": 6,
+        "observed": 7
+      },
+      {
+        "owner": "package interface",
+        "baseline": 7,
+        "observed": 8
+      },
+      {
+        "owner": "pure-tail receipt",
+        "baseline": 4,
+        "observed": 5
+      },
+      {
+        "owner": "offline-packages receipt",
+        "baseline": 2,
+        "observed": 3
+      }
+    ],
+    "unchanged_domains": {
+      "type_object": 10,
+      "bytecode": 4,
+      "artifact": 16,
+      "package_container": 3,
+      "typed_data": 1
+    },
+    "maintained_consumers": "Existing standard and lkjournal generation/dependency migrations are preserved. No semantic owners, operational data, generated assets or source are changed by this blocked record.",
+    "release_procedure_drift": "The stale source-version prose has already been corrected to unreleased 0.1.28.",
+    "completed_predecessors": [
+      "202609090021",
+      "202609091322",
+      "202609091625"
+    ],
+    "historical_proof_policy": "Accepted as prior implementation dispositions; no historical result is classified as fresh REL proof."
+  },
+  "inspected_inputs": [
+    {
+      "path": "Cargo.toml",
+      "sha256": "40fa5039b06ba2bb0c40a16e134a8b26d614d955145e10fd3e378e426b713261"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "bcf2e7819d63dcd276725525dbd81e796a7bdecb30b799d7306de2ab08743894"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "sha256": "f1adfed25fca89d418637337ee32a6580d06de345c179472acc780e17f291df4"
+    },
+    {
+      "path": "src/platform/kernel/contract.rs",
+      "sha256": "e6d107021d3cd18b2ac06266742968aa07ebf6252b6b9cc93727a24a1760439e"
+    },
+    {
+      "path": "src/platform/compiler/unit.rs",
+      "sha256": "7b73a92f4abea2888e55871acde3e4f1efbf59b1a1c56d3fd7a9ade28d2b0534"
+    },
+    {
+      "path": "src/platform/package_interface.rs",
+      "sha256": "97f7e584d71d1a569d1031511771f1f559022dcfdde04036d9dff12fc592a15d"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "6cfeb7aa1a4bfa3ed33100de828831586d22f9f4266ac11183584fbb5474906c"
+    },
+    {
+      "path": "tools/lkjscript-dev/src/release/admission.rs",
+      "sha256": "1ac67a2fe2530a13792a7b05087f21482465f03fed400d5d40976e2f7a14052a"
+    },
+    {
+      "path": "tools/lkjscript-dev/src/release/verifier.rs",
+      "sha256": "43b0c7993a568056a15f210f3aa30caf63c5452227fa3e11a4ea2c655d083a8f"
+    },
+    {
+      "path": "tools/lkjscript-dev/src/release/mod.rs",
+      "sha256": "01d6868054163721a723ee61dba2117d08ea80fce15bd2b3aea62587ad0e7834"
+    }
+  ],
+  "release_gap": {
+    "workflow_admission_predicate_line": 321,
+    "workflow_requires_oracles": 4,
+    "typed_target_oracles": [
+      "distributed_http",
+      "outbound_http",
+      "offline_packages",
+      "pure_tail",
+      "stateful_http",
+      "service_acceptance"
+    ],
+    "handoff_schema_observed": 3,
+    "handoff_roles_observed": [
+      "release-verify",
+      "distributed-http",
+      "outbound-http",
+      "stateful-http"
+    ],
+    "handoff_schema_required": 4,
+    "handoff_roles_required": [
+      "release-verify",
+      "distributed-http",
+      "outbound-http",
+      "offline-packages",
+      "pure-tail",
+      "stateful-http"
+    ],
+    "transferred_operation_implemented": false,
+    "caller_cutover_implemented": false,
+    "observation": "The four-versus-six defect and missing transferred language roles still exist. The later semantic campaign did not deliver or supersede this release outcome."
+  },
+  "defect_reproduction": {
+    "classification": "fresh_passed",
+    "scope": "Fresh execution of the unchanged workflow predicate on preserved historical evidence, solely to reproduce the distribution defect. This is neither fresh target admission nor REL-2.",
+    "input": {
+      "path": ".artifacts/campaign/202609091945/startup/historical-admission-summary.json",
+      "bytes": 763,
+      "sha256": "5e5cb73079540c2c6f1b96ff112e8c91e429664ba2800b8e455d8f4395bc7d38",
+      "status": "passed",
+      "source_commit": "8db09c26f623e2c64a0252a6a16ccf5465d2bb33",
+      "target_triple": "x86_64-unknown-linux-musl",
+      "runtime_linkage": "static-musl",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "candidate_sha256": "493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f",
+      "userlands": 2,
+      "oracles": 6,
+      "cleanup_complete": true,
+      "historical_receipt_bytes": 74574,
+      "historical_receipt_sha256": "98b2ecf95fd28ff7aa69395d1d5a52283410a6b885832ec8648bc5c218b5691b",
+      "historical_receipt_digest": "verification_0c1ad6b3074890cd2c84482e207cabd4881c7b9a32caf0fcf849547448c644fa"
+    },
+    "command": "jq -e --arg commit 8db09c26f623e2c64a0252a6a16ccf5465d2bb33 --arg target x86_64-unknown-linux-musl --arg policy 29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152 --arg candidate_sha 493d2542f3ef3ac8cc3d07c3ce0c2babc8fca6ae0a954cab5cea609c5ed07e6f '.status == \"passed\" and .source_commit == $commit and .target_triple == $target and .runtime_linkage == \"static-musl\" and .target_policy_sha256 == $policy and .candidate_sha256 == $candidate_sha and .userlands == 2 and .oracles == 4 and .cleanup_complete == true' .artifacts/campaign/202609091945/startup/historical-admission-summary.json",
+    "actual_exit_code": 1,
+    "expected_exit_code": 1,
+    "stdout": "false\n",
+    "stdout_sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+    "production_fault_or_repair_applied": false,
+    "interpretation": "Every predicate input except the obsolete oracle count matches. The full historical receipt's bytes and SHA-256 match its summary, and inspection finds all six named passed/clean results. Its prior execution has not been rerun or readmitted."
+  },
+  "external_state": {
+    "observed_utc": "2026-09-09T11:01:58Z",
+    "access": "Existing authenticated read-only gh metadata calls and git fetch; no public candidate download or attestation validation performed.",
+    "repository": "lkjsxc/lkjscript",
+    "default_branch": "main",
+    "admin_read": true,
+    "immutable_releases": {
+      "enabled": true,
+      "enforced_by_owner": false
+    },
+    "administrator_variable": {
+      "name": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+      "prior_value": "fd6e87acf987d1d4722845e69d2108de4705ed49",
+      "selected_value": null,
+      "observed_final_value": "fd6e87acf987d1d4722845e69d2108de4705ed49",
+      "updated_at": "2026-09-04T10:14:38Z",
+      "writes": 0,
+      "disposition": "Retain the v0.1.21 binding. No campaign value was installed, so restoration does not apply."
+    },
+    "matching_v0_1_2_tags": [
+      "v0.1.2",
+      "v0.1.21"
+    ],
+    "v0_1_27_tag_absent": true,
+    "v0_1_27_release_http_status": 404,
+    "active_run_counts": {
+      "queued": 0,
+      "in_progress": 0,
+      "waiting": 0,
+      "requested": 0,
+      "pending": 0
+    },
+    "latest_release": {
+      "id": 382657212,
+      "tag": "v0.1.21",
+      "tag_object": "fd6e87acf987d1d4722845e69d2108de4705ed49",
+      "immutable": true,
+      "draft": false,
+      "prerelease": false,
+      "published_at": "2026-09-04T10:56:45Z",
+      "assets": [
+        {
+          "id": 544201234,
+          "name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+          "bytes": 8293246,
+          "digest": "sha256:a2b36ab0f856b75b5686ddbc42433a2bbd8ae98e8b5d52675825bd33721fea32"
+        },
+        {
+          "id": 544201247,
+          "name": "SHA256SUMS",
+          "bytes": 109,
+          "digest": "sha256:aee7da6f5e7beb79632aea8947413c9e53ceeb0a654bf407cbeebe0ef308755e"
+        }
+      ]
+    },
+    "last_release_run": {
+      "id": 33862293249,
+      "attempt": 1,
+      "event": "push",
+      "source_commit": "6380117363ca2c69d4bf84e512a57d03ce9ea74e",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "actions_taken": [
+      "read-only git fetch origin --prune",
+      "read-only authenticated GitHub repository, release, tag, run, immutability and named-variable queries"
+    ],
+    "actions_not_taken": [
+      "push",
+      "workflow dispatch or rerun",
+      "tag creation or push",
+      "publication or asset mutation",
+      "settings or variable write",
+      "deployment",
+      "operational-data mutation",
+      "issue or PR write"
+    ]
+  },
+  "environment": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "installed_targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ],
+    "shell": "zsh",
+    "cargo_selection": "Existing /home/coder/.cargo/bin selected per command; no host or global configuration change.",
+    "cgroup_memory_max_bytes": 12884901888,
+    "cgroup_swap_max_bytes": 4294967296,
+    "approximate_free_workspace_disk_gib": 191,
+    "running_product_processes_observed": 0,
+    "running_containers_observed": 0,
+    "resource_failure": false,
+    "limitations": "Resource observations are not requirements. No release build or performance workload was attempted."
+  },
+  "acceptance": [
+    {
+      "id": "REL-1",
+      "classification": "not_run",
+      "disposition": "Blocked before release-source C selection; no fresh full or exact-target candidate proof for this campaign."
+    },
+    {
+      "id": "REL-2",
+      "classification": "not_run",
+      "disposition": "No transferred orchestration implementation, five-owner rehearsal or omission/candidate/verifier/cleanup fault matrix. The count-defect reproduction is narrower and is not REL-2."
+    },
+    {
+      "id": "REL-3",
+      "classification": "not_run",
+      "disposition": "No source push or hosted dry-run dispatch."
+    },
+    {
+      "id": "REL-4",
+      "classification": "not_run",
+      "disposition": "No release tag selected or created, no variable write, no tag run or publication. Read-only startup observations do not satisfy publication acceptance."
+    },
+    {
+      "id": "REL-5",
+      "classification": "not_run",
+      "disposition": "No exact/latest candidate downloads, transferred language/HTTP runs or independent comparison."
+    },
+    {
+      "id": "REL-6",
+      "classification": "not_run",
+      "disposition": "Bounded startup/blocked evidence retained here; mandatory release closure remains incomplete because REL-1 through REL-5 did not run."
+    }
+  ],
+  "record_verification": {
+    "policy_owner": "tools/lkjscript-dev/src/check/snapshot.rs::changed_profile",
+    "changed_paths": [
+      "docs/campaigns/202609091945.md",
+      "docs/evidence/202609091945-composable-core-release.json"
+    ],
+    "selected_gates": [
+      "diff_check",
+      "rust_only_tooling"
+    ],
+    "required_command": "cargo run --locked -p lkjscript-dev -- check changed --fresh --machine",
+    "status_at_record_assembly": "not_run",
+    "containing_record_result": "Report the actual final commit/tree, exact check receipt and dispositions out of band after execution.",
+    "full_profile": "not_run; no release completion is claimed, and the blocked record changes only documentation inputs. Fresh full and exact-target admission remain mandatory on resumption."
+  },
+  "closure": {
+    "release_source_C": null,
+    "post_publication_reporting_R": null,
+    "tag_object": null,
+    "release_run": null,
+    "release_id": null,
+    "candidate": null,
+    "verifier": null,
+    "local_record_commit": "Reported out of band; it is neither C nor post-publication R.",
+    "preserved": "All four pre-existing local commits, historical stash, ignored historical evidence, unknown projects, maintained semantic assets and applications/lkjournal/state/data.",
+    "owned_resources": "Only the bounded campaign evidence directory was created. No worktree, product service, container, port or application/data root was created.",
+    "cleanup": "No running campaign resource requires cleanup. Raw audit evidence is intentionally retained.",
+    "capability_gain_from_public_binary": "None in this campaign; public latest remains v0.1.21.",
+    "deviations": "No implementation or semantic scope deviation. Explicit startup stopping rule applied to observed material drift."
+  }
+}
