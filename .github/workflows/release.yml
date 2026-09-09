@@ -237,7 +237,7 @@ jobs:
           set -euo pipefail
           summary="$RUNNER_TEMP/full-verification-summary.json"
           set +e
-          cargo run --locked -p lkjscript-dev -- check full --machine | tee "$summary"
+          cargo run --release --locked -p lkjscript-dev -- check full --machine | tee "$summary"
           check_status=${PIPESTATUS[0]}
           set -e
           test "$(wc -l < "$summary")" -eq 1

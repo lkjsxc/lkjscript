@@ -2081,6 +2081,9 @@ mod tests {
         assert!(workflow.contains("cancel-in-progress: false"));
         assert!(!workflow.contains(".oracles =="));
         assert!(build.contains("release admission-verify"));
+        assert!(
+            build.contains("cargo run --release --locked -p lkjscript-dev -- check full --machine")
+        );
         assert!(build.contains("/acceptance/offline-packages/*"));
         assert!(build.contains("/acceptance/pure-tail/*"));
         let evidence_output = build

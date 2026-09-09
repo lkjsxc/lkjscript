@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 
 const IDENTITY_SCHEMA: &str = "lkjscript-application-verifier-handoff";
 const IDENTITY_SCHEMA_VERSION: u32 = 4;
+const MAXIMUM_EXECUTABLE_BYTES: u64 = 384 * 1024 * 1024;
 pub(super) const EXECUTABLE_NAME: &str = "lkjscript-dev";
 pub(super) const IDENTITY_NAME: &str = "verifier-identity.json";
 
@@ -64,6 +65,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     validate_tag(&options.tag)?;
     super::validate_git_sha(&options.commit, "verifier handoff commit")?;
     super::require_absolute_regular_executable(&options.executable, "host verifier executable")?;
+    validate_executable_bytes(fs::metadata(&options.executable)?.len())?;
     require_absent_output(&options.output)?;
     let parent = options
         .output
@@ -211,11 +213,12 @@ pub(super) fn validate_handoff(
 fn observe_executable(path: &Path) -> Result<FileIdentity, DevError> {
     let metadata = archive::ensure_regular(path, "verifier executable")?;
     let mode = metadata.permissions().mode() & 0o7777;
-    if mode != 0o755 || metadata.len() == 0 || metadata.len() > 384 * 1024 * 1024 {
+    if mode != 0o755 {
         return Err(DevError::corrupt(format!(
             "verifier executable mode is {mode:o}, expected 755"
         )));
     }
+    validate_executable_bytes(metadata.len())?;
     let (sha256, byte_length) = archive::sha256_file(path)?;
     Ok(FileIdentity {
         name: EXECUTABLE_NAME.to_owned(),
@@ -223,6 +226,15 @@ fn observe_executable(path: &Path) -> Result<FileIdentity, DevError> {
         sha256: sha256.as_str().to_owned(),
         mode,
     })
+}
+
+fn validate_executable_bytes(bytes: u64) -> Result<(), DevError> {
+    if bytes == 0 || bytes > MAXIMUM_EXECUTABLE_BYTES {
+        return Err(DevError::corrupt(format!(
+            "verifier executable byte length {bytes} is outside 1..={MAXIMUM_EXECUTABLE_BYTES}"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_inventory(directory: &Path) -> Result<(), DevError> {
@@ -381,6 +393,32 @@ pub(super) fn validate_tag(tag: &str) -> Result<(), DevError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_verifier_rejects_before_copying_or_publishing_a_handoff() {
+        let root = tempfile::tempdir().expect("owned oversized fixture");
+        let executable = root.path().join("oversized");
+        let file = fs::File::create_new(&executable).expect("sparse fixture");
+        file.set_len(384 * 1024 * 1024 + 1)
+            .expect("bounded sparse length");
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).expect("mode");
+        let output = root.path().join("handoff");
+        let error = prepare(PrepareOptions {
+            executable,
+            output: output.clone(),
+            tag: "v0.1.8".to_owned(),
+            commit: "0".repeat(40),
+        })
+        .expect_err("oversized verifier");
+        assert!(error.to_string().contains("byte length"));
+        assert!(!output.exists());
+        assert_eq!(
+            fs::read_dir(root.path()).expect("owned inventory").count(),
+            1
+        );
+        assert!(validate_executable_bytes(0).is_err());
+        assert!(validate_executable_bytes(384 * 1024 * 1024).is_ok());
+    }
 
     #[test]
     fn verifier_identity_schema_roles_and_tag_are_closed() {

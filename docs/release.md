@@ -123,7 +123,7 @@ After every implementation, workflow, normative, generated, target, or release-p
 committed, run one fresh source profile and rebuild/re-admit the exact candidate from that commit:
 
 ```sh
-cargo run --locked -p lkjscript-dev -- check full --fresh --machine
+cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
 target/release/lkjscript-dev release build \
   --output /absolute/absent/path/lkjscript \
   --receipt /absolute/absent/path/build-receipt.json
@@ -132,6 +132,10 @@ target/release/lkjscript-dev release admit \
   --build-receipt /absolute/path/build-receipt.json \
   --evidence-root /absolute/absent/path/target-admission
 ```
+
+The full-check driver uses Cargo's release profile so its frozen executable fits the existing
+verifier byte bound. This does not change the full profile's selected gates, their Cargo/test
+options, freshness policy, or required outcomes.
 
 Prepare the release with both receipts:
 
