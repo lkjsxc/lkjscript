@@ -63,6 +63,13 @@ downloaded binary, and running service are different states. A source/public ver
 an optional unperformed push, or unavailable ignored historical logs alone does not create an
 active release obligation. Give actual irreversible external work an explicit safe disposition.
 
+Apply the supplied mandate's bounded adaptation contract. Distinguish fixed outcomes and safety
+invariants from adjustable implementation, generation, filename, and pre-publication version details.
+Incorporate legitimate progress with an appended reconciliation and renewed affected proof; a
+semantic addition is not harmless merely because it is a superset. Verify and close an already
+satisfied outcome rather than reimplementing it. A real conflict stops the dependent unsafe action,
+not independent safe obligations. Adaptation cannot lower acceptance or silently change the objective.
+
 Preserve unrelated changes, stashes, unknown projects, and user data. Stage explicit paths and
 inspect the staged diff; do not use broad `git add .` or `git add -A`. Make coherent scoped commits.
 Avoid unrelated formatting, dependency changes, and generated-file churn. Do not commit secrets,
@@ -171,6 +178,13 @@ input identities in the established evidence owner; ignored paths alone are insu
 session. Avoid self-referential evidence hashes. A tracked report may bind independently identifiable
 implementation inputs, with final containing-commit and receipt identities reported out of band.
 Do not label unexecuted final checks passed.
+
+When the current mandate selects a public release, its completion includes publication and the
+distribution owner's required independent exact-version and latest-download acceptance. Preparation,
+a pushed tag, a dispatched workflow, and published-but-unverified bytes are distinct incomplete
+states. Unavailable external authority blocks the affected action and claim, not useful safe local
+work. Report implementation, distribution, and deployment outcomes separately; a release grant is
+not a deployment grant. Release selection and concrete permissions belong in the current mandate.
 
 Completion requires the fixed outcome, full public path, affected-consumer migration and predecessor
 removal, accurate current/generated documentation, required passing proof, and accounted worktree
