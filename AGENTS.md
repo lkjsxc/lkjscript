@@ -153,7 +153,7 @@ the current authorization.
 
 Use `tools/lkjscript-dev/src/check/` and `docs/spec/verification.md` for gate selection, dependency
 closure, fingerprints, reuse, and receipts. The verified workspace entry is
-`cargo run --locked -p lkjscript-dev -- check`; its profiles include `focused`, `changed`, `product`,
+`cargo run --release --locked -p lkjscript-dev -- check`; its profiles include `focused`, `changed`, `product`,
 `service`, `full`, and `self-test`. Discover their arguments from the owner. Iterate with the
 narrowest useful checks. After relevant inputs stabilize, run the applicable authoritative full
 profile freshly, plus independently required exact-candidate, target, or service admission. A host
