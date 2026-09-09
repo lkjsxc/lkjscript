@@ -5056,6 +5056,7 @@ fn materialize_function_definition(
                 ("parent", function_owner.to_string()),
                 ("index", index.to_string()),
                 ("name", record.name.as_str().to_owned()),
+                ("constraint", record.constraints.name().to_owned()),
             ],
         )?;
     }

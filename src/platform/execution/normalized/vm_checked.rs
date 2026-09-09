@@ -117,6 +117,19 @@ impl Value {
                 "function constructor requires exact resolved type arguments",
             ));
         }
+        if target
+            .type_parameter_constraints
+            .iter()
+            .zip(type_arguments.iter())
+            .any(|(constraint, ty)| {
+                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    && !program.capture_safe_types.contains(ty)
+            })
+        {
+            return Err(admission_error(
+                "function constructor requires capture-safe type arguments",
+            ));
+        }
         let pure = target.pure_graph
             || matches!(
                 target.body,
@@ -640,7 +653,7 @@ impl Admission<'_> {
         })
     }
 
-    fn require_capture_type(
+    pub(super) fn require_capture_type(
         &mut self,
         ty: TypeObjectDigest,
         bindings: &Bindings,
@@ -1010,6 +1023,21 @@ impl Admission<'_> {
                         return Err(admission_error(
                             "raw callback has a foreign or unresolved type argument; supply exact canonical types",
                         ));
+                    }
+                    for (constraint, ty) in callable
+                        .type_parameter_constraints
+                        .iter()
+                        .zip(type_arguments.iter())
+                    {
+                        if *constraint
+                            == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                        {
+                            self.require_capture_type(
+                                *ty,
+                                &BTreeMap::new(),
+                                &mut std::collections::BTreeSet::new(),
+                            )?;
+                        }
                     }
                     self.binding_storage(type_arguments.len())?;
                     let substitutions = Arc::new(

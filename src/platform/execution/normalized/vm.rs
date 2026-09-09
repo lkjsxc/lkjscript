@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 11 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 12 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -363,7 +363,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph11_dense_bytecode_6",
+                production_tier: "graph12_dense_bytecode_7",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -378,7 +378,17 @@ impl<'a> NormalizedVm<'a> {
             },
         };
         let result = (|| {
-            machine.charge_allocation(self.program.affine_variants.len() as u64)?;
+            let proof_bytes = self
+                .program
+                .capture_proof_bytes
+                .checked_add(self.program.affine_variants.len())
+                .ok_or_else(|| {
+                    resource_error(
+                        "normalized_allocation",
+                        "prepared proof storage accounting overflowed",
+                    )
+                })?;
+            machine.charge_allocation(proof_bytes as u64)?;
             let port_arguments = match entry {
                 NormalizedEntryPoint::Function(function) => {
                     let arguments = machine.admit_arguments(function, &[], arguments.into_vec())?;
@@ -1076,6 +1086,19 @@ impl Machine<'_> {
         }
         if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
+        }
+        if function
+            .type_parameter_constraints
+            .iter()
+            .zip(type_arguments.iter())
+            .any(|(constraint, ty)| {
+                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    && !self.program.capture_safe_types.contains(ty)
+            })
+        {
+            return Err(type_error(
+                "function type arguments do not satisfy capture-safe constraints",
+            ));
         }
         let type_arguments_by_parameter = function
             .type_parameters

@@ -21,12 +21,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_8cd2a310d5ba4bfe3a42be15d4e201a3dae52b71143c1655dce4830120c3bf09`;
-- package revision: `package_revision_7b9cd7fae489906bcdb9bf12ffa2b8dd80fb346fe9f980ddf2c9037907918b24`;
-- package transport: `package_transport_1b4880be8f7173b7cf39874bb62c1fa1b5892d21551c9f6888815042db4c7914`;
-- artifact manifest: `artifact_manifest_b90cbe36b91a23e1140d73537a897b63d3099ca7a19b4ee4ed2af38053feb7c8`;
-- artifact bundle: `artifact_bundle_bd8eded19156913baa1804c51684874f1b5a77495139195f152308a9dee79cfc`;
-- 688 live semantic owners, 122 compiler units, and 28 graph tests.
+- semantic revision: `rev_06b6477bb1564352ddf42a0567371ed383d3d58725135d5edaebd54fd50bc5ef`;
+- package revision: `package_revision_12e7d9a0ba281bd8e438acf80553fe405d05d5db3ca0c4e4fbb564cf8197e94b`;
+- package transport: `package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1`;
+- artifact manifest: `artifact_manifest_45939572d0cdf759a10314cbd0f4cb006e012fa4f88cee5be084119cbd508d73`;
+- artifact bundle: `artifact_bundle_fb51f3f7ead2b7fce5f889c5280d75f0b2ae29b22ab2d1c727fe6afc12cf4e3f`;
+- 723 live semantic owners, 126 compiler units, and 30 graph tests.
 
 Inspect and reproduce it from the repository root:
 
@@ -67,7 +67,7 @@ existing list types, encodings, callback eligibility, and default execution limi
 uses `bind` over its private generic graph helper. Four maintained graph tests fix composition
 order and heterogeneous `I64 -> Bool -> Text` instantiation. Runtime bound prefixes may capture
 other checked pure callables or recursively safe immutable data; bare unconstrained stored type
-parameters, secrets, streams, and resources are rejected. Graph 11 changes code meaning encoding;
+parameters, secrets, streams, and resources are rejected. Graph 12 changes code meaning encoding;
 unchanged TypeObject 10 bytes and typed-data layout identities remain current.
 
 The `HttpClient` interface has exactly one idempotent, possibly externally visible `get` operation.
@@ -85,3 +85,9 @@ protocol are specified in
 executable's embedded package transport and artifact bundle bytes. Product verification regenerates
 these outputs from the typed meaning graph and compares both embedded exports byte for byte. These
 files, artifact paths, and package transport are not another editable program authority.
+
+`function-constant<Value: capture-safe, Argument>(value: Value) -> Function(Argument)->Value`
+binds its runtime value into the private ordinary `function-constant-first<Value,Argument>` helper.
+Argument and both helper parameters stay unconstrained. Runtime Text, lists and safe nominal data
+can be retained; an empty `List<Secret>` still rejects. Two maintained tests fix scalar behavior
+and nested `List<Text>` results through standard map. No constant-function intrinsic is involved.

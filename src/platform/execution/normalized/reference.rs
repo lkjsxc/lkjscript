@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 11 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 12 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -240,6 +240,7 @@ impl NormalizedValueSchema for BoundReferenceSchema {
 
 pub struct ReferenceSignature {
     type_parameters: Vec<TypeParameterId>,
+    type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     parameters: Vec<ParameterRecord>,
     result: TypeObjectDigest,
     pure: bool,
@@ -376,7 +377,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 11 authority",
+                        "selected target is absent from canonical Graph 12 authority",
                     ));
                 }
             };
@@ -406,7 +407,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 11 authority",
+                        "selected target port is absent from canonical Graph 12 authority",
                     ));
                 }
             };
@@ -514,7 +515,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph11_reference_records_5",
+                production_tier: "graph12_reference_records_6",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -527,12 +528,26 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 live_handles_after: 0,
             },
         };
-        let operation = state
-            .charge_allocation(
-                (state.schema.affine_variants.len() + std::mem::size_of::<BoundReferenceSchema>())
-                    as u64,
-            )
-            .and_then(|()| operation(&mut state));
+        let operation = (|| {
+            state.control.check()?;
+            let bytes = state
+                .schema
+                .capture_safe_types
+                .len()
+                .checked_mul(
+                    std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>(),
+                )
+                .and_then(|bytes| bytes.checked_add(state.schema.affine_variants.len()))
+                .and_then(|bytes| bytes.checked_add(std::mem::size_of::<BoundReferenceSchema>()))
+                .ok_or_else(|| {
+                    reference_resource(
+                        "normalized_reference_allocation",
+                        "canonical proof storage accounting overflowed",
+                    )
+                })?;
+            state.charge_allocation(bytes as u64)?;
+            operation(&mut state)
+        })();
         let result = match operation {
             Ok(value) if state.transactions.is_empty() => Ok(value),
             Ok(_) => {
@@ -727,6 +742,21 @@ impl ReferenceState<'_> {
             }
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
+                    let constraints =
+                        self.type_parameter_constraints(reference, &function.type_parameters)?;
+                    if constraints
+                        .iter()
+                        .zip(type_arguments)
+                        .any(|(constraint, ty)| {
+                            *constraint
+                                == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                                && !self.schema.capture_safe_types.contains(ty)
+                        })
+                    {
+                        return Err(reference_type_error(
+                            "canonical callable type arguments fail capture-safe constraints",
+                        ));
+                    }
                     let parameters = self.parameters(reference.package, &function.parameters)?;
                     self.validate_call_resources(&parameters, &arguments)?;
                     if type_arguments.len() != function.type_parameters.len() {
@@ -799,6 +829,8 @@ impl ReferenceState<'_> {
                         ))
                     } else {
                         let signature = ReferenceSignature {
+                            type_parameter_constraints: self
+                                .type_parameter_constraints(reference, &external.type_parameters)?,
                             type_parameters: external.type_parameters,
                             parameters,
                             result: external.result,
@@ -1559,12 +1591,41 @@ impl ReferenceState<'_> {
                 ));
             }
         };
+        let type_parameter_constraints =
+            self.type_parameter_constraints(reference, &type_parameters)?;
         Ok(ReferenceSignature {
             type_parameters,
+            type_parameter_constraints,
             parameters: self.parameters(reference.package, &parameters)?,
             result,
             pure,
         })
+    }
+
+    fn type_parameter_constraints(
+        &mut self,
+        reference: DeclarationReference,
+        parameters: &[TypeParameterId],
+    ) -> Result<Vec<crate::platform::kernel::TypeParameterConstraints>, ExecutionError> {
+        self.charge_allocation(parameters.len() as u64)?;
+        parameters
+            .iter()
+            .map(|parameter| {
+                self.control.check()?;
+                match self
+                    .owner_in_package(reference.package, OwnerKey::TypeParameter(*parameter))?
+                {
+                    Some(OwnerRecord::TypeParameter(record))
+                        if record.declaration == reference.declaration =>
+                    {
+                        Ok(record.constraints)
+                    }
+                    _ => Err(reference_type_error(
+                        "canonical type parameter has no exact declaration binding",
+                    )),
+                }
+            })
+            .collect()
     }
 
     fn parameters(

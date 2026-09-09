@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR12";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR13";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -562,6 +562,14 @@ impl Writer {
                 self.declaration_selector(declaration, definitions)?;
                 self.type_parameter(parameter, definitions)
             }
+            AuthoredChange::SetTypeParameterConstraint {
+                parameter,
+                constraints,
+            } => {
+                self.tag(39)?;
+                self.owner_selector(parameter, definitions)?;
+                self.tag(constraints.tag())
+            }
             AuthoredChange::AddParameter { parent, parameter } => {
                 self.tag(17)?;
                 self.parameter_parent_selector(parent, definitions)?;
@@ -852,7 +860,8 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
-        self.name(&value.name)
+        self.name(&value.name)?;
+        self.tag(value.constraints.tag())
     }
 
     fn parameter(
@@ -1580,7 +1589,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "c6fd6d92d7179fcb42301f0ec9a8a4a10e831fcdca3c86f9e2f14928a8041c62"
+            "fef62cd4c91d2e89e7eb9b38a0375630658a888f2458f8353f0bb5e1d576efeb"
         );
     }
 

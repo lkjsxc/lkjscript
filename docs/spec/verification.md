@@ -551,3 +551,16 @@ unavailable, or failed evidence cannot be described as passed.
 Security, portability, scale, artifact provenance, provider-token, and monetary claims require
 direct retained evidence. The current verified environment does not imply portability or hostile-
 code isolation.
+
+Capture-safe abstraction extends these same acceptance owners. The public CLI supplies an independent
+constraint matrix and atomic set/clear checks; evaluator fixtures exercise raw generic admission,
+constraint metadata erasure/forgery with recomputed checksums, exact allocation/work limits and
+cancellation during type traversal. The retained-environment N/K fault oracle uses a constrained
+generic factory. `pure-tail` receipt 5 adds a separately authored `configure<Env: capture-safe, Input,
+Output>`, runtime nominal environments, simultaneous results `[8,11,17]` and `[2,0,-4]`, standard
+`function-constant` over runtime Text and nested lists, and the generic configured HTTP mapping path.
+`offline-packages` receipt 3 retains imported constraints and a consumer-owned nominal environment
+passed through a returned private generic helper after producer removal. Receipt readers require these
+cases on both the host and exact local musl candidate. Existing 900-second/1,073,741,824-owned-byte
+pure-tail bounds and sampling policy remain unchanged. Preparation-local constraint proof storage and
+raw type-proof traversal are included in cumulative allocation/work accounting.

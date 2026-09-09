@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 11 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 12 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -534,12 +534,15 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         result: TypeObjectDigest,
         effect: &FunctionEffect,
     ) -> Result<CompiledSignature, Diagnostic> {
+        let mut type_parameter_constraints = Vec::with_capacity(type_parameters.len());
         for type_parameter in type_parameters {
             match self.required_owner(
                 OwnerKey::TypeParameter(*type_parameter),
                 "function signature references a missing type parameter",
             )? {
-                OwnerRecord::TypeParameter(record) if record.declaration == declaration => {}
+                OwnerRecord::TypeParameter(record) if record.declaration == declaration => {
+                    type_parameter_constraints.push(record.constraints);
+                }
                 OwnerRecord::TypeParameter(_) => {
                     return Err(compiler_corrupt(
                         "compiler_unit_type_parameter_parent",
@@ -581,6 +584,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         };
         Ok(CompiledSignature {
             type_parameters: type_parameters.to_vec(),
+            type_parameter_constraints,
             parameters: compiled_parameters,
             result: self.tables.ty(result)?,
             task_requirements,

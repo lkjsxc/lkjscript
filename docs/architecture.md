@@ -544,7 +544,7 @@ signatures are leaves for capture safety, allowing generic composition; a stored
 parameter remains rejected. Runtime environments have neither semantic equality nor external or
 durable encoding.
 
-Graph 11 versions changed owner meaning independently of the current TypeObject 10 representation.
+Graph 12 versions changed owner meaning independently of the current TypeObject 10 representation.
 The type codec's existing magic, digest domains, and bytes remain stable, preserving unchanged
 typed-data layout identity. Maintained standard and application graphs were materialized through
 the accepted repository writer with stable existing owner identities and exact successor dependency
@@ -728,3 +728,13 @@ layer, DNSSEC, private-network mode, or sandbox. Inbound TLS termination, encryp
 storage, hostile-code sandboxing, multi-tenant isolation, artifact signatures, replication,
 distributed consensus, online data compaction, JIT/AOT, custom allocation, and a resident authoring
 daemon are not implemented.
+
+A graph TypeParameter now owns its explicit capture-safe constraint. Constraint edits participate
+in interface summaries and dependent validation; they do not qualify for body-only validation.
+Compiled signatures and transported interfaces retain the same ordered constraints. Production
+preparation reconstructs a disposable safe-type inventory from compiled inputs; canonical reference
+preparation independently eliminates unsafe stored closures from accepted layouts. Both use the
+completed instantiated composite-type closure. Raw invocation and capture still enforce actual
+value provenance, affinity, depth and resource ownership before installation. See the
+[capture-safe decision](decisions/20260909-capture-safe-rank-one-abstraction.md) for contract domains
+and the standard and non-built-in generic factory witnesses.

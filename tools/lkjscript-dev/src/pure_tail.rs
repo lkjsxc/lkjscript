@@ -59,9 +59,11 @@ fn mapping_collection_items(n: u64) -> u64 {
         };
         slots += 32 * (branches + 1);
     }
-    // Raw items plus the factory's 2-slot prefix, its 3-slot rebind, and standard
-    // step's 1-slot prefix whose callable admission traverses the retained 3 slots.
-    n + 2 + 3 + 1 + 3 + slots
+    // Raw input, constructed Env's two fields, configure's two-slot prefix and
+    // its Env admission, then map-step's one-slot prefix and admission of the
+    // retained two-slot configure prefix and its two Env fields. List slots
+    // follow the independent fixed-fanout append schedule above.
+    n + 2 + 2 + 2 + 1 + 2 + 2 + slots
 }
 
 impl ValueWork {
@@ -318,7 +320,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-4".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-5".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -777,6 +779,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "add",
         "multiply",
         "function-compose",
+        "function-constant",
         "subtract",
         "divide",
         "i64-equal",
@@ -804,6 +807,55 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             pure_tail_program::library(&standard.symbols)
         ),
     )?;
+    let before_constraint = authority::observe_graph_authority(&library.path)?;
+    let clear_request = context.output.join("clear-required-constraint.lkjc");
+    fs::write(
+        &clear_request,
+        format!(
+            "request base={}\nset.type-parameter-constraint parameter={} constraint=none\n",
+            library.revision, library.symbols["$Env"]
+        ),
+    )?;
+    let rejected = context.cli(
+        Some(&library.path),
+        &[
+            "change",
+            "plan",
+            "--input-file",
+            &clear_request.display().to_string(),
+        ],
+        false,
+    )?;
+    require(
+        field(&rejected, "diagnostic", "code")? == "kernel_type_bind_capture"
+            && before_constraint == authority::observe_graph_authority(&library.path)?,
+        "removing a required generic capture constraint changed authority or accepted its body",
+    )?;
+    context.receipt.outcomes.insert("capture-safe-constraint-clear".to_owned(), serde_json::json!({"classification":"fresh passed","parameter":library.symbols["$Env"],"code":"kernel_type_bind_capture","authority":before_constraint}));
+    for name in ["$configure", "$configure-helper"] {
+        let definition = context.cli(
+            Some(&library.path),
+            &[
+                "inspect",
+                "owner",
+                "pure_function",
+                &library.symbols[name],
+                "--detail",
+                "definition",
+                "--limit",
+                "1000",
+                "--bytes",
+                "1048576",
+            ],
+            true,
+        )?;
+        require(
+            definition
+                .iter()
+                .any(|record| record.operation == "definition.type-parameter"),
+            "generic factory definition omitted its parameters",
+        )?;
+    }
     let inventory = offline_producer_inventory(&library.path)
         .map_err(|error| DevError::corrupt(error.to_string()))?;
     evidence::publish_json(&context.output.join("producer-inventory.json"), &inventory)?;
@@ -825,6 +877,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     library.transport = field(&records, "package", "transport")?;
     let keep = format!("{}/{}", library.id, library.symbols["$keep"]);
     let factory = format!("{}/{}", library.id, library.symbols["$reducer-factory"]);
+    let configure = format!("{}/{}", library.id, library.symbols["$configure"]);
     let mut consumer = context.new_package("consumer")?;
     context.stage(&consumer, &library)?;
     context.stage(&consumer, &standard)?;
@@ -834,7 +887,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             "{}{}{}",
             dependency(&library),
             dependency(&standard),
-            pure_tail_program::consumer(&standard.symbols, &keep, &factory)
+            pure_tail_program::consumer(&standard.symbols, &keep, &factory, &configure)
         ),
     )?;
     context.cli(
@@ -1008,6 +1061,22 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         r#"{"first":36,"second":-11}"#,
     )?;
     for (target, arguments, expected) in [
+        (
+            "constant-text",
+            "[\"runtime text\",[1,2,4]]",
+            "[\"runtime text\",\"runtime text\",\"runtime text\"]",
+        ),
+        ("constant-text", "[\"runtime text\",[]]", "[]"),
+        (
+            "constant-lists",
+            "[[\"first\",\"second\"],[1,2]]",
+            "[[\"first\",\"second\"],[\"first\",\"second\"]]",
+        ),
+        (
+            "generic-pair",
+            "[{\"scale\":3,\"bias\":5},{\"scale\":-2,\"bias\":4},[1,2,4]]",
+            "{\"again\":[8,11,17],\"first\":[8,11,17],\"second\":[2,0,-4]}",
+        ),
         ("binding-empty", "[]", "9"),
         ("binding-partial", "[]", "9"),
         ("binding-repeated", "[]", "9"),
@@ -1837,7 +1906,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-4"
+        receipt.schema == "lkjscript-pure-tail-acceptance-5"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1869,6 +1938,12 @@ pub(crate) fn read_transferred_receipt(
             "pure-tail command evidence did not pass its specified boundary",
         )?;
     }
+    require(
+        receipt.outcomes["capture-safe-constraint-clear"]["classification"] == "fresh passed"
+            && receipt.outcomes["capture-safe-constraint-clear"]["code"]
+                == "kernel_type_bind_capture",
+        "pure-tail receipt omitted capture constraint authority rejection",
+    )?;
     for expected in [
         "0", "1", "32896", "524800", "8390656", "33558528", "true", "false", "-17", "5", "-5",
     ] {
@@ -1886,6 +1961,18 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     for (target, expected) in [
+        (
+            "constant-text",
+            "[\"runtime text\",\"runtime text\",\"runtime text\"]",
+        ),
+        (
+            "constant-lists",
+            "[[\"first\",\"second\"],[\"first\",\"second\"]]",
+        ),
+        (
+            "generic-pair",
+            "{\"again\":[8,11,17],\"first\":[8,11,17],\"second\":[2,0,-4]}",
+        ),
         ("configured", r#"{"first":36,"second":-11}"#),
         ("binding-empty", "9"),
         ("binding-partial", "9"),

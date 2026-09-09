@@ -261,5 +261,114 @@ pub(super) fn complete(
             closure.body(function.package, body, &bindings, &mut calls)?;
         }
     }
+    let mut visits = closure.visits;
+    schema.capture_safe_types = capture_types(schema, &mut visits)?;
     Ok(())
+}
+
+// Independent greatest fixed point over canonical stored edges. Function signatures have
+// no stored edges. Cycles admitted by canonical validation retain their ordinary meaning.
+fn capture_types(
+    schema: &NormalizedReferenceSchema,
+    visits: &mut usize,
+) -> Result<BTreeSet<TypeObjectDigest>, ExecutionError> {
+    fn tick(visits: &mut usize) -> Result<(), ExecutionError> {
+        *visits = visits
+            .checked_add(1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                ExecutionError::resource(
+                    "reference_constraint_work",
+                    "canonical capture proof exceeded validation work",
+                )
+            })?;
+        Ok(())
+    }
+    let mut safe = BTreeSet::new();
+    for (ty, object) in &schema.types {
+        tick(visits)?;
+        if !matches!(
+            object.form,
+            TypeForm::Secret
+                | TypeForm::Stream { .. }
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::TypeParameter { .. }
+        ) {
+            tick(visits)?;
+            safe.insert(*ty);
+        }
+    }
+    loop {
+        let before = safe.len();
+        for (ty, object) in &schema.types {
+            tick(visits)?;
+            if !safe.contains(ty) {
+                continue;
+            }
+            let mut retained = |child: TypeObjectDigest| -> Result<bool, ExecutionError> {
+                tick(visits)?;
+                if !schema.types.contains_key(&child) {
+                    return Err(failure());
+                }
+                Ok(safe.contains(&child))
+            };
+            let accepted = match &object.form {
+                TypeForm::List { item } | TypeForm::Option { item } => retained(*item)?,
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => retained(*key)? & retained(*value)?,
+                TypeForm::StructuralRecord { fields } => {
+                    let mut accepted = true;
+                    for field in fields {
+                        accepted &= retained(field.ty)?;
+                    }
+                    accepted
+                }
+                TypeForm::Named { declaration } => {
+                    let mut accepted = true;
+                    if let Ok(index) = schema
+                        .records
+                        .binary_search_by_key(declaration, |record| record.declaration)
+                    {
+                        for field in schema.records[index].fields.iter() {
+                            accepted &= retained(field.ty)?;
+                        }
+                    } else if let Ok(index) = schema
+                        .variants
+                        .binary_search_by_key(declaration, |variant| variant.declaration)
+                    {
+                        for case in schema.variants[index].cases.iter() {
+                            tick(visits)?;
+                            if let Some(payload) = case.payload {
+                                tick(visits)?;
+                                if !schema.types.contains_key(&payload) {
+                                    return Err(failure());
+                                }
+                                accepted &= safe.contains(&payload);
+                            }
+                        }
+                    } else {
+                        return Err(failure());
+                    }
+                    accepted
+                }
+                TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Function { .. } => true,
+                _ => false,
+            };
+            if !accepted {
+                safe.remove(ty);
+            }
+        }
+        if safe.len() == before {
+            return Ok(safe);
+        }
+    }
 }

@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-15";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 15;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-12";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 12;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-16";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 16;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-13";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 13;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -78,6 +78,7 @@ pub(crate) enum CompactChangeOperation {
     AddCase,
     AddOperation,
     AddTypeParameter,
+    SetTypeParameterConstraint,
     AddParameter,
     AddRequirement,
     AddPort,
@@ -95,7 +96,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 28] = [
+    pub(crate) const ALL: [Self; 29] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -110,6 +111,7 @@ impl CompactChangeOperation {
         Self::AddCase,
         Self::AddOperation,
         Self::AddTypeParameter,
+        Self::SetTypeParameterConstraint,
         Self::AddParameter,
         Self::AddRequirement,
         Self::AddPort,
@@ -153,6 +155,7 @@ pub(crate) enum CompactChangeFieldForm {
     Idempotency,
     ExternalVisibility,
     ParameterUse,
+    TypeParameterConstraint,
     RequirementReference,
     ImplementationName,
     ExactExpression,
@@ -162,7 +165,7 @@ pub(crate) enum CompactChangeFieldForm {
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 30] = [
+    pub(crate) const ALL: [Self; 31] = [
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -187,6 +190,7 @@ impl CompactChangeFieldForm {
         Self::Idempotency,
         Self::ExternalVisibility,
         Self::ParameterUse,
+        Self::TypeParameterConstraint,
         Self::RequirementReference,
         Self::ImplementationName,
         Self::ExactExpression,
@@ -221,6 +225,7 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotency",
             Self::ExternalVisibility => "external_visibility",
             Self::ParameterUse => "parameter_use",
+            Self::TypeParameterConstraint => "type_parameter_constraint",
             Self::RequirementReference => "requirement_reference",
             Self::ImplementationName => "implementation_name",
             Self::ExactExpression => "exact_expression",
@@ -256,6 +261,7 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
+            Self::TypeParameterConstraint => "none|capture-safe",
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
             Self::ExactExpression => "expr_HEX",
@@ -709,6 +715,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "name",
                 required: true,
                 form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "constraint",
+                required: false,
+                form: FieldForm::TypeParameterConstraint,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetTypeParameterConstraint,
+        name: "set.type-parameter-constraint",
+        fields: &[
+            CompactChangeOperationField {
+                name: "parameter",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "constraint",
+                required: true,
+                form: FieldForm::TypeParameterConstraint,
             },
         ],
         direct: None,
@@ -2623,8 +2651,15 @@ impl Decoder {
                 parameter: AuthoredTypeParameter {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
+                    constraints: parse_type_parameter_constraint(record)?,
                 },
             }),
+            CompactChangeOperation::SetTypeParameterConstraint => {
+                Ok(AuthoredChange::SetTypeParameterConstraint {
+                    parameter: parse_owner_selector(record, "parameter")?,
+                    constraints: parse_type_parameter_constraint(record)?,
+                })
+            }
             CompactChangeOperation::AddParameter => {
                 let parent = match (optional(record, "function"), optional(record, "operation")) {
                     (Some(_), None) => ParameterParentSelector::Declaration {
@@ -4077,6 +4112,22 @@ fn parse_resource_unit(
             format!(
                 "resource unit must be bytes, items, calls, tasks, or milliseconds; observed '{value}'"
             ),
+        )),
+    }
+}
+
+fn parse_type_parameter_constraint(
+    record: &CompactRecord,
+) -> Result<crate::platform::kernel::TypeParameterConstraints, Diagnostic> {
+    use crate::platform::kernel::TypeParameterConstraints;
+    match optional(record, "constraint").unwrap_or("none") {
+        "none" => Ok(TypeParameterConstraints::None),
+        "capture-safe" => Ok(TypeParameterConstraints::CaptureSafe),
+        _ => Err(field_error(
+            record,
+            "constraint",
+            "change_type_parameter_constraint",
+            "constraint must be none or capture-safe",
         )),
     }
 }

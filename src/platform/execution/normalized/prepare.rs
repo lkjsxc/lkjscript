@@ -189,6 +189,7 @@ pub struct NormalizedFunction {
     /// Derived from the exact canonical declaration, never from an empty requirement list.
     pub pure_graph: bool,
     pub type_parameters: Arc<[TypeParameterId]>,
+    pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
     pub result: TypeObjectDigest,
@@ -309,6 +310,8 @@ pub struct NormalizedTest {
 pub struct NormalizedProgram {
     pub(super) value_origin: super::value::ValueOrigin,
     pub(super) affine_variants: Arc<[bool]>,
+    pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
+    pub(super) capture_proof_bytes: usize,
     artifact: Arc<LoadedArtifact>,
     pub root_repository: RepositoryId,
     pub root_package: PackageId,
@@ -422,6 +425,8 @@ impl NormalizedProgram {
         let mut program = Self {
             value_origin,
             affine_variants,
+            capture_safe_types: BTreeSet::new(),
+            capture_proof_bytes: 0,
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
             root_revision: root_compilation.revision,
@@ -1015,12 +1020,20 @@ fn prepare_functions(
     let mut functions = vec![None; indexes.functions.len()];
     for (declaration, index) in &indexes.functions {
         let unit = declaration_unit(units, *declaration)?;
-        let (type_parameters, parameters, result, task_requirements, body) = match &unit.payload {
+        let (
+            type_parameters,
+            type_parameter_constraints,
+            parameters,
+            result,
+            task_requirements,
+            body,
+        ) = match &unit.payload {
             CompilationPayload::External {
                 signature,
                 implementation,
             } => (
                 signature.type_parameters.clone(),
+                signature.type_parameter_constraints.clone(),
                 normalized_parameters(
                     runtime_owners,
                     declaration.package,
@@ -1034,6 +1047,7 @@ fn prepare_functions(
             ),
             CompilationPayload::Function { signature, code } => (
                 signature.type_parameters.clone(),
+                signature.type_parameter_constraints.clone(),
                 normalized_parameters(
                     runtime_owners,
                     declaration.package,
@@ -1048,6 +1062,7 @@ fn prepare_functions(
                 )?),
             ),
             CompilationPayload::Constant { ty, code } => (
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 index_copy(&unit.tables.types, *ty, "constant type")?,
@@ -1133,6 +1148,7 @@ fn prepare_functions(
             declaration: *declaration,
             pure_graph,
             type_parameters: type_parameters.into(),
+            type_parameter_constraints: type_parameter_constraints.into(),
             parameter_count,
             parameters: parameters.into(),
             result,

@@ -245,8 +245,8 @@ options, and results with recursively safe members, and checked pure callables w
 environments. Every nominal field and case is inspected, including absent affine cases. A function
 signature is a leaf for capture safety: its future parameters and result are not stored captures.
 Secrets, streams, capability resources, other live resources, and aggregates containing them reject.
-An unknown stored type parameter rejects at declaration validation; this slice supplies no implicit
-generic capture constraints. A generic helper may capture a function whose signature contains type
+A stored type parameter requires an explicit capture-safe constraint from its exact in-scope
+pure declaration; unconstrained parameters reject at declaration validation. A generic helper may capture a function whose signature contains type
 parameters, or a concrete safe prefix, but cannot capture a bare unconstrained `T`.
 
 Binding has precisely the effects of evaluating its callee and captures. A failed capture stops
@@ -347,3 +347,40 @@ build, check, run, service, or worker paths.
 The graph persists declarations and explicit type arguments, not monomorphized runtime addresses.
 Accepted values contain no grant, credential, host coordinate, or live resource. Validation and
 resource accounting do not make an accepted program a hostile-code sandbox.
+
+## Explicit capture-safe rank-one parameters
+
+A type-parameter owner carries the closed constraint set `[]` or `["capture-safe"]`.
+The canonical set tags are 0 (empty) and 1 (capture-safe); unknown tags, names and duplicates
+reject. Omission in authoring creates the empty set. Constraints attach to the stable parameter
+identity and its exact declaration and are interface meaning even when the parameter is unused.
+Pure graph functions may declare the constraint. Task and generic nominal declarations remain
+inadmissible. Closed external signatures must match the intrinsic inventory, whose existing
+parameters have empty constraints.
+
+At every direct call and named function-value instantiation, every explicit argument must satisfy
+its parameter's constraint in the caller's declaration scope and exact package closure. This check
+also applies in unreachable branches and when the callee never captures or uses that parameter.
+A constrained caller parameter can discharge the same callee constraint; an unconstrained or
+foreign-scope parameter cannot. Safe stored children compose through lists, map keys and values,
+options, both result branches, every structural or nominal record field, and every variant payload,
+including absent cases and empty containers. Already admitted nominal cycles use bounded visitation.
+A pure Function type remains a leaf even when its signature mentions unconstrained parameters;
+actual callable admission still verifies pure target, exact origin and safe runtime environment.
+
+A constrained body may bind its parameter or aggregates of it. An unconstrained body cannot bind
+an actual value of that parameter. There is no implicit constraint inference, subtyping, dictionary,
+specialization, generic extraction, task closure, user-defined trait or higher-rank quantification.
+Capture safety does not confer equality, serialization, session retention or capability authority.
+Existing lifetime, affine resource, pure evaluation order, tail transfer and data rules still apply.
+
+Static failures identify the callee, exact parameter, supplied type, required constraint and a bounded
+stored-type path or missing scope assumption. The existing validation-work and type-depth budgets
+bound traversal and temporary proof storage. Compiled signatures retain the exact ordered constraints;
+strict artifact loading compares them to canonical owners, including unused parameters. Production
+preparation derives disposable proofs from compiled inputs and the complete instantiated type closure;
+reference preparation derives them independently from canonical owners. Proofs are scoped to that
+validated preparation and exact closure, never persisted by TypeObject identity alone. Raw invocation
+checks resolved type arguments and real captures before locals or body execution. Repeated invocation
+propagates admitted immutable values without rewalking retained payloads. Proof metadata, visited sets
+and pending traversal nodes consume their owning work/allocation budgets before growth.

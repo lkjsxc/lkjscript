@@ -15,7 +15,7 @@ use super::deployment::{
 use super::http::NormalizedHttpApplication;
 
 #[test]
-fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
+fn graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../tests/fixtures/graph10-unchanged-types-and-data.json"
     ))
@@ -26,7 +26,7 @@ fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        11
+        12
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -116,7 +116,7 @@ fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             .iter()
             .filter(|(key, _)| !old_owners.contains_key(&key.to_string()))
             .collect::<Vec<_>>();
-        assert_eq!(additions.len(), if type_count == 85 { 138 } else { 0 });
+        assert_eq!(additions.len(), if type_count == 85 { 173 } else { 0 });
         let new_declarations = additions
             .iter()
             .filter_map(|(_, owner)| match owner {
@@ -128,6 +128,10 @@ fn graph11_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             new_declarations,
             if type_count == 85 {
                 BTreeSet::from([
+                    "function-constant",
+                    "function-constant-first",
+                    "function-constant-scalar",
+                    "function-constant-list-map",
                     "function-compose",
                     "function-compose-apply",
                     "function-compose-test-label",
@@ -220,6 +224,13 @@ fn neutral_binding_generation_hash(mut value: serde_json::Value) -> serde_json::
             serde_json::Value::Object(fields) => {
                 fields.remove("contract_version");
                 fields.remove("graph_contract_version");
+                // An explicitly empty new constraint set preserves the predecessor meaning.
+                if fields
+                    .get("constraints")
+                    .is_some_and(|value| value == &serde_json::json!([]))
+                {
+                    fields.remove("constraints");
+                }
                 for child in fields.values_mut() {
                     remove_generation(child);
                 }
@@ -3435,7 +3446,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph11_dense_bytecode_6");
+    assert_eq!(observation.production_tier, "graph12_dense_bytecode_7");
 }
 
 #[test]
@@ -3731,7 +3742,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph11_reference_records_5"
+        "graph12_reference_records_6"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -4642,10 +4653,37 @@ expression.if as=$go-body condition=$condition when-true=$final-value when-false
 create.function as=$go module=$module name=forward-bound visibility=private result=i64 effect=pure body=$go-body
 add.parameter as=$go-n function=$go name=n type=i64
 add.parameter as=$go-thunk function=$go name=thunk type=@thunk
-expression.function-value as=$callee function=$length
-expression.local as=$capture value=$entry-items
-expression.bind as=$bound callee=$callee
-expression.argument parent=$bound index=0 expression=$capture
+type.parameter as=@Env parameter=$Env
+ type.parameter as=@H parameter=$H
+ type.function as=@step result=i64
+ type.argument parent=@step index=0 type=@Env
+ type.function as=@helper-step result=i64
+ type.argument parent=@helper-step index=0 type=@H
+ expression.local as=$helper-env-value value=$helper-env
+ expression.local as=$helper-step-value value=$helper-step
+ expression.invoke as=$helper-body function=$helper-step-value
+ expression.argument parent=$helper-body index=0 expression=$helper-env-value
+ create.function as=$helper module=$module name=generic-private-helper visibility=private result=i64 effect=pure body=$helper-body
+ add.type-parameter as=$H function=$helper name=Env
+ add.parameter as=$helper-env function=$helper name=env type=@H
+ add.parameter as=$helper-step function=$helper name=step type=@helper-step
+ expression.function-value as=$helper-value function=$helper
+ type.argument parent=$helper-value index=0 type=@Env
+ expression.local as=$factory-env-value value=$factory-env
+ expression.local as=$factory-step-value value=$factory-step
+ expression.bind as=$factory-body callee=$helper-value
+ expression.argument parent=$factory-body index=0 expression=$factory-env-value
+ expression.argument parent=$factory-body index=1 expression=$factory-step-value
+ create.function as=$factory module=$module name=generic-factory visibility=private result=@thunk effect=pure body=$factory-body
+ add.type-parameter as=$Env function=$factory name=Env constraint=capture-safe
+ add.parameter as=$factory-env function=$factory name=env type=@Env
+ add.parameter as=$factory-step function=$factory name=step type=@step
+ expression.function-value as=$callee function=$length
+ expression.local as=$capture value=$entry-items
+ expression.call as=$bound function=$factory
+ type.argument parent=$bound index=0 type=@items
+ expression.argument parent=$bound index=0 expression=$capture
+ expression.argument parent=$bound index=1 expression=$callee
 expression.local as=$n value=$entry-n
 expression.call as=$entry-body function=$go
 expression.argument parent=$entry-body index=0 expression=$n

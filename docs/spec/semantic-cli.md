@@ -519,3 +519,19 @@ The CLI does not expose storage records as authoring syntax, arbitrary predecess
 package manager, remote registry, source language, full owner-body projection, generic impact, an
 agent daemon, inbound TLS, arbitrary network destinations, outbound WebSocket clients, NIP-01,
 sandboxing, or multi-tenant isolation.
+
+The rank-one constraint authoring forms are:
+
+```text
+add.type-parameter as=$T function=DECLARATION name=NAME [constraint=none|capture-safe]
+set.type-parameter-constraint parameter=OWNER_SELECTOR constraint=none|capture-safe
+```
+
+Both lower to typed changes with the same closed constraint set as canonical/JSON authoring.
+The setter requires an exact type-parameter owner, preserves its identity and declaration order,
+and constitutes an interface edit. Plan and apply validate the entire final candidate: strengthening
+can invalidate callers, and clearing can invalidate a capturing body. One coherent request can change
+constraint, body and callers together. Review reports affected dependents. Stale reviewed apply,
+malformed constraints, cancellation and exhausted validation cannot partially advance accepted HEAD.
+Owner queries, full function definitions and built-in/staged interfaces expose `constraint=none` or
+`constraint=capture-safe`; definition continuations remain revision-pinned and reject after edits.

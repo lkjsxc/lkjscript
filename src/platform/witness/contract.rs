@@ -5,21 +5,21 @@ use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
 pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-7";
 pub const WITNESS_CONTRACT_VERSION: u16 = 7;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-6";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 6;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-11";
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-7";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 7;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-12";
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT07";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM10";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM11";
 pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v7";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v6";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v7";
 
 pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v7";
-pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v6";
+pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v7";
 pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v7";
-pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v11";
+pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v12";
 
-pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v6";
+pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v7";
 pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v6";
 pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v6";
 pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v6";
@@ -44,7 +44,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 20] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 21] = [
+    ValidatorFeatureDescriptor {
+        name: "capture_safe_type_parameter_constraints",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "explicit_pure_function_binding",
         version: 1,

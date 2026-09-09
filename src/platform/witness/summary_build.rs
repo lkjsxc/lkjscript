@@ -1046,7 +1046,10 @@ fn local_summary(
                 }
             }
         }
-        OwnerRecord::TypeParameter(record) => presentation.piece(1, &record.name)?,
+        OwnerRecord::TypeParameter(record) => {
+            presentation.piece(1, &record.name)?;
+            interface.piece(1, &record.constraints)?;
+        }
         OwnerRecord::Field(record) => {
             presentation.piece(1, &record.name)?;
             interface.piece(1, &record.ty)?;

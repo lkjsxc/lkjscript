@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-6";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 6;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-7";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 7;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-4";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 4;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN06";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v6";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v6";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN07";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v7";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v7";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -184,6 +184,7 @@ pub struct CompiledHttpRoute {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompiledSignature {
     pub type_parameters: Vec<TypeParameterId>,
+    pub type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     pub parameters: Vec<CompiledParameter>,
     pub result: u32,
     pub task_requirements: Vec<u32>,
@@ -452,7 +453,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 11 inline bound",
+                        "compiled inline text exceeds the Graph 12 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -775,6 +776,13 @@ fn validate_compiled_http_routes(
 impl CompiledSignature {
     fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
         require_item_count("compiled type parameters", self.type_parameters.len(), true)?;
+        if self.type_parameter_constraints.len() != self.type_parameters.len() {
+            return Err(unit_error(
+                DiagnosticClass::Corrupt,
+                "compiler_type_parameter_constraints",
+                "compiled signature must retain exactly one constraint set per ordered type parameter",
+            ));
+        }
         require_item_count("compiled parameters", self.parameters.len(), true)?;
         require_unique("compiled type parameter", &self.type_parameters)?;
         require_unique(

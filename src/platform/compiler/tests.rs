@@ -2573,3 +2573,89 @@ fn artifact_rejects_independently_encoded_unchecked_binding_prefixes() {
         println!("binding-artifact-negative {fault} {}", error.code);
     }
 }
+
+#[test]
+fn artifact_rejects_erased_or_forged_compiled_parameter_constraints() {
+    use crate::platform::kernel::TypeParameterConstraints;
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("packages/standard/generated/standard.lkja");
+    let loaded = load_artifact(&std::fs::read(path).unwrap()).unwrap();
+    let (old_key, original) = loaded.objects.iter().filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .find_map(|(key, bytes)| {
+            let unit = CompilationUnit::decode(bytes, *key).unwrap();
+            matches!(&unit.payload, CompilationPayload::Function { signature, .. } if signature.type_parameter_constraints.first() == Some(&TypeParameterConstraints::CaptureSafe)).then_some((*key, unit))
+        }).unwrap();
+    for fault in ["missing", "erased", "forged-unused"] {
+        let mut unit = original.clone();
+        let CompilationPayload::Function { signature, .. } = &mut unit.payload else {
+            panic!("generic factory")
+        };
+        match fault {
+            "missing" => signature.type_parameter_constraints.clear(),
+            "erased" => signature.type_parameter_constraints[0] = TypeParameterConstraints::None,
+            _ => signature.type_parameter_constraints[1] = TypeParameterConstraints::CaptureSafe,
+        }
+        let bytes = crate::platform::packed::encode(
+            super::unit::COMPILER_UNIT_MAGIC,
+            super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
+            &unit,
+            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        )
+        .unwrap();
+        let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
+        if fault == "missing" {
+            assert_eq!(
+                CompilationUnit::decode(&bytes, key).unwrap_err().code,
+                "compiler_type_parameter_constraints"
+            );
+        } else {
+            CompilationUnit::decode(&bytes, key).unwrap();
+        }
+        let mut objects = loaded.objects.clone();
+        objects.remove(&old_key);
+        objects.insert(key, bytes);
+        let mut manifest = loaded.manifest.clone();
+        let package = manifest
+            .packages
+            .iter_mut()
+            .find(|package| package.package == unit.source.package)
+            .unwrap();
+        let old_compilation = package.compilation;
+        let mut compilation =
+            CompilationManifest::decode(&objects[&old_compilation.object_key()], old_compilation)
+                .unwrap();
+        let mut entries = artifact_map_entries(&loaded, compilation.units);
+        let mut replacements = 0;
+        for (owner, value) in &mut entries {
+            let owner = crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap();
+            let mut binding = CompilationBinding::decode(value, owner).unwrap();
+            if binding.object.object_key() == old_key {
+                binding.object = CompilerUnitObjectDigest::from_bytes(key.digest.bytes());
+                *value = binding.encode(owner).unwrap();
+                replacements += 1;
+            }
+        }
+        assert_eq!(replacements, 1);
+        compilation.units = replace_artifact_map(&mut objects, entries);
+        let (digest, bytes) = compilation.encode().unwrap();
+        objects.remove(&old_compilation.object_key());
+        objects.insert(digest.object_key(), bytes);
+        package.compilation = digest;
+        let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
+        manifest.closure = closure;
+        manifest.object_count = count;
+        manifest.object_bytes = bytes;
+        let error = super::artifact::encode_artifact(manifest, &objects).unwrap_err();
+        assert_eq!(error.class, crate::platform::DiagnosticClass::Corrupt);
+        assert_eq!(
+            error.code,
+            if fault == "missing" {
+                "compiler_type_parameter_constraints"
+            } else {
+                "artifact_runtime_owner_semantics"
+            },
+            "{fault}: {error:?}"
+        );
+        println!("constraint-artifact-negative {fault} {}", error.code);
+    }
+}

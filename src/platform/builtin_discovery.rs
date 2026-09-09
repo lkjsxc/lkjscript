@@ -273,7 +273,7 @@ fn owner_summary(
     let parent = owner_parent(record)
         .map(|owner| owner.to_string())
         .unwrap_or_else(|| "package".to_owned());
-    Ok(DiscoveryRecord::new(
+    let mut summary = DiscoveryRecord::new(
         "owner",
         [
             ("kind", record.header().kind.name().to_owned()),
@@ -282,7 +282,14 @@ fn owner_summary(
             ("parent", parent),
             ("reference", exact_owner_reference(package, owner)),
         ],
-    ))
+    );
+    if let PackageInterfaceRecord::TypeParameter(parameter) = record {
+        summary.fields.push((
+            "constraint".to_owned(),
+            parameter.constraints.name().to_owned(),
+        ));
+    }
+    Ok(summary)
 }
 
 fn append_owner_detail(
@@ -455,6 +462,10 @@ fn append_child_detail(
     match record {
         PackageInterfaceRecord::TypeParameter(parameter) => {
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
+            common.push((
+                "constraint".to_owned(),
+                parameter.constraints.name().to_owned(),
+            ));
             records.push(DiscoveryRecord {
                 operation: "type-parameter".to_owned(),
                 fields: common,

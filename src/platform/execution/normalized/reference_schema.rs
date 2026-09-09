@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
     pub(super) affine_variants: Vec<bool>,
+    pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
     pub functions: Vec<DeclarationReference>,
     pub records: Vec<NormalizedRecordLayout>,
     pub variants: Vec<NormalizedVariantLayout>,

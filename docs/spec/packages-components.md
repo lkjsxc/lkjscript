@@ -22,7 +22,7 @@ not editable source or an alternate package repository.
 An exported factory can return a pure function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 11
+expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 12
 meaning rejects predecessor graph inputs. The unchanged TypeObject 10 codec, magic, digest domains,
 and bytes remain current, as do typed-data layout identities for unchanged types. This cutover does
 not rewrite operational data or add a predecessor graph reader.
@@ -206,3 +206,12 @@ The HTTP and RFC 6455 listener boundary is plaintext. Encrypted transport requir
 future explicitly selected adapter; no TLS or certificate machinery is implied by the component
 model. The first-party data root is local trusted-host authority, not encrypted storage or a remote
 database service.
+
+Rank-one package interfaces include every type parameter's exact closed constraint set, including
+unused parameters. Graph 12 owner encoding, compiled-unit 7 signatures and package-interface-owner 8
+replace their predecessors explicitly. An imported `capture-safe` constraint must be discharged in
+the consumer's scope using its exact closure and nominal layouts. A returned callable can target a
+private generic graph helper retained in transported code; private helpers remain unavailable to
+ordinary public name lookup. Checksums and compiled metadata do not override canonical constraints.
+The immutable transport/container framing and bytecode-4 instructions are unchanged. TypeObject 10,
+nominal typed-data layouts, operational stores, queues and backups require no data migration.

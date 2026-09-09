@@ -434,7 +434,7 @@ fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate()
             .check(&crate::platform::execution::ExecutionControl::uncancelled())
             .unwrap()
             .passed,
-        28
+        30
     );
 }
 
@@ -5692,6 +5692,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             name: Name::new("type_builder").unwrap(),
             visibility: DeclarationVisibility::Private,
             type_parameters: vec![AuthoredTypeParameter {
+                constraints: Default::default(),
                 symbol: "$type_parameter".to_owned(),
                 name: Name::new("T").unwrap(),
             }],
@@ -5881,6 +5882,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 name: Name::new("identity_external").unwrap(),
                 visibility: DeclarationVisibility::Package,
                 type_parameters: vec![AuthoredTypeParameter {
+                    constraints: Default::default(),
                     symbol: "$external_type".to_owned(),
                     name: Name::new("T").unwrap(),
                 }],
@@ -6351,6 +6353,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                     declaration: declaration_id(external),
                 },
                 parameter: AuthoredTypeParameter {
+                    constraints: Default::default(),
                     symbol: "$external_u".to_owned(),
                     name: Name::new("U").unwrap(),
                 },
@@ -8339,4 +8342,259 @@ fn logical_plan_decode_error(bytes: &[u8]) -> String {
     crate::platform::control::decode_logical_change_plan(std::io::Cursor::new(bytes))
         .expect_err("mutated logical plan must reject")
         .code
+}
+
+#[test]
+fn constraint_interface_edit_accounts_validation_and_cancels_review_without_publication() {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+    let snapshot = GraphRepository::open(&source)
+        .unwrap()
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let factory = owner_named(&snapshot, "function-constant");
+    let OwnerRecord::Declaration(declaration) = &snapshot.owners[&factory] else {
+        panic!("factory")
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        panic!("function")
+    };
+    let parameter = OwnerKey::TypeParameter(function.type_parameters[1]);
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &snapshot, None).unwrap();
+    let base = created.current.head.revision;
+    let inventory = created
+        .repository
+        .export_package_container()
+        .unwrap()
+        .container
+        .objects;
+    let text = format!(
+        "request base={base}\nset.type-parameter-constraint parameter={parameter} constraint=capture-safe\n"
+    );
+    let decoded =
+        crate::platform::control::decode_compact_change("constraint-edit", text.as_bytes())
+            .unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options.clone())
+        .unwrap();
+    assert!(
+        prepared
+            .logical_plan
+            .semantically_checked
+            .contains(&factory)
+    );
+    assert!(prepared.publication.compiler_units.contains(&factory));
+    let work = prepared.publication.budget_work.validation.expression_steps;
+    assert!(
+        work > 0,
+        "constraint edit must validate its complete affected interface"
+    );
+    for limit in [work - 1, work] {
+        let mut request = decoded.semantic.clone();
+        request.budget.validation.maximum_expression_steps = limit;
+        let result = created
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default());
+        assert_eq!(result.is_ok(), limit == work, "{result:?}");
+        if let Err(errors) = result {
+            assert_eq!(errors[0].code, "change_budget_validation_expression_steps");
+        }
+        assert_eq!(
+            created.repository.current().unwrap().head,
+            created.current.head
+        );
+        assert_eq!(
+            created
+                .repository
+                .export_package_container()
+                .unwrap()
+                .container
+                .objects,
+            inventory
+        );
+    }
+    let plan =
+        crate::platform::control::LogicalChangePlan::new(decoded.request_commitment, &prepared)
+            .unwrap();
+    let mut emitted = 0;
+    let cancelled = crate::platform::control::encode_logical_change_plan(&plan, |_| {
+        emitted += 1;
+        if emitted == 5 {
+            return Err(crate::platform::diagnostic::Diagnostic::new(
+                DiagnosticClass::Cancelled,
+                "constraint_review_cancelled",
+                "owned cancellation during review",
+            ));
+        }
+        Ok(())
+    })
+    .unwrap_err();
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(
+        created.repository.current().unwrap().head,
+        created.current.head
+    );
+    assert_eq!(
+        created
+            .repository
+            .export_package_container()
+            .unwrap()
+            .container
+            .objects,
+        inventory
+    );
+    assert!(matches!(
+        created.repository.publish(&prepared.publication).unwrap(),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let current = created
+        .repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    assert_eq!(current.owners.len(), snapshot.owners.len());
+    assert_eq!(current.types, snapshot.types);
+    assert_eq!(current.retirements, snapshot.retirements);
+    let OwnerRecord::TypeParameter(record) = &current.owners[&parameter] else {
+        panic!("parameter")
+    };
+    assert_eq!(
+        record.constraints,
+        crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+    );
+    println!(
+        "constraint-publication exact_fit_expression_steps={work} one_over_rejected=true review_cancelled_after={emitted} same_owner={parameter}"
+    );
+}
+
+#[test]
+fn constraint_proofs_invalidate_when_named_type_layout_changes_without_type_identity_change() {
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("meaning");
+    let standard =
+        GraphRepository::open(&Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"))
+            .unwrap()
+            .view_current()
+            .unwrap()
+            .reconstruct_full_oracle()
+            .unwrap()
+            .value;
+    let created = GraphRepository::create(&path, &standard, None).unwrap();
+    let base = created.current.head.revision;
+    let text = format!(
+        "request base={base}\ncreate.module as=$module name=constraints\ncreate.record as=$record module=$module name=Env visibility=private\nadd.field as=$field record=$record name=value type=i64\ntype.named as=@Env declaration=$record\nexpression.unit as=$body\ncreate.function as=$generic module=$module name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T function=$generic name=T constraint=capture-safe\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=@Env\nexpression.bool as=$true value=true\nexpression.unit as=$unit\nexpression.if as=$dead condition=$true when-true=$unit when-false=$call\ncreate.function as=$caller module=$module name=caller visibility=private result=unit effect=pure body=$dead\n"
+    );
+    let decoded =
+        crate::platform::control::decode_compact_change("nominal-proof", text.as_bytes()).unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    created.repository.publish(&prepared.publication).unwrap();
+    let snapshot = created
+        .repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let record = owner_named(&snapshot, "Env");
+    let OwnerKey::Declaration(record_id) = record else {
+        panic!("record")
+    };
+    let field = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            matches!(record,OwnerRecord::Field(field) if field.declaration==record_id)
+                .then_some(*owner)
+        })
+        .unwrap();
+    let nominal = snapshot
+        .types
+        .iter()
+        .find_map(|(ty, object)| {
+            matches!(object.form,TypeForm::Named{declaration} if declaration.declaration==record_id)
+                .then_some(*ty)
+        })
+        .unwrap();
+    let before =
+        crate::platform::normalized_lifecycle::prepare_repository(created.repository.clone())
+            .unwrap();
+    let inventory = created
+        .repository
+        .export_package_container()
+        .unwrap()
+        .container
+        .objects;
+    let base = created.repository.current().unwrap().head.revision;
+    let request = |ty| AuthoredChangeSet {
+        base,
+        preconditions: vec![],
+        budget: Default::default(),
+        changes: vec![AuthoredChange::SetFieldType {
+            field: OwnerSelector::Exact { owner: field },
+            ty,
+        }],
+    };
+    let invalid = created
+        .repository
+        .prepare_authored_change(
+            &request(AuthoredType::Secret {}),
+            PublicationOptions::default(),
+        )
+        .unwrap_err();
+    assert!(
+        invalid
+            .iter()
+            .any(|error| error.code == "kernel_type_constraint"),
+        "{invalid:?}"
+    );
+    assert_eq!(created.repository.current().unwrap().head.revision, base);
+    assert_eq!(
+        created
+            .repository
+            .export_package_container()
+            .unwrap()
+            .container
+            .objects,
+        inventory
+    );
+    let accepted = created
+        .repository
+        .prepare_authored_change(
+            &request(AuthoredType::Text {}),
+            PublicationOptions::default(),
+        )
+        .unwrap();
+    created.repository.publish(&accepted.publication).unwrap();
+    let warm =
+        crate::platform::normalized_lifecycle::prepare_repository(created.repository.clone())
+            .unwrap();
+    std::fs::remove_dir_all(path.join("derived/compiler")).unwrap();
+    let clean =
+        crate::platform::normalized_lifecycle::prepare_repository(created.repository.clone())
+            .unwrap();
+    assert_eq!(warm.artifact_bytes, clean.artifact_bytes);
+    assert_ne!(before.artifact_bytes, warm.artifact_bytes);
+    let current = created
+        .repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    assert_eq!(current.types[&nominal], snapshot.types[&nominal]);
+    assert_eq!(current.retirements, snapshot.retirements);
+    println!(
+        "constraint-nominal-invalidation unchanged_type={nominal} unsafe_dead_call_rejected=true warm_clean_equal=true before={} after={}",
+        before.artifact_bundle, warm.artifact_bundle
+    );
 }

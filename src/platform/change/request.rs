@@ -159,6 +159,10 @@ pub enum AuthoredChange {
         declaration: DeclarationSelector,
         parameter: AuthoredTypeParameter,
     },
+    SetTypeParameterConstraint {
+        parameter: OwnerSelector,
+        constraints: crate::platform::kernel::TypeParameterConstraints,
+    },
     AddParameter {
         parent: ParameterParentSelector,
         parameter: AuthoredParameter,
@@ -708,6 +712,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }
             | AuthoredChange::AddHttpRoute { .. } => {
@@ -770,6 +775,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }
@@ -948,6 +954,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }

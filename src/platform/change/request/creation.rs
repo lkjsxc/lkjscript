@@ -39,6 +39,7 @@ use crate::platform::semantic_id::{
 pub struct AuthoredTypeParameter {
     pub symbol: String,
     pub name: Name,
+    pub constraints: crate::platform::kernel::TypeParameterConstraints,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -474,6 +475,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
             declaration,
             name: parameter.name.clone(),
+            constraints: parameter.constraints,
         }))?;
     }
     let mut parameter_ids = Vec::with_capacity(parameters.len());

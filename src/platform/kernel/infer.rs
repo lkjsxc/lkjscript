@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 11.
+//! Independent exact-ID expression type and effect oracle for Graph 12.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -328,7 +328,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "port expression",
                         ),
                         PortImplementation::Function(function) => {
-                            match self.function_signature(function, &[]) {
+                            match self.function_signature(function, &[], &context) {
                                 Ok(signature) => {
                                     if let Err(diagnostic) =
                                         self.validate_call_effect(&signature, &context)
@@ -609,7 +609,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 type_arguments,
                 arguments,
             } => {
-                let signature = self.function_signature(function, &type_arguments)?;
+                let signature = self.function_signature(function, &type_arguments, context)?;
                 self.validate_call_effect(&signature, context)?;
                 let mut argument_context = context.clone();
                 argument_context.allow_task_function_value = false;
@@ -625,7 +625,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 function,
                 type_arguments,
             } => {
-                let signature = self.function_signature(function, &type_arguments)?;
+                let signature = self.function_signature(function, &type_arguments, context)?;
                 if signature.task && !context.allow_task_function_value {
                     return Err(type_error(
                         "kernel_type_task_function_value",
@@ -652,7 +652,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 for parameter in parameters.iter().take(arguments.len()) {
-                    self.require_capture_safe(*parameter, &mut BTreeSet::new(), 0)?;
+                    self.require_capture_safe(*parameter, context, &mut BTreeSet::new(), 0)?;
                 }
                 self.validate_arguments(
                     &arguments,
@@ -1203,6 +1203,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     fn require_capture_safe(
         &mut self,
         ty: TypeObjectDigest,
+        context: &ExecutionContext,
         visited: &mut BTreeSet<TypeObjectDigest>,
         depth: usize,
     ) -> Result<(), Diagnostic> {
@@ -1224,23 +1225,75 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             | TypeForm::Text
             | TypeForm::StaticText
             | TypeForm::Function { .. } => Vec::new(),
-            TypeForm::Secret
-            | TypeForm::Stream { .. }
-            | TypeForm::CapabilityResource { .. }
-            | TypeForm::TypeParameter { .. } => {
+            TypeForm::Secret | TypeForm::Stream { .. } | TypeForm::CapabilityResource { .. } => {
                 return Err(type_error(
                     "kernel_type_bind_capture",
                     "bound values require capture-safe stored types; remove secrets, streams, resources, and unconstrained stored type parameters",
                 ));
             }
-            TypeForm::List { item } | TypeForm::Option { item } => vec![item],
+            TypeForm::TypeParameter { parameter } => {
+                self.consume_work()?;
+                let proof = match self.read.owner(OwnerKey::TypeParameter(parameter))? {
+                    Some(OwnerRecord::TypeParameter(record))
+                        if Some(record.declaration) == context.declaration
+                            && record.constraints
+                                == super::TypeParameterConstraints::CaptureSafe =>
+                    {
+                        match self.read.owner(OwnerKey::Declaration(record.declaration))? {
+                            Some(OwnerRecord::Declaration(declaration)) => {
+                                match declaration.payload {
+                                    DeclarationPayload::Function(function) => {
+                                        if function.effect != FunctionEffect::Pure {
+                                            return Err(type_error(
+                                                "kernel_type_bind_capture",
+                                                "capture assumptions require a pure graph declaration",
+                                            ));
+                                        }
+                                        let mut present = false;
+                                        for declared in function.type_parameters {
+                                            self.consume_work()?;
+                                            present |= declared == parameter;
+                                        }
+                                        present
+                                    }
+                                    _ => false,
+                                }
+                            }
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                };
+                if !proof {
+                    return Err(type_error(
+                        "kernel_type_bind_capture",
+                        format!(
+                            "stored type parameter {parameter} lacks an exact in-scope capture-safe assumption; declare its constraint or remove the capture"
+                        ),
+                    ));
+                }
+                Vec::new()
+            }
+            TypeForm::List { item } | TypeForm::Option { item } => {
+                self.consume_work()?;
+                vec![item]
+            }
             TypeForm::Map { key, value }
             | TypeForm::Result {
                 ok: key,
                 error: value,
-            } => vec![key, value],
+            } => {
+                self.consume_work()?;
+                self.consume_work()?;
+                vec![key, value]
+            }
             TypeForm::StructuralRecord { fields } => {
-                fields.into_iter().map(|field| field.ty).collect()
+                let mut children = Vec::new();
+                for field in fields {
+                    self.consume_work()?;
+                    children.push(field.ty);
+                }
+                children
             }
             TypeForm::Named { declaration } => {
                 let payload = if declaration.package == self.read.package_id() {
@@ -1281,9 +1334,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 })?;
                 let mut children = Vec::new();
                 for field in fields {
+                    self.consume_work()?;
                     children.push(self.field_record(declaration.package, field)?.ty);
                 }
                 for case in cases {
+                    self.consume_work()?;
                     if let Some(payload) = self.case_record(declaration.package, case)?.payload {
                         children.push(payload);
                     }
@@ -1292,7 +1347,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
         };
         for child in children {
-            self.require_capture_safe(child, visited, depth + 1)?;
+            self.require_capture_safe(child, context, visited, depth + 1)
+                .map_err(|mut error| {
+                    if depth < 8 {
+                        error.message = format!("stored type {ty} -> {child}: {}", error.message);
+                    }
+                    error
+                })?;
         }
         Ok(())
     }
@@ -1403,6 +1464,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
+        context: &ExecutionContext,
     ) -> Result<FunctionSignature, Diagnostic> {
         let foreign = reference.package != self.read.package_id();
         let (type_parameters, parameters, result, requirements, task) = if foreign {
@@ -1504,6 +1566,38 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "kernel_type_argument_count",
                 "function type argument count disagrees with its declaration",
             ));
+        }
+        for (parameter, supplied) in type_parameters.iter().zip(type_arguments) {
+            self.consume_work()?;
+            let owner = if foreign {
+                match self.dependency_owner(
+                    reference.package,
+                    OwnerKey::TypeParameter(*parameter),
+                    "callee type parameter",
+                )? {
+                    PackageInterfaceRecord::TypeParameter(record) => Some(record),
+                    _ => None,
+                }
+            } else {
+                match self.read.owner(OwnerKey::TypeParameter(*parameter))? {
+                    Some(OwnerRecord::TypeParameter(record)) => Some(record),
+                    _ => None,
+                }
+            };
+            let owner = owner
+                .filter(|owner| owner.declaration == reference.declaration)
+                .ok_or_else(|| {
+                    type_error(
+                        "kernel_type_parameter_scope",
+                        "callee type parameter has no exact declaration owner",
+                    )
+                })?;
+            if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
+                self.require_capture_safe(*supplied, context, &mut BTreeSet::new(), 0).map_err(|error| {
+                    if error.code != "kernel_type_bind_capture" { return error; }
+                    type_error("kernel_type_constraint", format!("callee {}/{} parameter {} ({}) requires capture-safe; supplied {}: {}", reference.package, reference.declaration, parameter, owner.name, supplied, error.message))
+                })?;
+            }
         }
         let substitutions = type_parameters
             .into_iter()

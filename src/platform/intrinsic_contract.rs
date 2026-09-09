@@ -379,6 +379,24 @@ pub(crate) fn validate_kernel_intrinsic(
     work: &mut usize,
     maximum: usize,
 ) -> Result<(), Diagnostic> {
+    for id in &external.type_parameters {
+        *work = work
+            .checked_add(1)
+            .filter(|n| *n <= maximum)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_full_work",
+                    "external constraint validation exhausted its work budget",
+                )
+            })?;
+        if !matches!(snapshot.owners.get(&OwnerKey::TypeParameter(*id)), Some(OwnerRecord::TypeParameter(parameter)) if parameter.constraints == TypeParameterConstraints::None)
+        {
+            return Err(signature_error(
+                "closed external type parameters require the intrinsic inventory's empty constraint set",
+            ));
+        }
+    }
     let mut parameters = Vec::new();
     for id in &external.parameters {
         let Some(OwnerRecord::Parameter(parameter)) =

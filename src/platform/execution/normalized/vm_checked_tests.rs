@@ -1362,3 +1362,208 @@ fn canonical_affinity_derivation_rejects_a_missing_payload_type() {
     snapshot.types.remove(&ty);
     assert!(NormalizedReferenceSchema::reconstruct([&snapshot]).is_err());
 }
+
+#[test]
+fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
+    let (mut program, mut snapshot) = fixture();
+    let (index, declaration) = program
+        .functions
+        .iter()
+        .enumerate()
+        .find(|(_, function)| {
+            function.type_parameter_constraints.first()
+                == Some(&crate::platform::kernel::TypeParameterConstraints::CaptureSafe)
+        })
+        .map(|(index, function)| {
+            (
+                FunctionIndex(u32::try_from(index).unwrap(), program.value_origin),
+                function.declaration,
+            )
+        })
+        .unwrap();
+    let mut schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    let unit = internal_type(&mut program, &mut schema, TypeForm::Unit);
+    let integer = internal_type(&mut program, &mut schema, TypeForm::I64);
+    let secret = internal_type(&mut program, &mut schema, TypeForm::Secret);
+    let unsafe_list = internal_type(&mut program, &mut schema, TypeForm::List { item: secret });
+    let safe_list = internal_type(&mut program, &mut schema, TypeForm::List { item: integer });
+    let thunk = internal_type(
+        &mut program,
+        &mut schema,
+        TypeForm::Function {
+            parameters: vec![],
+            result: integer,
+        },
+    );
+    let mut depth = vec![integer];
+    for _ in 0..257 {
+        depth.push(internal_type(
+            &mut program,
+            &mut schema,
+            TypeForm::Option {
+                item: *depth.last().unwrap(),
+            },
+        ));
+    }
+    snapshot.types = schema.types.clone();
+    super::super::super::prepared_types::complete(&mut program).unwrap();
+    let length = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && function.parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
+        .map(|(i,_)| FunctionIndex(u32::try_from(i).unwrap(), program.value_origin)).unwrap();
+    let hidden = || NormalizedValue::Function {
+        function: length,
+        type_arguments: Arc::from([secret]),
+        bound_arguments: Some(Arc::new(vec![NormalizedValue::list(vec![]).unwrap()])),
+    };
+    let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
+        if reference {
+            let sink = std::sync::Mutex::new(None);
+            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                .observing(
+                    &sink,
+                    &super::super::super::reference::CoreNormalizedReferenceHost,
+                )
+                .invoke_instantiated(declaration, &[ty, unit], vec![value], control);
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_control_frames_after
+                    + observation.live_local_scopes_after
+                    + observation.live_type_scopes_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result.map(|(value, _)| value),
+                observation.calls,
+                observation.value_work,
+                observation.allocated_bytes,
+            )
+        } else {
+            let sink = std::sync::Mutex::new(None);
+            let result = super::super::NormalizedVm::new(&program, policy)
+                .observing(&sink, &super::super::CoreNormalizedHost)
+                .invoke_entry(
+                    super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                        index,
+                        Arc::from([ty, unit]),
+                    ),
+                    vec![value],
+                    None,
+                    control,
+                );
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_locals_after
+                    + observation.live_type_bindings_after
+                    + observation.live_operands_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result.map(|(value, _)| value),
+                observation.calls,
+                observation.value_work,
+                observation.allocated_bytes,
+            )
+        }
+    };
+    for reference in [false, true] {
+        let control = ExecutionControl::uncancelled();
+        for (name, ty, raw) in [
+            (
+                "empty-list-secret",
+                unsafe_list,
+                NormalizedValue::list(vec![]).unwrap(),
+            ),
+            (
+                "unresolved",
+                program.functions[index.0 as usize].parameters[0].ty,
+                NormalizedValue::Unit,
+            ),
+            ("hidden-forbidden-environment", thunk, hidden()),
+        ] {
+            let result = invoke(reference, ty, raw, Default::default(), &control);
+            assert!(result.0.is_err(), "{reference}/{name}");
+            assert_eq!(result.1, 0, "rejection precedes body installation");
+            println!(
+                "constraint-raw {reference} {name} {:?}",
+                result.0.unwrap_err()
+            );
+        }
+        let good = || NormalizedValue::list(vec![NormalizedValue::I64(3); 8]).unwrap();
+        let baseline = invoke(reference, safe_list, good(), Default::default(), &control);
+        assert!(baseline.0.is_ok(), "{:?}", baseline.0);
+        for (bytes, expected) in [(baseline.3, true), (baseline.3 - 1, false)] {
+            let result = invoke(
+                reference,
+                safe_list,
+                good(),
+                super::super::NormalizedRunPolicy {
+                    maximum_allocated_bytes: bytes,
+                    ..Default::default()
+                },
+                &control,
+            );
+            assert_eq!(result.0.is_ok(), expected);
+            if let Err(error) = result.0 {
+                assert_eq!(
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+            }
+        }
+        let cancelled = invoke(
+            reference,
+            depth[240],
+            NormalizedValue::Option(None),
+            Default::default(),
+            &ExecutionControl::cancel_after_checks(100),
+        );
+        assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
+        assert!(cancelled.2.capture_admission_nodes > 0);
+        assert_eq!(cancelled.1, 0);
+        let over = invoke(
+            reference,
+            depth[257],
+            NormalizedValue::Option(None),
+            Default::default(),
+            &control,
+        );
+        assert_eq!(
+            over.0.unwrap_err().class,
+            crate::platform::execution::ExecutionFailureClass::Infrastructure
+        );
+        assert_eq!(over.1, 0);
+        assert!(
+            invoke(reference, safe_list, good(), Default::default(), &control)
+                .0
+                .is_ok()
+        );
+        println!(
+            "constraint-budget {reference} exact_fit_bytes={} cancellation_nodes={} healthy_reuse=true",
+            baseline.3, cancelled.2.capture_admission_nodes
+        );
+    }
+    // Erasing disposable production metadata cannot erase the canonical reference's rule.
+    let mut erased = program.clone();
+    Arc::make_mut(&mut erased.functions)[index.0 as usize].type_parameter_constraints =
+        Arc::from([crate::platform::kernel::TypeParameterConstraints::None; 2]);
+    let sink = std::sync::Mutex::new(None);
+    let rejected = NormalizedReferenceInterpreter::new(&snapshot, &erased, Default::default())
+        .observing(
+            &sink,
+            &super::super::super::reference::CoreNormalizedReferenceHost,
+        )
+        .invoke_instantiated(
+            declaration,
+            &[unsafe_list, unit],
+            vec![NormalizedValue::list(vec![]).unwrap()],
+            &ExecutionControl::uncancelled(),
+        );
+    assert!(rejected.is_err());
+    assert_eq!(sink.into_inner().unwrap().unwrap().calls, 0);
+    println!("constraint-reference-production-metadata-erasure rejected-before-body=true");
+}

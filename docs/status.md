@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-08 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-09 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -22,28 +22,42 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_8cd2a310d5ba4bfe3a42be15d4e201a3dae52b71143c1655dce4830120c3bf09`; state `semantic_state_2a94174319134b60f44c113903443de36eaa56f660bf2e46b32035bf878aa7fe` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_dd4ee1abb738132bbcc14d4289ddb5d6bac134c6d392e5b3e3b3d28f18631915`; state `semantic_state_b9765530c27f817ed850a49ca7f9dad23313638810c9daaffbf42fd34c684632` |
-| built-in standard dependency | package revision `package_revision_7b9cd7fae489906bcdb9bf12ffa2b8dd80fb346fe9f980ddf2c9037907918b24`; transport `package_transport_1b4880be8f7173b7cf39874bb62c1fa1b5892d21551c9f6888815042db4c7914`; artifact manifest `artifact_manifest_b90cbe36b91a23e1140d73537a897b63d3099ca7a19b4ee4ed2af38053feb7c8` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_06b6477bb1564352ddf42a0567371ed383d3d58725135d5edaebd54fd50bc5ef`; state `semantic_state_a96f15872291261b3c45f4b80648dba23a75a587a621c30d906449d6577fb259` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_d07643ae5daa20e47582e8be62911a640b5f1338b791c34a47f35fb02729a130`; state `semantic_state_9083ae6473d929c830bc955e62a6ce464f1352a32f588025009371a63689a816` |
+| built-in standard dependency | package revision `package_revision_12e7d9a0ba281bd8e438acf80553fe405d05d5db3ca0c4e4fbb564cf8197e94b`; transport `package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1`; artifact manifest `artifact_manifest_45939572d0cdf759a10314cbd0f4cb006e012fa4f88cee5be084119cbd508d73` |
 
-The standard package owns 688 live semantic owners, 122 compiler units, and 28 graph tests. Its
-current artifact has 1,244 closure objects and 383,223 bytes. `lkjournal` owns 2,040 live semantic
-owners and one exact standard dependency; its two-package artifact has 212 compiler units, 3,725
-closure objects, and 1,117,156 bytes. Its complete dependency closure runs 35 graph tests. Both
+The standard package owns 723 live semantic owners, 126 compiler units, and 30 graph tests. Its
+current artifact has 1,292 closure objects and 397,334 bytes. `lkjournal` owns 2,040 live semantic
+owners and one exact standard dependency; its two-package artifact has 216 compiler units, 3,773
+closure objects, and 1,131,294 bytes. Its complete dependency closure runs 37 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 266,003 bytes | `d26ae7f15f42d9d3e4c3907237535e4e15eb2232ebfc3dc3242e2b2e588d1d32` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 383,223 bytes | `0135a9fc1e0ec1f1f5d59dd442822138bbdc122ed980defaf741bfeef0baf95b` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,117,156 bytes | `03a1dd375d9b4f615eee4b291d3902d8944003ea38520e7164e2db568826d9d6` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 275,085 bytes | `3ead1a17ab28bf52ae3fcfb13b29c86352836cc328f1ec15eda079c0f3dc5b0b` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 397,334 bytes | `7ffe836adf786bcc65f66181d26cd168d5a709a18725c0d0afffd3cbf940d6ed` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,131,294 bytes | `eeb3215ed6e4628724785211c8ce3ff778a0ee4c635d007e1b20fdbe613febbc` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
 also performs a fresh public `lkjournal` build, requires byte equality with the checked-in bundle,
 and stages that one artifact for isolated `serve` and `worker` acceptance.
+
+## Capture-safe rank-one abstraction
+
+Graph-owned parameters carry explicit capture-safe constraints. The compact add/set operations,
+complete-candidate validation, interface summaries, compiled signatures, strict loading and both
+evaluators carry that meaning. The standard owns function-constant over a private generic graph
+helper; copied-product witnesses author configurable callbacks with runtime nominal environments,
+Text and nested lists. lkjournal receives only the Graph 12 and exact dependency migration.
+Existing type/data bytes and owner identities are preserved. This is a new reusable library
+capability; no generic tasks, user-defined traits, equality/serialization constraints, resource
+polymorphism or application feature was added.
+
+Final campaign proof is in progress. The campaign and bounded evidence will record exact source,
+candidate and verification dispositions without relabelling earlier results as fresh.
 
 ## Public binary release
 
@@ -104,19 +118,19 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is unreleased `0.1.27`; immutable public latest remains `v0.1.21` at the
+Current product source is unreleased `0.1.28`; immutable public latest remains `v0.1.21` at the
 exact release-input source commit named above. The source retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
-Graph 11, TypeObject 10, validation witness 7, owner summary 6,
-validator 11, package 3, package interface 7, compiler-unit 6, bytecode 4, Artifact 16, resident
-runtime 3, function-definition projection 3, service receipt 10, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 15, authored change 12,
-logical change plan 5, query 6,
-project creation 5, registry 14, CLI 28, deployment 4, HTTP adapter 3, and structured-session 1 are
+Graph 12, TypeObject 10, validation witness 7, owner summary 7,
+validator 12, package 3, package interface 8, compiler-unit 7, bytecode 4, Artifact 16, resident
+runtime 3, function-definition projection 4, service receipt 10, distributed-HTTP receipt 4,
+outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 16, authored change 13,
+logical change plan 5, query 7,
+project creation 5, registry 15, CLI 29, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 
@@ -124,8 +138,8 @@ Pure-function binding provides immutable runtime prefixes and graph-owned standa
 BND-1–BND-6 pass at the implementation boundary, including copied-public returned reducers,
 nested callable capture, composition, extraction, request-configured transactional folding, and
 exact musl target admission. The maintained Graph 11 materialization keeps existing semantic owner
-identities and unchanged TypeObject 10 bytes and typed-data layouts. Stored bare type parameters
-remain outside the capture-safe subset. See the
+identities and unchanged TypeObject 10 bytes and typed-data layouts. Unconstrained stored type
+parameters remain outside the capture-safe subset. See the
 [campaign](campaigns/202609090021.md) and
 [decision](decisions/20260909-explicit-pure-function-binding.md).
 

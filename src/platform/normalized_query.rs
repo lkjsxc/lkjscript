@@ -25,8 +25,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
-pub const QUERY_CONTRACT_VERSION: u16 = 6;
-pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query-6";
+pub const QUERY_CONTRACT_VERSION: u16 = 7;
+pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query-7";
 pub const DEFAULT_QUERY_ITEMS: u64 = 50;
 pub const MAXIMUM_QUERY_ITEMS: u64 = 10_000;
 pub const DEFAULT_QUERY_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -119,7 +119,7 @@ pub(crate) const QUERY_OPERATION_DESCRIPTORS: [QueryOperationDescriptor; 4] = [
     },
 ];
 
-pub(crate) const QUERY_RESPONSE_FIELDS: [(&str, &str); 43] = [
+pub(crate) const QUERY_RESPONSE_FIELDS: [(&str, &str); 44] = [
     ("result", "status"),
     ("result", "command"),
     ("project", "path"),
@@ -135,6 +135,7 @@ pub(crate) const QUERY_RESPONSE_FIELDS: [(&str, &str); 43] = [
     ("owner", "name"),
     ("owner", "class"),
     ("owner", "parent"),
+    ("owner", "constraint"),
     ("owner", "depth"),
     ("relation", "kind"),
     ("relation", "source-package"),
@@ -1326,6 +1327,7 @@ struct OwnerProjection {
     owner: OwnerKey,
     kind: OwnerKind,
     namespace: Option<OwnerNamespaceProjection>,
+    constraints: Option<super::kernel::TypeParameterConstraints>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1346,6 +1348,10 @@ impl OwnerProjection {
             owner,
             kind: record.kind(),
             namespace,
+            constraints: match record {
+                super::kernel::OwnerRecord::TypeParameter(record) => Some(record.constraints),
+                _ => None,
+            },
         }
     }
 
@@ -1372,6 +1378,9 @@ impl OwnerProjection {
                     .parent
                     .map_or_else(|| "package".to_owned(), |parent| parent.to_string()),
             ));
+        }
+        if let Some(constraints) = self.constraints {
+            fields.push(("constraint", constraints.name().to_owned()));
         }
         fields
     }

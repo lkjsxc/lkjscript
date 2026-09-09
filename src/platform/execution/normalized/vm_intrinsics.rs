@@ -84,6 +84,36 @@ impl Machine<'_> {
                 "raw invocation has a foreign argument or type arity",
             ));
         }
+        for (constraint, ty) in function.type_parameter_constraints.iter().zip(types) {
+            self.control.check()?;
+            if self
+                .program
+                .substitute_type(*ty, &BTreeMap::new(), 0)
+                .is_none()
+            {
+                return Err(type_error(
+                    "raw invocation requires fully resolved exact types",
+                ));
+            }
+            if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
+                checked::Admission {
+                    substitutions: &BTreeMap::new(),
+                    program: self.program,
+                    resources: self.resources,
+                    control: self.control,
+                    policy: self.policy,
+                    work: &mut self.observation.value_work,
+                    allocated: &mut self.observation.allocated_bytes,
+                    allocation_charges: &mut self.observation.allocation_charges,
+                    items: &mut self.observation.collection_items,
+                }
+                .require_capture_type(
+                    *ty,
+                    &BTreeMap::new(),
+                    &mut std::collections::BTreeSet::new(),
+                )?;
+            }
+        }
         self.charge_allocation(
             (types.len() * std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()) as u64,
         )?;

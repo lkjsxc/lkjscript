@@ -96,7 +96,122 @@ pub(super) fn complete(program: &mut NormalizedProgram) -> Result<(), Diagnostic
         }
     }
     program.work.type_objects = program.types.len() as u64;
+    program.capture_safe_types = capture_types(program, &mut work)?;
+    let mut bytes = program
+        .capture_safe_types
+        .len()
+        .checked_mul(std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>())
+        .ok_or_else(missing)?;
+    for function in program.functions.iter() {
+        step(&mut work)?;
+        bytes = function
+            .type_parameter_constraints
+            .len()
+            .checked_mul(std::mem::size_of::<
+                crate::platform::kernel::TypeParameterConstraints,
+            >())
+            .and_then(|count| {
+                count.checked_add(
+                    std::mem::size_of::<
+                        std::sync::Arc<[crate::platform::kernel::TypeParameterConstraints]>,
+                    >() + 2 * std::mem::size_of::<usize>(),
+                )
+            })
+            .and_then(|count| count.checked_add(bytes))
+            .ok_or_else(missing)?;
+    }
+    program.capture_proof_bytes = bytes;
     Ok(())
+}
+
+// Preparation-local proof from compiled layouts and the completed type closure. Every root
+// is reconstructed; nominal cycles use a bounded per-root visited set, never a persistent cache.
+fn capture_types(
+    program: &NormalizedProgram,
+    work: &mut usize,
+) -> Result<BTreeSet<TypeObjectDigest>, Diagnostic> {
+    let mut safe = BTreeSet::new();
+    for root in program.types.keys() {
+        step(work)?;
+        let mut pending = vec![(*root, 0usize)];
+        let mut visited = BTreeSet::new();
+        let mut admitted = true;
+        while let Some((ty, depth)) = pending.pop() {
+            step(work)?;
+            if depth > 256 {
+                admitted = false;
+                break;
+            }
+            if visited.contains(&ty) {
+                continue;
+            }
+            step(work)?;
+            visited.insert(ty);
+            let mut child = |ty| -> Result<(), Diagnostic> {
+                step(work)?;
+                pending.push((ty, depth + 1));
+                Ok(())
+            };
+            match &program.types.get(&ty).ok_or_else(missing)?.form {
+                TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Function { .. } => {}
+                TypeForm::Secret
+                | TypeForm::Stream { .. }
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::TypeParameter { .. } => {
+                    admitted = false;
+                    break;
+                }
+                TypeForm::List { item } | TypeForm::Option { item } => child(*item)?,
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => {
+                    child(*key)?;
+                    child(*value)?;
+                }
+                TypeForm::StructuralRecord { fields } => {
+                    for field in fields {
+                        child(field.ty)?;
+                    }
+                }
+                TypeForm::Named { declaration } => {
+                    if let Ok(index) = program
+                        .records
+                        .binary_search_by_key(declaration, |record| record.declaration)
+                    {
+                        for field in program.records[index].fields.iter() {
+                            child(field.ty)?;
+                        }
+                    } else if let Ok(index) = program
+                        .variants
+                        .binary_search_by_key(declaration, |variant| variant.declaration)
+                    {
+                        for case in program.variants[index].cases.iter() {
+                            step(work)?;
+                            if let Some(payload) = case.payload {
+                                step(work)?;
+                                pending.push((payload, depth + 1));
+                            }
+                        }
+                    } else {
+                        return Err(missing());
+                    }
+                }
+            }
+        }
+        if admitted {
+            step(work)?;
+            safe.insert(*root);
+        }
+    }
+    Ok(safe)
 }
 
 fn calls(

@@ -102,6 +102,19 @@ impl Value {
                 "named reference callable requires all resolved canonical type arguments",
             ));
         }
+        if signature
+            .type_parameter_constraints
+            .iter()
+            .zip(type_arguments.iter())
+            .any(|(constraint, ty)| {
+                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    && !schema.capture_safe_types.contains(ty)
+            })
+        {
+            return Err(reject(
+                "named canonical callable requires capture-safe type arguments",
+            ));
+        }
         Ok(Self {
             datum: NormalizedValue::Function {
                 function,
@@ -890,6 +903,17 @@ impl ReferenceState<'_> {
                             "raw callback contains a foreign or unbound type argument; supply exact canonical types",
                         ));
                     }
+                    for (constraint, ty) in signature
+                        .type_parameter_constraints
+                        .iter()
+                        .zip(type_arguments.iter())
+                    {
+                        if *constraint
+                            == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                        {
+                            self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+                        }
+                    }
                     self.charge_reference_bindings(type_arguments.len())?;
                     let actual_bindings = Arc::new(
                         signature
@@ -1014,6 +1038,25 @@ impl ReferenceState<'_> {
         self.charge_allocation(
             (types.len() * std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()) as u64,
         )?;
+        for (constraint, ty) in signature
+            .type_parameter_constraints
+            .iter()
+            .zip(types.iter())
+        {
+            self.control.check()?;
+            if self
+                .schema
+                .substitute_type(*ty, &BTreeMap::new(), 0)
+                .is_none()
+            {
+                return Err(reject(
+                    "raw invocation requires resolved canonical type arguments",
+                ));
+            }
+            if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
+                self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+            }
+        }
         let bindings = signature
             .type_parameters
             .iter()

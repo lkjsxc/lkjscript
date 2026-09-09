@@ -99,16 +99,16 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-14";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 14;
-pub const CLI_CONTRACT_VERSION: u16 = 28;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-15";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 15;
+pub const CLI_CONTRACT_VERSION: u16 = 29;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-3";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 3;
+    "lkjscript-function-definition-projection-4";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 4;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -216,6 +216,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.type-parameter", "parent"),
     ("definition.type-parameter", "index"),
     ("definition.type-parameter", "name"),
+    ("definition.type-parameter", "constraint"),
     ("definition.parameter", "id"),
     ("definition.parameter", "parent"),
     ("definition.parameter", "index"),
@@ -3655,6 +3656,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Capture recursively safe ordinary values or pure callables; inspect every nominal case, including absent resource cases.",
         ),
         diagnostic(
+            "change_type_parameter_constraint",
+            DiagnosticClass::Source,
+            "The authored constraint is outside the closed none/capture-safe set.",
+            "Select none or capture-safe; omission is permitted only when adding a parameter.",
+        ),
+        diagnostic(
+            "compiler_type_parameter_constraints",
+            DiagnosticClass::Corrupt,
+            "A loaded compiled signature lacks its exact ordered parameter constraint inventory.",
+            "Rebuild the artifact from accepted graph meaning; do not default missing constraints.",
+        ),
+        diagnostic(
+            "kernel_type_constraint",
+            DiagnosticClass::Semantic,
+            "An explicit type argument does not satisfy its exact callee parameter's capture-safe constraint.",
+            "Use a structurally safe type or declare the exact caller parameter's capture-safe constraint; review all affected callers.",
+        ),
+        diagnostic(
             "kernel_type_bind_capture_depth",
             DiagnosticClass::Semantic,
             "Capture-type validation exceeded its bounded structural depth.",
@@ -6091,7 +6110,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "stored-type-parameters",
-                        "reject-unknown-capture-safety".to_owned(),
+                        "require-explicit-in-scope-capture-safe".to_owned(),
                     ),
                     (
                         "function-signature-parameters",
@@ -6625,6 +6644,7 @@ fn validate_compact_change_inventory(
             ));
         }
         let optional = [
+            ("add.type-parameter", "constraint"),
             ("add.case", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
@@ -6823,9 +6843,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-3"
+            "lkjscript-function-definition-projection-4"
         );
-        assert_eq!(contract.version, 3);
+        assert_eq!(contract.version, 4);
         assert_eq!(
             contract_descriptors()
                 .iter()

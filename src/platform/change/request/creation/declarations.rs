@@ -355,6 +355,7 @@ pub(in crate::platform::change::request) fn lower_external<
             header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
             declaration,
             name: parameter.name.clone(),
+            constraints: parameter.constraints,
         }))?;
     }
     let mut parameter_ids = Vec::with_capacity(parameters.len());

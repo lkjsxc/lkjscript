@@ -124,7 +124,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-2".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-3".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -419,10 +419,10 @@ impl Context {
     fn check(&mut self, target: &Package) -> Result<(), DevError> {
         let records = self.cli(Some(&target.path), &["check"], true)?;
         require(
-            field(&records, "tests", "passed")? == "32"
+            field(&records, "tests", "passed")? == "34"
                 && field(&records, "tests", "failed")? == "0"
                 && field(&records, "tests", "differential")? == "equal",
-            "each of five selected packages must be tested exactly once (28+1+1+1+1)",
+            "each of five selected packages must be tested exactly once (30+1+1+1+1)",
         )?;
         require(
             field(&records, "artifact", "packages")? == "5",
@@ -605,19 +605,71 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         d.symbols["$helper"], d.symbols["$module"]
     );
     context.apply(&mut d, &factory)?;
-    let mapping_factory = format!(
-        "type.function as=@mapper result=i64\ntype.argument parent=@mapper index=0 type=i64\nexpression.local as=$map-item value=$map-item-parameter\nexpression.local as=$map-bias value=$map-bias-parameter\n{}{}create.function as=$map-helper module={} name=map-helper visibility=private result=i64 effect=pure body=$map-result\nadd.parameter as=$map-bias-parameter function=$map-helper name=bias type=i64\nadd.parameter as=$map-item-parameter function=$map-helper name=item type=i64\nexpression.function-value as=$map-helper-value function=$map-helper\nexpression.local as=$factory-bias value=$mapper-bias\nexpression.bind as=$bound-mapper callee=$map-helper-value\nexpression.argument parent=$bound-mapper index=0 expression=$factory-bias\ncreate.function as=$mapper-factory module={} name=mapper-factory visibility=public result=@mapper effect=pure body=$bound-mapper\nadd.parameter as=$mapper-bias function=$mapper-factory name=bias type=i64\n",
-        call("$map-offset", &d.symbols["$helper"], &["$map-item"]),
-        call(
-            "$map-result",
-            &standard.symbols["add"],
-            &["$map-offset", "$map-bias"]
-        ),
-        d.symbols["$module"],
-        d.symbols["$module"]
-    );
+    // Public generic factory and ordinary private helper. The bound is attached
+    // only to the factory's stored Env; the helper merely passes it to step.
+    let mapping_factory = r#"type.function as=@mapper result=i64
+ type.argument parent=@mapper index=0 type=i64
+ type.parameter as=@env parameter=$env
+ type.parameter as=@helper-env parameter=$helper-env
+ type.function as=@step result=i64
+ type.argument parent=@step index=0 type=@env
+ type.argument parent=@step index=1 type=i64
+ type.function as=@helper-step result=i64
+ type.argument parent=@helper-step index=0 type=@helper-env
+ type.argument parent=@helper-step index=1 type=i64
+ expression.local as=$helper-step-value value=$helper-step-parameter
+ expression.local as=$helper-env-value value=$helper-env-parameter
+ expression.local as=$helper-item value=$helper-item-parameter
+ expression.invoke as=$map-result function=$helper-step-value
+ expression.argument parent=$map-result index=0 expression=$helper-env-value
+ expression.argument parent=$map-result index=1 expression=$helper-item
+ create.function as=$map-helper module=$module name=map-helper visibility=private result=i64 effect=pure body=$map-result
+ add.type-parameter as=$helper-env function=$map-helper name=Env
+ add.parameter as=$helper-env-parameter function=$map-helper name=env type=@helper-env
+ add.parameter as=$helper-step-parameter function=$map-helper name=step type=@helper-step
+ add.parameter as=$helper-item-parameter function=$map-helper name=item type=i64
+ expression.function-value as=$map-helper-value function=$map-helper
+ type.argument parent=$map-helper-value index=0 type=@env
+ expression.local as=$factory-env value=$mapper-env
+ expression.local as=$factory-step value=$mapper-step
+ expression.bind as=$bound-mapper callee=$map-helper-value
+ expression.argument parent=$bound-mapper index=0 expression=$factory-env
+ expression.argument parent=$bound-mapper index=1 expression=$factory-step
+ create.function as=$mapper-factory module=$module name=mapper-factory visibility=public result=@mapper effect=pure body=$bound-mapper
+ add.type-parameter as=$env function=$mapper-factory name=Env constraint=capture-safe
+ add.parameter as=$mapper-env function=$mapper-factory name=env type=@env
+ add.parameter as=$mapper-step function=$mapper-factory name=step type=@step
+ "#.replace("module=$module", &format!("module={}", d.symbols["$module"]));
     context.apply(&mut d, &mapping_factory)?;
     let d1_inventory = context.export(&mut d)?;
+    let constraints = context.cli(
+        Some(&d.path),
+        &[
+            "inspect",
+            "owner",
+            "pure_function",
+            &d.symbols["$mapper-factory"],
+            "--detail",
+            "definition",
+            "--limit",
+            "1000",
+            "--bytes",
+            "1048576",
+        ],
+        true,
+    )?;
+    require(
+        constraints.iter().any(|record| {
+            record.operation == "definition.type-parameter"
+                && record_field(record, "constraint").is_ok_and(|value| value == "capture-safe")
+        }),
+        "generic factory definition omitted its bound",
+    )?;
+    context.receipt.observations.insert(
+        "generic_capture_factory".to_owned(),
+        "capture-safe;private-generic-helper;consumer-nominal-env".to_owned(),
+    );
+
     let d1 = d.clone();
     let mut b = context.new_package("producer-b")?;
     let mut c = context.new_package("producer-c")?;
@@ -655,20 +707,47 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         context.export(package)?;
     }
     let mapped = format!(
-        "type.list as=@mapped-items item=i64\nexpression.local as=$mapped-input value=$mapped-parameter\nexpression.i64 as=$mapped-bias value=5\n{}{}type.argument parent=$mapped-body index=0 type=i64\ntype.argument parent=$mapped-body index=1 type=i64\ncreate.function as=$mapped module={} name=mapped visibility=public result=@mapped-items effect=pure body=$mapped-body\nadd.parameter as=$mapped-parameter function=$mapped name=items type=@mapped-items\n",
-        call(
+        "create.record as=$env-record module={module} name=Environment visibility=public\nadd.field as=$bias-field record=$env-record name=bias type=i64\ntype.named as=@env declaration=$env-record\nexpression.local as=$step-env value=$step-env-parameter\nexpression.field as=$step-bias value=$step-env field=$bias-field\nexpression.local as=$step-item value=$step-item-parameter\n{offset}{sum}create.function as=$map-step module={module} name=map-step visibility=private result=i64 effect=pure body=$step-result\nadd.parameter as=$step-env-parameter function=$map-step name=env type=@env\nadd.parameter as=$step-item-parameter function=$map-step name=item type=i64\nexpression.function-value as=$map-step-value function=$map-step\ntype.list as=@mapped-items item=i64\nexpression.local as=$mapped-input value=$mapped-parameter\nexpression.i64 as=$mapped-bias value=5\nexpression.record as=$mapped-env type=$env-record\nexpression.record-field parent=$mapped-env index=0 field=$bias-field value=$mapped-bias\n{factory}type.argument parent=$mapper index=0 type=@env\n{map}type.argument parent=$mapped-body index=0 type=i64\ntype.argument parent=$mapped-body index=1 type=i64\ncreate.function as=$mapped module={module} name=mapped visibility=public result=@mapped-items effect=pure body=$mapped-body\nadd.parameter as=$mapped-parameter function=$mapped name=items type=@mapped-items\n",
+        module = b.symbols["$module"],
+        offset = call("$step-offset", &reference(&d, "$entry")?, &["$step-item"]),
+        sum = call(
+            "$step-result",
+            &standard.symbols["add"],
+            &["$step-offset", "$step-bias"]
+        ),
+        factory = call(
             "$mapper",
             &reference(&d, "$mapper-factory")?,
-            &["$mapped-bias"]
+            &["$mapped-env", "$map-step-value"]
         ),
-        call(
+        map = call(
             "$mapped-body",
             &standard.symbols["list-map"],
             &["$mapped-input", "$mapper"]
         ),
-        b.symbols["$module"]
     );
     context.apply(&mut b, &mapped)?;
+    let invalid_constraint = context.evidence.join("imported-unsafe-instantiation.lkjc");
+    fs::write(
+        &invalid_constraint,
+        format!(
+            "request base={}\ntype.list as=@unsafe item=secret\nexpression.function-value as=$invalid function={}\ntype.argument parent=$invalid index=0 type=@unsafe\nexpression.unit as=$unit\nexpression.sequence as=$sequence\nexpression.argument parent=$sequence index=0 expression=$invalid\nexpression.argument parent=$sequence index=1 expression=$unit\ncreate.function as=$bad module={} name=unsafe-instantiation visibility=private result=unit effect=pure body=$sequence\n",
+            b.revision,
+            reference(&d, "$mapper-factory")?,
+            b.symbols["$module"]
+        ),
+    )?;
+    context.reject(
+        &b,
+        &[
+            "change",
+            "plan",
+            "--input-file",
+            &invalid_constraint.display().to_string(),
+        ],
+        "kernel_type_constraint",
+    )?;
+
     context.export(&mut b)?;
     let b1 = b.clone();
     let c1 = c.clone();
@@ -747,6 +826,31 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         true,
     )?;
+    let constrained = context.cli(
+        Some(&a.path),
+        &[
+            "package",
+            "dependency",
+            "inspect",
+            "owner",
+            "pure_function",
+            &d.symbols["$mapper-factory"],
+            "--package-revision",
+            &d.logical,
+        ],
+        true,
+    )?;
+    require(
+        constrained.iter().any(|record| {
+            record.operation == "type-parameter"
+                && record_field(record, "constraint").is_ok_and(|value| value == "capture-safe")
+        }),
+        "imported interface lost its exact constraint",
+    )?;
+    context.receipt.observations.insert(
+        "imported_capture_constraint".to_owned(),
+        "capture-safe;unsafe-empty-container-rejected".to_owned(),
+    );
     let first_page = context.cli(
         Some(&a.path),
         &[
@@ -1542,7 +1646,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-2"
+        receipt.schema == "lkjscript-offline-packages-acceptance-3"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1555,6 +1659,14 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt does not bind the exact transferred candidate, verifier, and cleanup",
     )?;
     for (key, value) in [
+        (
+            "generic_capture_factory",
+            "capture-safe;private-generic-helper;consumer-nominal-env",
+        ),
+        (
+            "imported_capture_constraint",
+            "capture-safe;unsafe-empty-container-rejected",
+        ),
         ("fixed_results", "11,11,12"),
         ("diamond_package_ids_distinct", "true"),
         ("producers_absent_before_execution", "true"),
@@ -1580,6 +1692,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     for code in [
+        "kernel_type_constraint",
         "change_authored_stale_base",
         "change_plan_output_type",
         "change_request_commitment_mismatch",

@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 11 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 12 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -999,6 +999,7 @@ pub(crate) enum RuntimeOwnerExpectation {
     },
     TypeParameter {
         declaration: DeclarationId,
+        constraints: crate::platform::kernel::TypeParameterConstraints,
     },
     Field {
         declaration: DeclarationId,
@@ -1096,9 +1097,13 @@ impl RuntimeOwnerExpectation {
                         )
                 )
             }
-            (Self::TypeParameter { declaration }, OwnerRecord::TypeParameter(record)) => {
-                record.declaration == *declaration
-            }
+            (
+                Self::TypeParameter {
+                    declaration,
+                    constraints,
+                },
+                OwnerRecord::TypeParameter(record),
+            ) => record.declaration == *declaration && record.constraints == *constraints,
             (Self::Field { declaration, ty }, OwnerRecord::Field(record)) => {
                 record.declaration == *declaration && record.ty == *ty
             }
@@ -1653,11 +1658,18 @@ fn insert_signature_expectations(
     signature: &CompiledSignature,
     unit: &CompilationUnit,
 ) -> Result<(), Diagnostic> {
-    for parameter in &signature.type_parameters {
+    for (parameter, constraints) in signature
+        .type_parameters
+        .iter()
+        .zip(&signature.type_parameter_constraints)
+    {
         insert_runtime_expectation(
             expected,
             (package, OwnerKey::TypeParameter(*parameter)),
-            RuntimeOwnerExpectation::TypeParameter { declaration },
+            RuntimeOwnerExpectation::TypeParameter {
+                declaration,
+                constraints: *constraints,
+            },
         )?;
     }
     for parameter in &signature.parameters {

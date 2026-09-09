@@ -38,3 +38,8 @@ and no-rescan proof. Wrong-prefix and restored-scan mutations must fail fixed ex
 of these public boundaries is grounds to revise the mechanism; it does not authorize retaining a
 second editable body representation, adding task closures, inferring generic capture constraints,
 or weakening the fixed acceptance obligations.
+
+The later [capture-safe rank-one decision](20260909-capture-safe-rank-one-abstraction.md) permits
+stored parameters only through an explicit exact-declaration constraint. It supersedes this slice's
+lack of constrained parameters while retaining its rejection of unconstrained captures and its
+lifetime, callable, effect and data boundaries.

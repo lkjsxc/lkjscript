@@ -414,6 +414,99 @@ pub struct TypeParameterRecord {
     pub header: OwnerHeader,
     pub declaration: DeclarationId,
     pub name: Name,
+    pub constraints: TypeParameterConstraints,
+}
+
+/// The closed structural constraint set. The wire tags below are explicit and do not
+/// depend on Rust enum order. A set needs no heap storage; duplicate/unknown entries reject.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TypeParameterConstraints {
+    #[default]
+    None,
+    CaptureSafe,
+}
+
+impl TypeParameterConstraints {
+    pub const fn tag(self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::CaptureSafe => 1,
+        }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::CaptureSafe => "capture-safe",
+        }
+    }
+}
+
+impl Encode for TypeParameterConstraints {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.tag().encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for TypeParameterConstraints {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        match u8::decode(decoder)? {
+            0 => Ok(Self::None),
+            1 => Ok(Self::CaptureSafe),
+            _ => Err(DecodeError::Other("unknown type-parameter constraint set")),
+        }
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for TypeParameterConstraints {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        Self::decode(decoder)
+    }
+}
+
+impl Serialize for TypeParameterConstraints {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let mut sequence = serializer.serialize_seq(Some(usize::from(self.tag())))?;
+        if *self == Self::CaptureSafe {
+            sequence.serialize_element("capture-safe")?;
+        }
+        sequence.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for TypeParameterConstraints {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ConstraintSet;
+        impl<'de> serde::de::Visitor<'de> for ConstraintSet {
+            type Value = TypeParameterConstraints;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an empty constraint set or [\"capture-safe\"]")
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut sequence: A,
+            ) -> Result<Self::Value, A::Error> {
+                let Some(value) = sequence.next_element::<String>()? else {
+                    return Ok(TypeParameterConstraints::None);
+                };
+                if value != "capture-safe" {
+                    return Err(serde::de::Error::custom(
+                        "unknown type-parameter constraint",
+                    ));
+                }
+                if sequence.next_element::<serde::de::IgnoredAny>()?.is_some() {
+                    return Err(serde::de::Error::custom(
+                        "duplicate or unknown type-parameter constraint",
+                    ));
+                }
+                Ok(TypeParameterConstraints::CaptureSafe)
+            }
+        }
+        deserializer.deserialize_seq(ConstraintSet)
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

@@ -238,6 +238,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
     insert(
         &mut owners,
         OwnerRecord::TypeParameter(TypeParameterRecord {
+            constraints: Default::default(),
             header: OwnerHeader::new(
                 OwnerKey::TypeParameter(type_parameter),
                 OwnerKind::TypeParameter,
@@ -1672,7 +1673,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "c1075c5bacc7a5c6b3b6db6a10cf828e6402f1ac546e5152dc20335368a2f1e1"
+        "43d7a15e98befb478a67f05e3a3aca2b55e7fce4ab35d3abed373129e97fec39"
     );
 }
 
@@ -2111,6 +2112,7 @@ fn full_oracle_rejects_foreign_type_parameter_scope() {
     insert(
         &mut snapshot.owners,
         OwnerRecord::TypeParameter(TypeParameterRecord {
+            constraints: Default::default(),
             header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
             declaration: ids.callee,
             name: name("T"),
@@ -2158,6 +2160,7 @@ fn generic_call_substitutes_the_exact_type_parameter() {
     insert(
         &mut snapshot.owners,
         OwnerRecord::TypeParameter(TypeParameterRecord {
+            constraints: Default::default(),
             header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
             declaration: ids.callee,
             name: name("Value"),
@@ -2206,12 +2209,58 @@ fn generic_call_substitutes_the_exact_type_parameter() {
 }
 
 #[test]
+fn capture_constraint_set_has_stable_tags_and_strict_json() {
+    for (constraint, tag, json) in [
+        (TypeParameterConstraints::None, 0_u8, "[]"),
+        (
+            TypeParameterConstraints::CaptureSafe,
+            1,
+            "[\"capture-safe\"]",
+        ),
+    ] {
+        let bytes = bincode::encode_to_vec(constraint, bincode::config::standard()).unwrap();
+        assert_eq!(bytes, [tag]);
+        assert_eq!(serde_json::to_string(&constraint).unwrap(), json);
+        assert_eq!(
+            serde_json::from_str::<TypeParameterConstraints>(json).unwrap(),
+            constraint
+        );
+    }
+    for json in [
+        "[\"unknown\"]",
+        "[\"capture-safe\",\"capture-safe\"]",
+        "[\"none\"]",
+        "null",
+        "{}",
+    ] {
+        assert!(
+            serde_json::from_str::<TypeParameterConstraints>(json).is_err(),
+            "{json}"
+        );
+    }
+    for tag in [2_u8, 127, 255] {
+        assert!(
+            bincode::decode_from_slice::<TypeParameterConstraints, _>(
+                &[tag],
+                bincode::config::standard()
+            )
+            .is_err()
+        );
+    }
+    assert!(
+        bincode::decode_from_slice::<TypeParameterConstraints, _>(&[], bincode::config::standard())
+            .is_err()
+    );
+}
+
+#[test]
 fn full_oracle_rejects_generic_task_functions() {
     let (mut snapshot, ids) = prototype_snapshot();
     let parameter = TypeParameterId::migrate(TEST_SEED, 52);
     insert(
         &mut snapshot.owners,
         OwnerRecord::TypeParameter(TypeParameterRecord {
+            constraints: Default::default(),
             header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
             declaration: ids.caller,
             name: name("TaskValue"),

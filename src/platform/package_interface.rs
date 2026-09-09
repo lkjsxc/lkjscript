@@ -31,10 +31,10 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-7";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 7;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF07";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v7";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-8";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 8;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF08";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v8";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;

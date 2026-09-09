@@ -61,6 +61,7 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
         | AuthoredChange::SetFieldType { .. }
         | AuthoredChange::SetCasePayload { .. }
         | AuthoredChange::SetParameterType { .. }
+        | AuthoredChange::SetTypeParameterConstraint { .. }
         | AuthoredChange::SetOperationContract { .. }
         | AuthoredChange::SetRequirementContract { .. }
         | AuthoredChange::SetTarget { .. }
@@ -148,6 +149,17 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 return Err(mutation_kind("parameter", owner));
             };
             record.ty = ty;
+            Ok(())
+        }
+        AuthoredChange::SetTypeParameterConstraint {
+            parameter,
+            constraints,
+        } => {
+            let owner = lowerer.resolve_owner(parameter)?;
+            let OwnerRecord::TypeParameter(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("type parameter", owner));
+            };
+            record.constraints = *constraints;
             Ok(())
         }
         AuthoredChange::SetOperationContract {
@@ -331,6 +343,7 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         ),
         declaration,
         name: parameter.name.clone(),
+        constraints: parameter.constraints,
     }))
 }
 

@@ -276,6 +276,52 @@ pub(super) fn http(
     request.text
 }
 
+fn configure_factory(request: &mut Request) {
+    request.text.push_str(
+        r#"type.parameter as=@Env parameter=$Env
+type.parameter as=@Input parameter=$Input
+type.parameter as=@Output parameter=$Output
+type.parameter as=@HE parameter=$HE
+type.parameter as=@HI parameter=$HI
+type.parameter as=@HO parameter=$HO
+type.function as=@generic-step result=@Output
+type.argument parent=@generic-step index=0 type=@Env
+type.argument parent=@generic-step index=1 type=@Input
+type.function as=@generic-configured result=@Output
+type.argument parent=@generic-configured index=0 type=@Input
+type.function as=@helper-step result=@HO
+type.argument parent=@helper-step index=0 type=@HE
+type.argument parent=@helper-step index=1 type=@HI
+"#,
+    );
+    let step = request.local("$configure-helper_step");
+    let env = request.local("$configure-helper_env");
+    let input = request.local("$configure-helper_input");
+    let body = request.invoke(&step, &[env, input]);
+    request.text.push_str(&format!("create.function as=$configure-helper module=$module name=configure-helper visibility=private result=@HO effect=pure body={body}\n"));
+    request.text.push_str(
+        r#"add.type-parameter as=$HE function=$configure-helper name=Env
+add.type-parameter as=$HI function=$configure-helper name=Input
+add.type-parameter as=$HO function=$configure-helper name=Output
+add.parameter as=$configure-helper_env function=$configure-helper name=env type=@HE
+add.parameter as=$configure-helper_step function=$configure-helper name=step type=@helper-step
+add.parameter as=$configure-helper_input function=$configure-helper name=input type=@HI
+"#,
+    );
+    let callee = request.function_value("$configure-helper");
+    request.types(&callee, &["@Env", "@Input", "@Output"]);
+    let env = request.local("$configure_env");
+    let step = request.local("$configure_step");
+    let body = request.bind(&callee, &[env, step]);
+    request.function(
+        "configure",
+        "@generic-configured",
+        &body,
+        &[("env", "@Env"), ("step", "@generic-step")],
+    );
+    request.text.push_str("add.type-parameter as=$Env function=$configure name=Env constraint=capture-safe\nadd.type-parameter as=$Input function=$configure name=Input\nadd.type-parameter as=$Output function=$configure name=Output\n");
+}
+
 pub(super) fn library(standard: &BTreeMap<String, String>) -> String {
     let mut request = Request::default();
     request.text.push_str("create.module as=$module name=library\ntype.parameter as=@A parameter=$A\ntype.parameter as=@B parameter=$B\ncreate.variant as=$branch module=$module name=Branch visibility=private\nadd.case as=$selected variant=$branch name=selected\n");
@@ -306,6 +352,7 @@ pub(super) fn library(standard: &BTreeMap<String, String>) -> String {
         &[("n", "i64"), ("a", "@A"), ("b", "@B")],
     );
     request.text.push_str("add.type-parameter as=$A function=$keep name=A\nadd.type-parameter as=$B function=$keep name=B\n");
+    configure_factory(&mut request);
     request.text.push_str("type.function as=@reducer result=i64\ntype.argument parent=@reducer index=0 type=i64\ntype.argument parent=@reducer index=1 type=i64\n");
     let scale = request.local("$configured-step_scale");
     let item = request.local("$configured-step_item");
@@ -335,6 +382,7 @@ pub(super) fn consumer(
     standard: &BTreeMap<String, String>,
     library: &str,
     factory: &str,
+    configure: &str,
 ) -> String {
     let mut request = Request::default();
     request.text.push_str("create.module as=$module name=application\ncreate.component as=$component module=$module name=application visibility=package\ntype.list as=@items item=i64\n");
@@ -502,19 +550,34 @@ pub(super) fn consumer(
         &[("n", "i64"), ("items", "@items")],
     );
     request.target("forward-generic", "i64", &["i64", "@items"]);
-    binding_consumer(&mut request, standard, factory);
-    mapping_consumer(&mut request, standard, factory);
+    binding_consumer(&mut request, standard, factory, configure);
+    mapping_consumer(&mut request, standard, configure);
     request.text
 }
 
-fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, factory: &str) {
-    // The imported factory retains a private producer helper; further binding makes
-    // its reducer a unary mapper, using only the ordinary public language forms.
+fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, configure: &str) {
+    // The independently authored consumer owns Env. The imported generic factory stores an
+    // actual nominal Env and a callback, and returns its producer's private generic helper.
+    request.text.push_str("create.record as=$EnvRecord module=$module name=Environment visibility=public\nadd.field as=$env-scale record=$EnvRecord name=scale type=i64\nadd.field as=$env-bias record=$EnvRecord name=bias type=i64\ntype.named as=@env declaration=$EnvRecord\n");
+    let env = request.local("$configured-map-step_env");
+    let scale = request.expression("field", &format!("value={env} field=$env-scale"));
+    let input = request.local("$configured-map-step_input");
+    let scaled = request.call(&standard["multiply"], &[], &[scale, input]);
+    let env = request.local("$configured-map-step_env");
+    let bias = request.expression("field", &format!("value={env} field=$env-bias"));
+    let body = request.call(&standard["add"], &[], &[scaled, bias]);
+    request.function(
+        "configured-map-step",
+        "i64",
+        &body,
+        &[("env", "@env"), ("input", "i64")],
+    );
     let scale = request.local("$map_scale");
     let bias = request.local("$map_bias");
-    let returned = request.call(factory, &[], &[scale, bias]);
-    let zero = request.integer(0);
-    let mapper = request.bind(&returned, &[zero]);
+    let env = request.expression("record", "type=$EnvRecord");
+    request.text.push_str(&format!("expression.record-field parent={env} index=0 field=$env-scale value={scale}\nexpression.record-field parent={env} index=1 field=$env-bias value={bias}\n"));
+    let step = request.function_value("$configured-map-step");
+    let mapper = request.call(configure, &["@env", "i64", "i64"], &[env, step]);
     let input = request.local("$map_items");
     let body = request.call(&standard["list-map"], &["i64", "i64"], &[input, mapper]);
     request.function(
@@ -524,6 +587,68 @@ fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, 
         &[("items", "@items"), ("scale", "i64"), ("bias", "i64")],
     );
     request.target("map", "@items", &["@items", "i64", "i64"]);
+
+    for (name, value_type, result_type) in [
+        ("constant-text", "text", "@constant-texts"),
+        ("constant-lists", "@constant-texts", "@constant-nested"),
+    ] {
+        request.text.push_str(if name == "constant-text" { "type.list as=@constant-texts item=text\ntype.list as=@constant-nested item=@constant-texts\n" } else { "" });
+        let value = request.local(&format!("${name}_value"));
+        let callback = request.call(
+            &standard["function-constant"],
+            &[value_type, "i64"],
+            &[value],
+        );
+        let items = request.local(&format!("${name}_items"));
+        let body = request.call(
+            &standard["list-map"],
+            &["i64", value_type],
+            &[items, callback],
+        );
+        request.function(
+            name,
+            result_type,
+            &body,
+            &[("value", value_type), ("items", "@items")],
+        );
+        request.target(name, result_type, &[value_type, "@items"]);
+    }
+
+    request.text.push_str("type.function as=@configured-unary result=i64\ntype.argument parent=@configured-unary index=0 type=i64\ntype.structural-record as=@configured-pair\ntype.field parent=@configured-pair index=0 name=again type=@items\ntype.field parent=@configured-pair index=1 name=first type=@items\ntype.field parent=@configured-pair index=2 name=second type=@items\n");
+    let mut closures = Vec::new();
+    for name in ["first", "second"] {
+        let env = request.local(&format!("$generic-pair_{name}"));
+        let step = request.function_value("$configured-map-step");
+        closures.push(request.call(configure, &["@env", "i64", "i64"], &[env, step]));
+    }
+    let mut results = Vec::new();
+    for (name, closure) in [("again", "first"), ("first", "first"), ("second", "second")] {
+        let items = request.local("$generic-pair_items");
+        let callback = request.local(&format!("$saved-{closure}"));
+        let mapped = request.call(&standard["list-map"], &["i64", "i64"], &[items, callback]);
+        results.push((name, mapped));
+    }
+    let record = request.expression("record", "");
+    for (index, (name, value)) in results.iter().enumerate() {
+        request.text.push_str(&format!(
+            "expression.record-field parent={record} index={index} name={name} value={value}\n"
+        ));
+    }
+    let body = request.expression("let", &format!("body={record}"));
+    for (index, name) in ["first", "second"].iter().enumerate() {
+        request.text.push_str(&format!("expression.binding parent={body} index={index} as=$saved-{name} name={name} value={} type=@configured-unary\n", closures[index]));
+    }
+    request.function(
+        "generic-pair",
+        "@configured-pair",
+        &body,
+        &[("first", "@env"), ("second", "@env"), ("items", "@items")],
+    );
+    request.target(
+        "generic-pair",
+        "@configured-pair",
+        &["@env", "@env", "@items"],
+    );
 
     request.text.push_str("type.structural-record as=@aliases\ntype.field parent=@aliases index=0 name=left type=@items\ntype.field parent=@aliases index=1 name=mapped type=@items\ntype.field parent=@aliases index=2 name=original type=@items\ntype.field parent=@aliases index=3 name=right type=@items\n");
     let items = request.local("$map-aliases_items");
@@ -587,7 +712,12 @@ fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, 
     request.target("map-composed", "@texts", &["@items"]);
 }
 
-fn binding_consumer(request: &mut Request, standard: &BTreeMap<String, String>, factory: &str) {
+fn binding_consumer(
+    request: &mut Request,
+    standard: &BTreeMap<String, String>,
+    factory: &str,
+    configure: &str,
+) {
     request.text.push_str("type.function as=@thunk result=i64\ntype.function as=@reducer result=i64\ntype.argument parent=@reducer index=0 type=i64\ntype.argument parent=@reducer index=1 type=i64\ntype.structural-record as=@totals\ntype.field parent=@totals index=0 name=first type=i64\ntype.field parent=@totals index=1 name=second type=i64\n");
     let mut closures = Vec::new();
     for name in ["first", "second"] {
@@ -637,7 +767,12 @@ fn binding_consumer(request: &mut Request, standard: &BTreeMap<String, String>, 
 
     let items = request.local("$retained-length_items");
     let length = request.call(&standard["list-length"], &["i64"], &[items]);
-    request.function("retained-length", "i64", &length, &[("items", "@items")]);
+    request.function(
+        "retained-length",
+        "i64",
+        &length,
+        &[("items", "@items"), ("ignored", "unit")],
+    );
     let condition = request.test_zero(standard, "$forward-bound_n");
     let closure = request.local("$forward-bound_closure");
     let value = request.invoke(&closure, &[]);
@@ -657,7 +792,9 @@ fn binding_consumer(request: &mut Request, standard: &BTreeMap<String, String>, 
     );
     let function = request.function_value("$retained-length");
     let items = request.local("$bound-forward_items");
-    let closure = request.bind(&function, &[items]);
+    let returned = request.call(configure, &["@items", "unit", "i64"], &[items, function]);
+    let unit = request.expression("unit", "");
+    let closure = request.bind(&returned, &[unit]);
     let n = request.local("$bound-forward_n");
     let body = request.call("$forward-bound", &[], &[n, closure]);
     request.function(

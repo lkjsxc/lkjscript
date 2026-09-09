@@ -763,6 +763,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.case",
             "add.operation",
             "add.type-parameter",
+            "set.type-parameter-constraint",
             "add.parameter",
             "add.requirement",
             "add.port",
@@ -783,7 +784,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 117);
+    assert_eq!(operation_fields.len(), 120);
     assert_eq!(
         operation_fields
             .iter()
@@ -798,6 +799,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         vec![
             ("create.target", "port"),
             ("add.case", "payload"),
+            ("add.type-parameter", "constraint"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
@@ -813,7 +815,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 30);
+    assert_eq!(field_forms.len(), 31);
     for (name, syntax) in [
         ("exact_expression", "expr_HEX"),
         ("http_method", "ASCII_HTTP_TOKEN_1_TO_32_BYTES"),
@@ -939,7 +941,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.response-field")
             .count(),
-        43
+        44
     );
     assert_eq!(
         query
@@ -1509,7 +1511,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("35")
+        Some("37")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2631,7 +2633,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("29"));
+    assert_eq!(compact_field(tests, "passed"), Some("31"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -2699,7 +2701,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("29")
+        Some("31")
     );
 
     let artifact = temporary.path().join("sample.lkja");
@@ -3976,6 +3978,250 @@ fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
             "{name} changed authority"
         );
         println!("binding-rejection {name} {code}");
+    }
+}
+
+#[test]
+fn copied_binary_checks_capture_safe_instantiation_constraints_before_publication() {
+    // Fixed language expectations, independent of production entailment. In particular the
+    // constrained parameter is unused, so neither substitution nor binding can supply this check.
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("constraints");
+    compact_success_at(
+        &copied,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "command",
+            "--name",
+            "constraints",
+        ],
+    );
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let modules = compact_success_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "module",
+            "application",
+        ],
+    );
+    let module = compact_field(compact_record(&modules, "owner"), "id").unwrap();
+    let inventory = content_inventory(&project);
+    let matrix = [
+        ("unit", "", "unit", true),
+        ("bool", "", "bool", true),
+        ("integer", "", "i64", true),
+        ("bytes", "", "bytes", true),
+        ("text", "", "text", true),
+        ("static-text", "", "static-text", true),
+        ("secret", "", "secret", false),
+        (
+            "nominal-safe",
+            "create.record as=$record module=MODULE name=Env visibility=private\nadd.field as=$field record=$record name=value type=text\ntype.named as=@supplied declaration=$record\n",
+            "@supplied",
+            true,
+        ),
+        (
+            "nominal-unsafe",
+            "create.record as=$record module=MODULE name=Env visibility=private\nadd.field as=$field record=$record name=value type=secret\ntype.named as=@supplied declaration=$record\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "variant-safe",
+            "create.variant as=$variant module=MODULE name=Choice visibility=private\nadd.case as=$empty variant=$variant name=Empty\nadd.case as=$some variant=$variant name=Some payload=text\ntype.named as=@supplied declaration=$variant\n",
+            "@supplied",
+            true,
+        ),
+        (
+            "variant-absent-secret",
+            "create.variant as=$variant module=MODULE name=Choice visibility=private\nadd.case as=$empty variant=$variant name=Empty\nadd.case as=$some variant=$variant name=Some payload=secret\ntype.named as=@supplied declaration=$variant\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "empty-list-secret",
+            "type.list as=@supplied item=secret\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "list-text",
+            "type.list as=@supplied item=text\n",
+            "@supplied",
+            true,
+        ),
+        (
+            "absent-option",
+            "type.option as=@supplied item=secret\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "absent-result",
+            "type.result as=@supplied ok=i64 error=secret\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "map-key",
+            "type.map as=@supplied key=secret value=i64\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "map-value",
+            "type.map as=@supplied key=i64 value=secret\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "stream",
+            "type.stream as=@supplied item=bytes\n",
+            "@supplied",
+            false,
+        ),
+        (
+            "function-leaf",
+            "type.function as=@supplied result=secret\ntype.argument parent=@supplied index=0 type=secret\n",
+            "@supplied",
+            true,
+        ),
+        (
+            "safe-record",
+            "type.structural-record as=@supplied\ntype.field parent=@supplied index=0 name=x type=text\n",
+            "@supplied",
+            true,
+        ),
+        (
+            "last-record-field",
+            "type.structural-record as=@supplied\ntype.field parent=@supplied index=0 name=x type=text\ntype.field parent=@supplied index=1 name=y type=secret\n",
+            "@supplied",
+            false,
+        ),
+    ];
+    for (name, types, supplied, accepted) in matrix {
+        let types = types.replace("MODULE", module);
+        for invocation in ["call", "function-value"] {
+            let request = format!(
+                "request base={base}\n{types}\n\
+                expression.unit as=$unit\n\
+                create.function as=$target module={module} name=unused-bound visibility=private result=unit effect=pure body=$unit\n\
+                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                expression.{invocation} as=$site function=$target\n\
+                type.argument parent=$site index=0 type={supplied}\n\
+                type.function as=@thunk result=unit\n\
+                create.function as=$caller module={module} name=caller visibility=private result={} effect=pure body=$site\n",
+                if invocation == "call" {
+                    "unit"
+                } else {
+                    "@thunk"
+                }
+            );
+            let output = command_at(
+                &copied,
+                temporary.path(),
+                &[
+                    "--project",
+                    path(&project),
+                    "change",
+                    "plan",
+                    "--input",
+                    &request,
+                ],
+            );
+            assert_eq!(
+                output.status.success(),
+                accepted,
+                "{name}/{invocation}: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            if !accepted {
+                let records = parse_records("constraint rejection", &output.stdout).unwrap();
+                assert_eq!(
+                    compact_field(compact_record(&records, "diagnostic"), "code"),
+                    Some("kernel_type_constraint")
+                );
+            }
+            assert_eq!(
+                inventory,
+                content_inventory(&project),
+                "{name}/{invocation} changed authority"
+            );
+        }
+    }
+    for (name, assumption, supplied, types, accepted) in [
+        ("constrained-caller", "capture-safe", "@U", "", true),
+        ("unconstrained-caller", "none", "@U", "", false),
+        (
+            "constrained-list",
+            "capture-safe",
+            "@supplied",
+            "type.list as=@supplied item=@U\n",
+            true,
+        ),
+        (
+            "unconstrained-list",
+            "none",
+            "@supplied",
+            "type.list as=@supplied item=@U\n",
+            false,
+        ),
+        (
+            "generic-function-leaf",
+            "none",
+            "@supplied",
+            "type.function as=@supplied result=@U\ntype.argument parent=@supplied index=0 type=@U\n",
+            true,
+        ),
+    ] {
+        for invocation in ["call", "function-value"] {
+            let request = format!(
+                "request base={base}\n{types}\n\
+                type.parameter as=@U parameter=$U\n\
+                expression.unit as=$unit\n\
+                create.function as=$target module={module} name=unused-bound visibility=private result=unit effect=pure body=$unit\n\
+                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                expression.{invocation} as=$site function=$target\n\
+                type.argument parent=$site index=0 type={supplied}\n\
+                type.function as=@thunk result=unit\n\
+                create.function as=$caller module={module} name=caller visibility=private result={} effect=pure body=$site\n\
+                add.type-parameter as=$U function=$caller name=U constraint={assumption}\n",
+                if invocation == "call" {
+                    "unit"
+                } else {
+                    "@thunk"
+                }
+            );
+            let output = command_at(
+                &copied,
+                temporary.path(),
+                &[
+                    "--project",
+                    path(&project),
+                    "change",
+                    "plan",
+                    "--input",
+                    &request,
+                ],
+            );
+            assert_eq!(
+                output.status.success(),
+                accepted,
+                "{name}/{invocation}: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            assert_eq!(inventory, content_inventory(&project));
+        }
     }
 }
 
@@ -10220,4 +10466,225 @@ fn public_data_lifecycle_is_create_new_strict_and_semantically_disjoint() {
 
 fn path(value: &Path) -> &str {
     value.to_str().expect("UTF-8 temporary path")
+}
+
+#[test]
+fn copied_binary_constraint_edits_preserve_identity_and_validate_complete_callers() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("project");
+    let run = |arguments: &[&str]| compact_success_at(&copied, temporary.path(), arguments);
+    run(&[
+        "new",
+        path(&project),
+        "--template",
+        "command",
+        "--name",
+        "constraints",
+    ]);
+    let query = run(&[
+        "--project",
+        path(&project),
+        "query",
+        "find",
+        "module",
+        "application",
+    ]);
+    let module = compact_field(compact_record(&query, "owner"), "id").unwrap();
+    let apply = |request: &str| {
+        let plan = run(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            request,
+        ]);
+        let token = compact_field(compact_record(&plan, "plan"), "token").unwrap();
+        run(&[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            request,
+            "--plan",
+            token,
+        ]);
+        plan
+    };
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let initial = format!(
+        "request base={base}\nexpression.unit as=$body\ncreate.function as=$generic module={module} name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T function=$generic name=T\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=secret\ncreate.function as=$caller module={module} name=caller visibility=private result=unit effect=pure body=$call\n"
+    );
+    let plan = apply(&initial);
+    let identity = |symbol| {
+        plan.iter()
+            .find(|record| {
+                record.operation == "identity" && compact_field(record, "symbol") == Some(symbol)
+            })
+            .and_then(|record| compact_field(record, "id"))
+            .unwrap()
+            .to_owned()
+    };
+    let parameter = identity("$T");
+    let generic = identity("$generic");
+    let caller = identity("$caller");
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let before = content_inventory(&project);
+    for (owner, constraint, code) in [
+        (parameter.as_str(), "capture-safe", "kernel_type_constraint"),
+        (
+            parameter.as_str(),
+            "unknown",
+            "change_type_parameter_constraint",
+        ),
+        (generic.as_str(), "none", "change_mutation_owner_kind"),
+    ] {
+        let request = format!(
+            "request base={base}\nset.type-parameter-constraint parameter={owner} constraint={constraint}\n"
+        );
+        let output = command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &request,
+            ],
+        );
+        assert!(!output.status.success());
+        let records = parse_records("constraint rejection", &output.stdout).unwrap();
+        assert_eq!(
+            compact_field(compact_record(&records, "diagnostic"), "code"),
+            Some(code)
+        );
+        assert_eq!(content_inventory(&project), before);
+    }
+    let definition = run(&[
+        "--project",
+        path(&project),
+        "inspect",
+        "owner",
+        "pure_function",
+        &generic,
+        "--detail",
+        "definition",
+        "--limit",
+        "1",
+        "--bytes",
+        "65536",
+    ]);
+    let continuation = compact_field(compact_record(&definition, "continuation"), "token")
+        .unwrap()
+        .to_owned();
+    let coherent = format!(
+        "request base={base}\nset.type-parameter-constraint parameter={parameter} constraint=capture-safe\nexpression.call as=$safe function={generic}\ntype.argument parent=$safe index=0 type=text\nreplace.body function={caller} body=$safe\n"
+    );
+    let reviewed = apply(&coherent);
+    let stale_definition = command_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "pure_function",
+            &generic,
+            "--detail",
+            "definition",
+            "--limit",
+            "1",
+            "--bytes",
+            "65536",
+            "--continuation",
+            &continuation,
+        ],
+    );
+    assert!(!stale_definition.status.success());
+    let records = parse_records("stale constraint definition", &stale_definition.stdout).unwrap();
+    assert_eq!(
+        compact_field(compact_record(&records, "diagnostic"), "code"),
+        Some("definition_continuation_stale")
+    );
+
+    assert!(
+        reviewed
+            .iter()
+            .any(|record| record.operation == "logical-plan.change" || record.operation == "plan")
+    );
+    let inspect = run(&[
+        "--project",
+        path(&project),
+        "query",
+        "owners",
+        "--kind",
+        "type_parameter",
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&inspect, "owner"), "id"),
+        Some(parameter.as_str())
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspect, "owner"), "constraint"),
+        Some("capture-safe")
+    );
+    let accepted = current_revision_at(&copied, temporary.path(), &project);
+    let clear = format!(
+        "request base={accepted}\nset.type-parameter-constraint parameter={parameter} constraint=none\n"
+    );
+    let clear_plan = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &clear,
+    ]);
+    let token = compact_field(compact_record(&clear_plan, "plan"), "token").unwrap();
+    let rename = format!("request base={accepted}\nrename.owner owner={parameter} name=Renamed\n");
+    apply(&rename);
+    let before_stale = content_inventory(&project);
+    let stale = command_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &clear,
+            "--plan",
+            token,
+        ],
+    );
+    assert_eq!(stale.status.code(), Some(7));
+    assert_eq!(content_inventory(&project), before_stale);
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    apply(&format!(
+        "request base={base}\nset.type-parameter-constraint parameter={parameter} constraint=none\n"
+    ));
+    let inspect = run(&[
+        "--project",
+        path(&project),
+        "query",
+        "owners",
+        "--kind",
+        "type_parameter",
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&inspect, "owner"), "id"),
+        Some(parameter.as_str())
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspect, "owner"), "constraint"),
+        Some("none")
+    );
+    run(&["--project", path(&project), "check"]);
 }

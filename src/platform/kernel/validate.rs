@@ -466,6 +466,11 @@ impl FullValidator<'_> {
                         OwnerKey::Declaration(parameter.declaration),
                         "type parameter",
                     );
+                    if parameter.constraints != super::TypeParameterConstraints::None
+                        && matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::External(_)))
+                    {
+                        self.error("intrinsic_signature", "closed external parameters require the intrinsic inventory's empty constraint set");
+                    }
                 }
                 OwnerRecord::Field(field) => self.require_parent_listed(
                     *key,
