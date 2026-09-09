@@ -335,6 +335,54 @@ fn unique_suffix() -> Result<String, DevError> {
     ))
 }
 
+/// Strict identity spelling for receipt validation; no semantic identity allocation.
+pub(crate) fn hex_identity(value: &str, prefix: &str, digits: usize) -> bool {
+    value.strip_prefix(prefix).is_some_and(|suffix| {
+        suffix.len() == digits
+            && suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
+pub(crate) fn scoped_identity(value: &str, owner: &str) -> bool {
+    value.split_once('/').is_some_and(|(package, id)| {
+        hex_identity(package, "pkg_", 32) && hex_identity(id, owner, 32)
+    })
+}
+
+pub(crate) fn verify_process_files(
+    root: &Path,
+    observation: &crate::process::ProcessObservation,
+) -> Result<(), DevError> {
+    for file in [&observation.stdout, &observation.stderr] {
+        let path = Path::new(&file.path);
+        if path.components().count() != 1
+            || !matches!(
+                path.components().next(),
+                Some(std::path::Component::Normal(_))
+            )
+            || file.kind != FileKind::File
+            || proof(&root.join(path), file.path.clone())? != *file
+        {
+            return Err(DevError::corrupt(
+                "process evidence path, bytes, digest, or mode changed",
+            ));
+        }
+    }
+    if observation.stdout_limit_exhausted
+        || observation.stderr_limit_exhausted
+        || observation.signal.is_some()
+        || !matches!(
+            observation.status,
+            crate::process::ProcessStatus::Passed | crate::process::ProcessStatus::Failed
+        )
+    {
+        return Err(DevError::corrupt("required process evidence is incomplete"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

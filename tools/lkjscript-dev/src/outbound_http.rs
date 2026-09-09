@@ -455,7 +455,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         runners: Vec::new(),
         active_runner: None,
     };
-    let workflow = if outside_checkout {
+    let mut workflow = if outside_checkout {
         run_workflow(&mut context, &isolated_root, fixture)
     } else {
         Err(AcceptanceFailure::acceptance(
@@ -463,6 +463,18 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             "temporary product workspace is inside the repository checkout",
         ))
     };
+    if !executable_observation(&context.copied_binary, "completed candidate copy").is_ok_and(
+        |observed| {
+            observed.sha256 == copied_candidate.sha256
+                && observed.byte_length == copied_candidate.byte_length
+                && observed.mode == copied_candidate.mode
+        },
+    ) {
+        workflow = Err(AcceptanceFailure::acceptance(
+            "candidate_changed",
+            "copied candidate changed during execution",
+        ));
+    }
     let runner_cleanup_attempted = context.active_runner.is_some();
     let runner_cleanup = context.cleanup_runner();
     let mut failure = workflow.as_ref().err().map(AcceptanceFailure::receipt);
@@ -578,6 +590,8 @@ pub(crate) fn read_transferred_receipt(
         .result
         .as_ref()
         .ok_or_else(|| DevError::corrupt("passed outbound receipt omitted its result"))?;
+    let capabilities =
+        lkjscript::platform::contract::capabilities_snapshot().map_err(DevError::corrupt)?;
     let cleanup_complete = receipt.cleanup.runner_cleanup_complete
         && receipt.cleanup.oracle_cleanup_complete
         && receipt.cleanup.isolated_root_removed
@@ -598,19 +612,59 @@ pub(crate) fn read_transferred_receipt(
         || receipt.candidate.sha256 != candidate.sha256
         || receipt.candidate.byte_length != candidate.byte_length
         || receipt.candidate.mode != candidate.mode
+        || receipt.verifier.verification_digest != verifier.verification_digest
+        || receipt.candidate.verification_digest != candidate.verification_digest
+        || receipt.copied_candidate.byte_length != candidate.byte_length
+        || receipt.copied_candidate.mode != candidate.mode
+        || receipt.copied_candidate.verification_digest != candidate.verification_digest
+        || !Path::new(&receipt.copied_candidate.file.path)
+            .starts_with(Path::new(&receipt.isolated_root))
+        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
+        || path.canonicalize()? != expected_root.join("receipt.json")
         || receipt.copied_candidate.sha256 != candidate.sha256
         || receipt.failure.is_some()
         || !relay_route_topology_is_current(&result.topology)
         || !route_miss_no_connection_is_current(&result.no_connection, &result.negative_cases)
+        || result.product_version != capabilities.product_version
+        || result.capabilities_digest != capabilities.digest
         || !result.authority_unchanged
         || !result.clean_incremental_equal
         || !result.restart_equal
-        || result.startup_failures_without_ready < 1
+        || result.startup_failures_without_ready != 1
+        || result.responses.len() != 17
+        || result.no_connection.len() != 7
+        || result.certificate.generator != "lkjscript-deterministic-ed25519-tls-fixture-1"
+        || result.artifact_sha256 != result.clean_artifact_sha256
+        || result.authority_before != result.authority_after
         || !cleanup_complete
     {
         return Err(DevError::corrupt(
             "transferred outbound HTTP receipt binding or acceptance mismatch",
         ));
+    }
+    if receipt.commands.is_empty() || receipt.runners.is_empty() {
+        return Err(DevError::corrupt("HTTP command/runner evidence missing"));
+    }
+    for command in &receipt.commands {
+        evidence::verify_process_files(&expected_root, &command.process)?;
+        let passed = command.expected == "success";
+        if ![
+            "success",
+            "compact-failure",
+            "startup-failure-without-ready",
+        ]
+        .contains(&command.expected.as_str())
+            || (command.process.status == ProcessStatus::Passed) != passed
+            || command.command.first().map(Path::new)
+                != Some(Path::new(&receipt.copied_candidate.file.path))
+        {
+            return Err(DevError::corrupt(
+                "HTTP command expectation or executable mismatch",
+            ));
+        }
+    }
+    for runner in &receipt.runners {
+        evidence::verify_process_files(&expected_root, &runner.process)?;
     }
     Ok(TransferredReceiptBinding {
         receipt_bytes: metadata.len(),
@@ -626,14 +680,14 @@ pub(crate) fn read_transferred_receipt(
 }
 
 fn relay_route_topology_is_current(topology: &RelayRouteTopologyObservation) -> bool {
-    topology.target.starts_with("target_")
-        && topology.route.starts_with("route_")
-        && topology.component.contains("/decl_")
-        && topology.port.contains("/port_")
+    evidence::hex_identity(&topology.target, "target_", 32)
+        && evidence::hex_identity(&topology.route, "route_", 32)
+        && evidence::scoped_identity(&topology.component, "decl_")
+        && evidence::scoped_identity(&topology.port, "port_")
         && topology.method == "GET"
         && topology.path == "/relay-info"
         && topology.route_count == 1
-        && topology.route_set.starts_with("http_routes_")
+        && evidence::hex_identity(&topology.route_set, "http_routes_", 64)
         && topology.route_set.len() == 76
         && topology.predecessor_port_absent
         && topology.predecessor_predicate_absent
@@ -3595,6 +3649,14 @@ fn print_summary(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn encode_transferred_test_fixture(
+    value: serde_json::Value,
+) -> Result<Vec<u8>, DevError> {
+    let receipt: AcceptanceReceipt = serde_json::from_value(value)?;
+    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

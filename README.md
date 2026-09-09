@@ -14,7 +14,7 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current product source is unreleased `0.1.27`; immutable supported release `v0.1.21` remains at exact
+Current product source is unreleased `0.1.28`; immutable supported release `v0.1.21` remains at exact
 release-source commit `6380117363ca2c69d4bf84e512a57d03ce9ea74e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
@@ -81,13 +81,16 @@ initialize/verify/backup/restore, canonical typed application values, and
 separate. Public product surfaces expose the root product version and opaque capabilities digest
 without separate subsystem generation numbers.
 
-Unreleased 0.1.26 adds explicit `bind` expressions with immutable runtime prefixes and graph-owned
+Unreleased source also includes explicit `bind` expressions with immutable runtime prefixes and graph-owned
 `function-compose<A,B,C>`. Factories can return pure functions over runtime configuration and other
-pure callables after their own frame ends. Stored bare type parameters, secrets, streams, and
-resources remain outside the capture-safe subset. Graph 11 preserves unchanged TypeObject 10 bytes
+pure callables after their own frame ends. Capture-safe type-parameter constraints permit generic
+runtime environments; unconstrained parameters, secrets, streams, and resources remain outside the
+capture-safe subset. Graph 12 preserves unchanged TypeObject 10 bytes
 and persisted typed-data layouts; the maintained application retains its existing semantic owners.
-The [binding evidence](docs/evidence/202609090021-pure-function-binding.json) records public-path
-verification, retained-value costs, migration equivalence, and exact-target admission.
+The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
+generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
+maintained-consumer cutover. The distribution cutover requires fresh five-owner acceptance before
+publication and independently on exact and latest downloads.
 
 Unreleased 0.1.27 adds graph-owned `list-map<Input,Output>` and a persistent immutable list carrier.
 Aliased append copies a bounded tail or branch spine; it does not rebuild the complete old prefix.

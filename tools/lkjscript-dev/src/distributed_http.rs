@@ -460,7 +460,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         active_runner: None,
     };
 
-    let workflow = if outside_checkout {
+    let mut workflow = if outside_checkout {
         run_workflow(&mut context, &isolated_root)
     } else {
         Err(AcceptanceFailure::acceptance(
@@ -468,6 +468,21 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
             "temporary product workspace is inside the repository checkout",
         ))
     };
+    if !executable_observation(
+        &context.copied_binary,
+        "completed candidate copy",
+        MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,
+    )
+    .is_ok_and(|observed| {
+        observed.sha256 == copied_candidate.sha256
+            && observed.byte_length == copied_candidate.byte_length
+            && observed.mode == copied_candidate.mode
+    }) {
+        workflow = Err(AcceptanceFailure::acceptance(
+            "candidate_changed",
+            "copied candidate changed during execution",
+        ));
+    }
     let runner_cleanup_attempted = context.active_runner.is_some();
     let runner_cleanup = context.cleanup_runner();
     let mut failure = workflow.as_ref().err().map(AcceptanceFailure::receipt);
@@ -611,6 +626,8 @@ pub(crate) fn read_transferred_receipt(
         .result
         .as_ref()
         .ok_or_else(|| DevError::corrupt("passed distributed HTTP receipt omitted its result"))?;
+    let capabilities =
+        lkjscript::platform::contract::capabilities_snapshot().map_err(DevError::corrupt)?;
     let cleanup_complete =
         receipt.cleanup.runner_cleanup_complete && receipt.cleanup.isolated_root_removed;
     if canonical_path != evidence_root.join("receipt.json")
@@ -643,12 +660,34 @@ pub(crate) fn read_transferred_receipt(
         || !cleanup_complete
         || !result.clean_incremental_equal
         || result.artifact_sha256 != result.clean_artifact_sha256
+        || result.product_version != capabilities.product_version
+        || result.capabilities_digest != capabilities.digest
         || !result.authority_unchanged
         || result.authority_before != result.authority_after
         || !result.restart_equal
-        || result.startup_failures_without_ready == 0
+        || result.startup_failures_without_ready != 6
         || !http_topology_is_current(&result.topology)
         || !http_response_matrix_is_current(&result.responses)
+        || result.initial_revision == result.accepted_revision
+        || !evidence::hex_identity(&result.definition_projection.function, "decl_", 32)
+        || !evidence::hex_identity(
+            &result.definition_projection.initial_digest,
+            "definition_",
+            64,
+        )
+        || !evidence::hex_identity(
+            &result.definition_projection.accepted_digest,
+            "definition_",
+            64,
+        )
+        || !evidence::hex_identity(&result.definition_projection.initial_literal_sha256, "", 64)
+        || !evidence::hex_identity(
+            &result.definition_projection.accepted_literal_sha256,
+            "",
+            64,
+        )
+        || result.definition_projection.initial_literal_sha256
+            == result.definition_projection.accepted_literal_sha256
         || result.definition_projection.initial_revision != result.initial_revision
         || result.definition_projection.accepted_revision != result.accepted_revision
         || result.definition_projection.initial_digest
@@ -692,6 +731,30 @@ pub(crate) fn read_transferred_receipt(
         return Err(DevError::corrupt(
             "transferred distributed HTTP receipt invoked checkout build tooling",
         ));
+    }
+    if receipt.commands.is_empty() || receipt.runners.is_empty() {
+        return Err(DevError::corrupt("HTTP command/runner evidence missing"));
+    }
+    for command in &receipt.commands {
+        evidence::verify_process_files(&evidence_root, &command.process)?;
+        let passed = command.expected == "success";
+        if ![
+            "success",
+            "classified-failure",
+            "startup-failure-without-ready",
+        ]
+        .contains(&command.expected.as_str())
+            || (command.process.status == ProcessStatus::Passed) != passed
+            || command.command.first().map(Path::new)
+                != Some(Path::new(&receipt.copied_candidate.file.path))
+        {
+            return Err(DevError::corrupt(
+                "HTTP command expectation or executable mismatch",
+            ));
+        }
+    }
+    for runner in &receipt.runners {
+        evidence::verify_process_files(&evidence_root, &runner.process)?;
     }
     Ok(TransferredReceiptBinding {
         receipt_bytes: metadata.len(),
@@ -1605,15 +1668,15 @@ fn relation_exists(records: &[CompactRecord], kind: &str, source: &str, target: 
 }
 
 fn http_topology_is_current(topology: &HttpTopologyObservation) -> bool {
-    topology.route.starts_with("route_")
-        && topology.target.starts_with("target_")
-        && topology.component.contains("/decl_")
-        && topology.port.contains("/port_")
-        && topology.function.starts_with("decl_")
+    evidence::hex_identity(&topology.route, "route_", 32)
+        && evidence::hex_identity(&topology.target, "target_", 32)
+        && evidence::scoped_identity(&topology.component, "decl_")
+        && evidence::scoped_identity(&topology.port, "port_")
+        && evidence::hex_identity(&topology.function, "decl_", 32)
         && topology.method == "GET"
         && topology.path == "/"
         && topology.route_count == 1
-        && topology.route_set.starts_with("http_routes_")
+        && evidence::hex_identity(&topology.route_set, "http_routes_", 64)
         && topology.route_set.len() == 76
         && topology.context_owners == 5
         && topology.context_relations == 5
@@ -3507,6 +3570,14 @@ fn print_summary(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn encode_transferred_test_fixture(
+    value: serde_json::Value,
+) -> Result<Vec<u8>, DevError> {
+    let receipt: AcceptanceReceipt = serde_json::from_value(value)?;
+    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

@@ -1,3 +1,6 @@
+#[cfg(target_os = "linux")]
+mod descendants;
+
 use crate::error::DevError;
 use crate::evidence::{self, FileProof};
 #[cfg(target_os = "linux")]
@@ -93,6 +96,10 @@ impl ProcessControl {
     fn requested(&self) -> u8 {
         self.requested.load(Ordering::Acquire)
     }
+
+    pub(crate) fn cancelled(&self) -> bool {
+        self.requested() != CONTROL_NONE
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -142,7 +149,7 @@ struct ProcessCompletion {
 }
 
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
-    run_configured(specification, repository, None, None)
+    run_configured(specification, repository, None, None, false)
 }
 
 pub(crate) fn run_controlled(
@@ -150,7 +157,7 @@ pub(crate) fn run_controlled(
     repository: &Path,
     control: &ProcessControl,
 ) -> ProcessObservation {
-    run_configured(specification, repository, Some(control), None)
+    run_configured(specification, repository, Some(control), None, false)
 }
 
 #[cfg(test)]
@@ -165,7 +172,16 @@ pub(crate) fn run_with_stdin_file(
         repository,
         None,
         Some((stdin_path, maximum_stdin_bytes)),
+        false,
     )
+}
+
+pub(crate) fn run_supervised(
+    specification: &ProcessSpec,
+    repository: &Path,
+    control: Option<&ProcessControl>,
+) -> ProcessObservation {
+    run_configured(specification, repository, control, None, true)
 }
 
 fn run_configured(
@@ -173,9 +189,17 @@ fn run_configured(
     repository: &Path,
     control: Option<&ProcessControl>,
     stdin_file: Option<(&Path, u64)>,
+    supervise_descendants: bool,
 ) -> ProcessObservation {
     let started = Instant::now();
-    match run_inner(specification, repository, started, control, stdin_file) {
+    match run_inner(
+        specification,
+        repository,
+        started,
+        control,
+        stdin_file,
+        supervise_descendants,
+    ) {
         Ok(observation) => observation,
         Err(error) => infrastructure_observation(specification, repository, started, error),
     }
@@ -188,6 +212,7 @@ fn run_inner(
     started: Instant,
     control: Option<&ProcessControl>,
     stdin_file: Option<(&Path, u64)>,
+    supervise_descendants: bool,
 ) -> Result<ProcessObservation, DevError> {
     if specification.command.is_empty() {
         return Err(DevError::infrastructure("child command is empty"));
@@ -234,6 +259,7 @@ fn run_inner(
         }
     };
     let process_group = Pid::from_child(&child);
+    let mut descendants = supervise_descendants.then(|| descendants::Descendants::new(child.id()));
     let stdout = child
         .stdout
         .take()
@@ -263,11 +289,23 @@ fn run_inner(
         specification.maximum_stderr_bytes,
     );
 
+    let mut descendant_failure = None;
     let mut terminal_reason = None;
     let mut sent_control = CONTROL_NONE;
     let mut resources = ProcessResources::default();
     let exit_status = loop {
         sample_linux_process(child.id(), &mut resources);
+        if let Some(tree) = &mut descendants
+            && let Err(error) = tree.sample()
+        {
+            descendant_failure = Some(error.to_string());
+            if let Some(tree) = &mut descendants
+                && let Err(error) = tree.terminate()
+            {
+                descendant_failure = Some(error.to_string());
+            }
+            let _ = kill_process_group(process_group, Signal::KILL);
+        }
         if let Some(status) = child.try_wait().map_err(|error| {
             DevError::infrastructure(format!(
                 "poll child '{}': {error}",
@@ -278,6 +316,11 @@ fn run_inner(
         }
         if stdout_exhausted.load(Ordering::Acquire) || stderr_exhausted.load(Ordering::Acquire) {
             terminal_reason = Some(ProcessStatus::OutputExhausted);
+            if let Some(tree) = &mut descendants
+                && let Err(error) = tree.terminate()
+            {
+                descendant_failure = Some(error.to_string());
+            }
             let _ = kill_process_group(process_group, Signal::KILL);
             break child.wait().map_err(|error| {
                 DevError::infrastructure(format!(
@@ -291,6 +334,11 @@ fn run_inner(
             if requested > sent_control {
                 if requested >= CONTROL_KILL {
                     terminal_reason = Some(ProcessStatus::Signaled);
+                    if let Some(tree) = &mut descendants
+                        && let Err(error) = tree.terminate()
+                    {
+                        descendant_failure = Some(error.to_string());
+                    }
                     let _ = kill_process_group(process_group, Signal::KILL);
                     break child.wait().map_err(|error| {
                         DevError::infrastructure(format!(
@@ -305,6 +353,11 @@ fn run_inner(
         }
         if started.elapsed() >= specification.timeout {
             terminal_reason = Some(ProcessStatus::Timeout);
+            if let Some(tree) = &mut descendants
+                && let Err(error) = tree.terminate()
+            {
+                descendant_failure = Some(error.to_string());
+            }
             let _ = kill_process_group(process_group, Signal::KILL);
             break child.wait().map_err(|error| {
                 DevError::infrastructure(format!(
@@ -316,11 +369,21 @@ fn run_inner(
         thread::sleep(POLL_INTERVAL);
     };
 
+    if let Some(tree) = &mut descendants {
+        match tree.finish() {
+            Ok(true) if terminal_reason.is_none() => {
+                descendant_failure =
+                    Some("owned descendants survived child exit and were terminated".to_owned())
+            }
+            Err(error) => descendant_failure = Some(error.to_string()),
+            _ => {}
+        }
+    }
     join_reader(stdout_reader, "stdout")?;
     join_reader(stderr_reader, "stderr")?;
     let stdout_limit_exhausted = stdout_exhausted.load(Ordering::Acquire);
     let stderr_limit_exhausted = stderr_exhausted.load(Ordering::Acquire);
-    let (status, reason) = match terminal_reason {
+    let (mut status, mut reason) = match terminal_reason {
         Some(ProcessStatus::OutputExhausted) => (
             ProcessStatus::OutputExhausted,
             Some(exhausted_reason(
@@ -357,6 +420,10 @@ fn run_inner(
         }
         None => (ProcessStatus::Failed, Some("nonzero_exit".to_owned())),
     };
+    if let Some(failure) = descendant_failure {
+        status = ProcessStatus::InfrastructureFailure;
+        reason = Some(failure);
+    }
     observation(
         specification,
         repository,
@@ -378,6 +445,7 @@ fn run_inner(
     _started: Instant,
     _control: Option<&ProcessControl>,
     _stdin_file: Option<(&Path, u64)>,
+    _supervise_descendants: bool,
 ) -> Result<ProcessObservation, DevError> {
     Err(DevError::infrastructure(
         "bounded process execution requires Linux process-group signaling",

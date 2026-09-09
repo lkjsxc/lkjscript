@@ -123,7 +123,7 @@ After every implementation, workflow, normative, generated, target, or release-p
 committed, run one fresh source profile and rebuild/re-admit the exact candidate from that commit:
 
 ```sh
-cargo run --locked -p lkjscript-dev -- check full --machine
+cargo run --locked -p lkjscript-dev -- check full --fresh --machine
 target/release/lkjscript-dev release build \
   --output /absolute/absent/path/lkjscript \
   --receipt /absolute/absent/path/build-receipt.json
@@ -179,14 +179,15 @@ The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout j
 verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
 deterministic package, and uploads a three-file release handoff plus a two-file application-verifier
 handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
-commit, mode, and the release-verify/distributed-HTTP/stateful-HTTP/outbound-HTTP roles.
+commit, mode, and the schema-4 roles release-verify, distributed-http, outbound-http,
+offline-packages, pure-tail, and stateful-http.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
 the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,
-and runs all three transferred application oracles. Stateful verification uses only an explicit absolute
+and runs all five transferred behavioral owners through `release transferred run`. Stateful verification uses only an explicit absolute
 create-new evidence root and an isolated first-party data store; it provisions no database server or
 container. Outbound verification uses a separate create-new root and deterministic local raw
-HTTP/TLS fixtures. All three application receipts must classify passed before the publication job
+HTTP/TLS fixtures. All five child receipts must pass their complete current typed readers before the publication job
 can run.
 
 Dispatch a dry run against the final source commit:
@@ -203,11 +204,32 @@ gh run download --repo lkjsxc/lkjscript RUN_ID \
   --dir /absolute/absent/path/hosted-application-evidence
 ```
 
-The dry run must freshly pass build, full, target-admission, package, transferred distributed HTTP,
-transferred stateful HTTP, and transferred outbound HTTP. Its publish and post-release jobs must be
+The dry run must freshly pass build, full, all six named target oracles, package, and the
+five-owner transferred operation. Its publish and post-release jobs must be
 skipped, and no tag, draft,
 release, or public asset may be created. Evidence from another commit, workflow, target policy,
 candidate, verifier, image, or run attempt is stale.
+
+The bounded transferred operation runs from the already verified two-file verifier handoff. It
+requires the extracted executable and canonical manifest from `release verify --extract-to`, the
+expected source/tag/publication context, and externally supplied verifier bytes/hash:
+
+```sh
+/absolute/verifier-handoff/lkjscript-dev release transferred run \
+  --candidate /absolute/verified-release/lkjscript \
+  --manifest /absolute/verified-release/RELEASE-MANIFEST.json \
+  --tag "$release_tag" --commit "$release_source" --publication dry-run \
+  --boundary pre-publication --evidence-root /absolute/absent/transferred-evidence \
+  --verifier-identity /absolute/verifier-handoff/verifier-identity.json \
+  --expected-verifier-sha256 "$verifier_sha256" --expected-verifier-bytes "$verifier_bytes"
+```
+
+`release transferred verify` takes the same arguments to re-read existing evidence without rerunning
+behavior. It cannot certify a different root, boundary, source, candidate, or verifier. Retries use
+new roots and retain failed attempts. The aggregate, all child receipts, and bounded command/output
+files are retained; incomplete state is published before invocation. Neither a child status flag nor
+obsolete receipt generation suffices. `release admission-verify` and preparation likewise re-read
+each named target receipt through its existing owner.
 
 ## Exact tag and immutable publication
 
@@ -236,6 +258,13 @@ test "$(gh variable list --repo lkjsxc/lkjscript --json name,value \
 git push origin "refs/tags/$release_tag"
 ```
 
+Before writing the variable, record its exact prior value and reconcile it to a completed release;
+exclude queued, in-progress, waiting, requested, pending, or foreign publishers. Compare the prior
+value again immediately before the write. This read/check/write is not atomic compare-and-swap.
+Before tag push, restore the prior value only if the field still contains this attempt's tag object
+and no tag/run has acquired it. After tag push retain the binding for the owning run. A release-only
+grant does not authorize changing immutability or any other settings.
+
 The tag push owns publication. The only `contents: write` job receives the verified release handoff,
 performs no checkout, and executes no repository binary or script. It checks the remote annotated tag
 and administrator binding, creates or resumes only the exact draft, uploads only missing exact assets
@@ -247,10 +276,10 @@ manually create a parallel release.
 The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum
 pairs. For each pair independently it verifies checksums, release and asset attestations, strict
 extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs
-transferred distributed HTTP and transferred stateful HTTP against fresh roots and fresh isolated
-first-party data authorities, plus transferred outbound HTTP against fresh local relay fixtures.
+all five owners through `release transferred run`, with boundary `exact-download` or `latest-download`,
+against separate create-new roots and fresh isolated application, data, and local relay state.
 Exact/latest archive, checksum, candidate, and manifest byte equality is checked after, and never
-substitutes for the three behavioral runs. Each stateful run requires its own clean and
+substitutes for either complete five-owner behavioral run. Each stateful run requires its own clean and
 incremental artifacts to agree; artifacts from independently allocated fresh applications are not
 cross-compared. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation
 results.

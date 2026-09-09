@@ -104,30 +104,35 @@ locked source + typed target policy
                  + byte-bound verifier handoff
                               │
         read-only no-checkout package/static verification
-             + transferred distributed/stateful/outbound HTTP
+             + five typed transferred behavioral owners
                               │
        no-checkout publication job with contents:write only
                               │
                immutable GitHub Release
                               │
- anonymous exact/latest static + distributed/stateful/outbound acceptance
+ anonymous exact/latest static + five independent behavioral owners
 ```
 
 `tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
 preparation, strict archive/static verification, and application-verifier handoff. Target admission
 binds source and candidate identities to direct ELF inspection, two pinned networkless userland
-command lifecycles, transferable offline package composition, and the distributed HTTP, stateful HTTP,
+command lifecycles, transferable offline package composition and pure-tail execution, and the distributed HTTP, stateful HTTP,
 outbound HTTP, and standalone service oracles. A host
 build and the source-wide full receipt remain distinct from this exact-candidate evidence.
 
 The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
 handoff owns the archive, checksum, and private release receipt. The verifier handoff binds the exact
-host `lkjscript-dev` bytes and its release/distributed/stateful/outbound roles. Read-only jobs verify those
+host `lkjscript-dev` bytes and six schema-4 roles: release-verify, distributed-http, outbound-http,
+offline-packages, pure-tail, and stateful-http. Read-only jobs verify those
 bytes before restoring executable mode after artifact transport. The pre-publication job checks out
-no source, safely extracts and re-inspects the packaged candidate, then runs all three transferred
-application oracles. The publication job receives only the release handoff and is the only job with
+no source, safely extracts and re-inspects the packaged candidate, then runs all five transferred
+behavioral owners through `release transferred run`. The publication job receives only the release handoff and is the only job with
 release-write authority. Post-publication verification downloads exact and latest assets
-anonymously and runs strict static inspection plus all three oracles independently against each.
+anonymously and runs strict static inspection plus all five owners independently against each.
+The release owner has one finite behavioral inventory shared by target admission, verifier handoff,
+and transferred execution; each child owner validates its current complete receipt. The aggregate
+owns identities, orchestration, failure retention, and cleanup; application and language semantics
+stay in their original owners.
 
 The public release, transient artifacts, archive, manifest, checksum, receipts, asset digest, and
 attestation are derived distribution evidence. None can select or edit typed meaning, executable

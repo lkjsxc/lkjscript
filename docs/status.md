@@ -64,6 +64,11 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
+Current 0.1.28 source includes the schema-4 verifier handoff and one typed five-owner transferred
+acceptance command. Target admission rereads all six named oracle receipts. The current release
+campaign requires fresh local, hosted dry-run, tag-driven and independent exact/latest admission;
+these tooling changes do not establish a new public release by themselves.
+
 [`v0.1.21`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.21) is the current public and
 supported release. Its annotated tag object
 `fd6e87acf987d1d4722845e69d2108de4705ed49` selects exact release-source commit

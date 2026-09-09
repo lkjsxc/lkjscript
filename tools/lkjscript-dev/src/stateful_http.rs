@@ -419,13 +419,27 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         ordinal: 0,
         commands: Vec::new(),
     };
-    let workflow = if outside_checkout {
+    let mut workflow = if outside_checkout {
         run_authoring(&mut context, &isolated)
     } else {
         Err(DevError::corrupt(
             "stateful HTTP isolated root is inside the checkout",
         ))
     };
+    if !executable_observation(
+        &context.binary,
+        "completed stateful candidate",
+        MAXIMUM_CANDIDATE_BINARY_BYTES,
+    )
+    .is_ok_and(|observed| {
+        observed.sha256 == copied_candidate.sha256
+            && observed.byte_length == copied_candidate.byte_length
+            && observed.mode == copied_candidate.mode
+    }) {
+        workflow = Err(DevError::corrupt(
+            "copied stateful candidate changed during execution",
+        ));
+    }
     let cleanup = temporary.close().map_err(|error| {
         DevError::infrastructure(format!("remove isolated stateful HTTP root: {error}"))
     });
@@ -641,7 +655,7 @@ pub(crate) fn read_transferred_receipt(
         || result.topology.pattern_routes != 2
         || result.topology.pattern_segments != 6
         || result.topology.maximum_specificity_chain != 2
-        || result.topology.route_set.is_empty()
+        || !stateful_topology_is_current(&result.topology)
         || ["streams", "data", "identifiers", "clock"]
             .iter()
             .any(|name| !result.topology.requirements.contains_key(*name))
@@ -682,7 +696,7 @@ pub(crate) fn read_transferred_receipt(
         || !result.live.authority_unchanged
         || result.live.authority_before != result.live.authority_after
         || result.live.routes_checked != result.live.requests.len() as u64
-        || result.live.requests.is_empty()
+        || result.live.requests.len() != 26
     {
         return Err(DevError::corrupt(
             "transferred stateful receipt binding or acceptance mismatch",
@@ -700,6 +714,17 @@ pub(crate) fn read_transferred_receipt(
             "transferred stateful receipt invoked checkout build tooling",
         ));
     }
+    if receipt.commands.is_empty() {
+        return Err(DevError::corrupt("stateful command evidence missing"));
+    }
+    for command in &receipt.commands {
+        evidence::verify_process_files(&evidence_root, &command.process)?;
+        if command.command.first().map(Path::new)
+            != Some(Path::new(&receipt.copied_candidate.file.path))
+        {
+            return Err(DevError::corrupt("foreign stateful executable"));
+        }
+    }
     Ok(TransferredReceiptBinding {
         receipt_bytes: metadata.len(),
         receipt_sha256: sha256_file(path, MAXIMUM_RECEIPT_BYTES)?,
@@ -711,6 +736,51 @@ pub(crate) fn read_transferred_receipt(
         data_contract: result.live.data_contract.clone(),
         cleanup_complete,
     })
+}
+
+fn stateful_topology_is_current(topology: &TopologyObservation) -> bool {
+    let expected = [
+        ("DELETE", "exact", "/api/posts/featured", vec![]),
+        (
+            "DELETE",
+            "pattern",
+            "/api/{space}/{id}",
+            vec!["space", "id"],
+        ),
+        ("GET", "exact", "/", vec![]),
+        ("GET", "exact", "/api/posts", vec![]),
+        ("POST", "exact", "/api/posts", vec![]),
+        ("PUT", "pattern", "/api/posts/{id}", vec!["id"]),
+    ];
+    evidence::hex_identity(&topology.module, "mod_", 32)
+        && evidence::hex_identity(&topology.component, "decl_", 32)
+        && evidence::hex_identity(&topology.target, "target_", 32)
+        && evidence::hex_identity(&topology.route_set, "http_routes_", 64)
+        && topology.routes.len() == expected.len()
+        && topology.routes.iter().zip(expected).all(
+            |(route, (method, selector, path, captures))| {
+                route.method == method
+                    && route.selector == selector
+                    && route.path == path
+                    && route.captures == captures
+                    && evidence::hex_identity(&route.route, "route_", 32)
+                    && evidence::scoped_identity(&route.port, "port_")
+                    && evidence::hex_identity(&route.handler, "decl_", 32)
+                    && route.parameters.len() == captures.len() + 1
+                    && route.parameters.iter().enumerate().all(|(index, param)| {
+                        evidence::hex_identity(&param.id, "param_", 32)
+                            && param.index == index as u64
+                            && param.use_mode == "unrestricted"
+                            && param.requirement == "none"
+                            && param.name
+                                == if index == 0 {
+                                    "request"
+                                } else {
+                                    captures[index - 1]
+                                }
+                    })
+            },
+        )
 }
 
 fn run_authoring(context: &mut Context, isolated: &Path) -> Result<AuthoringResult, DevError> {
@@ -3731,6 +3801,14 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .map_err(|error| DevError::infrastructure(format!("system clock: {error}")))
+}
+
+#[cfg(test)]
+pub(crate) fn encode_transferred_test_fixture(
+    value: serde_json::Value,
+) -> Result<Vec<u8>, DevError> {
+    let receipt: StatefulReceipt = serde_json::from_value(value)?;
+    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ Status: normative.
 ## Independent correctness mechanisms
 
 Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
-source-bound evaluator owners. Receipt contracts are pure-tail 4 and offline-packages 2. Transferred
+source-bound evaluator owners. Receipt contracts are pure-tail 5 and offline-packages 3. Transferred
 receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
 mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
 removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its
@@ -428,8 +428,8 @@ logical backup/absent-root restore, corrupt/absent-root failed startup, graceful
 accepted graph authority, and data/runner-root cleanup. Timeout, early exit, data failure, shutdown
 failure, or cleanup failure remains a typed non-pass. Workflow shell cannot reclassify it.
 
-The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. None of the
-three application oracles replaces another at release admission.
+The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. Each HTTP
+oracle and both language/package oracles remain independently required at transferred admission.
 
 The maintained service owner also starts `lkjournal-live-1` against the same isolated initialized
 data root as HTTP and worker coverage. Its bounded raw TCP client computes the upgrade accept value,
@@ -479,8 +479,11 @@ byte-equal. Strict verification owns archive inventory, order, mode, timestamp, 
 canonical metadata, checksum, target/linkage, candidate, and extraction-conflict rejection.
 
 Before publication, a read-only no-checkout job verifies exact artifact and verifier handoffs,
-re-inspects the extracted candidate, and freshly passes transferred distributed, stateful, and
-outbound HTTP.
+re-inspects the extracted candidate, and runs `release transferred run` with boundary
+`pre-publication`. Its exact ordered behavioral inventory is distributed HTTP, outbound HTTP,
+offline packages, pure tail, and stateful HTTP. Target admission additionally requires maintained
+service acceptance. `release admission-verify` and preparation re-read the six named target receipts;
+a count or success flag cannot replace them.
 The publication job depends on both receipts, has the only release-write permission, performs no
 checkout, and executes no repository binary or script.
 
@@ -488,12 +491,36 @@ After immutable publication, exact-tag and `releases/latest` assets are download
 verified independently. Each path requires checksum, GitHub asset digest, release/asset attestation,
 strict extraction, source/manifest/candidate equality, static inspection, transferred distributed
 HTTP, transferred stateful HTTP against a fresh isolated first-party data root, transferred
-outbound HTTP against fresh local HTTP/TLS fixtures, and cleanup. Exact/latest
-release-asset, manifest, and candidate byte equality is required but cannot replace either
+outbound HTTP against fresh local HTTP/TLS fixtures, offline packages, pure tail, and cleanup.
+`release transferred run` independently owns the `exact-download` and `latest-download` boundaries.
+Exact/latest release-asset, manifest, and candidate byte equality is checked only after both
+behavioral runs and cannot replace either
 behavioral run. Clean/incremental artifact equality is required within each independently created
 application; artifacts from the two fresh applications have independently allocated semantic
 identities and are not required to have the same digest. A required stale, reused, skipped,
 unavailable, failed, cancelled, or unrun observation is not public acceptance.
+
+The schema-4 private verifier handoff admits exactly release-verify, distributed-http, outbound-http,
+offline-packages, pure-tail, and stateful-http, in that order. Schema 3 and omitted, duplicate,
+foreign, or extra roles reject. The exact two-file inventory, canonical identity, externally expected
+verifier byte length/hash, source/tag, and safe executable mode are checked before transferred code
+runs. The aggregate rechecks frozen inputs before and after each child and delegates complete
+behavioral receipt validation to that child's owner. It retains the manifest, source/publication/
+boundary, actual capabilities, target/policy, candidate/verifier, child receipt byte length/SHA-256/
+verification digest, process results, and cleanup. Each child has a create-new absolute evidence
+root and disposable state. Incomplete state is durably recorded before execution; failed or cancelled
+attempts cannot advance publication. Supervised descendants, including separate process groups,
+are terminated through bounded Linux process identity tracking; abrupt external termination can
+leave an incomplete receipt requiring cleanup, never a passing receipt.
+
+Independent inventory tests must use literal expected roles. Source-bound live-receipt falsification
+recomputes aggregate hashes after corrupting a child obligation, so an omitted constrained factory
+cannot hide behind current schema agreement. It requires an actual complete no-checkout rehearsal;
+it is separately executed proof, not a substitute for candidate-bound public observations. The
+existing language owners retain fixed configure results [8,11,17] and [2,0,-4], Text/nested-list
+constants, every ordered 8,192-element mapped value and sum 100,691,968, unchanged-HEAD bound and
+unsafe-empty-container rejections, graph projections, storage/accounting, transactional visibility,
+and healthy recovery. Internal evaluator probes remain source/verifier-bound observations.
 
 ## Verification profiles and receipts
 

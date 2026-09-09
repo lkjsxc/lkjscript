@@ -9,15 +9,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 
 const IDENTITY_SCHEMA: &str = "lkjscript-application-verifier-handoff";
-const IDENTITY_SCHEMA_VERSION: u32 = 3;
+const IDENTITY_SCHEMA_VERSION: u32 = 4;
 pub(super) const EXECUTABLE_NAME: &str = "lkjscript-dev";
 pub(super) const IDENTITY_NAME: &str = "verifier-identity.json";
-const ROLES: [&str; 4] = [
-    "release-verify",
-    "distributed-http",
-    "outbound-http",
-    "stateful-http",
-];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -90,7 +84,10 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         },
         tag: options.tag,
         commit_sha: options.commit,
-        roles: ROLES.iter().map(|role| (*role).to_owned()).collect(),
+        roles: super::transferred::roles()
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         file,
     };
     archive::write_new(
@@ -117,6 +114,12 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
 }
 
 fn verify(options: VerifyOptions) -> Result<u8, DevError> {
+    let identity = validate_options(&options)?;
+    print_verified(&options, &identity)?;
+    Ok(0)
+}
+
+fn validate_options(options: &VerifyOptions) -> Result<VerifierIdentity, DevError> {
     validate_tag(&options.tag)?;
     super::validate_git_sha(&options.commit, "verifier handoff commit")?;
     super::require_absolute_regular_executable(
@@ -124,7 +127,8 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         "transferred verifier executable",
     )?;
     super::require_absolute_regular(&options.identity, "transferred verifier identity")?;
-    let bytes = fs::read(&options.identity)?;
+    super::require_absolute_regular(&options.identity, "verifier identity")?;
+    let bytes = crate::process::read_bounded(&options.identity, 1024 * 1024)?;
     if bytes.len() > 1024 * 1024 {
         return Err(DevError::corrupt(
             "transferred verifier identity exceeds 1 MiB",
@@ -142,7 +146,7 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         || identity.schema.version != IDENTITY_SCHEMA_VERSION
         || identity.tag != options.tag
         || identity.commit_sha != options.commit
-        || identity.roles != ROLES
+        || identity.roles != super::transferred::roles()
         || identity.file.name != EXECUTABLE_NAME
         || identity.file != observed
         || identity.file.sha256 != options.expected_sha256
@@ -164,6 +168,10 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         .parent()
         .ok_or_else(|| DevError::corrupt("transferred verifier has no parent"))?;
     validate_inventory(parent)?;
+    Ok(identity)
+}
+
+fn print_verified(options: &VerifyOptions, identity: &VerifierIdentity) -> Result<(), DevError> {
     println!(
         "{}",
         serde_json::to_string(&serde_json::json!({
@@ -178,13 +186,32 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
             "roles": identity.roles,
         }))?
     );
-    Ok(0)
+    Ok(())
+}
+
+pub(super) fn validate_handoff(
+    executable: &Path,
+    identity: &Path,
+    tag: &str,
+    commit: &str,
+    sha256: &str,
+    bytes: u64,
+) -> Result<(), DevError> {
+    validate_options(&VerifyOptions {
+        executable: executable.to_path_buf(),
+        identity: identity.to_path_buf(),
+        tag: tag.to_owned(),
+        commit: commit.to_owned(),
+        expected_sha256: sha256.to_owned(),
+        expected_bytes: bytes,
+    })?;
+    Ok(())
 }
 
 fn observe_executable(path: &Path) -> Result<FileIdentity, DevError> {
     let metadata = archive::ensure_regular(path, "verifier executable")?;
     let mode = metadata.permissions().mode() & 0o7777;
-    if mode != 0o755 {
+    if mode != 0o755 || metadata.len() == 0 || metadata.len() > 384 * 1024 * 1024 {
         return Err(DevError::corrupt(format!(
             "verifier executable mode is {mode:o}, expected 755"
         )));
@@ -206,6 +233,7 @@ fn validate_inventory(directory: &Path) -> Result<(), DevError> {
         ));
     }
     let mut names = fs::read_dir(directory)?
+        .take(3)
         .map(|entry| {
             let entry = entry?;
             let metadata = fs::symlink_metadata(entry.path())?;
@@ -277,7 +305,7 @@ fn parse_verify(arguments: impl Iterator<Item = OsString>) -> Result<VerifyOptio
     })
 }
 
-fn parse_values(
+pub(super) fn parse_values(
     mut arguments: impl Iterator<Item = OsString>,
     allowed: &[&str],
 ) -> Result<BTreeMap<String, String>, DevError> {
@@ -299,7 +327,10 @@ fn parse_values(
     Ok(values)
 }
 
-fn required(values: &mut BTreeMap<String, String>, name: &str) -> Result<String, DevError> {
+pub(super) fn required(
+    values: &mut BTreeMap<String, String>,
+    name: &str,
+) -> Result<String, DevError> {
     values
         .remove(name)
         .ok_or_else(|| DevError::usage(format!("required option '{name}' is missing")))
@@ -328,7 +359,7 @@ fn require_absent_output(path: &Path) -> Result<(), DevError> {
     Ok(())
 }
 
-fn validate_tag(tag: &str) -> Result<(), DevError> {
+pub(super) fn validate_tag(tag: &str) -> Result<(), DevError> {
     let Some(version) = tag.strip_prefix('v') else {
         return Err(DevError::usage("verifier handoff tag must start with 'v'"));
     };
@@ -353,13 +384,15 @@ mod tests {
 
     #[test]
     fn verifier_identity_schema_roles_and_tag_are_closed() {
-        assert_eq!(IDENTITY_SCHEMA_VERSION, 3);
+        assert_eq!(IDENTITY_SCHEMA_VERSION, 4);
         assert_eq!(
-            ROLES,
+            super::super::transferred::roles(),
             [
                 "release-verify",
                 "distributed-http",
                 "outbound-http",
+                "offline-packages",
+                "pure-tail",
                 "stateful-http"
             ]
         );
@@ -420,6 +453,47 @@ mod tests {
         verify(options()).expect("verify exact handoff");
 
         let identity_bytes = fs::read(&identity).expect("read identity");
+        let baseline: VerifierIdentity =
+            serde_json::from_slice(&identity_bytes).expect("typed identity");
+        for missing in [
+            "release-verify",
+            "distributed-http",
+            "outbound-http",
+            "offline-packages",
+            "pure-tail",
+            "stateful-http",
+        ] {
+            let mut fault = baseline.clone();
+            fault.roles.retain(|role| role != missing);
+            fs::write(
+                &identity,
+                archive::canonical_json(&fault).expect("canonical fault"),
+            )
+            .expect("fault");
+            assert!(verify(options()).is_err(), "missing {missing} passed");
+        }
+        for extra in ["distributed-http", "foreign-role"] {
+            let mut fault = baseline.clone();
+            fault.roles.push(extra.to_owned());
+            fs::write(
+                &identity,
+                archive::canonical_json(&fault).expect("canonical fault"),
+            )
+            .expect("fault");
+            assert!(verify(options()).is_err());
+        }
+        let mut predecessor = baseline.clone();
+        predecessor.schema.version = 3;
+        fs::write(
+            &identity,
+            archive::canonical_json(&predecessor).expect("schema 3"),
+        )
+        .expect("fault");
+        assert!(verify(options()).is_err());
+        fs::write(&identity, &identity_bytes).expect("restore identity");
+        let mut foreign = options();
+        foreign.expected_sha256 = "f".repeat(64);
+        assert!(verify(foreign).is_err());
         let mut noncanonical = identity_bytes.clone();
         noncanonical.push(b'\n');
         fs::write(&identity, noncanonical).expect("write noncanonical identity");

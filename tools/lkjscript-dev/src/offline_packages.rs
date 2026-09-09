@@ -144,7 +144,15 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             failure: None,
         },
     };
-    let outcome = workflow(&mut context);
+    let outcome = workflow(&mut context).and_then(|()| {
+        require(
+            digest_file(&context.binary, MAXIMUM_EXECUTABLE_BYTES)?
+                == context.receipt.candidate_sha256
+                && digest_file(&binary, MAXIMUM_EXECUTABLE_BYTES)?
+                    == context.receipt.candidate_sha256,
+            "candidate or copied candidate changed during execution",
+        )
+    });
     context.receipt.elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos())
         .map_err(|_| DevError::infrastructure("elapsed time overflow"))?;
     isolated.close()?;
@@ -1918,6 +1926,14 @@ fn verify_observation_files(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn encode_transferred_test_fixture(
+    value: serde_json::Value,
+) -> Result<Vec<u8>, DevError> {
+    let receipt: Receipt = serde_json::from_value(value)?;
+    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

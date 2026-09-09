@@ -336,7 +336,13 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             failure: None,
         },
     };
-    let result = workflow(&mut context);
+    let result = workflow(&mut context).and_then(|()| {
+        require(
+            digest(&context.binary)? == context.receipt.candidate_sha256
+                && digest(&binary)? == context.receipt.candidate_sha256,
+            "candidate or copied candidate changed during execution",
+        )
+    });
     context.receipt.elapsed_nanoseconds = u64::try_from(context.started.elapsed().as_nanos())
         .map_err(|_| DevError::corrupt("elapsed overflow"))?;
     root.close()?;
@@ -832,6 +838,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "removing a required generic capture constraint changed authority or accepted its body",
     )?;
     context.receipt.outcomes.insert("capture-safe-constraint-clear".to_owned(), serde_json::json!({"classification":"fresh passed","parameter":library.symbols["$Env"],"code":"kernel_type_bind_capture","authority":before_constraint}));
+    let mut factory_projections = BTreeMap::new();
     for name in ["$configure", "$configure-helper"] {
         let definition = context.cli(
             Some(&library.path),
@@ -855,7 +862,17 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
                 .any(|record| record.operation == "definition.type-parameter"),
             "generic factory definition omitted its parameters",
         )?;
+        let command = context
+            .receipt
+            .commands
+            .last()
+            .ok_or_else(|| DevError::corrupt("factory projection command missing"))?;
+        factory_projections.insert(name.to_owned(), command.observation.stdout.path.clone());
     }
+    context.receipt.outcomes.insert(
+        "generic-factory-definitions".to_owned(),
+        serde_json::to_value(&factory_projections)?,
+    );
     let inventory = offline_producer_inventory(&library.path)
         .map_err(|error| DevError::corrupt(error.to_string()))?;
     evidence::publish_json(&context.output.join("producer-inventory.json"), &inventory)?;
@@ -1910,6 +1927,8 @@ pub(crate) fn read_transferred_receipt(
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
+            && receipt.evidence_root == root.display().to_string()
+            && path.canonicalize()? == root.join("receipt.json")
             && !Path::new(&receipt.isolated_root).exists(),
         "pure-tail receipt is incomplete",
     )?;
@@ -1929,6 +1948,12 @@ pub(crate) fn read_transferred_receipt(
         "pure-tail command inventory is incomplete or excessive",
     )?;
     for command in &receipt.commands {
+        evidence::verify_process_files(&root, &command.observation)?;
+        require(
+            command.command.first().map(Path::new)
+                == Some(&Path::new(&receipt.isolated_root).join("lkjscript")),
+            "pure-tail command used a foreign executable",
+        )?;
         require(
             if command.expected_success {
                 command.observation.status == process::ProcessStatus::Passed
@@ -1939,10 +1964,94 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     require(
-        receipt.outcomes["capture-safe-constraint-clear"]["classification"] == "fresh passed"
-            && receipt.outcomes["capture-safe-constraint-clear"]["code"]
+        receipt
+            .outcomes
+            .get("capture-safe-constraint-clear")
+            .unwrap_or(&serde_json::Value::Null)["classification"]
+            == "fresh passed"
+            && receipt
+                .outcomes
+                .get("capture-safe-constraint-clear")
+                .unwrap_or(&serde_json::Value::Null)["code"]
                 == "kernel_type_bind_capture",
         "pure-tail receipt omitted capture constraint authority rejection",
+    )?;
+    let definitions = receipt
+        .outcomes
+        .get("generic-factory-definitions")
+        .ok_or_else(|| DevError::corrupt("generic factory definitions missing"))?;
+    let mut projected = BTreeMap::new();
+    for (symbol, visibility, parameters, constraint, form) in [
+        ("$configure", "public", "2", "capture-safe", "bind"),
+        ("$configure-helper", "private", "3", "none", "invoke"),
+    ] {
+        let file = definitions[symbol]
+            .as_str()
+            .ok_or_else(|| DevError::corrupt("generic factory projection file missing"))?;
+        require(
+            receipt
+                .commands
+                .iter()
+                .any(|command| command.expected_success && command.observation.stdout.path == file),
+            "factory projection is not a candidate command output",
+        )?;
+        let relative = Path::new(file);
+        require(
+            relative.components().count() == 1
+                && matches!(relative.components().next(), Some(Component::Normal(_))),
+            "factory projection path escaped evidence",
+        )?;
+        let bytes = process::read_bounded(&root.join(relative), MAXIMUM_OUTPUT)?;
+        let records = parse_records("factory definition", &bytes)
+            .map_err(|errors| DevError::corrupt(format!("factory projection: {errors:?}")))?;
+        require(
+            field(&records, "definition.function", "visibility")? == visibility
+                && field(&records, "definition.function", "type-parameters")? == "3"
+                && field(&records, "definition.function", "parameters")? == parameters
+                && field(&records, "definition.function", "effect")? == "pure"
+                && field(&records, "page", "complete")? == "true",
+            "factory projection lost generic private/public contract",
+        )?;
+        for (index, name, bound) in [
+            ("0", "Env", constraint),
+            ("1", "Input", "none"),
+            ("2", "Output", "none"),
+        ] {
+            require(
+                records
+                    .iter()
+                    .filter(|record| {
+                        record.operation == "definition.type-parameter"
+                            && record_field(record, "index").is_ok_and(|value| value == index)
+                            && record_field(record, "name").is_ok_and(|value| value == name)
+                            && record_field(record, "constraint").is_ok_and(|value| value == bound)
+                    })
+                    .count()
+                    == 1,
+                "factory projection omitted an explicit type parameter constraint",
+            )?;
+        }
+        require(
+            records.iter().any(|record| {
+                record.operation == "definition.expression"
+                    && record_field(record, "depth").is_ok_and(|value| value == "0")
+                    && record_field(record, "form").is_ok_and(|value| value == form)
+                    && record_field(record, "arguments").is_ok_and(|value| value == "2")
+            }),
+            "factory projection omitted graph-owned bind/invoke body",
+        )?;
+        projected.insert(symbol, records);
+    }
+    let helper = field(&projected["$configure-helper"], "definition.function", "id")?;
+    require(
+        projected["$configure"].iter().any(|record| {
+            record.operation == "definition.expression"
+                && record_field(record, "form").is_ok_and(|value| value == "function_value")
+                && record_field(record, "function")
+                    .is_ok_and(|function| function.ends_with(&format!("/{helper}")))
+                && record_field(record, "type-arguments").is_ok_and(|value| value == "3")
+        }),
+        "public generic factory lost its exact private generic helper",
     )?;
     for expected in [
         "0", "1", "32896", "524800", "8390656", "33558528", "true", "false", "-17", "5", "-5",
@@ -1961,6 +2070,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     for (target, expected) in [
+        ("constant-text", "[]"),
         (
             "constant-text",
             "[\"runtime text\",\"runtime text\",\"runtime text\"]",
@@ -2013,7 +2123,10 @@ pub(crate) fn read_transferred_receipt(
         discovery["observation_fields"] == 36 && discovery["classification"] == "fresh passed",
         "checked-value discovery evidence missing",
     )?;
-    let mapping = &receipt.outcomes["persistent-map"];
+    let mapping = receipt
+        .outcomes
+        .get("persistent-map")
+        .ok_or_else(|| DevError::corrupt("persistent-map outcome absent"))?;
     for task in [false, true] {
         require(
             receipt
@@ -2322,7 +2435,15 @@ pub(crate) fn read_transferred_receipt(
                 .is_some_and(|outcome| outcome.as_str().is_some_and(|digest| digest.len() == 64)),
         "canonical corruption or reviewed incremental proof missing",
     )?;
+    let mut previous = None;
     for file in &receipt.files {
+        require(
+            file.kind == evidence::FileKind::File
+                && file.path != "receipt.json"
+                && previous.is_none_or(|previous: &str| previous < file.path.as_str()),
+            "pure-tail file inventory is duplicated, unordered, or nonregular",
+        )?;
+        previous = Some(file.path.as_str());
         let relative = Path::new(&file.path);
         require(
             relative.components().count() == 1
@@ -2334,7 +2455,29 @@ pub(crate) fn read_transferred_receipt(
             "pure-tail evidence file changed",
         )?;
     }
+    let mut observed = fs::read_dir(&root)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()?;
+    observed.retain(|name| name != "receipt.json");
+    observed.sort();
+    require(
+        observed
+            == receipt
+                .files
+                .iter()
+                .map(|file| file.path.clone())
+                .collect::<Vec<_>>(),
+        "pure-tail evidence inventory is not exact",
+    )?;
     Ok(receipt)
+}
+
+#[cfg(test)]
+pub(crate) fn encode_transferred_test_fixture(
+    value: serde_json::Value,
+) -> Result<Vec<u8>, DevError> {
+    let receipt: Receipt = serde_json::from_value(value)?;
+    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

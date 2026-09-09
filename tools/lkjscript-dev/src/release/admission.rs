@@ -4,15 +4,11 @@ use super::model::{
     VerificationClassification,
 };
 use super::target::{self, BuiltCandidate, TargetBuildReceipt, UserlandPolicy};
-use crate::distributed_http;
+use super::transferred::{ORACLES, Oracle};
 use crate::error::DevError;
 use crate::evidence;
-use crate::offline_packages;
-use crate::outbound_http;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
-use crate::pure_tail;
 use crate::service;
-use crate::stateful_http;
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -349,7 +345,54 @@ pub(super) fn read_receipt(
             "target admission build-receipt evidence changed",
         ));
     }
+    for item in &receipt.oracles {
+        let child_path = Path::new(&item.receipt.path);
+        if external_evidence(child_path)? != item.receipt {
+            return Err(DevError::corrupt("target child receipt changed"));
+        }
+        if let Some(role) = ORACLES
+            .into_iter()
+            .find(|role| role.admission_name() == item.name)
+        {
+            if child_path
+                != path
+                    .parent()
+                    .ok_or_else(|| DevError::corrupt("target receipt parent absent"))?
+                    .join(role.name())
+                    .join("receipt.json")
+            {
+                return Err(DevError::corrupt("target child receipt is foreign"));
+            }
+            let facts = role.read(child_path, candidate, &verifier)?;
+            if facts.verifier_sha256 != item.verifier_sha256
+                || facts.candidate_sha256 != item.candidate_sha256
+                || facts.commands != item.commands
+                || facts.runners != item.runners
+                || facts.requests != item.requests
+                || facts.elapsed_nanoseconds != item.elapsed_nanoseconds
+                || facts.cleanup_complete != item.cleanup_complete
+            {
+                return Err(DevError::corrupt("target child facts differ"));
+            }
+        } else {
+            service::read_receipt(child_path, candidate)?;
+        }
+    }
     Ok(receipt)
+}
+
+pub(super) fn verify_command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
+    let mut values =
+        super::verifier::parse_values(arguments, &["--candidate", "--receipt", "--commit"])?;
+    let candidate = PathBuf::from(super::verifier::required(&mut values, "--candidate")?);
+    let path = PathBuf::from(super::verifier::required(&mut values, "--receipt")?);
+    let commit = super::verifier::required(&mut values, "--commit")?;
+    let receipt = read_receipt(&path, &candidate, &commit)?;
+    println!(
+        "{}",
+        serde_json::json!({"status":"passed", "source_commit":receipt.source_commit,"oracles":receipt.oracles.iter().map(|item|item.name.as_str()).collect::<Vec<_>>(),"receipt":external_evidence(&path)?})
+    );
+    Ok(0)
 }
 
 fn validate_receipt(
@@ -371,14 +414,11 @@ fn validate_receipt(
         .iter()
         .map(|item| (item.role.as_str(), item.image.requested.as_str()))
         .collect::<Vec<_>>();
-    let expected_oracles = [
-        "distributed_http",
-        "outbound_http",
-        "offline_packages",
-        "pure_tail",
-        "stateful_http",
-        "service_acceptance",
-    ];
+    let expected_oracles = ORACLES
+        .map(Oracle::admission_name)
+        .into_iter()
+        .chain(std::iter::once("service_acceptance"))
+        .collect::<Vec<_>>();
     let observed_oracles = receipt
         .oracles
         .iter()
@@ -861,108 +901,40 @@ fn run_oracles(
     verifier: &Path,
     candidate: &Path,
 ) -> Result<Vec<OracleObservation>, DevError> {
-    let distributed_root = context.evidence_root.join("distributed-http");
-    let distributed_output = context.invoke(
-        "distributed-http-oracle",
-        vec![
-            verifier.display().to_string(),
-            "distributed-http".to_owned(),
-            "--binary".to_owned(),
-            candidate.display().to_string(),
-            "--evidence-root".to_owned(),
-            distributed_root.display().to_string(),
-            "--machine".to_owned(),
-        ],
-        Expected::Passed,
-        ORACLE_TIMEOUT,
-        false,
-    )?;
-    require_machine_passed("distributed HTTP", &distributed_output)?;
-    let distributed_receipt = distributed_root.join("receipt.json");
-    let distributed =
-        distributed_http::read_transferred_receipt(&distributed_receipt, candidate, verifier)?;
-
-    let outbound_root = context.evidence_root.join("outbound-http");
-    let outbound_output = context.invoke(
-        "outbound-http-oracle",
-        vec![
-            verifier.display().to_string(),
-            "outbound-http".to_owned(),
-            "--binary".to_owned(),
-            candidate.display().to_string(),
-            "--evidence-root".to_owned(),
-            outbound_root.display().to_string(),
-            "--machine".to_owned(),
-        ],
-        Expected::Passed,
-        ORACLE_TIMEOUT,
-        false,
-    )?;
-    require_machine_passed("outbound HTTP", &outbound_output)?;
-    let outbound_receipt = outbound_root.join("receipt.json");
-    let outbound = outbound_http::read_transferred_receipt(&outbound_receipt, candidate, verifier)?;
-
-    let offline_root = context.evidence_root.join("offline-packages");
-    let offline_output = context.invoke(
-        "offline-packages-oracle",
-        vec![
-            verifier.display().to_string(),
-            "offline-packages".to_owned(),
-            "--binary".to_owned(),
-            candidate.display().to_string(),
-            "--evidence-root".to_owned(),
-            offline_root.display().to_string(),
-            "--machine".to_owned(),
-        ],
-        Expected::Passed,
-        ORACLE_TIMEOUT,
-        false,
-    )?;
-    require_machine_passed("offline packages", &offline_output)?;
-    let offline_receipt = offline_root.join("receipt.json");
-    let offline =
-        offline_packages::read_transferred_receipt(&offline_receipt, candidate, verifier)?;
-
-    let tail_root = context.evidence_root.join("pure-tail");
-    let tail_output = context.invoke(
-        "pure-tail-oracle",
-        vec![
-            verifier.display().to_string(),
-            "pure-tail".to_owned(),
-            "--binary".to_owned(),
-            candidate.display().to_string(),
-            "--evidence-root".to_owned(),
-            tail_root.display().to_string(),
-            "--machine".to_owned(),
-        ],
-        Expected::Passed,
-        Duration::from_secs(900),
-        false,
-    )?;
-    require_machine_passed("pure tail", &tail_output)?;
-    let tail_receipt = tail_root.join("receipt.json");
-    let tail = pure_tail::read_transferred_receipt(&tail_receipt, candidate, verifier)?;
-
-    let stateful_root = context.evidence_root.join("stateful-http");
-    let stateful_output = context.invoke(
-        "stateful-http-oracle",
-        vec![
-            verifier.display().to_string(),
-            "stateful-http".to_owned(),
-            "--binary".to_owned(),
-            candidate.display().to_string(),
-            "--evidence-root".to_owned(),
-            stateful_root.display().to_string(),
-            "--machine".to_owned(),
-        ],
-        Expected::Passed,
-        ORACLE_TIMEOUT,
-        false,
-    )?;
-    require_machine_passed("stateful HTTP", &stateful_output)?;
-    let stateful_receipt = stateful_root.join("receipt.json");
-    let stateful = stateful_http::read_transferred_receipt(&stateful_receipt, candidate, verifier)?;
-
+    let mut observations = Vec::new();
+    for role in ORACLES {
+        let root = context.evidence_root.join(role.name());
+        context.invoke(
+            role.name(),
+            vec![
+                verifier.display().to_string(),
+                role.name().to_owned(),
+                "--binary".to_owned(),
+                candidate.display().to_string(),
+                "--evidence-root".to_owned(),
+                root.display().to_string(),
+                "--machine".to_owned(),
+            ],
+            Expected::Passed,
+            role.timeout(),
+            false,
+        )?;
+        let path = root.join("receipt.json");
+        let facts = role.read(&path, candidate, verifier)?;
+        observations.push(OracleObservation {
+            name: role.admission_name().to_owned(),
+            status: AdmissionStatus::Passed,
+            receipt: external_evidence(&path)?,
+            verifier_sha256: facts.verifier_sha256,
+            candidate_sha256: facts.candidate_sha256,
+            elapsed_nanoseconds: facts.elapsed_nanoseconds,
+            commands: facts.commands,
+            runners: facts.runners,
+            requests: facts.requests,
+            cleanup_complete: facts.cleanup_complete,
+            prerequisite: role.prerequisite().to_owned(),
+        });
+    }
     let service_output = context.invoke(
         "service-oracle",
         vec![
@@ -994,87 +966,20 @@ fn run_oracles(
     let service_receipt = repository.join(service_receipt_relative);
     let service = service::read_receipt(&service_receipt, candidate)?;
     let candidate_sha256 = target::observe_candidate(candidate)?.sha256;
-    let tail_commands = tail.command_count();
-    Ok(vec![
-        OracleObservation {
-            name: "distributed_http".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&distributed_receipt)?,
-            verifier_sha256: distributed.verifier_sha256,
-            candidate_sha256: distributed.candidate_sha256,
-            elapsed_nanoseconds: distributed.elapsed_nanoseconds,
-            commands: distributed.commands,
-            runners: distributed.runners,
-            requests: distributed.responses,
-            cleanup_complete: distributed.cleanup_complete,
-            prerequisite: "none".to_owned(),
-        },
-        OracleObservation {
-            name: "outbound_http".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&outbound_receipt)?,
-            verifier_sha256: outbound.verifier_sha256,
-            candidate_sha256: outbound.candidate_sha256,
-            elapsed_nanoseconds: outbound.elapsed_nanoseconds,
-            commands: outbound.commands,
-            runners: outbound.runners,
-            requests: outbound.requests,
-            cleanup_complete: outbound.cleanup_complete,
-            prerequisite: "http_client_adapter_1".to_owned(),
-        },
-        OracleObservation {
-            name: "offline_packages".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&offline_receipt)?,
-            verifier_sha256: offline.verifier_sha256,
-            candidate_sha256: offline.candidate_sha256,
-            elapsed_nanoseconds: offline.elapsed_nanoseconds,
-            commands: offline.commands.len() as u64,
-            runners: offline.runners.len() as u64,
-            requests: 1,
-            cleanup_complete: offline.cleanup_complete,
-            prerequisite: "code_complete_package_container_1".to_owned(),
-        },
-        OracleObservation {
-            name: "pure_tail".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&tail_receipt)?,
-            verifier_sha256: tail.verifier_sha256,
-            candidate_sha256: tail.candidate_sha256,
-            elapsed_nanoseconds: tail.elapsed_nanoseconds,
-            commands: tail_commands,
-            runners: 1,
-            requests: 4,
-            cleanup_complete: tail.cleanup_complete,
-            prerequisite: "pure-tail-execution".to_owned(),
-        },
-        OracleObservation {
-            name: "stateful_http".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&stateful_receipt)?,
-            verifier_sha256: stateful.verifier_sha256,
-            candidate_sha256: stateful.candidate_sha256,
-            elapsed_nanoseconds: stateful.elapsed_nanoseconds,
-            commands: stateful.commands,
-            runners: 3,
-            requests: stateful.requests,
-            cleanup_complete: stateful.cleanup_complete,
-            prerequisite: stateful.data_contract,
-        },
-        OracleObservation {
-            name: "service_acceptance".to_owned(),
-            status: AdmissionStatus::Passed,
-            receipt: external_evidence(&service_receipt)?,
-            verifier_sha256: executable_binding(verifier)?.sha256,
-            candidate_sha256,
-            elapsed_nanoseconds: service.elapsed_nanoseconds,
-            commands: service.commands,
-            runners: service.runners,
-            requests: service.requests,
-            cleanup_complete: service.cleanup_complete,
-            prerequisite: service::DATA_CONTRACT.to_owned(),
-        },
-    ])
+    observations.push(OracleObservation {
+        name: "service_acceptance".to_owned(),
+        status: AdmissionStatus::Passed,
+        receipt: external_evidence(&service_receipt)?,
+        verifier_sha256: executable_binding(verifier)?.sha256,
+        candidate_sha256,
+        elapsed_nanoseconds: service.elapsed_nanoseconds,
+        commands: service.commands,
+        runners: service.runners,
+        requests: service.requests,
+        cleanup_complete: service.cleanup_complete,
+        prerequisite: service::DATA_CONTRACT.to_owned(),
+    });
+    Ok(observations)
 }
 
 impl Context {

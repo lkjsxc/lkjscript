@@ -2,6 +2,7 @@ mod admission;
 mod archive;
 mod model;
 mod target;
+mod transferred;
 mod verifier;
 
 use crate::error::DevError;
@@ -104,6 +105,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         "target" => target::print_policy(arguments),
         "build" => target::build(arguments),
         "admit" => admission::command(arguments),
+        "admission-verify" => admission::verify_command(arguments),
+        "transferred" => transferred::command(arguments),
         "verifier" => verifier::command(arguments),
         "prepare" => prepare(parse_prepare(arguments)?),
         "verify" => verify(parse_verify(arguments)?),
@@ -1687,131 +1690,6 @@ mod tests {
         fs::read_to_string(repository).expect("read release workflow")
     }
 
-    fn assert_current_distributed_projection_acceptance(job: &str) {
-        let schema = format!(
-            ".schema == {{identity:\"{}\",version:{}}}",
-            crate::distributed_http::ACCEPTANCE_SCHEMA,
-            crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
-        );
-        assert!(job.contains(&schema), "release job omitted {schema}");
-        for predicate in [
-            "(.result.responses | length) == 14",
-            ".result.topology.method == \"GET\"",
-            ".result.topology.path == \"/\"",
-            ".result.topology.route_count == 1",
-            ".result.topology.route | test(\"^route_[0-9a-f]{32}$\")",
-            ".result.topology.target | test(\"^target_[0-9a-f]{32}$\")",
-            ".result.topology.component | test(\"^pkg_[0-9a-f]{32}/decl_[0-9a-f]{32}$\")",
-            ".result.topology.port | test(\"^pkg_[0-9a-f]{32}/port_[0-9a-f]{32}$\")",
-            ".result.topology.function | test(\"^decl_[0-9a-f]{32}$\")",
-            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
-            ".result.topology.context_owners == 5",
-            ".result.topology.context_relations == 5",
-            ".result.topology.predecessor_port_absent == true",
-            ".result.topology.context_complete == true",
-            ".result.definition_projection.function | test(\"^decl_[0-9a-f]{32}$\")",
-            ".result.definition_projection.initial_revision == .result.initial_revision",
-            ".result.definition_projection.accepted_revision == .result.accepted_revision",
-            ".result.definition_projection.initial_revision != .result.definition_projection.accepted_revision",
-            ".result.definition_projection.initial_digest | test(\"^definition_[0-9a-f]{64}$\")",
-            ".result.definition_projection.accepted_digest | test(\"^definition_[0-9a-f]{64}$\")",
-            ".result.definition_projection.initial_digest != .result.definition_projection.accepted_digest",
-            ".result.definition_projection.initial_records > 0",
-            ".result.definition_projection.accepted_records > 0",
-            ".result.definition_projection.initial_pages >= 2",
-            ".result.definition_projection.accepted_pages >= 2",
-            ".result.definition_projection.initial_body_records > 0",
-            ".result.definition_projection.accepted_body_records > 0",
-            ".result.definition_projection.initial_fact_records > 0",
-            ".result.definition_projection.accepted_fact_records > 0",
-            ".result.definition_projection.initial_logical_bytes > 0",
-            ".result.definition_projection.accepted_logical_bytes > 0",
-            ".result.definition_projection.initial_output_bytes > 0",
-            ".result.definition_projection.accepted_output_bytes > 0",
-            ".result.definition_projection.initial_literal_sha256 | test(\"^[0-9a-f]{64}$\")",
-            ".result.definition_projection.accepted_literal_sha256 | test(\"^[0-9a-f]{64}$\")",
-            ".result.definition_projection.initial_literal_sha256 != .result.definition_projection.accepted_literal_sha256",
-            ".result.definition_projection.contract_unchanged == true",
-            ".result.definition_projection.intended_body_change == true",
-            ".result.definition_projection.digest_recomputed == true",
-            ".result.definition_projection.changed_page_budgets == true",
-            ".result.definition_projection.direct_file_plan_equal == true",
-            ".result.definition_projection.malformed_continuation_rejected == true",
-            ".result.definition_projection.stale_continuation_rejected == true",
-            ".result.definition_projection.projection_input_rejected == true",
-            ".result.definition_projection.authority_unchanged_before_apply == true",
-        ] {
-            assert!(
-                job.contains(predicate),
-                "release job omitted distributed projection predicate {predicate}"
-            );
-        }
-    }
-
-    fn assert_current_outbound_route_acceptance(job: &str) {
-        let schema = format!(
-            ".schema == {{identity:\"{}\",version:{}}}",
-            crate::outbound_http::ACCEPTANCE_SCHEMA,
-            crate::outbound_http::ACCEPTANCE_SCHEMA_VERSION
-        );
-        assert!(job.contains(&schema), "release job omitted {schema}");
-        for predicate in [
-            "(.result.responses | length) == 17",
-            "(.result.no_connection | length) == 7",
-            ".result.topology.method == \"GET\"",
-            ".result.topology.path == \"/relay-info\"",
-            ".result.topology.route_count == 1",
-            ".result.topology.route | test(\"^route_[0-9a-f]{32}$\")",
-            ".result.topology.target | test(\"^target_[0-9a-f]{32}$\")",
-            ".result.topology.component | test(\"^pkg_[0-9a-f]{32}/decl_[0-9a-f]{32}$\")",
-            ".result.topology.port | test(\"^pkg_[0-9a-f]{32}/port_[0-9a-f]{32}$\")",
-            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
-            ".result.topology.predecessor_port_absent == true",
-            ".result.topology.predecessor_predicate_absent == true",
-        ] {
-            assert!(
-                job.contains(predicate),
-                "release job omitted outbound route predicate {predicate}"
-            );
-        }
-    }
-
-    fn assert_current_stateful_route_acceptance(job: &str) {
-        let schema = format!(
-            ".schema == {{identity:\"{}\",version:{}}}",
-            crate::stateful_http::STATEFUL_SCHEMA,
-            crate::stateful_http::STATEFUL_SCHEMA_VERSION
-        );
-        assert!(job.contains(&schema), "release job omitted {schema}");
-        for predicate in [
-            "(.result.topology.routes | length) == 6",
-            ".result.topology.route_set | test(\"^http_routes_[0-9a-f]{64}$\")",
-            ".result.topology.exact_routes == 4",
-            ".result.topology.pattern_routes == 2",
-            ".result.topology.pattern_segments == 6",
-            ".result.topology.maximum_specificity_chain == 2",
-            ".result.pattern_lifecycle.set_preserved_identity == true",
-            ".result.pattern_lifecycle.altered_plan_rejected == true",
-            ".result.pattern_lifecycle.stale_plan_rejected == true",
-            ".result.pattern_lifecycle.temporary_pattern_deleted == true",
-            ".result.live.routes_checked == 26",
-            "(.result.live.requests | length) == 26",
-            ".result.live.exact_over_pattern_precedence == true",
-            ".result.live.ordered_two_captures == true",
-            ".result.live.capture_query_ignored == true",
-            ".result.live.matcher_step_bound == (.result.live.matcher_nodes + 1)",
-            ".result.live.runtime.runs == 3",
-            ".result.live.runtime.admitted_tasks == .result.live.runtime.completed_tasks",
-            ".result.live.runtime.maximum_admission_permits <= 40",
-            ".result.live.runtime.maximum_worker_permits <= 8",
-        ] {
-            assert!(
-                job.contains(predicate),
-                "release job omitted stateful route predicate {predicate}"
-            );
-        }
-    }
-
     #[test]
     fn release_strict_tag_accepts_only_matching_plain_semver() {
         assert!(validate_strict_tag("v0.1.0", "0.1.0").is_ok());
@@ -2088,19 +1966,25 @@ mod tests {
         assert!(pre_publication.contains("distributed-http"));
         assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
-        assert_current_distributed_projection_acceptance(pre_publication);
-        assert_current_outbound_route_acceptance(pre_publication);
-        assert_current_stateful_route_acceptance(pre_publication);
-        assert!(pre_publication.contains(".result.initial_template == \"minimal\""));
-        assert!(pre_publication.contains(".result.initial_owners == 0"));
-        assert!(pre_publication.contains(".result.initial_dependencies == 0"));
-        assert!(pre_publication.contains(".result.dependency_staged == true"));
-        assert!(pre_publication.contains(".result.topology.target_name == \"serve\""));
-        assert!(pre_publication.contains(".result.topology.runner == \"http\""));
-        assert!(pre_publication.contains(
-            "(.result.topology.requirements | keys) == [\"clock\",\"data\",\"identifiers\",\"streams\"]"
-        ));
-        assert!(!pre_publication.contains("request_records =="));
+        assert!(pre_publication.contains("release transferred run"));
+        for role in [
+            "distributed-http",
+            "outbound-http",
+            "offline-packages",
+            "pure-tail",
+            "stateful-http",
+        ] {
+            assert!(
+                pre_publication.contains(&format!("/{role}/*")),
+                "missing retained child {role}"
+            );
+        }
+        assert!(pre_publication.contains("--expected-verifier-sha256"));
+        assert!(pre_publication.contains("--expected-verifier-bytes"));
+        assert!(
+            !pre_publication.contains(".result."),
+            "behavioral admission belongs to typed readers"
+        );
         assert!(pre_publication.contains("--evidence-root"));
         assert!(pre_publication.contains("env -i LANG=C"));
         assert!(!pre_publication.contains("tar -"));
@@ -2141,8 +2025,7 @@ mod tests {
         assert!(!post_release.contains("attestations: write"));
         assert!(!post_release.contains("actions/checkout"));
         assert!(!post_release.contains("cargo "));
-        assert!(post_release.contains(".executable.capabilities_digest"));
-        assert!(post_release.contains(".product.version"));
+        assert!(post_release.contains("--manifest"));
         assert!(!post_release.contains(".executable.cli_contract"));
         assert!(!post_release.contains(".executable.executable_registry_digest"));
         assert!(post_release.contains("verify_public_application exact"));
@@ -2152,23 +2035,24 @@ mod tests {
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
-        assert_current_distributed_projection_acceptance(post_release);
-        assert_current_outbound_route_acceptance(post_release);
-        assert_current_stateful_route_acceptance(post_release);
-        assert!(post_release.contains(".result.initial_template == \"minimal\""));
-        assert!(post_release.contains(".result.initial_owners == 0"));
-        assert!(post_release.contains(".result.initial_dependencies == 0"));
-        assert!(post_release.contains(".result.dependency_staged == true"));
-        assert!(post_release.contains(".result.topology.target_name == \"serve\""));
-        assert!(post_release.contains(".result.topology.runner == \"http\""));
-        assert!(post_release.contains(
-            "(.result.topology.requirements | keys) == [\"clock\",\"data\",\"identifiers\",\"streams\"]"
-        ));
-        assert!(!post_release.contains("request_records =="));
-        assert_eq!(
-            post_release.matches(".result.incremental_sha256").count(),
-            1,
-            "fresh exact/latest applications must prove clean/incremental equality internally without requiring cross-application artifact identity"
+        assert!(post_release.contains("release transferred run"));
+        for role in [
+            "distributed-http",
+            "outbound-http",
+            "offline-packages",
+            "pure-tail",
+            "stateful-http",
+        ] {
+            assert!(
+                post_release.contains(&format!("/{role}/*")),
+                "missing retained child {role}"
+            );
+        }
+        assert!(post_release.contains("--expected-verifier-sha256"));
+        assert!(post_release.contains("--expected-verifier-bytes"));
+        assert!(
+            !post_release.contains(".result."),
+            "behavioral admission belongs to typed readers"
         );
         assert!(post_release.contains("--evidence-root"));
         assert!(post_release.contains("env -i LANG=C"));
@@ -2195,46 +2079,25 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
-        for schema in [
-            format!(
-                ".schema == {{identity:\"{}\",version:{}}}",
-                crate::distributed_http::ACCEPTANCE_SCHEMA,
-                crate::distributed_http::ACCEPTANCE_SCHEMA_VERSION
-            ),
-            format!(
-                ".schema == {{identity:\"{}\",version:{}}}",
-                crate::outbound_http::ACCEPTANCE_SCHEMA,
-                crate::outbound_http::ACCEPTANCE_SCHEMA_VERSION
-            ),
-            format!(
-                ".schema == {{identity:\"{}\",version:{}}}",
-                crate::stateful_http::STATEFUL_SCHEMA,
-                crate::stateful_http::STATEFUL_SCHEMA_VERSION
-            ),
-        ] {
-            assert_eq!(
-                workflow.matches(&schema).count(),
-                2,
-                "workflow omitted {schema}"
-            );
-        }
-        assert!(
-            !workflow.contains(
-                ".schema == {identity:\"lkjscript-distributed-http-acceptance\",version:3}"
-            )
-        );
-        assert!(
-            !workflow
-                .contains(".schema == {identity:\"lkjscript-outbound-http-acceptance\",version:1}")
-        );
-        assert!(
-            !workflow
-                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:4}")
-        );
-        assert!(
-            !workflow
-                .contains(".schema == {identity:\"lkjscript-stateful-http-acceptance\",version:5}")
-        );
+        assert!(!workflow.contains(".oracles =="));
+        assert!(build.contains("release admission-verify"));
+        assert!(build.contains("/acceptance/offline-packages/*"));
+        assert!(build.contains("/acceptance/pure-tail/*"));
+        let evidence_output = build
+            .find("echo \"evidence=$root\"")
+            .expect("early target evidence path");
+        assert!(evidence_output < build.find(" release build ").expect("candidate build"));
+        assert!(publish.contains("needs.build-verify-package.result == 'success'"));
+        assert!(publish.contains("needs.pre-publication-applications.result == 'success'"));
+        assert!(post_release.contains("latest-archive-attestation.json"));
+        assert!(post_release.contains("latest-checksum-attestation.json"));
+        let latest_run = post_release
+            .find("verify_public_application latest")
+            .expect("latest run");
+        let first_compare = post_release
+            .find("          cmp ")
+            .expect("post acceptance equality");
+        assert!(latest_run < first_compare);
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));
