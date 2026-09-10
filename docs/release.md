@@ -5,24 +5,30 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.28`, release `385653688`, is the current supported release. Annotated tag
-`c317df24fe90edff1acbd7440dd0c4c6b3e5f488` selects source
-`221beca0df7b31dbf10c9b22fe35c6db3af1b903`. Dry run `34361011045` and tag-driven release run
-`34366733245` passed on attempt 1. Each ran 26 fresh source gates, static inspection, both pinned
-userlands, all six named target oracles, strict packaging, and all five transferred behavioral owners.
-Only the tag run published. Its exact-version and latest anonymous downloads independently passed
-checksums, GitHub asset digests, release/asset attestations, strict extraction, and five fresh
-behavioral owners before byte comparison. Exact identities and bounded proof are in the
-[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
+Immutable `v0.1.30`, release `386193815`, is the current supported release. Annotated tag
+`b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects source
+`35269961fc66fc308785913190a10843ee175aaa`. Dry run `34454845131` and tag run `34461031325`
+passed on attempt 1. Each ran 26 fresh source gates, static inspection, both pinned userlands,
+all six target oracles, strict packaging and all five checkout-free transferred owners. Only the
+tag run published. Its anonymous exact-version and latest downloads independently passed integrity,
+release/asset attestations, strict extraction and all five behavioral owners before byte comparison.
+Exact identities and bounded proof are in the
+[public nominal evidence](evidence/202609101130-parametric-nominal-public-milestone.json).
 
-The release delivers the already implemented capture-safe compositional core. The only settings
-write bound the existing `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA` variable to that exact tag
-after a fresh enabled-immutability administrator read and prior-value check. The read/check/write/
-readback sequence is not atomic. Earlier tags, releases, and assets remain unchanged. Immutable
-`v0.1.8` remains the historical recovery point documented by its campaign; the prior supported
-[v0.1.21 record](evidence/202609041625-v0.1.21-consolidated-release.json) remains historical evidence.
-No installer, registry package, second target, deployment, or hosted application state was created.
-The later reporting commit does not replace the tagged release-source identity.
+This release distributes the implemented parametric nominal-data foundation. Immutable v0.1.29
+passed exact-download behavior but failed latest acceptance when verifier process observation raced
+with task exit; its same-input recovery failed on the same error. A narrow verifier correction
+required additive v0.1.30 and renewed proof. Both v0.1.29 and every earlier tag and asset remain
+unchanged. The campaign made two authorized writes to the existing release-control variable,
+one for each annotated tag, with enabled-immutability administrator reads and prior-value checks.
+The immutable-release setting itself was not changed; read/check/write is not atomic.
+
+Upgrading the executable does not migrate repositories, artifacts or operational data. Older
+incompatible Graph 12/Artifact 16 inputs reject without an automatic converter. Retain backups/exports
+and the matching predecessor executable for unsupported inputs. Operational data is not disposable
+derived state, and unchanged operational formats do not guarantee universal application compatibility.
+No deployment or live-data migration was performed. Later reporting commits do not replace the tagged
+release-source identity. Historical release evidence remains retained in its original owners.
 
 ## Identity and authority
 

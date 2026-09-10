@@ -24,14 +24,15 @@ authenticated multi-subscription push with an implementation-disjoint raw client
 rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source is
-untagged `0.1.29`; `0.1.28` remains the supported immutable public `x86_64-unknown-linux-musl` distribution. Exact and
+PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source and
+supported immutable public distribution are `0.1.30` for `x86_64-unknown-linux-musl`. Exact and
 latest downloads independently passed static inspection and five behavioral owners covering
 distributed HTTP, outbound HTTPS/TLS/DNS, offline package closures, pure-tail execution, and stateful
-HTTP. Capture-safe generic factories, retained runtime configuration, and ordered persistent-list
-mapping now compose through the public copied binary. Target admission additionally proved the
+HTTP. Parameterized records/variants, capture-safe generic factories, retained runtime configuration,
+typed persistence, concrete sessions and ordered persistent-list mapping compose through the public
+copied binary. Target admission additionally proved the
 maintained service/worker and both pinned userlands. The
-[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json) binds their
+[public nominal evidence](evidence/202609101130-parametric-nominal-public-milestone.json) binds their
 exact source, candidate, publication, and independent download boundaries.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 

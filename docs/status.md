@@ -45,9 +45,10 @@ Product verification regenerates maintained owners and compares exact bytes. Ser
 also performs a fresh public `lkjournal` build, requires byte equality with the checked-in bundle,
 and stages that one artifact for isolated `serve` and `worker` acceptance.
 
-## Parametric nominal data in source
+## Parametric nominal data
 
-Untagged source adds ordinary parametric records and variants with ordered stable parameters,
+The source and public v0.1.30 executable provide ordinary parametric records and variants with ordered
+stable parameters,
 explicit applications and capture-safe bounds. Canonical authoring, exact package interfaces,
 compiler/runtime layouts, independent reference derivation, JSON/data and concrete session state
 carry the application identity. The standard owns the pair family. A newly authored batch/edit
@@ -60,7 +61,8 @@ userlands and all six behavioral oracles pass with complete cleanup. The
 [campaign](campaigns/202609100459.md) and [evidence](evidence/202609100459-parametric-nominal-data.json)
 retain exact source/candidate/verifier identities, public requests/results, preserved identities,
 failed attempts and limitations. Final containing-record revalidation is reported out of band.
-This source state is not a public distribution or deployment.
+That implementation campaign closed source-only. The separate public-delivery campaign below
+now distributes this foundation in immutable v0.1.30; neither campaign performed deployment.
 
 ## Capture-safe rank-one abstraction
 
@@ -81,55 +83,58 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
-[`v0.1.28`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.28) is the current public and
-supported release. Annotated tag object `c317df24fe90edff1acbd7440dd0c4c6b3e5f488` selects
-release-source commit `221beca0df7b31dbf10c9b22fe35c6db3af1b903`, tree
-`c19f5c9713665a87acaa05fde82f79f32844e605`. GitHub reports release `385653688` as
-immutable, latest, non-draft, and non-prerelease. The sole admitted target is
-`x86_64-unknown-linux-musl`. Its 20,445,440-byte executable has SHA-256
-`d169a6739f9ad9a5c2acfeb792aef1f1f3989c707a0f332d293b114681b1c3cb`, with no ELF interpreter, `DT_NEEDED` library, or GLIBC
-symbol-version requirement.
+[`v0.1.30`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.30) is the current supported,
+immutable public release, ID `386193815`, observed latest/non-draft/non-prerelease. Annotated tag
+`b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects release source
+`35269961fc66fc308785913190a10843ee175aaa`, tree `556a93a594a3b6fa727f9bf46d6db8217d27a837`.
+The admitted target remains `x86_64-unknown-linux-musl`. Its 21,260,544-byte executable has SHA-256
+`69d5f5c4b8408ebef228f02c0016fb7551e50ee6b7457c6f50c60b3575ae0be0`, with no ELF interpreter,
+`DT_NEEDED` dependency or GLIBC version requirement.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 9,237,176 | `4ca67c32697034d0893b8c6feaab0de2cc301b2a35bb552f879aeedaa9cfc1e4` |
-| `SHA256SUMS` | 109 | `a74ccdff06e3e582a0f32f4166a83acd7fbca2d510599d83176d758e82883d8e` |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | 9,615,496 | `c78ae1d4fc9185673c733fef71acbedd87d6174cd8ef9f7f9d9156bc7f932d7d` |
+| `SHA256SUMS` | 109 | `d32456bf6a357aaa80c7ee740e55c5f423a60959623091872f37083250abc8db` |
 
-[Dry run 34361011045](https://github.com/lkjsxc/lkjscript/actions/runs/34361011045) and
-[tag run 34366733245](https://github.com/lkjsxc/lkjscript/actions/runs/34366733245) each passed
-26 fresh full gates with zero reuse at that source. Each independently built and admitted its exact
-musl candidate: static ELF inspection, 12-command lifecycles in pinned Alpine 3.22.5/musl 1.2 and
-Debian 11/glibc 2.31 userlands, and six named distributed HTTP, outbound HTTP, offline-package,
-pure-tail, stateful HTTP, and maintained `lkjournal` service oracles. All cleanup checks passed.
-The private verifier handoff admits release verification plus the five transferred behavioral owners.
-The typed target reader validates complete named receipts; obsolete count-only admission is removed.
+[Dry run 34454845131](https://github.com/lkjsxc/lkjscript/actions/runs/34454845131) and
+[tag run 34461031325](https://github.com/lkjsxc/lkjscript/actions/runs/34461031325) passed on
+attempt 1. Each passed 26 fresh full gates, zero reuse, exact static target admission, both pinned
+userland lifecycles and all six behavioral owners including maintained lkjournal service acceptance.
+Each strictly packaged and transferred the candidate into a job without a checkout; all five fresh
+transferred owners and cleanup passed. Local admission separately passed the 40 nominal target
+receipt faults and all 233 transferred faults with restored healthy evidence.
 
-The tag run completed all four jobs on attempt 1. Before its isolated publication job, a job without
-a checkout strictly extracted the package and freshly ran all five transferred owners. Anonymous
-exact-version and latest archive/checksum pairs independently passed transport checksums, GitHub
-asset digests, release and asset attestations, strict extraction and static inspection, followed by
-five fresh behavioral owners on each extraction. Exact/latest archive, checksum, manifest, and
-executable bytes were compared only after both complete runs. All aggregate and child cleanup passed.
-Authenticated metadata and attestation reads are separate from token-free downloads.
+The tag run published at 2026-09-10T10:41:30Z. Separate anonymous exact-version and latest
+archive/checksum downloads passed integrity, release/asset attestations, strict extraction and all
+five fresh behavioral owners each, with independent state/evidence roots and complete cleanup.
+Exact acceptance completed at 10:58:13Z and latest at 11:14:31Z; only then did the successful hosted
+step compare archive, checksum, manifest and executable bytes. Authenticated attestation/metadata
+reads remained distinct from token-free downloads. All retained artifact and child receipt hashes
+were checked. The downloaded executable exposes parameterized records and variants, ordered type
+arguments and bounds, reusable offline libraries, retained pure callbacks, typed persistence and
+admissible concrete structured sessions.
 
-The downloaded executable can publicly author and inspect a constrained generic factory and its
-private graph helper, transport the exact offline closure, retain Text and nested lists, and run
-independent configured callbacks. Mapping [1,2,4] with {scale:3,bias:5} produces [8,11,17]; a second
-retained {scale:-2,bias:4} factory produces [2,0,-4] while the first remains unchanged. Each public
-run checks every ordered mapped value for 8,192 inputs and the fixed sum 100,691,968, package diamond
-results 11/11/12 after producer removal, capture-constraint rejection without a changed HEAD, and
-transactional HTTP wire/data equality with failure cleanup and healthy recovery. Retained evaluator
-and cancellation probes are explicitly source/verifier-bound. No live effect is replayed for evidence.
+Both downloaded candidates authored batch/edit libraries and independent consumers, removed producers,
+and checked all 8,192 ordered mapped values plus fixed sum 100,691,968. Body/dependency replacement
+produced the prescribed complete values. Typed data and transactional HTTP checks passed. Raw
+WebSocket observations came from each downloaded candidate; internal pair states 0/empty, 1/a and
+2/ab remain explicitly source/verifier-bound probes, not public product state inspection.
 
-The release incorporates the already completed route, checked-value, offline-package, tail,
-binding, persistent-list, and capture-safe consumer cutovers; distribution work changed no product
-source, maintained semantic owner, or generated consumer bytes. Bounded identities, outcomes,
-204 actual transfer-fault rejections, cancellation recovery, failed local attempts, resources,
-settings actions, and cleanup are in the
-[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
-The historical [v0.1.21 record](evidence/202609041625-v0.1.21-consolidated-release.json) remains
-unchanged, as do every earlier tag and public asset. This campaign performed no deployment or
-operational-data mutation. The later reporting commit is distinct from the release source above.
+The implementation was already complete before release engineering. Immutable v0.1.29 passed exact
+acceptance but its latest pure-tail run failed on a verifier procfs ESRCH race; unchanged recovery
+failed the cancellation/cleanup test. The narrow verifier repair and version-derived guide headers
+required additive v0.1.30. No language feature, semantic encoding, consumer meaning, fuel or timeout
+was changed. All earlier tags, releases and assets, including v0.1.29, remain preserved.
+[Bounded public nominal evidence](evidence/202609101130-parametric-nominal-public-milestone.json)
+and the [campaign lifecycle](campaigns/202609101130.md) retain the failures, repair, source and byte
+bindings, fault results, settings actions, isolation limits and cleanup. Later containing commits
+are reported separately from the release source; their verification is reported out of band.
+
+Upgrading the executable does not migrate repositories, artifacts or operational data. Unsupported
+older Graph 12/Artifact 16 inputs reject; retain backups/exports and the matching predecessor binary.
+There is no automatic converter, universal compatibility, portability, sandbox or performance claim.
+No deployment or live-data mutation occurred. The earlier
+[v0.1.28 evidence](evidence/202609092050-capture-safe-public-milestone.json) remains historical.
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
@@ -150,8 +155,8 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source is untagged `0.1.29`; immutable public latest remains `0.1.28` from the
-exact release-input source commit named above. The product retains the exact-requirement-bound affine
+Current product source and supported immutable public release are `0.1.30`, from the exact
+release-input source commit named above. The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure tail execution, and preparation-bound checked execution
