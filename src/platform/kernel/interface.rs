@@ -116,10 +116,18 @@ impl PackageInterfaceDeclaration {
             ));
         }
         let payload = match &record.payload {
-            DeclarationPayload::Record { fields } => PackageInterfaceDeclarationPayload::Record {
+            DeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => PackageInterfaceDeclarationPayload::Record {
+                type_parameters: type_parameters.clone(),
                 fields: fields.clone(),
             },
-            DeclarationPayload::Variant { cases } => PackageInterfaceDeclarationPayload::Variant {
+            DeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => PackageInterfaceDeclarationPayload::Variant {
+                type_parameters: type_parameters.clone(),
                 cases: cases.clone(),
             },
             DeclarationPayload::Interface { operations } => {
@@ -182,11 +190,19 @@ impl PackageInterfaceDeclaration {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
         let expected = match &self.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => {
+            PackageInterfaceDeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                validate_ordered("record type parameters", type_parameters)?;
                 validate_sorted("record fields", fields, false)?;
                 OwnerKind::Record
             }
-            PackageInterfaceDeclarationPayload::Variant { cases } => {
+            PackageInterfaceDeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                validate_ordered("variant type parameters", type_parameters)?;
                 validate_sorted("variant cases", cases, false)?;
                 OwnerKind::Variant
             }
@@ -233,9 +249,11 @@ impl PackageInterfaceDeclaration {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum PackageInterfaceDeclarationPayload {
     Record {
+        type_parameters: Vec<TypeParameterId>,
         fields: Vec<FieldId>,
     },
     Variant {
+        type_parameters: Vec<TypeParameterId>,
         cases: Vec<CaseId>,
     },
     Interface {

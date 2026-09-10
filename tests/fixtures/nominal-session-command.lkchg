@@ -1,0 +1,52 @@
+create.module as=$module name=session-boundary
+create.component as=$component module=$module name=Boundary visibility=private
+add.requirement as=$streams component=$component name=streams interface=pkg_10000000000000000000000000000001/decl_e29e0ac407696662f355e9056172ac2b
+requirement.operation parent=$streams index=0 operation=pkg_10000000000000000000000000000001/op_30cd44d5491201efdafea2b9e22adff0
+requirement.limit parent=$streams index=0 name=maximum_calls maximum=64 unit=calls
+create.variant as=$Marker module=$module name=Marker visibility=private
+add.type-parameter as=$T declaration=$Marker name=T
+add.case as=$absent variant=$Marker name=absent
+type.function as=@Callable result=unit
+type.list as=@Nested item=secret
+type.named as=@event declaration=pkg_10000000000000000000000000000001/decl_66b80a34dfaac5f8ccf47ce707ec8731
+type.named as=@kind declaration=pkg_10000000000000000000000000000001/decl_b939d019fb10a24344c2c947a20f2c02
+type.named as=@outbound declaration=pkg_10000000000000000000000000000001/decl_effe692dc8cecc3b5dafaec348b5622e
+type.named as=@reject declaration=pkg_10000000000000000000000000000001/decl_d50d3cf51bf092ed8b1437e1664010fc
+type.named as=@close declaration=pkg_10000000000000000000000000000001/decl_a2baeefacf23b620d7f814eda4cfe0ba
+type.application as=@State declaration=$Marker
+type.argument parent=@State index=0 type=ARGUMENT
+type.application as=@Repeated declaration=$Marker
+type.argument parent=@Repeated index=0 type=REPEATED
+type.option as=@StateOption item=@State
+type.option as=@RepeatedOption item=@Repeated
+type.list as=@messages item=@outbound
+type.option as=@rejection item=@reject
+type.option as=@closing item=@close
+type.structural-record as=@Decision
+type.field parent=@Decision index=0 name=closing type=@closing
+type.field parent=@Decision index=1 name=kind type=@kind
+type.field parent=@Decision index=2 name=messages type=@messages
+type.field parent=@Decision index=3 name=rejection type=@rejection
+type.field parent=@Decision index=4 name=state type=@RepeatedOption
+expression.call as=$closing function=pkg_10000000000000000000000000000001/decl_6e7cd674bd6163894e173e52a285ee43
+type.argument parent=$closing index=0 type=@close
+expression.call as=$rejection function=pkg_10000000000000000000000000000001/decl_6e7cd674bd6163894e173e52a285ee43
+type.argument parent=$rejection index=0 type=@reject
+expression.call as=$state function=pkg_10000000000000000000000000000001/decl_6e7cd674bd6163894e173e52a285ee43
+type.argument parent=$state index=0 type=@Repeated
+expression.variant as=$kind case=pkg_10000000000000000000000000000001/case_5a92fc0e8754826d959e0c3f2c01f76c
+expression.list as=$messages item=@outbound
+expression.record as=$body
+expression.record-field parent=$body index=0 name=closing value=$closing
+expression.record-field parent=$body index=1 name=kind value=$kind
+expression.record-field parent=$body index=2 name=messages value=$messages
+expression.record-field parent=$body index=3 name=rejection value=$rejection
+expression.record-field parent=$body index=4 name=state value=$state
+create.function as=$handler module=$module name=handler visibility=private result=@Decision effect=pure body=$body
+add.parameter as=$handler_state function=$handler name=state type=@StateOption
+add.parameter as=$handler_event function=$handler name=event type=@event
+type.function as=@Handler result=@Decision
+type.argument parent=@Handler index=0 type=@StateOption
+type.argument parent=@Handler index=1 type=@event
+add.port as=$port component=$component name=live type=@Handler function=$handler
+create.target as=$target name=boundary component=$component port=$port runner=command

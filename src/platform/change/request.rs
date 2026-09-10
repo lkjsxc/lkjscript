@@ -73,6 +73,7 @@ pub enum AuthoredChange {
         module: ModuleSelector,
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
+        type_parameters: Vec<AuthoredTypeParameter>,
         fields: Vec<AuthoredField>,
     },
     CreateVariant {
@@ -80,6 +81,7 @@ pub enum AuthoredChange {
         module: ModuleSelector,
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
+        type_parameters: Vec<AuthoredTypeParameter>,
         cases: Vec<AuthoredCase>,
     },
     CreateInterface {
@@ -569,15 +571,33 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 module,
                 name,
                 visibility,
+                type_parameters,
                 fields,
-            } => creation::lower_record(&mut lowerer, symbol, module, name, *visibility, fields)?,
+            } => creation::lower_record(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                type_parameters,
+                fields,
+            )?,
             AuthoredChange::CreateVariant {
                 symbol,
                 module,
                 name,
                 visibility,
+                type_parameters,
                 cases,
-            } => creation::lower_variant(&mut lowerer, symbol, module, name, *visibility, cases)?,
+            } => creation::lower_variant(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                type_parameters,
+                cases,
+            )?,
             AuthoredChange::CreateInterface {
                 symbol,
                 module,
@@ -887,11 +907,21 @@ fn collect_symbol_definitions(
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
-            AuthoredChange::CreateRecord { symbol, fields, .. } => {
-                creation::collect_record_symbols(symbol, fields, &mut definitions)?
+            AuthoredChange::CreateRecord {
+                symbol,
+                type_parameters,
+                fields,
+                ..
+            } => {
+                creation::collect_record_symbols(symbol, type_parameters, fields, &mut definitions)?
             }
-            AuthoredChange::CreateVariant { symbol, cases, .. } => {
-                creation::collect_variant_symbols(symbol, cases, &mut definitions)?
+            AuthoredChange::CreateVariant {
+                symbol,
+                type_parameters,
+                cases,
+                ..
+            } => {
+                creation::collect_variant_symbols(symbol, type_parameters, cases, &mut definitions)?
             }
             AuthoredChange::CreateInterface {
                 symbol, operations, ..

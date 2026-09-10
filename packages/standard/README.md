@@ -21,12 +21,17 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_06b6477bb1564352ddf42a0567371ed383d3d58725135d5edaebd54fd50bc5ef`;
-- package revision: `package_revision_12e7d9a0ba281bd8e438acf80553fe405d05d5db3ca0c4e4fbb564cf8197e94b`;
-- package transport: `package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1`;
-- artifact manifest: `artifact_manifest_45939572d0cdf759a10314cbd0f4cb006e012fa4f88cee5be084119cbd508d73`;
-- artifact bundle: `artifact_bundle_fb51f3f7ead2b7fce5f889c5280d75f0b2ae29b22ab2d1c727fe6afc12cf4e3f`;
-- 723 live semantic owners, 126 compiler units, and 30 graph tests.
+- semantic revision: `rev_7cbf14efbdd7938c347c7b7d3379e239b0f71c7eac72ea0fb36bf5dc675073d5`;
+- package revision: `package_revision_e269ce05d689c60ae7323637a9db74ed5f726ce8df185b78bd4a70096d398071`;
+- package transport: `package_transport_50750a298f483b06c18abe312ba46d5ee18c645aa39e4e98b0107564c84df718`;
+- artifact manifest: `artifact_manifest_ecdd94a11857deb65ccea3d39adb58c1de49dfa6e560b79643ba5828f2fdb53f`;
+- artifact bundle: `artifact_bundle_4ec2eaab49812a4e647e11a0478024bf44f5665028162323a6e2de0dfb17a424`;
+- 802 live semantic owners, 136 compiler units, and 33 graph tests.
+
+Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
+ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
+once each; a trap stops later callbacks. Three maintained tests cover construction/projection and
+ordered heterogeneous mapping. No pair-specific host intrinsic or runtime opcode implements them.
 
 Inspect and reproduce it from the repository root:
 
@@ -67,7 +72,7 @@ existing list types, encodings, callback eligibility, and default execution limi
 uses `bind` over its private generic graph helper. Four maintained graph tests fix composition
 order and heterogeneous `I64 -> Bool -> Text` instantiation. Runtime bound prefixes may capture
 other checked pure callables or recursively safe immutable data; bare unconstrained stored type
-parameters, secrets, streams, and resources are rejected. Graph 12 changes code meaning encoding;
+parameters, secrets, streams, and resources are rejected. The Graph 13 cutover retains these bodies;
 unchanged TypeObject 10 bytes and typed-data layout identities remain current.
 
 The `HttpClient` interface has exactly one idempotent, possibly externally visible `get` operation.

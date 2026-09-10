@@ -200,6 +200,70 @@ impl NormalizedSessionApplication {
         self.resident.shutdown().await
     }
 
+    /// Contributor observation of installed state from real callbacks. No reference evaluator
+    /// executes effects; the canonical schema independently inspects each returned value.
+    pub(crate) async fn contributor_states(
+        &self,
+        schema: &super::reference_schema::NormalizedReferenceSchema,
+    ) -> Result<Vec<serde_json::Value>, ExecutionError> {
+        let program = self.resident.program();
+        let bound = super::reference::BoundReferenceSchema {
+            canonical: Arc::new(schema.clone()),
+            value_origin: program.value_origin,
+        };
+        let inspect = |value: &NormalizedValue| -> Result<serde_json::Value, ExecutionError> {
+            super::value_oracle::inspect(
+                schema,
+                program.value_origin,
+                value,
+                self.contract.relation.state,
+                &crate::platform::execution::ExecutionControl::uncancelled(),
+            )
+            .map_err(|error| session_execution("session_probe_state", error))?;
+            super::codec::encode_value(
+                &bound,
+                value,
+                self.contract.relation.state,
+                crate::platform::json::JsonLimits::default(),
+            )
+            .map_err(|error| session_execution("session_probe_state", error.message))
+        };
+        let opened = self
+            .invoke_open(SessionOpenRequest {
+                path: "/".into(),
+                query: String::new(),
+                headers: Vec::new(),
+            })
+            .await?;
+        let mut state = opened.state.ok_or_else(|| {
+            session_execution("session_probe_open", "accepted session omitted its state")
+        })?;
+        let mut states = vec![inspect(&state)?];
+        for input in [b"a", b"b"] {
+            let next = self
+                .invoke_event(
+                    state,
+                    SessionInput::Message {
+                        kind: InboundKind::Text,
+                        body: bytes::Bytes::copy_from_slice(input),
+                    },
+                )
+                .await?;
+            state = next.state.ok_or_else(|| {
+                session_execution("session_probe_next", "continuing session omitted its state")
+            })?;
+            states.push(inspect(&state)?);
+        }
+        let finish = self.invoke_event(state, SessionInput::Shutdown).await?;
+        if finish.state.is_some() {
+            return Err(session_execution(
+                "session_probe_finish",
+                "finished session retained state",
+            ));
+        }
+        Ok(states)
+    }
+
     async fn invoke_open(
         &self,
         request: SessionOpenRequest,
@@ -1271,6 +1335,31 @@ struct ProgramSessionRead<'a> {
 }
 
 impl SessionShapeRead for ProgramSessionRead<'_> {
+    fn nominal_parameters(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<crate::platform::semantic_id::TypeParameterId>, Diagnostic> {
+        if let Some(layout) = self
+            .program
+            .records
+            .iter()
+            .find(|layout| layout.declaration == declaration)
+        {
+            return Ok(layout.type_parameters.to_vec());
+        }
+        if let Some(layout) = self
+            .program
+            .variants
+            .iter()
+            .find(|layout| layout.declaration == declaration)
+        {
+            return Ok(layout.type_parameters.to_vec());
+        }
+        Err(session_corrupt(
+            "normalized_session_nominal_missing",
+            "state has no exact nominal template",
+        ))
+    }
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
         self.program.types.get(&digest).cloned().ok_or_else(|| {
             session_corrupt(
@@ -1587,8 +1676,9 @@ impl ValueMeter {
                 }
                 Ok(())
             }
-            (value, TypeForm::Named { declaration }) => {
-                if let Some((layout, record)) = record_layout(program, *declaration) {
+            (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
+                if let Some(layout) = program.record_instances.get(&ty).copied() {
+                    let record = &program.records[layout.0 as usize];
                     let NormalizedValue::Record(NormalizedRecord::Nominal {
                         layout: actual,
                         fields,
@@ -1611,7 +1701,8 @@ impl ValueMeter {
                     }
                     return Ok(());
                 }
-                if let Some((layout, variant)) = variant_layout(program, *declaration) {
+                if let Some(layout) = program.variant_instances.get(&ty).copied() {
+                    let variant = &program.variants[layout.0 as usize];
                     let NormalizedValue::Variant {
                         layout: actual,
                         case,

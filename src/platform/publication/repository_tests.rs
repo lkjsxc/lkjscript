@@ -434,7 +434,7 @@ fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate()
             .check(&crate::platform::execution::ExecutionControl::uncancelled())
             .unwrap()
             .passed,
-        30
+        33
     );
 }
 
@@ -2534,6 +2534,7 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateRecord {
+            type_parameters: Vec::new(),
             symbol: "$record".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("second").unwrap(),
@@ -4070,7 +4071,7 @@ fn authored_leaf_deletion_accepts_same_request_reference_repair() {
     else {
         panic!("repaired record must remain live")
     };
-    let DeclarationPayload::Record { fields } = record.payload else {
+    let DeclarationPayload::Record { fields, .. } = record.payload else {
         panic!("Payload must remain a record")
     };
     assert_eq!(
@@ -4616,6 +4617,7 @@ fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateRecord {
+            type_parameters: Vec::new(),
             symbol: "$member_delete_record".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("second").unwrap(),
@@ -4672,7 +4674,7 @@ fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
     let Some(OwnerRecord::Declaration(record)) = view.owner(declaration).unwrap().value else {
         panic!("record declaration must remain live")
     };
-    let DeclarationPayload::Record { fields } = record.payload else {
+    let DeclarationPayload::Record { fields, .. } = record.payload else {
         panic!("created declaration must remain a record")
     };
     let OwnerKey::Field(retained) = retained else {
@@ -5755,6 +5757,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::Secret => "secret",
             TypeForm::TypeParameter { .. } => "type_parameter",
             TypeForm::Named { .. } => "named",
+            TypeForm::Applied { .. } => "application",
             TypeForm::CapabilityResource { .. } => "capability-resource",
             TypeForm::StructuralRecord { .. } => "structural_record",
             TypeForm::List { .. } => "list",
@@ -5929,6 +5932,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 }],
             },
             AuthoredChange::CreateVariant {
+                type_parameters: Vec::new(),
                 symbol: "$variant".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$domain".to_owned(),
@@ -5944,6 +5948,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 }],
             },
             AuthoredChange::CreateRecord {
+                type_parameters: Vec::new(),
                 symbol: "$record".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$domain".to_owned(),
@@ -5974,6 +5979,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                             AuthoredExpression {
                                 symbol: Some("$record_literal".to_owned()),
                                 operation: AuthoredExpressionOperation::Record {
+                                    type_arguments: Vec::new(),
                                     nominal_type: Some(local_declaration("$record")),
                                     fields: vec![AuthoredRecordExpressionField {
                                         selector: AuthoredFieldSelector::Nominal {
@@ -6129,6 +6135,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
         budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateRecord {
+                type_parameters: Vec::new(),
                 symbol: "$mutable_record".to_owned(),
                 module: second_module.clone(),
                 name: Name::new("MutableRecord").unwrap(),
@@ -6140,6 +6147,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 }],
             },
             AuthoredChange::CreateVariant {
+                type_parameters: Vec::new(),
                 symbol: "$mutable_variant".to_owned(),
                 module: second_module.clone(),
                 name: Name::new("MutableVariant").unwrap(),
@@ -6424,7 +6432,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     let Some(OwnerRecord::Declaration(record_owner)) = view.owner(record).unwrap().value else {
         panic!("mutated record must remain readable")
     };
-    let DeclarationPayload::Record { fields } = record_owner.payload else {
+    let DeclarationPayload::Record { fields, .. } = record_owner.payload else {
         panic!("mutated declaration must remain a record")
     };
     assert_eq!(record_owner.visibility, DeclarationVisibility::Private);
@@ -6447,7 +6455,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     let Some(OwnerRecord::Declaration(variant_owner)) = view.owner(variant).unwrap().value else {
         panic!("mutated variant must remain readable")
     };
-    let DeclarationPayload::Variant { cases } = variant_owner.payload else {
+    let DeclarationPayload::Variant { cases, .. } = variant_owner.payload else {
         panic!("mutated declaration must remain a variant")
     };
     assert!(cases.contains(&match added_case {
@@ -6681,6 +6689,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
     let nominal_record = |symbol: &str| AuthoredExpression {
         symbol: Some(symbol.to_owned()),
         operation: AuthoredExpressionOperation::Record {
+            type_arguments: Vec::new(),
             nominal_type: Some(record_reference.clone()),
             fields: vec![AuthoredRecordExpressionField {
                 selector: AuthoredFieldSelector::Nominal {
@@ -6693,6 +6702,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
     let variant = |symbol: &str| AuthoredExpression {
         symbol: Some(symbol.to_owned()),
         operation: AuthoredExpressionOperation::Variant {
+            type_arguments: Vec::new(),
             case: case_reference.clone(),
             payload: None,
         },
@@ -6821,6 +6831,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 AuthoredExpression {
                     symbol: Some("$structural_record".to_owned()),
                     operation: AuthoredExpressionOperation::Record {
+                        type_arguments: Vec::new(),
                         nominal_type: None,
                         fields: vec![AuthoredRecordExpressionField {
                             selector: AuthoredFieldSelector::Structural {
@@ -6834,6 +6845,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                     symbol: Some("$structural_field".to_owned()),
                     operation: AuthoredExpressionOperation::Field {
                         value: Box::new(authored_expression(AuthoredExpressionOperation::Record {
+                            type_arguments: Vec::new(),
                             nominal_type: None,
                             fields: vec![AuthoredRecordExpressionField {
                                 selector: AuthoredFieldSelector::Structural {
@@ -8489,7 +8501,7 @@ fn constraint_proofs_invalidate_when_named_type_layout_changes_without_type_iden
     let created = GraphRepository::create(&path, &standard, None).unwrap();
     let base = created.current.head.revision;
     let text = format!(
-        "request base={base}\ncreate.module as=$module name=constraints\ncreate.record as=$record module=$module name=Env visibility=private\nadd.field as=$field record=$record name=value type=i64\ntype.named as=@Env declaration=$record\nexpression.unit as=$body\ncreate.function as=$generic module=$module name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T function=$generic name=T constraint=capture-safe\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=@Env\nexpression.bool as=$true value=true\nexpression.unit as=$unit\nexpression.if as=$dead condition=$true when-true=$unit when-false=$call\ncreate.function as=$caller module=$module name=caller visibility=private result=unit effect=pure body=$dead\n"
+        "request base={base}\ncreate.module as=$module name=constraints\ncreate.record as=$record module=$module name=Env visibility=private\nadd.field as=$field record=$record name=value type=i64\ntype.named as=@Env declaration=$record\nexpression.unit as=$body\ncreate.function as=$generic module=$module name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T declaration=$generic name=T constraint=capture-safe\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=@Env\nexpression.bool as=$true value=true\nexpression.unit as=$unit\nexpression.if as=$dead condition=$true when-true=$unit when-false=$call\ncreate.function as=$caller module=$module name=caller visibility=private result=unit effect=pure body=$dead\n"
     );
     let decoded =
         crate::platform::control::decode_compact_change("nominal-proof", text.as_bytes()).unwrap();

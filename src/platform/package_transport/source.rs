@@ -1189,6 +1189,20 @@ mod tests {
     }
 
     #[test]
+    fn exact_graph12_producer_container_rejects_without_partial_readiness() {
+        let bytes = include_bytes!("../../../tests/fixtures/graph12-standard.lkjp");
+        let transport =
+            "package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            PackageContainer::decode(bytes, transport).unwrap_err().code,
+            "object_digest_mismatch"
+        );
+        assert_not_ready(bytes, transport);
+    }
+
+    #[test]
     fn source_cannot_omit_private_meaning_or_smuggle_unreachable_objects() {
         let admitted = standard_source();
         let package = &admitted.packages[&admitted.container.root.package_revision];
@@ -1525,6 +1539,139 @@ mod tests {
             root,
             selections: vec![root],
             objects,
+        }
+    }
+
+    #[test]
+    fn coherently_rehashed_nominal_templates_arguments_and_private_closure_reject() {
+        let original = standard_source();
+        let package = &original.packages[&original.container.root.package_revision];
+        let pair = package.snapshot.owners.values().find(|owner|matches!(owner,OwnerRecord::Declaration(record) if record.name.as_str() == "pair")).unwrap().clone();
+        let OwnerRecord::Declaration(record) = &pair else {
+            panic!("pair declaration");
+        };
+        let DeclarationPayload::Record {
+            type_parameters,
+            fields,
+        } = &record.payload
+        else {
+            panic!("pair record");
+        };
+        let first_parameter = type_parameters[0];
+        let first_field = fields[0];
+        let other_parameter = package
+            .snapshot
+            .owners
+            .values()
+            .find_map(|owner| match owner {
+                OwnerRecord::TypeParameter(record)
+                    if !type_parameters.contains(&match record.header.owner {
+                        OwnerKey::TypeParameter(id) => id,
+                        _ => unreachable!(),
+                    }) =>
+                {
+                    Some(record.header.owner)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let constructor = package.snapshot.owners.values().find(|owner|matches!(owner,OwnerRecord::Expression(record) if matches!(&record.operation,ExpressionOperation::Record {type_arguments,..} if type_arguments.len() == 2 && type_arguments[0] != type_arguments[1]))).unwrap().clone();
+        for fault in [
+            "erased",
+            "extra",
+            "reordered",
+            "bound",
+            "member",
+            "argument",
+        ] {
+            let mut replacement = match fault {
+                "bound" => {
+                    package.snapshot.owners[&OwnerKey::TypeParameter(first_parameter)].clone()
+                }
+                "member" => package.snapshot.owners[&OwnerKey::Field(first_field)].clone(),
+                "argument" => constructor.clone(),
+                _ => pair.clone(),
+            };
+            match &mut replacement {
+                OwnerRecord::Declaration(record) => {
+                    let DeclarationPayload::Record {
+                        type_parameters, ..
+                    } = &mut record.payload
+                    else {
+                        unreachable!()
+                    };
+                    match fault {
+                        "erased" => type_parameters.clear(),
+                        "reordered" => type_parameters.swap(0, 1),
+                        "extra" => {
+                            let OwnerKey::TypeParameter(id) = other_parameter else {
+                                unreachable!()
+                            };
+                            type_parameters.push(id);
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                OwnerRecord::TypeParameter(parameter) => {
+                    parameter.constraints = TypeParameterConstraints::CaptureSafe
+                }
+                OwnerRecord::Field(field) => {
+                    let OwnerRecord::Field(other) =
+                        &package.snapshot.owners[&OwnerKey::Field(fields[1])]
+                    else {
+                        unreachable!()
+                    };
+                    field.ty = other.ty;
+                }
+                OwnerRecord::Expression(expression) => {
+                    let ExpressionOperation::Record { type_arguments, .. } =
+                        &mut expression.operation
+                    else {
+                        unreachable!()
+                    };
+                    type_arguments.swap(0, 1);
+                }
+                _ => unreachable!(),
+            }
+            let hostile = rehash_owner(&original, replacement);
+            let failure = hostile.admit().unwrap_err();
+            assert!(
+                failure.code.starts_with("kernel_") || failure.code == "package_source_interface",
+                "{fault}: {failure:?}"
+            );
+            assert!(
+                crate::platform::package_transport::oracle::reconstruct(&hostile).is_err(),
+                "{fault}"
+            );
+            assert_not_ready(&hostile.encode().unwrap(), hostile.root.transport);
+            println!("nominal-transport-negative {fault} {}", failure.code);
+        }
+        for fault in ["argument-type", "private-returned-helper"] {
+            let key = if fault == "argument-type" {
+                let OwnerRecord::Expression(expression) = &constructor else {
+                    unreachable!()
+                };
+                let ExpressionOperation::Record { type_arguments, .. } = &expression.operation
+                else {
+                    unreachable!()
+                };
+                ObjectKey::from_digest(ObjectDomain::Type, type_arguments[0].bytes())
+            } else {
+                let helper = package.snapshot.owners.values().find(|owner|matches!(owner,OwnerRecord::Declaration(record) if record.name.as_str() == "function-constant-first")).unwrap();
+                ObjectKey::from_digest(ObjectDomain::Owner, encode_owner(helper).unwrap().0.bytes())
+            };
+            let mut hostile = original.container.clone();
+            assert!(hostile.objects.remove(&key).is_some());
+            let bytes = hostile.encode().unwrap();
+            let expected = if fault == "argument-type" {
+                "package_interface_type_missing"
+            } else {
+                "package_source_missing"
+            };
+            assert_eq!(hostile.admit().unwrap_err().code, expected);
+            assert!(crate::platform::package_transport::oracle::reconstruct(&hostile).is_err());
+            assert_not_ready(&bytes, hostile.root.transport);
+            println!("nominal-transport-negative {fault} {expected}");
         }
     }
 

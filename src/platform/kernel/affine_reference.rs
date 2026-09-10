@@ -176,7 +176,7 @@ impl Reference<'_> {
                 DeclarationPayload::Constant { ty, .. } => {
                     !self.contains_resource(*ty, &mut BTreeSet::new())
                 }
-                DeclarationPayload::Variant { cases } => {
+                DeclarationPayload::Variant { cases, .. } => {
                     cases
                         .iter()
                         .filter_map(
@@ -309,7 +309,7 @@ impl Reference<'_> {
                 }
                 Ok(Value::Plain)
             }
-            ExpressionOperation::Variant { case, payload } => {
+            ExpressionOperation::Variant { case, payload, .. } => {
                 let payload_type = self.case_payload(case.package, case.case);
                 let resource =
                     payload_type.and_then(|ty| self.resource_type(ty, &mut BTreeSet::new()));
@@ -909,7 +909,7 @@ impl Reference<'_> {
             else {
                 return Vec::new();
             };
-            let DeclarationPayload::Variant { cases } = &record.payload else {
+            let DeclarationPayload::Variant { cases, .. } = &record.payload else {
                 return Vec::new();
             };
             return cases
@@ -923,7 +923,7 @@ impl Reference<'_> {
         ) else {
             return Vec::new();
         };
-        let PackageInterfaceDeclarationPayload::Variant { cases } = &record.payload else {
+        let PackageInterfaceDeclarationPayload::Variant { cases, .. } = &record.payload else {
             return Vec::new();
         };
         cases
@@ -942,7 +942,7 @@ impl Reference<'_> {
                 return Vec::new();
             };
             return match &record.payload {
-                DeclarationPayload::Record { fields } => fields
+                DeclarationPayload::Record { fields, .. } => fields
                     .iter()
                     .filter_map(
                         |field| match self.snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -951,7 +951,7 @@ impl Reference<'_> {
                         },
                     )
                     .collect(),
-                DeclarationPayload::Variant { cases } => cases
+                DeclarationPayload::Variant { cases, .. } => cases
                     .iter()
                     .filter_map(|case| self.case_payload(declaration.package, *case))
                     .collect(),
@@ -965,7 +965,7 @@ impl Reference<'_> {
             return Vec::new();
         };
         match &record.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => fields
+            PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
                 .iter()
                 .filter_map(|field| {
                     match self.foreign_owner(declaration.package, OwnerKey::Field(*field)) {
@@ -974,7 +974,7 @@ impl Reference<'_> {
                     }
                 })
                 .collect(),
-            PackageInterfaceDeclarationPayload::Variant { cases } => cases
+            PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
                 .iter()
                 .filter_map(|case| self.case_payload(declaration.package, *case))
                 .collect(),

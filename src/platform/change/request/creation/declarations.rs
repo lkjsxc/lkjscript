@@ -77,10 +77,14 @@ pub enum AuthoredAnnotationValue {
 
 pub(in crate::platform::change::request) fn collect_record_symbols(
     symbol: &str,
+    type_parameters: &[AuthoredTypeParameter],
     fields: &[AuthoredField],
     definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
+    for parameter in type_parameters {
+        define_symbol(definitions, &parameter.symbol, SymbolKind::TypeParameter)?;
+    }
     for field in fields {
         define_symbol(definitions, &field.symbol, SymbolKind::Field)?;
     }
@@ -89,10 +93,14 @@ pub(in crate::platform::change::request) fn collect_record_symbols(
 
 pub(in crate::platform::change::request) fn collect_variant_symbols(
     symbol: &str,
+    type_parameters: &[AuthoredTypeParameter],
     cases: &[AuthoredCase],
     definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
+    for parameter in type_parameters {
+        define_symbol(definitions, &parameter.symbol, SymbolKind::TypeParameter)?;
+    }
     for case in cases {
         define_symbol(definitions, &case.symbol, SymbolKind::Case)?;
     }
@@ -200,9 +208,11 @@ pub(in crate::platform::change::request) fn lower_record<
     module: &ModuleSelector,
     name: &Name,
     visibility: DeclarationVisibility,
+    type_parameters: &[AuthoredTypeParameter],
     fields: &[AuthoredField],
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.declaration_symbol(symbol)?;
+    let type_parameters = lower_nominal_parameters(lowerer, declaration, type_parameters)?;
     let module = lowerer.resolve_module(module)?;
     let mut field_ids = Vec::with_capacity(fields.len());
     for field in fields {
@@ -222,7 +232,10 @@ pub(in crate::platform::change::request) fn lower_record<
         module,
         name: name.clone(),
         visibility,
-        payload: DeclarationPayload::Record { fields: field_ids },
+        payload: DeclarationPayload::Record {
+            type_parameters,
+            fields: field_ids,
+        },
     }))
 }
 
@@ -239,9 +252,11 @@ pub(in crate::platform::change::request) fn lower_variant<
     module: &ModuleSelector,
     name: &Name,
     visibility: DeclarationVisibility,
+    type_parameters: &[AuthoredTypeParameter],
     cases: &[AuthoredCase],
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.declaration_symbol(symbol)?;
+    let type_parameters = lower_nominal_parameters(lowerer, declaration, type_parameters)?;
     let module = lowerer.resolve_module(module)?;
     let mut case_ids = Vec::with_capacity(cases.len());
     for case in cases {
@@ -265,8 +280,30 @@ pub(in crate::platform::change::request) fn lower_variant<
         module,
         name: name.clone(),
         visibility,
-        payload: DeclarationPayload::Variant { cases: case_ids },
+        payload: DeclarationPayload::Variant {
+            type_parameters,
+            cases: case_ids,
+        },
     }))
+}
+
+fn lower_nominal_parameters<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    declaration: DeclarationId,
+    parameters: &[AuthoredTypeParameter],
+) -> Result<Vec<TypeParameterId>, Diagnostic> {
+    let mut ids = Vec::new();
+    for parameter in parameters {
+        let id = lowerer.type_parameter_symbol(&parameter.symbol)?;
+        lowerer.insert_created(OwnerRecord::TypeParameter(TypeParameterRecord {
+            header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
+            declaration,
+            name: parameter.name.clone(),
+            constraints: parameter.constraints,
+        }))?;
+        ids.push(id);
+    }
+    Ok(ids)
 }
 
 #[allow(

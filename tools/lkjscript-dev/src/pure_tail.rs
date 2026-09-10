@@ -1,5 +1,7 @@
 //! Bounded copied-public-executable acceptance for pure tail execution.
 
+mod nominal_data;
+
 use crate::{authority, error::DevError, evidence, process, pure_tail_program};
 use lkjscript::platform::contributor::offline_producer_inventory;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
@@ -84,6 +86,25 @@ struct MatrixCell {
     k: i64,
     production: ValueWork,
     reference: ValueWork,
+    preparation: PreparationWork,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreparationWork {
+    production_steps: u64,
+    production_bytes: u64,
+    reference_steps: u64,
+    reference_bytes: u64,
+}
+
+fn preparation_work(records: &[CompactRecord]) -> Result<PreparationWork, DevError> {
+    Ok(PreparationWork {
+        production_steps: integer_field(records, "production-type-derivation-steps")?,
+        production_bytes: integer_field(records, "production-type-metadata-bytes")?,
+        reference_steps: integer_field(records, "reference-type-derivation-steps")?,
+        reference_bytes: integer_field(records, "reference-type-metadata-bytes")?,
+    })
 }
 
 fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevError> {
@@ -145,6 +166,15 @@ fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
     require(
         matrix.len() == 9,
         "forwarding matrix must contain all nine pairs",
+    )?;
+    let preparation = &matrix[0].preparation;
+    require(
+        preparation.production_steps > 0
+            && preparation.reference_steps > 0
+            && preparation.production_bytes > 0
+            && preparation.reference_bytes > 0
+            && matrix.iter().all(|cell| cell.preparation == *preparation),
+        "type/layout/property preparation is missing or depends on payload/call count",
     )?;
     for reference in [false, true] {
         let select = |n, k| -> Result<&ValueWork, DevError> {
@@ -320,7 +350,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-5".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-6".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -604,7 +634,7 @@ impl Context {
             integer_field(&records, "production-tail-transfers")?,
             integer_field(&records, "reference-tail-transfers")?,
         );
-        self.receipt.outcomes.insert(format!("run-{}-{target}",self.receipt.commands.len()), serde_json::json!({"expected":expected,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(&records,"production-instructions")?,"reference_expressions":integer_field(&records,"reference-expressions")?,"production_value_work":value_work(&records,"production")?,"reference_value_work":value_work(&records,"reference")?,"production_allocated_bytes":integer_field(&records,"production-allocated-bytes")?,"production_allocation_charges":integer_field(&records,"production-allocation-charges")?,"reference_allocated_bytes":integer_field(&records,"reference-allocated-bytes")?,"reference_allocation_charges":integer_field(&records,"reference-allocation-charges")?,"production_collection_items":integer_field(&records,"production-collection-items")?,"reference_collection_items":integer_field(&records,"reference-collection-items")?,"authority":before}));
+        self.receipt.outcomes.insert(format!("run-{}-{target}",self.receipt.commands.len()), serde_json::json!({"expected":expected,"preparation":preparation_work(&records)?,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(&records,"production-instructions")?,"reference_expressions":integer_field(&records,"reference-expressions")?,"production_value_work":value_work(&records,"production")?,"reference_value_work":value_work(&records,"reference")?,"production_allocated_bytes":integer_field(&records,"production-allocated-bytes")?,"production_allocation_charges":integer_field(&records,"production-allocation-charges")?,"reference_allocated_bytes":integer_field(&records,"reference-allocated-bytes")?,"reference_allocation_charges":integer_field(&records,"reference-allocation-charges")?,"production_collection_items":integer_field(&records,"production-collection-items")?,"reference_collection_items":integer_field(&records,"reference-collection-items")?,"authority":before}));
         Ok((production, reference))
     }
 
@@ -1109,12 +1139,23 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     ] {
         context.run(&consumer, target, arguments, expected)?;
     }
-    for target in ["forward", "forward-generic", "bound-forward"] {
+    for target in [
+        "forward",
+        "forward-generic",
+        "bound-forward",
+        "nominal-forward",
+        "nominal-bound",
+    ] {
         let mut matrix = Vec::new();
         for n in [1_i64, 256, 4096] {
             for k in [1_i64, 64, 1024] {
-                let arguments =
-                    serde_json::to_string(&serde_json::json!([k, (1..=n).collect::<Vec<_>>()]))?;
+                let items = serde_json::json!((1..=n).collect::<Vec<_>>());
+                let input = if target.starts_with("nominal-") {
+                    serde_json::json!({"revision":7,"items":items})
+                } else {
+                    items
+                };
+                let arguments = serde_json::to_string(&serde_json::json!([k, input]))?;
                 context.run(&consumer, target, &arguments, &n.to_string())?;
                 let key = format!("run-{}-{target}", context.receipt.commands.len());
                 let outcome = &context.receipt.outcomes[&key];
@@ -1123,6 +1164,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
                     k,
                     production: serde_json::from_value(outcome["production_value_work"].clone())?,
                     reference: serde_json::from_value(outcome["reference_value_work"].clone())?,
+                    preparation: serde_json::from_value(outcome["preparation"].clone())?,
                 });
             }
         }
@@ -1264,6 +1306,8 @@ fn standalone_http(
         "bytes-from-text",
         "json-decode-or",
         "json-encode",
+        "data-encode",
+        "data-decode-or",
         "DataKeyPart",
         "DataExpectation",
         "DataEntry",
@@ -1410,11 +1454,39 @@ fn standalone_http(
         &format!(
             "{}{}",
             dependency(consumer),
-            pure_tail_program::http(&standard.symbols, &bindings, &sum)
+            pure_tail_program::http(
+                &standard.symbols,
+                &bindings,
+                &sum,
+                &BTreeMap::from([
+                    (
+                        "batch".into(),
+                        format!("{}/{}", consumer.id, consumer.symbols["$Batch"])
+                    ),
+                    (
+                        "revision".into(),
+                        format!("{}/{}", consumer.id, consumer.symbols["$BatchRevision"])
+                    ),
+                    (
+                        "items".into(),
+                        format!("{}/{}", consumer.id, consumer.symbols["$BatchValues"])
+                    ),
+                ])
+            )
         ),
     )?;
     let inventory = offline_producer_inventory(&http.path)
         .map_err(|error| DevError::corrupt(error.to_string()))?;
+    let nominal_identities = nominal_data::Identities {
+        batch_package: consumer.id.clone(),
+        batch: consumer.symbols["$Batch"].clone(),
+        revision: consumer.symbols["$BatchRevision"].clone(),
+        items: consumer.symbols["$BatchValues"].clone(),
+        edit_package: http.id.clone(),
+        edit: http.symbols["$Edit"].clone(),
+        keep: http.symbols["$Keep"].clone(),
+        replace: http.symbols["$Replace"].clone(),
+    };
     evidence::publish_json(&context.output.join("http-inventory.json"), &inventory)?;
     let before = authority::observe_graph_authority(&http.path)?;
     let before_files = authority_files(&http.path)?;
@@ -1556,6 +1628,7 @@ fn standalone_http(
         let values = (0_i64..8192).collect::<Vec<_>>();
         let mapped = values.iter().map(|x| 3 * x + 5).collect::<Vec<_>>();
         let expected_body = serde_json::to_vec(&mapped)?;
+        let expected_stored = nominal_data::expected(&nominal_identities, &mapped)?;
         let response = crate::http_probe::request(
             address,
             "GET",
@@ -1570,7 +1643,7 @@ fn standalone_http(
         let committed = data_scan()?;
         require(
             committed.items.len() == 1
-                && committed.items[0].value == expected_body
+                && committed.items[0].value == expected_stored
                 && store
                     .verify()
                     .map_err(|error| DevError::corrupt(error.to_string()))?
@@ -1634,13 +1707,14 @@ fn standalone_http(
                     .map_err(|error| DevError::corrupt(error.to_string()))?
                     .revisions
                     == initial_revisions + 3
-                && data_scan()?
-                    .items
-                    .iter()
-                    .any(|item| item.value == response.body),
+                && data_scan()?.items.iter().any(|item| {
+                    nominal_data::expected(&nominal_identities, &[8, 11, 17])
+                        .is_ok_and(|bytes| item.value == bytes)
+                }),
             "request-configured bound reducer did not commit exactly once",
         )?;
-        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response_length":8192,"fixed_response_sum":100691968,"mapped_data_equals_wire":true,"initial_committed_changes":1,"initial_data_revisions":initial_revisions,"final_data_verification":store.verify().map_err(|error| DevError::corrupt(error.to_string()))?,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"[8,11,17]","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
+        context.receipt.outcomes.insert("nominal_typed_data".into(),serde_json::json!({"identities":nominal_identities,"expected_bytes":expected_stored.len(),"expected_sha256":Sha256::digest(&expected_stored).iter().map(|byte|format!("{byte:02x}")).collect::<String>(),"complete_batch_and_edit":true,"revision":7,"items":8192,"independent_layout_and_payload":true}));
+        context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response_length":8192,"fixed_response_sum":100691968,"mapped_data_matches_independent_typed_bytes":true,"initial_committed_changes":1,"initial_data_revisions":initial_revisions,"final_data_verification":store.verify().map_err(|error| DevError::corrupt(error.to_string()))?,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"[8,11,17]","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
         Ok(())
     })();
     control.interrupt();
@@ -1923,7 +1997,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-5"
+        receipt.schema == "lkjscript-pure-tail-acceptance-6"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2219,7 +2293,13 @@ pub(crate) fn read_transferred_receipt(
             }
         }
     }
-    for target in ["forward", "forward-generic", "bound-forward"] {
+    for target in [
+        "forward",
+        "forward-generic",
+        "bound-forward",
+        "nominal-forward",
+        "nominal-bound",
+    ] {
         let matrix = receipt
             .outcomes
             .get(&format!("checked-value-{target}-matrix"))
@@ -2426,7 +2506,7 @@ pub(crate) fn read_transferred_receipt(
     require(
         http["fixed_response_length"] == 8192
             && http["fixed_response_sum"] == 100691968
-            && http["mapped_data_equals_wire"] == true
+            && http["mapped_data_matches_independent_typed_bytes"] == true
             && http["initial_committed_changes"] == 1
             && http["initial_data_revisions"]
                 .as_u64()
@@ -2443,6 +2523,30 @@ pub(crate) fn read_transferred_receipt(
         .outcomes
         .get("transaction_cancellation")
         .ok_or_else(|| DevError::corrupt("transaction cancellation evidence missing"))?;
+    let nominal = receipt
+        .outcomes
+        .get("nominal_typed_data")
+        .ok_or_else(|| DevError::corrupt("nominal typed persistence evidence missing"))?;
+    let identities: nominal_data::Identities =
+        serde_json::from_value(nominal["identities"].clone())?;
+    let expected = nominal_data::expected(
+        &identities,
+        &(0..8192).map(|i| 3 * i + 5).collect::<Vec<_>>(),
+    )?;
+    let expected_digest = Sha256::digest(&expected)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    require(
+        nominal["expected_bytes"] == expected.len()
+            && nominal["expected_sha256"] == expected_digest
+            && nominal["complete_batch_and_edit"] == true
+            && nominal["independent_layout_and_payload"] == true
+            && nominal["items"] == 8192
+            && nominal["revision"] == 7
+            && http["committed"]["items"][0]["value"] == serde_json::json!(expected),
+        "nominal typed layout or complete stored payload differs from fixed independent bytes",
+    )?;
     require(
         cancellation["execution"]["failure"]["code"] == "execution_cancelled"
             && cancellation["execution"]["cleanup_complete"] == true
@@ -2532,6 +2636,12 @@ mod checked_value_tests {
                     k,
                     production: work.clone(),
                     reference: work,
+                    preparation: PreparationWork {
+                        production_steps: 100,
+                        production_bytes: 200,
+                        reference_steps: 110,
+                        reference_bytes: 210,
+                    },
                 });
             }
         }

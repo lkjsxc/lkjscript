@@ -600,6 +600,16 @@ fn authored_type(
         TypeForm::Named { declaration } => AuthoredType::Named {
             declaration: exact_declaration(*declaration),
         },
+        TypeForm::Applied {
+            declaration,
+            arguments,
+        } => AuthoredType::Applied {
+            declaration: exact_declaration(*declaration),
+            arguments: arguments
+                .iter()
+                .map(|ty| authored_type(interner, *ty))
+                .collect::<Result<_, _>>()?,
+        },
         TypeForm::CapabilityResource { interface } => AuthoredType::CapabilityResource {
             interface: exact_declaration(*interface),
         },
@@ -751,6 +761,7 @@ impl RecipeExpressions {
         fields: Vec<(&str, AuthoredExpression)>,
     ) -> Result<AuthoredExpression, Diagnostic> {
         Ok(self.expression(AuthoredExpressionOperation::Record {
+            type_arguments: Vec::new(),
             nominal_type: None,
             fields: fields
                 .into_iter()

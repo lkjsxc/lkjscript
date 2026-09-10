@@ -1,4 +1,5 @@
-//! Bounded test-only structural oracle. It deliberately ignores both evaluator classifications.
+//! Bounded contributor structural oracle. It ignores both evaluator classifications and is never
+//! called by ordinary execution, admission, codecs, or resident state installation.
 
 use super::reference_schema::NormalizedReferenceSchema;
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue, ValueOrigin};
@@ -94,7 +95,7 @@ pub(super) fn inspect(
             | (NormalizedValue::StaticText(_), TypeForm::StaticText) => {}
             (
                 NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }),
-                TypeForm::Named { declaration },
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
             ) => {
                 if layout.1 != origin {
                     return Err("foreign preparation");
@@ -103,7 +104,13 @@ pub(super) fn inspect(
                     .records
                     .get(layout.0 as usize)
                     .filter(|record| {
-                        record.declaration == *declaration && record.fields.len() == fields.len()
+                        record.declaration == *declaration
+                            && record.fields.len() == fields.len()
+                            && record.arguments.as_ref()
+                                == match form {
+                                    TypeForm::Applied { arguments, .. } => arguments.as_slice(),
+                                    _ => &[],
+                                }
                     })
                     .ok_or("foreign nominal shape")?;
                 for (child, field) in fields.iter().zip(record.fields.iter()) {
@@ -130,12 +137,20 @@ pub(super) fn inspect(
                     case,
                     payload,
                 },
-                TypeForm::Named { declaration },
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
             ) => {
                 let variant = schema
                     .variants
                     .get(layout.0 as usize)
-                    .filter(|variant| variant.declaration == *declaration)
+                    .filter(|variant| {
+                        variant.declaration == *declaration
+                            && layout.1 == origin
+                            && variant.arguments.as_ref()
+                                == match form {
+                                    TypeForm::Applied { arguments, .. } => arguments.as_slice(),
+                                    _ => &[],
+                                }
+                    })
                     .ok_or("foreign variant identity")?;
                 let selected = variant
                     .cases
@@ -209,10 +224,12 @@ pub(super) fn inspect(
     Ok((affinity, nodes))
 }
 
+#[cfg(test)]
 std::thread_local! {
     static FORCED_RESCAN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+#[cfg(test)]
 pub(super) fn force_rescan<T>(run: impl FnOnce() -> T) -> T {
     struct Reset(bool);
     impl Drop for Reset {
@@ -225,6 +242,7 @@ pub(super) fn force_rescan<T>(run: impl FnOnce() -> T) -> T {
 }
 
 /// Restore payload work safely in tests without changing the computed classification.
+#[cfg(test)]
 pub(super) fn forced_descendant_work(value: &NormalizedValue, work: &mut super::value::ValueWork) {
     if !FORCED_RESCAN.get() {
         return;

@@ -403,6 +403,12 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                 return Err(parent_kind_error(root, parent.header.owner));
             };
             match &mut parent.payload {
+                DeclarationPayload::Record {
+                    type_parameters, ..
+                }
+                | DeclarationPayload::Variant {
+                    type_parameters, ..
+                } => remove_exact(type_parameters, child, "nominal type parameter"),
                 DeclarationPayload::External(function) => {
                     remove_exact(&mut function.type_parameters, child, "type parameter")
                 }
@@ -417,7 +423,7 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                 return Err(parent_kind_error(root, parent.header.owner));
             };
             match &mut parent.payload {
-                DeclarationPayload::Record { fields } => remove_exact(fields, child, "field"),
+                DeclarationPayload::Record { fields, .. } => remove_exact(fields, child, "field"),
                 _ => Err(parent_kind_error(root, parent.header.owner)),
             }
         }
@@ -426,7 +432,9 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                 return Err(parent_kind_error(root, parent.header.owner));
             };
             match &mut parent.payload {
-                DeclarationPayload::Variant { cases } => remove_exact(cases, child, "variant case"),
+                DeclarationPayload::Variant { cases, .. } => {
+                    remove_exact(cases, child, "variant case")
+                }
                 _ => Err(parent_kind_error(root, parent.header.owner)),
             }
         }

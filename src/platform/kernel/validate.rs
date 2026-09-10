@@ -257,7 +257,7 @@ fn snapshot_named_member_types(
             return Vec::new();
         };
         return match &record.payload {
-            DeclarationPayload::Record { fields } => fields
+            DeclarationPayload::Record { fields, .. } => fields
                 .iter()
                 .filter_map(
                     |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -266,7 +266,7 @@ fn snapshot_named_member_types(
                     },
                 )
                 .collect(),
-            DeclarationPayload::Variant { cases } => cases
+            DeclarationPayload::Variant { cases, .. } => cases
                 .iter()
                 .filter_map(|case| match snapshot.owners.get(&OwnerKey::Case(*case)) {
                     Some(OwnerRecord::Case(record)) => record.payload,
@@ -293,14 +293,14 @@ fn snapshot_named_member_types(
         return Vec::new();
     };
     match &record.payload {
-        super::PackageInterfaceDeclarationPayload::Record { fields } => fields
+        super::PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
             .iter()
             .filter_map(|field| match owners.get(&OwnerKey::Field(*field)) {
                 Some(PackageInterfaceRecord::Field(record)) => Some(record.ty),
                 _ => None,
             })
             .collect(),
-        super::PackageInterfaceDeclarationPayload::Variant { cases } => cases
+        super::PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
             .iter()
             .filter_map(|case| match owners.get(&OwnerKey::Case(*case)) {
                 Some(PackageInterfaceRecord::Case(record)) => record.payload,
@@ -996,12 +996,32 @@ impl FullValidator<'_> {
             return;
         };
         match payload {
-            DeclarationPayload::Record { fields } => {
+            DeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                for parameter in type_parameters {
+                    self.require_local_kind(
+                        OwnerKey::TypeParameter(*parameter),
+                        &[OwnerKind::TypeParameter],
+                        "record type parameter",
+                    );
+                }
                 for field in fields {
                     self.require_local_kind(OwnerKey::Field(*field), &[OwnerKind::Field], "field");
                 }
             }
-            DeclarationPayload::Variant { cases } => {
+            DeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                for parameter in type_parameters {
+                    self.require_local_kind(
+                        OwnerKey::TypeParameter(*parameter),
+                        &[OwnerKind::TypeParameter],
+                        "variant type parameter",
+                    );
+                }
                 for case in cases {
                     self.require_local_kind(OwnerKey::Case(*case), &[OwnerKind::Case], "case");
                 }
@@ -1167,12 +1187,13 @@ impl FullValidator<'_> {
                     );
                 }
             }
-            TypeForm::Named { declaration } => self.require_exact_kind(
-                declaration.package,
-                OwnerKey::Declaration(declaration.declaration),
-                &[OwnerKind::Record, OwnerKind::Variant],
-                "named type",
-            ),
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => self
+                .require_exact_kind(
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    &[OwnerKind::Record, OwnerKind::Variant],
+                    "named type",
+                ),
             TypeForm::CapabilityResource { interface } => self.require_exact_kind(
                 interface.package,
                 OwnerKey::Declaration(interface.declaration),
@@ -1359,7 +1380,7 @@ impl FullValidator<'_> {
                     }
                 }
                 OwnerRecord::Declaration(declaration) => match declaration.payload {
-                    DeclarationPayload::Variant { cases } => {
+                    DeclarationPayload::Variant { cases, .. } => {
                         let resource_cases = cases
                             .iter()
                             .filter(|case| {
@@ -2001,6 +2022,7 @@ impl FullValidator<'_> {
             ExpressionOperation::Record {
                 nominal_type: Some(declaration),
                 fields,
+                ..
             } => {
                 self.require_exact_kind(
                     declaration.package,
@@ -2215,6 +2237,12 @@ impl FullValidator<'_> {
         let listed = match (child, parent_record) {
             (OwnerKey::TypeParameter(id), OwnerRecord::Declaration(declaration)) => {
                 match &declaration.payload {
+                    DeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | DeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => type_parameters.contains(&id),
                     DeclarationPayload::External(function) => {
                         function.type_parameters.contains(&id)
                     }
@@ -2226,11 +2254,11 @@ impl FullValidator<'_> {
             }
             (OwnerKey::Field(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,
-                DeclarationPayload::Record { fields } if fields.contains(&id)
+                DeclarationPayload::Record { fields, .. } if fields.contains(&id)
             ),
             (OwnerKey::Case(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,
-                DeclarationPayload::Variant { cases } if cases.contains(&id)
+                DeclarationPayload::Variant { cases, .. } if cases.contains(&id)
             ),
             (OwnerKey::Operation(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,

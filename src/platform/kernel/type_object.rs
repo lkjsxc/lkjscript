@@ -20,7 +20,11 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: TYPE_OBJECT_CONTRACT_VERSION,
+            contract_version: if matches!(form, TypeForm::Applied { .. }) {
+                super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
+            } else {
+                TYPE_OBJECT_CONTRACT_VERSION
+            },
             form,
         };
         object.validate_local()?;
@@ -28,16 +32,24 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != TYPE_OBJECT_CONTRACT_VERSION {
+        let expected = if matches!(self.form, TypeForm::Applied { .. }) {
+            super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
+        } else {
+            TYPE_OBJECT_CONTRACT_VERSION
+        };
+        if self.contract_version != expected {
             return Err(type_error(
                 "kernel_type_contract",
                 format!(
-                    "type object contract {} is not Type Object Contract {TYPE_OBJECT_CONTRACT_VERSION}",
+                    "type object contract {} does not match its canonical form generation {expected}",
                     self.contract_version
                 ),
             ));
         }
         match &self.form {
+            TypeForm::Applied { arguments, .. } => {
+                require_count("nominal type arguments", arguments.len(), false)?;
+            }
             TypeForm::StructuralRecord { fields } => {
                 require_count("structural fields", fields.len(), false)?;
                 if fields.windows(2).any(|pair| pair[0].name >= pair[1].name) {
@@ -71,6 +83,7 @@ impl TypeObject {
 
     pub fn child_types(&self) -> Vec<TypeObjectDigest> {
         match &self.form {
+            TypeForm::Applied { arguments, .. } => arguments.clone(),
             TypeForm::StructuralRecord { fields } => fields.iter().map(|field| field.ty).collect(),
             TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
                 vec![*item]
@@ -143,6 +156,12 @@ pub enum TypeForm {
     Function {
         parameters: Vec<TypeObjectDigest>,
         result: TypeObjectDigest,
+    },
+    /// Positive-arity nominal identity. Its wire form has a separate explicit envelope/tag;
+    /// it is never encoded as a new ordinal in the retained base-type envelope.
+    Applied {
+        declaration: DeclarationReference,
+        arguments: Vec<TypeObjectDigest>,
     },
 }
 

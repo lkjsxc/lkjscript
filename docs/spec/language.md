@@ -51,11 +51,13 @@ Function signatures containing type parameters remain capture-safe leaves; this 
 capture of a bare unconstrained type parameter. Ordinary transient callable list elements retain
 their existing restrictions on equality, persistence, and resource containment.
 
-Instantiated composite types are disposable derivations of exact rank-one call substitutions.
-Production preparation derives its finite closure from bytecode calls; the canonical evaluator
-independently derives it from accepted owners. Both use the existing bounded validation-work and
-type-depth limits. Derived types use unchanged canonical TypeObject identities and are never a
-second editable or serialized type authority.
+Instantiated composite types are disposable derivations of exact rank-one substitutions.
+Production preparation closes all concrete signatures, constants, tests, ports, constructors and
+explicit calls over their nominal members; the canonical evaluator independently closes accepted
+owners. Both use the existing validation-work, type-depth and allocation limits, check cancellation,
+and charge new traversal and metadata before growth. Preparation steps and cumulative metadata bytes
+are reported separately from runtime payload work. Derived types use canonical identities and are
+never a second editable or serialized type authority.
 
 Language constructs are typed semantic records in canonical owner objects. There is no maintained
 source grammar. Executable-discovered compact change records describe bounded authored intent; the
@@ -354,7 +356,7 @@ A type-parameter owner carries the closed constraint set `[]` or `["capture-safe
 The canonical set tags are 0 (empty) and 1 (capture-safe); unknown tags, names and duplicates
 reject. Omission in authoring creates the empty set. Constraints attach to the stable parameter
 identity and its exact declaration and are interface meaning even when the parameter is unused.
-Pure graph functions may declare the constraint. Task and generic nominal declarations remain
+Pure graph functions, records and variants may declare the constraint. Generic tasks remain
 inadmissible. Closed external signatures must match the intrinsic inventory, whose existing
 parameters have empty constraints.
 
@@ -384,3 +386,42 @@ validated preparation and exact closure, never persisted by TypeObject identity 
 checks resolved type arguments and real captures before locals or body execution. Repeated invocation
 propagates admitted immutable values without rewalking retained payloads. Proof metadata, visited sets
 and pending traversal nodes consume their owning work/allocation budgets before growth.
+
+## Parametric nominal data
+
+A record or variant owns an ordered vector of stable type-parameter identities. Each parameter has
+exact declaration scope and the same explicit `none` or `capture-safe` constraint as a pure function
+parameter. Every positive-arity reference supplies all arguments, in order, through an explicit
+application; a plain named reference is valid only for a zero-arity declaration. There are no inferred
+arguments, defaults, higher kinds, generic tasks or resource polymorphism. Concrete task signatures
+and component ports may contain closed ordinary applications.
+
+Constructors carry the declaration and ordered type arguments. Field and case selectors retain stable
+member identities, resolve against that declaration, and substitute the complete application. Matches
+remain exhaustive. All arguments discharge exact arity, scope and constraints even for unused or
+phantom parameters. Definition edits validate the complete candidate, including all affected callers;
+adding parameters to a monomorphic declaration requires updating its dependent references atomically.
+Names may change without changing these identities.
+
+Every generic declaration cycle rejects, including indirect, type-growing, function-signature and
+monomorphic-wrapper paths. Substituting a concrete argument must not introduce a cycle through an
+application. Finite nesting such as `batch<batch<I64>>` is admitted; existing wholly monomorphic
+recursive declarations keep their established behavior. These are bounded closure rules, not a
+termination analysis of executable functions.
+
+An instance layout and its preparation provenance bind the complete canonical application, including
+phantom arguments. Same-template instances with identical fields but different arguments are distinct.
+Raw ingress rejects a wrong instance or foreign preparation before invoking a downstream callback.
+Production layout tables and canonical reference derivation are independent disposable structures.
+
+Eligibility examines every argument and substituted stored member, including inactive variant cases
+and empty containers. Ordinary values exclude resources and streams. Capture safety additionally
+excludes secrets and unconstrained parameters; function signatures remain leaves, while actual pure
+function origin and retained environments are checked separately. Equality, JSON, typed-data encoding
+and session state impose their own stronger requirements. A function-containing application can be
+ordinary and capture-safe without being comparable, durable or retainable session state. Application
+encoding does not extend existing Option/Result codec support.
+
+The maintained standard graph owns `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and
+`pair-map`. Mapping invokes the first callback and then the second, once each; a trap in the first
+prevents the second. These declarations have ordinary graph bodies and no host-specific policy.

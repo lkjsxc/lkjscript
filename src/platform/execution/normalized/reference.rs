@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 12 owner and expression records.
+//! Implementation-disjoint evaluator over canonical Graph 13 owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -42,6 +42,8 @@ pub struct NormalizedReferenceObservation {
     pub capability_calls: u64,
     pub allocated_bytes: u64,
     pub allocation_charges: u64,
+    pub type_derivation_steps: u64,
+    pub type_metadata_bytes: u64,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub maximum_call_depth: usize,
@@ -211,9 +213,9 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
     }
 }
 
-struct BoundReferenceSchema {
-    canonical: Arc<NormalizedReferenceSchema>,
-    value_origin: super::value::ValueOrigin,
+pub(super) struct BoundReferenceSchema {
+    pub(super) canonical: Arc<NormalizedReferenceSchema>,
+    pub(super) value_origin: super::value::ValueOrigin,
 }
 
 impl std::ops::Deref for BoundReferenceSchema {
@@ -224,6 +226,18 @@ impl std::ops::Deref for BoundReferenceSchema {
 }
 
 impl NormalizedValueSchema for BoundReferenceSchema {
+    fn comparable(&self, ty: TypeObjectDigest) -> bool {
+        self.canonical.comparable_types.contains(&ty)
+    }
+    fn application_free(&self, ty: TypeObjectDigest) -> bool {
+        self.canonical.application_free_types.contains(&ty)
+    }
+    fn record_index(&self, ty: TypeObjectDigest) -> Option<usize> {
+        self.canonical.record_instances.get(&ty).copied()
+    }
+    fn variant_index(&self, ty: TypeObjectDigest) -> Option<usize> {
+        self.canonical.variant_instances.get(&ty).copied()
+    }
     fn value_origin(&self) -> super::value::ValueOrigin {
         self.value_origin
     }
@@ -377,7 +391,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_target_owner",
-                        "selected target is absent from canonical Graph 12 authority",
+                        "selected target is absent from canonical Graph 13 authority",
                     ));
                 }
             };
@@ -407,7 +421,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 None => {
                     return Err(reference_error(
                         "normalized_reference_port_missing",
-                        "selected target port is absent from canonical Graph 12 authority",
+                        "selected target port is absent from canonical Graph 13 authority",
                     ));
                 }
             };
@@ -481,6 +495,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             value_origin: self.program.value_origin,
         });
         let schema_work = schema.work;
+        let type_derivation_steps = schema.type_derivation_steps;
+        let type_metadata_bytes = schema.type_metadata_bytes;
         let list_work = super::list::Work::current();
         let mut state = ReferenceState {
             authority: self.authority,
@@ -508,6 +524,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 capability_calls: 0,
                 allocated_bytes: 0,
                 allocation_charges: 0,
+                type_derivation_steps,
+                type_metadata_bytes,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 maximum_call_depth: 0,
@@ -515,7 +533,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph12_reference_records_6",
+                production_tier: "graph13_reference_records_7",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -530,13 +548,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         };
         let operation = (|| {
             state.control.check()?;
-            let bytes = state
-                .schema
-                .capture_safe_types
-                .len()
-                .checked_mul(
-                    std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>(),
-                )
+            let bytes = usize::try_from(state.schema.type_metadata_bytes)
+                .ok()
                 .and_then(|bytes| bytes.checked_add(state.schema.affine_variants.len()))
                 .and_then(|bytes| bytes.checked_add(std::mem::size_of::<BoundReferenceSchema>()))
                 .ok_or_else(|| {
@@ -1011,7 +1024,7 @@ impl ReferenceState<'_> {
                         .open_variant(&self.schema)?;
                     let mut selected = None;
                     for arm in arms {
-                        if self.case_layout(arm.case)? == (layout, case) {
+                        if self.matches_case(layout, case, arm.case)? {
                             selected = Some(arm);
                             break;
                         }
@@ -1309,6 +1322,7 @@ impl ReferenceState<'_> {
             ExpressionOperation::Record {
                 nominal_type,
                 fields,
+                type_arguments,
             } => {
                 let mut values = Vec::with_capacity(fields.len());
                 for field in &fields {
@@ -1316,12 +1330,36 @@ impl ReferenceState<'_> {
                 }
                 self.record(
                     nominal_type,
+                    &self.resolve_type_arguments(&type_arguments)?,
                     fields.into_iter().map(|field| field.selector),
                     values,
                 )
             }
-            ExpressionOperation::Variant { case, payload } => {
-                let (layout, tag) = self.case_layout(case)?;
+            ExpressionOperation::Variant {
+                case,
+                payload,
+                type_arguments,
+            } => {
+                let (template, tag) = self.case_layout(case)?;
+                let arguments = self.resolve_type_arguments(&type_arguments)?;
+                let identity = super::value_schema::nominal_identity(
+                    self.schema.variants[template.0 as usize].declaration,
+                    &arguments,
+                )
+                .map_err(|_| reference_type_error("invalid nominal application"))?;
+                if !arguments.is_empty() && !self.schema.ordinary_types.contains(&identity) {
+                    return Err(reference_type_error(
+                        "variant application contains live authority",
+                    ));
+                }
+                let index = self
+                    .schema
+                    .variant_index(identity)
+                    .and_then(|index| u32::try_from(index).ok())
+                    .ok_or_else(|| {
+                        reference_type_error("variant application has no canonical layout")
+                    })?;
+                let layout = VariantLayoutIndex(index, self.schema.value_origin);
                 let payload = payload
                     .map(|payload| {
                         self.evaluate_with_use(
@@ -1382,7 +1420,7 @@ impl ReferenceState<'_> {
                     .open_variant(&self.schema)?;
                 let mut selected = None;
                 for arm in arms {
-                    if self.case_layout(arm.case)? == (layout, case) {
+                    if self.matches_case(layout, case, arm.case)? {
                         selected = Some(arm);
                         break;
                     }
@@ -1779,12 +1817,13 @@ impl ReferenceState<'_> {
     fn record(
         &mut self,
         nominal_type: Option<DeclarationReference>,
+        arguments: &[TypeObjectDigest],
         selectors: impl IntoIterator<Item = FieldSelector>,
         values: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
         self.charge_items(values.len(), std::mem::size_of::<NormalizedValue>())?;
         if let Some(declaration) = nominal_type {
-            let layout = self.record_layout(declaration)?;
+            let layout = self.record_layout(declaration, arguments)?;
             let field_count = self.schema.records[layout.0 as usize].fields.len();
             let mut slots = (0..field_count).map(|_| None).collect::<Vec<_>>();
             for (selector, value) in selectors.into_iter().zip(values) {
@@ -1795,7 +1834,7 @@ impl ReferenceState<'_> {
                     ));
                 };
                 let (field_layout, offset) = self.field_layout(field)?;
-                if field_layout != layout {
+                if self.schema.records[field_layout.0 as usize].declaration != declaration {
                     return Err(reference_error(
                         "normalized_reference_record_field_layout",
                         "nominal record field belongs to another exact declaration",
@@ -1869,11 +1908,17 @@ impl ReferenceState<'_> {
     fn record_layout(
         &self,
         declaration: DeclarationReference,
+        arguments: &[TypeObjectDigest],
     ) -> Result<RecordLayoutIndex, ExecutionError> {
+        let identity = super::value_schema::nominal_identity(declaration, arguments)
+            .map_err(|_| reference_type_error("invalid record application"))?;
+        if !arguments.is_empty() && !self.schema.ordinary_types.contains(&identity) {
+            return Err(reference_type_error(
+                "record application contains live authority",
+            ));
+        }
         self.schema
-            .records
-            .iter()
-            .position(|layout| layout.declaration == declaration)
+            .record_index(identity)
             .and_then(|index| u32::try_from(index).ok())
             .map(|index| RecordLayoutIndex(index, self.schema.value_origin))
             .ok_or_else(|| {
@@ -1916,6 +1961,24 @@ impl ReferenceState<'_> {
             "normalized_reference_field_layout",
             "exact field has no prepared runtime layout",
         ))
+    }
+
+    fn matches_case(
+        &self,
+        layout: VariantLayoutIndex,
+        tag: u32,
+        case: CaseReference,
+    ) -> Result<bool, ExecutionError> {
+        if layout.1 != self.schema.value_origin {
+            return Err(reference_type_error("match value has a foreign origin"));
+        }
+        let member = self
+            .schema
+            .variants
+            .get(layout.0 as usize)
+            .and_then(|layout| layout.cases.get(tag as usize))
+            .ok_or_else(|| reference_type_error("match value has no exact canonical case"))?;
+        Ok(member.reference == case)
     }
 
     fn case_layout(
@@ -2041,14 +2104,12 @@ impl ReferenceState<'_> {
             self.control,
         )?;
         self.next_transaction = next_generation;
-        debug_assert!(
-            locals
-                .insert(
-                    local,
-                    CheckedValue::primitive(&self.schema, NormalizedValue::Unit)?
-                )
-                .is_none()
+        // Binding insertion is required in optimized builds too.
+        let previous = locals.insert(
+            local,
+            CheckedValue::primitive(&self.schema, NormalizedValue::Unit)?,
         );
+        debug_assert!(previous.is_none());
         self.transactions.insert(
             canonical,
             ReferenceTransaction {
@@ -2639,6 +2700,15 @@ fn reference_intrinsic(
             )),
         },
         "core.value.equal" => {
+            if type_arguments
+                .iter()
+                .any(|ty| !program.application_free(*ty) && !program.comparable(*ty))
+            {
+                return Err(reference_trap(
+                    "normalized_reference_value_not_comparable",
+                    "nominal application's complete type does not support equality",
+                ));
+            }
             let [left, right] = arguments.as_slice() else {
                 return Err(reference_type_error(
                     "value equality received a foreign arity",

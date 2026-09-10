@@ -1,4 +1,5 @@
 use crate::authority::{self, AuthorityObservation};
+pub(crate) mod nominal;
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
@@ -48,7 +49,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "eeb3215ed6e4628724785211c8ce3ff778a0ee4c635d007e1b20fdbe613febbc";
+    "45d0568a06b33a14565d18914d45fb7181749177a0971fcfda763ae9d9b5d523";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -2843,7 +2844,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 12 authority inventory",
+        "service acceptance changed the maintained Graph 13 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -4493,7 +4494,7 @@ fn verify_http_route_topology(
         require(
             authority_unchanged,
             "route_authority_changed",
-            "HTTP route inspection changed the isolated Graph 12 application copy",
+            "HTTP route inspection changed the isolated Graph 13 application copy",
         )?;
         Ok(HttpRouteTopologyObservation {
             target,

@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 12 records.
+//! Single deterministic relation extractor for Graph 13 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -374,7 +374,7 @@ where
                 OwnerKey::Module(declaration.module),
             )?;
             match &declaration.payload {
-                DeclarationPayload::Record { fields } => {
+                DeclarationPayload::Record { fields, .. } => {
                     for field in fields {
                         owner_edge(
                             edges,
@@ -385,7 +385,7 @@ where
                         )?;
                     }
                 }
-                DeclarationPayload::Variant { cases } => {
+                DeclarationPayload::Variant { cases, .. } => {
                     for case in cases {
                         owner_edge(
                             edges,
@@ -692,6 +692,7 @@ where
         ExpressionOperation::Record {
             nominal_type,
             fields,
+            ..
         } => {
             if let Some(declaration) = nominal_type {
                 exact_edge(
@@ -840,6 +841,19 @@ where
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
                 )?;
+            }
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NamedTypeUse,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?;
+                pending.extend(arguments.iter().copied());
             }
             TypeForm::CapabilityResource { interface } => {
                 exact_edge(

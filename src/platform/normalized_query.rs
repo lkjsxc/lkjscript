@@ -3472,6 +3472,7 @@ mod tests {
                         .expect("maximum context target name"),
                     visibility: DeclarationVisibility::Private,
                     payload: DeclarationPayload::Record {
+                        type_parameters: Vec::new(),
                         fields: vec![field_id],
                     },
                 }),

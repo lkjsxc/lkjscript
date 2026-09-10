@@ -1819,7 +1819,7 @@ fn named_member_types<B: CanonicalBaseRead + ?Sized>(
     let payload = if reference.package == reader.package_id() {
         match reader.owner(OwnerKey::Declaration(reference.declaration))? {
             Some(OwnerRecord::Declaration(record)) => match record.payload {
-                DeclarationPayload::Record { fields } => {
+                DeclarationPayload::Record { fields, .. } => {
                     return fields
                         .into_iter()
                         .map(|field| match reader.owner(OwnerKey::Field(field))? {
@@ -1831,7 +1831,7 @@ fn named_member_types<B: CanonicalBaseRead + ?Sized>(
                         })
                         .collect();
                 }
-                DeclarationPayload::Variant { cases } => {
+                DeclarationPayload::Variant { cases, .. } => {
                     return cases
                         .into_iter()
                         .map(|case| match reader.owner(OwnerKey::Case(case))? {
@@ -1868,7 +1868,7 @@ fn named_member_types<B: CanonicalBaseRead + ?Sized>(
         }
     };
     match payload {
-        PackageInterfaceDeclarationPayload::Record { fields } => fields
+        PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
             .into_iter()
             .map(|field| {
                 match reader.package_interface_owner(reference.package, OwnerKey::Field(field))? {
@@ -1880,7 +1880,7 @@ fn named_member_types<B: CanonicalBaseRead + ?Sized>(
                 }
             })
             .collect(),
-        PackageInterfaceDeclarationPayload::Variant { cases } => cases
+        PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
             .into_iter()
             .map(|case| {
                 match reader.package_interface_owner(reference.package, OwnerKey::Case(case))? {

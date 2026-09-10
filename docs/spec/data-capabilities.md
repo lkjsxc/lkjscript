@@ -51,6 +51,15 @@ bytes, and item/depth/byte exhaustion. `decode-or` returns its exact typed fallb
 encoding. JSON, SQL rows, Rust layout, serde shape, and host filesystem representation are not data
 authority. Production and canonical-reference codecs are separate implementations and must agree.
 
+Applied nominal records and variants use layout tag 9, followed by every ordered argument's complete
+type description and the substituted declaration/member layout. Tag 5 and all unchanged monomorphic
+bytes remain exact. A phantom argument therefore affects the expected layout even if it affects no
+payload field. The decoder checks this identity before accepting the payload. Both argument types and
+every stored member must be durable, including inactive cases and empty containers: functions,
+secrets, resources, streams and unresolved parameters cannot become durable through a wrapper.
+This does not add Option/Result encoding support. JSON uses the existing field/case shapes and
+substituted member types; it authenticates no phantom identity absent from its untyped input.
+
 `schema-read` returns missing or one exact schema identity/digest. Transaction-only `schema-set`
 requires missing or an exact prior schema. An equal exact retry is a no-op; a mismatch marks the
 whole transaction uncommittable. Application migrations perform ordinary reads and writes, then

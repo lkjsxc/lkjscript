@@ -1,4 +1,4 @@
-//! Language-order affine capability-resource validation for Graph 12.
+//! Language-order affine capability-resource validation for Graph 13.
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
@@ -378,7 +378,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                         ));
                     }
                 }
-                DeclarationPayload::Variant { cases } => {
+                DeclarationPayload::Variant { cases, .. } => {
                     let mut count = 0_usize;
                     for case in cases {
                         if let Some(OwnerRecord::Case(record)) =
@@ -552,7 +552,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 }
                 Ok(EvaluatedValue::Unrestricted)
             }
-            ExpressionOperation::Variant { case, payload } => {
+            ExpressionOperation::Variant { case, payload, .. } => {
                 let case_record = self.case(case.package, case.case)?;
                 let resource_payload = case_record
                     .payload
@@ -1212,7 +1212,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             else {
                 return Ok(Vec::new());
             };
-            let DeclarationPayload::Variant { cases } = record.payload else {
+            let DeclarationPayload::Variant { cases, .. } = record.payload else {
                 return Ok(Vec::new());
             };
             let mut payloads = Vec::new();
@@ -1232,7 +1232,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         else {
             return Ok(Vec::new());
         };
-        let PackageInterfaceDeclarationPayload::Variant { cases } = record.payload else {
+        let PackageInterfaceDeclarationPayload::Variant { cases, .. } = record.payload else {
             return Ok(Vec::new());
         };
         let mut payloads = Vec::new();
@@ -1260,7 +1260,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 return Ok(Vec::new());
             };
             let members = match record.payload {
-                DeclarationPayload::Record { fields } => fields
+                DeclarationPayload::Record { fields, .. } => fields
                     .into_iter()
                     .filter_map(|field| match self.read.owner(OwnerKey::Field(field)) {
                         Ok(Some(OwnerRecord::Field(record))) => Some(Ok(record.ty)),
@@ -1268,7 +1268,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                         Err(diagnostic) => Some(Err(diagnostic)),
                     })
                     .collect::<Result<Vec<_>, _>>()?,
-                DeclarationPayload::Variant { cases } => cases
+                DeclarationPayload::Variant { cases, .. } => cases
                     .into_iter()
                     .filter_map(|case| match self.read.owner(OwnerKey::Case(case)) {
                         Ok(Some(OwnerRecord::Case(record))) => record.payload.map(Ok),
@@ -1288,7 +1288,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             return Ok(Vec::new());
         };
         match record.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => fields
+            PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
                 .into_iter()
                 .filter_map(|field| {
                     match self
@@ -1301,7 +1301,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     }
                 })
                 .collect(),
-            PackageInterfaceDeclarationPayload::Variant { cases } => cases
+            PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
                 .into_iter()
                 .filter_map(|case| {
                     match self

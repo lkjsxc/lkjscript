@@ -32,7 +32,6 @@ mod secret;
 mod security;
 mod session;
 mod value;
-#[cfg(test)]
 mod value_oracle;
 mod value_schema;
 mod vm;

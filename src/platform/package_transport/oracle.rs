@@ -478,17 +478,29 @@ fn public_inventory(
             continue;
         }
         let payload = match &declaration.payload {
-            DeclarationPayload::Record { fields } => {
+            DeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                reader.charge(type_parameters.len())?;
+                selected.extend(type_parameters.iter().copied().map(OwnerKey::TypeParameter));
                 reader.charge(fields.len())?;
                 selected.extend(fields.iter().copied().map(OwnerKey::Field));
                 PackageInterfaceDeclarationPayload::Record {
+                    type_parameters: type_parameters.clone(),
                     fields: fields.clone(),
                 }
             }
-            DeclarationPayload::Variant { cases } => {
+            DeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                reader.charge(type_parameters.len())?;
+                selected.extend(type_parameters.iter().copied().map(OwnerKey::TypeParameter));
                 reader.charge(cases.len())?;
                 selected.extend(cases.iter().copied().map(OwnerKey::Case));
                 PackageInterfaceDeclarationPayload::Variant {
+                    type_parameters: type_parameters.clone(),
                     cases: cases.clone(),
                 }
             }

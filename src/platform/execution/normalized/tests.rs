@@ -15,7 +15,7 @@ use super::deployment::{
 use super::http::NormalizedHttpApplication;
 
 #[test]
-fn graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
+fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../tests/fixtures/graph10-unchanged-types-and-data.json"
     ))
@@ -26,7 +26,7 @@ fn graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        12
+        13
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -116,7 +116,7 @@ fn graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             .iter()
             .filter(|(key, _)| !old_owners.contains_key(&key.to_string()))
             .collect::<Vec<_>>();
-        assert_eq!(additions.len(), if type_count == 85 { 173 } else { 0 });
+        assert_eq!(additions.len(), if type_count == 85 { 252 } else { 0 });
         let new_declarations = additions
             .iter()
             .filter_map(|(_, owner)| match owner {
@@ -128,6 +128,16 @@ fn graph12_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             new_declarations,
             if type_count == 85 {
                 BTreeSet::from([
+                    "pair",
+                    "pair-new",
+                    "pair-first",
+                    "pair-second",
+                    "pair-map",
+                    "pair-first-heterogeneous",
+                    "pair-second-heterogeneous",
+                    "pair-map-heterogeneous",
+                    "pair-test-increment",
+                    "pair-test-suffix",
                     "function-constant",
                     "function-constant-first",
                     "function-constant-scalar",
@@ -231,6 +241,19 @@ fn neutral_binding_generation_hash(mut value: serde_json::Value) -> serde_json::
                 {
                     fields.remove("constraints");
                 }
+                if matches!(
+                    fields.get("kind").and_then(serde_json::Value::as_str),
+                    Some("record" | "variant")
+                ) {
+                    for key in ["type_parameters", "type_arguments"] {
+                        if fields
+                            .get(key)
+                            .is_some_and(|value| value == &serde_json::json!([]))
+                        {
+                            fields.remove(key);
+                        }
+                    }
+                }
                 for child in fields.values_mut() {
                     remove_generation(child);
                 }
@@ -324,6 +347,410 @@ fn declaration_named(
 
 fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> NormalizedProgram {
     prepare_repository(snapshot).2
+}
+
+#[test]
+fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_independent() {
+    use crate::platform::kernel::{
+        FieldRecord, ModuleRecord, ParameterParent, ParameterRecord, ParameterUse,
+        TypeParameterConstraints, TypeParameterRecord,
+    };
+    use crate::platform::semantic_id::{FieldId, ModuleId, ParameterId, TypeParameterId};
+    let seed = b"nominal-phantom-acceptance";
+    let mut snapshot = empty_normalized_snapshot(seed);
+    let module = ModuleId::migrate(seed, 0);
+    let marker = DeclarationId::migrate(seed, 0);
+    let parameter = TypeParameterId::migrate(seed, 0);
+    let field = FieldId::migrate(seed, 0);
+    let package = snapshot.root.package_id;
+    let reference = DeclarationReference {
+        package,
+        declaration: marker,
+    };
+    snapshot.owners.insert(
+        OwnerKey::Module(module),
+        OwnerRecord::Module(ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: Name::new("phantom").unwrap(),
+        }),
+    );
+    snapshot.owners.insert(
+        OwnerKey::TypeParameter(parameter),
+        OwnerRecord::TypeParameter(TypeParameterRecord {
+            header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
+            declaration: marker,
+            name: Name::new("Phantom").unwrap(),
+            constraints: TypeParameterConstraints::None,
+        }),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Declaration(marker),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(marker), OwnerKind::Record),
+            module,
+            name: Name::new("Marker").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::Record {
+                type_parameters: vec![parameter],
+                fields: vec![field],
+            },
+        }),
+    );
+    let mut intern = |form| {
+        let object = TypeObject::new(form).unwrap();
+        let (ty, _) = encode_type_object(&object).unwrap();
+        snapshot.types.insert(ty, object);
+        ty
+    };
+    let unit = intern(TypeForm::Unit);
+    let integer = intern(TypeForm::I64);
+    let text = intern(TypeForm::Text);
+    let secret = intern(TypeForm::Secret);
+    let callable = intern(TypeForm::Function {
+        parameters: vec![],
+        result: secret,
+    });
+    let applications = [integer, text, secret, callable].map(|argument| {
+        intern(TypeForm::Applied {
+            declaration: reference,
+            arguments: vec![argument],
+        })
+    });
+    snapshot.owners.insert(
+        OwnerKey::Field(field),
+        OwnerRecord::Field(FieldRecord {
+            header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+            declaration: marker,
+            name: Name::new("value").unwrap(),
+            ty: integer,
+        }),
+    );
+    let mut declarations = Vec::new();
+    for (index, ty) in applications.iter().enumerate() {
+        let serial = index as u64 + 1;
+        let declaration = DeclarationId::migrate(seed, serial);
+        let input = ParameterId::migrate(seed, serial);
+        let body = ExpressionId::migrate(seed, serial);
+        snapshot.owners.insert(
+            OwnerKey::Expression(body),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(body, ExpressionOperation::Unit {}).unwrap(),
+            ),
+        );
+        snapshot.owners.insert(
+            OwnerKey::Parameter(input),
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(input), OwnerKind::Parameter),
+                parent: ParameterParent::Function(declaration),
+                name: Name::new("input").unwrap(),
+                ty: *ty,
+                use_mode: ParameterUse::Unrestricted,
+                resource_requirement: None,
+            }),
+        );
+        snapshot.owners.insert(
+            OwnerKey::Declaration(declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(declaration),
+                    OwnerKind::PureFunction,
+                ),
+                module,
+                name: Name::new(format!("consume-{index}")).unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Function(FunctionDeclaration {
+                    type_parameters: vec![],
+                    parameters: vec![input],
+                    result: unit,
+                    effect: FunctionEffect::Pure,
+                    body,
+                }),
+            }),
+        );
+        declarations.push(DeclarationReference {
+            package,
+            declaration,
+        });
+    }
+    snapshot.root.owners = MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    let mut program = prepare_snapshot(&snapshot);
+    let schema =
+        super::reference_schema::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    let bound_schema = super::reference::BoundReferenceSchema {
+        canonical: Arc::new(schema.clone()),
+        value_origin: program.value_origin,
+    };
+    for after in [1, 5, program.work.type_derivation_steps / 2] {
+        let control = ExecutionControl::cancel_after_checks(after);
+        let error = NormalizedProgram::prepare_with_control(program.artifact().clone(), &control)
+            .unwrap_err();
+        assert_eq!(error.class, crate::platform::DiagnosticClass::Cancelled);
+        assert_eq!(error.code, "execution_cancelled");
+    }
+    for after in [1, 5, schema.type_derivation_steps / 2] {
+        let control = ExecutionControl::cancel_after_checks(after);
+        let error = super::reference_schema::NormalizedReferenceSchema::reconstruct_with_control(
+            [&snapshot],
+            &control,
+        )
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+    }
+    let recovered = NormalizedProgram::prepare(program.artifact().clone()).unwrap();
+    assert_eq!(
+        recovered.work.type_derivation_steps,
+        program.work.type_derivation_steps
+    );
+    assert_eq!(
+        recovered.work.type_metadata_bytes,
+        program.work.type_metadata_bytes
+    );
+    let recovered =
+        super::reference_schema::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    assert_eq!(
+        recovered.type_derivation_steps,
+        schema.type_derivation_steps
+    );
+    assert_eq!(recovered.type_metadata_bytes, schema.type_metadata_bytes);
+    let control = ExecutionControl::uncancelled();
+    let value = |program: &NormalizedProgram, ty| {
+        NormalizedValue::Record(super::value::NormalizedRecord::Nominal {
+            layout: program.record_instances[&ty],
+            fields: Arc::new(vec![NormalizedValue::I64(7)]),
+        })
+    };
+    let first = value(&program, applications[0]);
+    let second = value(&program, applications[1]);
+    assert_ne!(
+        program.record_instances[&applications[0]],
+        program.record_instances[&applications[1]]
+    );
+    for (index, ty) in applications.iter().enumerate() {
+        let raw = value(&program, *ty);
+        assert!(program.ordinary_types.contains(ty));
+        assert_eq!(program.capture_safe_types.contains(ty), index != 2);
+        assert_eq!(schema.capture_safe_types.contains(ty), index != 2);
+        assert_eq!(program.comparable_types.contains(ty), index < 2);
+        assert_eq!(schema.comparable_types.contains(ty), index < 2);
+        super::value_oracle::inspect(&schema, program.value_origin, &raw, *ty, &control).unwrap();
+        let encoded = super::data_codec::encode_typed(&program, &raw, *ty);
+        let independent = super::data_codec_reference::encode_typed(&bound_schema, &raw, *ty);
+        assert_eq!(encoded.is_ok(), index < 2);
+        assert_eq!(independent.is_ok(), index < 2);
+        if index < 2 {
+            assert_eq!(encoded.unwrap(), independent.unwrap());
+        }
+        let json = super::codec::encode_value(&program, &raw, *ty, JsonLimits::default());
+        assert_eq!(json.is_ok(), index < 2);
+    }
+    let encoded = super::data_codec::encode_typed(&program, &first, applications[0]).unwrap();
+    let rehash = |mut payload: Vec<u8>| {
+        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.data.typed-value-envelope.v1");
+        hasher.update(&(payload.len() as u64).to_be_bytes());
+        hasher.update(&payload);
+        payload.extend_from_slice(hasher.finalize().as_bytes());
+        payload
+    };
+    let body = encoded[..encoded.len() - 32].to_vec();
+    let mut trailing = body.clone();
+    trailing.push(0);
+    let mut wrong_layout = body.clone();
+    wrong_layout[10] ^= 1;
+    let mut wrong_checksum = encoded.clone();
+    wrong_checksum[10] ^= 1;
+    let mut truncated = body;
+    truncated.pop();
+    for (bytes, code) in [
+        (rehash(trailing), "normalized_data_value_trailing"),
+        (rehash(wrong_layout), "normalized_data_value_layout"),
+        (wrong_checksum, "normalized_data_value_checksum"),
+        (rehash(truncated), "normalized_data_i64"),
+    ] {
+        assert_eq!(
+            super::data_codec::decode_typed(&program, &bytes, applications[0])
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(
+            super::data_codec_reference::decode_typed(&bound_schema, &bytes, applications[0])
+                .unwrap_err()
+                .code,
+            code
+        );
+    }
+    assert_eq!(
+        super::data_codec::decode_typed(&program, &encoded, applications[1])
+            .unwrap_err()
+            .code,
+        "normalized_data_value_layout"
+    );
+    assert!(
+        super::data_codec_reference::decode_typed(&bound_schema, &encoded, applications[1])
+            .is_err()
+    );
+    let index = declarations[1];
+    let sink = std::sync::Mutex::new(None);
+    assert!(
+        NormalizedVm::new(&program, Default::default())
+            .observing(&sink, &super::vm::CoreNormalizedHost)
+            .invoke(index, vec![first.clone()], None, &control)
+            .is_err()
+    );
+    assert_eq!(sink.into_inner().unwrap().unwrap().calls, 0);
+    assert!(
+        NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+            .invoke(declarations[1], vec![first.clone()], None, &control)
+            .is_err()
+    );
+    let foreign = prepare_snapshot(&snapshot);
+    assert!(
+        NormalizedVm::new(&foreign, Default::default())
+            .invoke(declarations[1], vec![second], None, &control)
+            .is_err()
+    );
+    // Fault injection preserves ordinary classification and field representation, aliases only
+    // production application identity, and must disagree with the canonical-owner oracle.
+    program
+        .record_instances
+        .insert(applications[1], program.record_instances[&applications[0]]);
+    assert!(
+        NormalizedVm::new(&program, Default::default())
+            .invoke(index, vec![first.clone()], None, &control)
+            .is_ok()
+    );
+    assert!(
+        super::value_oracle::inspect(
+            &schema,
+            program.value_origin,
+            &first,
+            applications[1],
+            &control
+        )
+        .is_err()
+    );
+    assert!(
+        NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+            .invoke(declarations[1], vec![first], None, &control)
+            .is_err()
+    );
+    println!(
+        "nominal-phantom matrix=ordinary,capture,equality,json,data wrong-instance=before-body foreign-origin=rejected layout-alias-fault=detected reference=canonical-owners"
+    );
+}
+
+#[test]
+fn maintained_pair_map_calls_each_callback_once_in_order_and_stops_on_traps() {
+    use super::reference::{
+        CoreNormalizedReferenceHost, NormalizedReferenceHost, ReferenceSignature,
+    };
+    use super::value_schema::NormalizedValueSchema;
+    use super::vm::{CoreNormalizedHost, NormalizedHost};
+    struct Callbacks {
+        trace: Mutex<Vec<String>>,
+        trap_at: Option<usize>,
+    }
+    impl Callbacks {
+        fn observe(&self, implementation: &ImplementationName) -> Result<(), ExecutionError> {
+            let mut trace = self.trace.lock().unwrap();
+            trace.push(implementation.as_str().to_owned());
+            if self.trap_at == Some(trace.len()) {
+                return Err(ExecutionError::new(
+                    ExecutionFailureClass::Trap,
+                    "nominal_callback_trap",
+                    "disposable callback trap",
+                ));
+            }
+            Ok(())
+        }
+    }
+    impl NormalizedHost for Callbacks {
+        fn call(
+            &self,
+            program: &NormalizedProgram,
+            function: &super::prepare::NormalizedFunction,
+            implementation: &ImplementationName,
+            types: &[TypeObjectDigest],
+            arguments: Vec<NormalizedValue>,
+            control: &ExecutionControl,
+        ) -> Result<NormalizedValue, ExecutionError> {
+            self.observe(implementation)?;
+            CoreNormalizedHost.call(program, function, implementation, types, arguments, control)
+        }
+    }
+    impl NormalizedReferenceHost for Callbacks {
+        fn call(
+            &self,
+            schema: &dyn NormalizedValueSchema,
+            function: &ReferenceSignature,
+            implementation: &ImplementationName,
+            types: &[TypeObjectDigest],
+            arguments: Vec<NormalizedValue>,
+            control: &ExecutionControl,
+        ) -> Result<NormalizedValue, ExecutionError> {
+            self.observe(implementation)?;
+            CoreNormalizedReferenceHost.call(
+                schema,
+                function,
+                implementation,
+                types,
+                arguments,
+                control,
+            )
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let snapshot = GraphRepository::open(&root.join("packages/standard"))
+        .unwrap()
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let program = prepare_snapshot(&snapshot);
+    let test = declaration_named(&snapshot, "pair-map-heterogeneous");
+    for reference in [false, true] {
+        for trap_at in [None, Some(1), Some(2)] {
+            let host = Callbacks {
+                trace: Mutex::new(Vec::new()),
+                trap_at,
+            };
+            let control = ExecutionControl::uncancelled();
+            let result = if reference {
+                let sink = Mutex::new(None);
+                NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                    .observing(&sink, &host)
+                    .invoke_test(test, None, &control)
+                    .map(|_| ())
+            } else {
+                let sink = Mutex::new(None);
+                NormalizedVm::new(&program, Default::default())
+                    .observing(&sink, &host)
+                    .invoke_test(test, None, &control)
+                    .map(|_| ())
+            };
+            if trap_at.is_some() {
+                assert_eq!(result.unwrap_err().code, "nominal_callback_trap");
+            } else {
+                result.unwrap();
+            }
+            let trace = host.trace.into_inner().unwrap();
+            let expected = if trap_at == Some(1) {
+                vec!["core.i64.add"]
+            } else {
+                vec!["core.i64.add", "core.text.concat"]
+            };
+            assert_eq!(trace, expected);
+            println!(
+                "{}",
+                serde_json::json!({"case":"pair-map-callback-order","reference":reference,"trap_at":trap_at,"calls":trace})
+            );
+        }
+    }
 }
 
 fn prepare_repository(
@@ -1334,6 +1761,7 @@ pub(crate) fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnaps
         panic!("HTTP response owner kind")
     };
     body.operation = ExpressionOperation::Record {
+        type_arguments: Vec::new(),
         nominal_type: None,
         fields: vec![
             RecordExpressionField {
@@ -2158,8 +2586,8 @@ fn strict_graph9_artifact_prepares_only_dense_runtime_bindings() {
 
     assert_eq!(program.work.packages, 1);
     assert_eq!(program.work.compiler_units, 11);
-    assert_eq!(program.work.runtime_owners, 8);
-    assert_eq!(program.work.type_objects, 2);
+    assert_eq!(program.work.runtime_owners, 11);
+    assert_eq!(program.work.type_objects, 4);
     assert_eq!(program.work.functions, 5);
     assert_eq!(program.work.record_layouts, 1);
     assert_eq!(program.work.variant_layouts, 1);
@@ -2218,7 +2646,9 @@ fn strict_graph9_artifact_prepares_only_dense_runtime_bindings() {
 fn admit_runtime_type(program: &mut NormalizedProgram, form: TypeForm) -> TypeObjectDigest {
     let object = TypeObject::new(form).expect("valid runtime boundary type");
     let (digest, _) = encode_type_object(&object).expect("canonical runtime boundary type");
-    assert!(program.types.insert(digest, object).is_none());
+    if let Some(previous) = program.types.insert(digest, object.clone()) {
+        assert_eq!(previous, object);
+    }
     digest
 }
 
@@ -3446,7 +3876,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph12_dense_bytecode_7");
+    assert_eq!(observation.production_tier, "graph13_dense_bytecode_8");
 }
 
 #[test]
@@ -3742,7 +4172,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph12_reference_records_6"
+        "graph13_reference_records_7"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -4603,6 +5033,11 @@ fn raw_adapter_result_rejection_reports_prior_visibility_and_stops_next_effect()
 
 #[test]
 fn bound_environment_cost_oracle_detects_real_per_invoke_rescanning() {
+    bound_environment_rescan_case(false);
+    bound_environment_rescan_case(true);
+}
+
+fn bound_environment_rescan_case(applied: bool) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
     let standard = GraphRepository::open(&root)
         .unwrap()
@@ -4664,7 +5099,7 @@ type.parameter as=@Env parameter=$Env
  expression.invoke as=$helper-body function=$helper-step-value
  expression.argument parent=$helper-body index=0 expression=$helper-env-value
  create.function as=$helper module=$module name=generic-private-helper visibility=private result=i64 effect=pure body=$helper-body
- add.type-parameter as=$H function=$helper name=Env
+ add.type-parameter as=$H declaration=$helper name=Env
  add.parameter as=$helper-env function=$helper name=env type=@H
  add.parameter as=$helper-step function=$helper name=step type=@helper-step
  expression.function-value as=$helper-value function=$helper
@@ -4675,7 +5110,7 @@ type.parameter as=@Env parameter=$Env
  expression.argument parent=$factory-body index=0 expression=$factory-env-value
  expression.argument parent=$factory-body index=1 expression=$factory-step-value
  create.function as=$factory module=$module name=generic-factory visibility=private result=@thunk effect=pure body=$factory-body
- add.type-parameter as=$Env function=$factory name=Env constraint=capture-safe
+ add.type-parameter as=$Env declaration=$factory name=Env constraint=capture-safe
  add.parameter as=$factory-env function=$factory name=env type=@Env
  add.parameter as=$factory-step function=$factory name=step type=@step
  expression.function-value as=$callee function=$length
@@ -4693,6 +5128,19 @@ add.parameter as=$entry-n function=$entry name=n type=i64
 add.parameter as=$entry-items function=$entry name=items type=@items
 "#
     );
+    let request = if applied {
+        request.replace("type.list as=@items item=i64", r#"create.record as=$Batch module=$module name=Batch visibility=private
+add.type-parameter as=$Item declaration=$Batch name=Item
+type.parameter as=@Item parameter=$Item
+type.list as=@Items item=@Item
+add.field as=$revision record=$Batch name=revision type=i64
+add.field as=$values record=$Batch name=items type=@Items
+type.application as=@items declaration=$Batch
+type.argument parent=@items index=0 type=i64"#)
+            .replace("expression.local as=$items value=$length-items", "expression.local as=$batch value=$length-items\nexpression.field as=$items value=$batch field=$values")
+    } else {
+        request
+    };
     let decoded =
         crate::platform::control::decode_compact_change("bound-cost", request.as_bytes()).unwrap();
     let prepared = created
@@ -4712,6 +5160,13 @@ add.parameter as=$entry-items function=$entry name=items type=@items
         .value;
     let program = prepare_snapshot(&snapshot);
     let entry = declaration_named(&snapshot, "bound-entry");
+    let argument_type = program
+        .functions
+        .iter()
+        .find(|function| function.declaration == entry)
+        .unwrap()
+        .parameters[1]
+        .ty;
     let policy = NormalizedRunPolicy {
         maximum_call_depth: 8,
         ..Default::default()
@@ -4723,11 +5178,19 @@ add.parameter as=$entry-items function=$entry name=items type=@items
             for k in [1, 64, 1024] {
                 for fault in [false, true] {
                     let run = || {
-                        let arguments = vec![
-                            NormalizedValue::I64(k),
+                        let input = if applied {
+                            super::codec::decode_value(
+                                &program,
+                                &serde_json::json!({"revision":7,"items":vec![1;n]}),
+                                argument_type,
+                                JsonLimits::default(),
+                            )
+                            .unwrap()
+                        } else {
                             NormalizedValue::list(vec![NormalizedValue::I64(1); n])
-                                .expect("bounded raw list"),
-                        ];
+                                .expect("bounded raw list")
+                        };
+                        let arguments = vec![NormalizedValue::I64(k), input];
                         if reference {
                             let (value, observation) =
                                 NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
@@ -4819,7 +5282,7 @@ add.parameter as=$entry-items function=$entry name=items type=@items
         );
         println!(
             "{}",
-            serde_json::json!({"case":"bound-environment-rescan-fault","reference":reference,
+            serde_json::json!({"case":"bound-environment-rescan-fault","reference":reference,"applied_nominal":applied,
             "regular_separable":true,"restored_scan_separable":false,"n":4096,"k":1024,
             "regular_work":regular[&(4096,1024)],"restored_work":rescanned[&(4096,1024)]})
         );

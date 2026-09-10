@@ -564,6 +564,22 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             // changes with maintained materialization; its stable package identity remains here.
             values.remove("contract_version");
             values.remove("graph_contract_version");
+            // Graph 13 makes zero-arity nominal declarations and constructors explicit.
+            // Keep the pre-existing monomorphic recipe projection, while retaining every
+            // nonempty vector so a parametric semantic change still changes this oracle.
+            if matches!(
+                values.get("kind").and_then(Value::as_str),
+                Some("record" | "variant")
+            ) {
+                for key in ["type_parameters", "type_arguments"] {
+                    if values
+                        .get(key)
+                        .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                    {
+                        values.remove(key);
+                    }
+                }
+            }
             if values.contains_key("package")
                 && values.contains_key("semantic_revision")
                 && values.contains_key("package_revision")

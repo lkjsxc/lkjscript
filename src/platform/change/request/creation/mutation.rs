@@ -219,7 +219,7 @@ fn lower_add_field<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             OwnerKey::Declaration(declaration),
         ));
     };
-    let DeclarationPayload::Record { fields } = &mut parent.payload else {
+    let DeclarationPayload::Record { fields, .. } = &mut parent.payload else {
         return Err(mutation_kind("record declaration", parent.header.owner));
     };
     fields.push(field_id);
@@ -252,7 +252,7 @@ fn lower_add_case<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             OwnerKey::Declaration(declaration),
         ));
     };
-    let DeclarationPayload::Variant { cases } = &mut parent.payload else {
+    let DeclarationPayload::Variant { cases, .. } = &mut parent.payload else {
         return Err(mutation_kind("variant declaration", parent.header.owner));
     };
     cases.push(case_id);
@@ -322,16 +322,22 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
     else {
         return Err(mutation_kind(
-            "function or external declaration",
+            "record, variant, function or registered external declaration",
             OwnerKey::Declaration(declaration),
         ));
     };
     match &mut parent.payload {
+        DeclarationPayload::Record {
+            type_parameters, ..
+        }
+        | DeclarationPayload::Variant {
+            type_parameters, ..
+        } => type_parameters.push(parameter_id),
         DeclarationPayload::Function(function) => function.type_parameters.push(parameter_id),
         DeclarationPayload::External(function) => function.type_parameters.push(parameter_id),
         _ => {
             return Err(mutation_kind(
-                "function or external declaration",
+                "record, variant, function or registered external declaration",
                 parent.header.owner,
             ));
         }

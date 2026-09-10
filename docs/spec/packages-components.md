@@ -22,9 +22,11 @@ not editable source or an alternate package repository.
 An exported factory can return a pure function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 12
+expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 13
 meaning rejects predecessor graph inputs. The unchanged TypeObject 10 codec, magic, digest domains,
-and bytes remain current, as do typed-data layout identities for unchanged types. This cutover does
+and bytes remain current for all pre-existing type forms. Positive nominal applications use the
+separate version-1 `LKJTAP01` envelope and its own digest domain, binding declaration and ordered
+arguments. Unchanged monomorphic typed-data layouts retain their exact identities. This cutover does
 not rewrite operational data or add a predecessor graph reader.
 
 Public package interfaces retain exact-interface capability-resource types and operation parameter
@@ -208,10 +210,15 @@ model. The first-party data root is local trusted-host authority, not encrypted 
 database service.
 
 Rank-one package interfaces include every type parameter's exact closed constraint set, including
-unused parameters. Graph 12 owner encoding, compiled-unit 7 signatures and package-interface-owner 8
+unused parameters. Graph 13 owner encoding, compiled-unit 8 signatures and package-interface-owner 9
 replace their predecessors explicitly. An imported `capture-safe` constraint must be discharged in
 the consumer's scope using its exact closure and nominal layouts. A returned callable can target a
 private generic graph helper retained in transported code; private helpers remain unavailable to
 ordinary public name lookup. Checksums and compiled metadata do not override canonical constraints.
-The immutable transport/container framing and bytecode-4 instructions are unchanged. TypeObject 10,
-nominal typed-data layouts, operational stores, queues and backups require no data migration.
+The immutable transport/container framing is unchanged. Bytecode 5 constructor instructions retain
+ordered application arguments, and Artifact 17 binds the new compiled/runtime meaning. Strict loading
+rederives parameter order, constraints, member layouts and constructor inventories from canonical
+owners, including private closure objects. Fully rehashed incompatible or incomplete inputs reject.
+Unchanged TypeObject 10 and monomorphic typed-data bytes, operational stores, queues and backups
+require no data migration. Applications have a separate typed-data layout discriminator that includes
+all arguments before the substituted members, so phantom changes cannot reuse a layout.

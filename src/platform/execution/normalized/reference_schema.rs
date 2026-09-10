@@ -17,11 +17,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
+    pub(super) type_derivation_steps: u64,
+    pub(super) type_metadata_bytes: u64,
     pub(super) affine_variants: Vec<bool>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
+    pub(super) ordinary_types: BTreeSet<TypeObjectDigest>,
+    pub(super) comparable_types: BTreeSet<TypeObjectDigest>,
+    pub(super) application_free_types: BTreeSet<TypeObjectDigest>,
     pub functions: Vec<DeclarationReference>,
     pub records: Vec<NormalizedRecordLayout>,
     pub variants: Vec<NormalizedVariantLayout>,
+    pub(super) record_instances: BTreeMap<TypeObjectDigest, usize>,
+    pub(super) variant_instances: BTreeMap<TypeObjectDigest, usize>,
     pub types: BTreeMap<TypeObjectDigest, TypeObject>,
     pub targets: BTreeMap<(PackageId, Name), TargetId>,
     pub tests: BTreeMap<DeclarationReference, ComparisonPolicy>,
@@ -32,6 +39,17 @@ impl NormalizedReferenceSchema {
     pub fn reconstruct<'a>(
         snapshots: impl IntoIterator<Item = &'a KernelSnapshot>,
     ) -> Result<Self, ExecutionError> {
+        Self::reconstruct_with_control(
+            snapshots,
+            &crate::platform::execution::ExecutionControl::uncancelled(),
+        )
+    }
+
+    pub(crate) fn reconstruct_with_control<'a>(
+        snapshots: impl IntoIterator<Item = &'a KernelSnapshot>,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, ExecutionError> {
+        control.check()?;
         let mut schema = Self::default();
         let mut packages = BTreeSet::new();
         let mut functions = BTreeSet::new();
@@ -40,6 +58,7 @@ impl NormalizedReferenceSchema {
         let mut visited = 0_usize;
         let mut inputs = Vec::new();
         for snapshot in snapshots {
+            control.check()?;
             let package = snapshot.root.package_id;
             if !packages.insert(package) || packages.len() > 10_000 {
                 return Err(inventory_error("duplicate or excessive canonical packages"));
@@ -91,7 +110,12 @@ impl NormalizedReferenceSchema {
                             | DeclarationPayload::Constant { .. } => {
                                 functions.insert(reference);
                             }
-                            DeclarationPayload::Record { fields } => {
+                            DeclarationPayload::Record {
+                                fields,
+                                type_parameters,
+                            } => {
+                                let constraints =
+                                    nominal_constraints(snapshot, *id, type_parameters)?;
                                 let mut layout = Vec::with_capacity(fields.len());
                                 for field in fields {
                                     let Some(OwnerRecord::Field(record)) =
@@ -119,11 +143,19 @@ impl NormalizedReferenceSchema {
                                     reference,
                                     NormalizedRecordLayout {
                                         declaration: reference,
+                                        type_parameters: type_parameters.clone().into(),
+                                        type_parameter_constraints: constraints.into(),
+                                        arguments: Vec::new().into(),
                                         fields: layout.into(),
                                     },
                                 );
                             }
-                            DeclarationPayload::Variant { cases } => {
+                            DeclarationPayload::Variant {
+                                cases,
+                                type_parameters,
+                            } => {
+                                let constraints =
+                                    nominal_constraints(snapshot, *id, type_parameters)?;
                                 let mut layout = Vec::with_capacity(cases.len());
                                 for case in cases {
                                     let Some(OwnerRecord::Case(record)) =
@@ -151,6 +183,9 @@ impl NormalizedReferenceSchema {
                                     reference,
                                     NormalizedVariantLayout {
                                         declaration: reference,
+                                        type_parameters: type_parameters.clone().into(),
+                                        type_parameter_constraints: constraints.into(),
+                                        arguments: Vec::new().into(),
                                         cases: layout.into(),
                                     },
                                 );
@@ -185,7 +220,7 @@ impl NormalizedReferenceSchema {
                 Ok(affine)
             })
             .collect::<Result<_, ExecutionError>>()?;
-        super::reference_types::complete(&mut schema, &inputs)?;
+        super::reference_types::complete(&mut schema, &inputs, control)?;
         Ok(schema)
     }
 
@@ -225,6 +260,17 @@ impl NormalizedReferenceSchema {
                     })
                     .collect::<Option<_>>()?,
             },
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => TypeForm::Applied {
+                declaration: *declaration,
+                arguments: arguments
+                    .iter()
+                    .copied()
+                    .map(descend)
+                    .collect::<Option<_>>()?,
+            },
             TypeForm::List { item } => TypeForm::List {
                 item: descend(*item)?,
             },
@@ -250,7 +296,7 @@ impl NormalizedReferenceSchema {
                     .collect::<Option<_>>()?,
                 result: descend(*result)?,
             },
-            form => form.clone(),
+            _ => return Some(digest),
         };
         let (resolved, _) = encode_type_object(&TypeObject::new(form).ok()?).ok()?;
         Some(resolved)
@@ -258,6 +304,12 @@ impl NormalizedReferenceSchema {
 }
 
 impl NormalizedValueSchema for NormalizedReferenceSchema {
+    fn comparable(&self, ty: TypeObjectDigest) -> bool {
+        self.comparable_types.contains(&ty)
+    }
+    fn application_free(&self, ty: TypeObjectDigest) -> bool {
+        self.application_free_types.contains(&ty)
+    }
     fn value_origin(&self) -> super::value::ValueOrigin {
         Default::default()
     }
@@ -271,6 +323,32 @@ impl NormalizedValueSchema for NormalizedReferenceSchema {
     fn types(&self) -> &BTreeMap<TypeObjectDigest, TypeObject> {
         &self.types
     }
+    fn record_index(&self, ty: TypeObjectDigest) -> Option<usize> {
+        self.record_instances.get(&ty).copied()
+    }
+    fn variant_index(&self, ty: TypeObjectDigest) -> Option<usize> {
+        self.variant_instances.get(&ty).copied()
+    }
+}
+
+fn nominal_constraints(
+    snapshot: &KernelSnapshot,
+    declaration: crate::platform::semantic_id::DeclarationId,
+    parameters: &[TypeParameterId],
+) -> Result<Vec<crate::platform::kernel::TypeParameterConstraints>, ExecutionError> {
+    parameters
+        .iter()
+        .map(
+            |parameter| match snapshot.owners.get(&OwnerKey::TypeParameter(*parameter)) {
+                Some(OwnerRecord::TypeParameter(record)) if record.declaration == declaration => {
+                    Ok(record.constraints)
+                }
+                _ => Err(inventory_error(
+                    "nominal parameter lacks its exact canonical owner",
+                )),
+            },
+        )
+        .collect()
 }
 
 fn inventory_error(message: &str) -> ExecutionError {

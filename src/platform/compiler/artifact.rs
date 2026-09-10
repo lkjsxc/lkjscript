@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 12 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 13 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -45,17 +45,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-16";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-16";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 16;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF16";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART16";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN16";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-17";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-17";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 17;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF17";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART17";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN17";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v16";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v16";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v16";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v16";
+    "lkjscript.artifact-manifest-envelope.v17";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v17";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v17";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v17";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -235,6 +235,9 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
     matches!(
         kind,
         OwnerKind::TaskFunction
+            | OwnerKind::Component
+            | OwnerKind::Record
+            | OwnerKind::Variant
             | OwnerKind::TypeParameter
             | OwnerKind::Field
             | OwnerKind::Case
@@ -992,6 +995,18 @@ fn validate_declared_closure(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeOwnerExpectation {
+    Component {
+        requirements: Vec<crate::platform::semantic_id::RequirementId>,
+        ports: Vec<crate::platform::semantic_id::PortId>,
+    },
+    Record {
+        type_parameters: Vec<TypeParameterId>,
+        fields: Vec<crate::platform::semantic_id::FieldId>,
+    },
+    Variant {
+        type_parameters: Vec<TypeParameterId>,
+        cases: Vec<crate::platform::semantic_id::CaseId>,
+    },
     ResourceFunction {
         parameters: Vec<ParameterId>,
         result: TypeObjectDigest,
@@ -1058,6 +1073,9 @@ pub(crate) enum RuntimePortImplementation {
 impl RuntimeOwnerExpectation {
     pub(crate) const fn kind(&self) -> OwnerKind {
         match self {
+            Self::Component { .. } => OwnerKind::Component,
+            Self::Record { .. } => OwnerKind::Record,
+            Self::Variant { .. } => OwnerKind::Variant,
             Self::ResourceFunction { .. } => OwnerKind::TaskFunction,
             Self::TypeParameter { .. } => OwnerKind::TypeParameter,
             Self::Field { .. } => OwnerKind::Field,
@@ -1073,6 +1091,34 @@ impl RuntimeOwnerExpectation {
 
     fn matches(&self, record: &OwnerRecord) -> bool {
         match (self, record) {
+            (
+                Self::Component {
+                    requirements,
+                    ports,
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                matches!(&record.payload,DeclarationPayload::Component { requirements:actual_requirements, ports:actual_ports }
+                    if actual_requirements == requirements && actual_ports == ports)
+            }
+            (
+                Self::Record {
+                    type_parameters,
+                    fields,
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                matches!(&record.payload, DeclarationPayload::Record { type_parameters: actual, fields: members } if actual == type_parameters && members == fields)
+            }
+            (
+                Self::Variant {
+                    type_parameters,
+                    cases,
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                matches!(&record.payload, DeclarationPayload::Variant { type_parameters: actual, cases: members } if actual == type_parameters && members == cases)
+            }
             (
                 Self::ResourceFunction {
                     parameters,
@@ -1224,8 +1270,33 @@ pub(crate) fn runtime_owner_expectations(
         }
         let before = expected.len();
         match &unit.payload {
-            CompilationPayload::Record { fields } => {
+            CompilationPayload::Record {
+                fields,
+                type_parameters,
+                type_parameter_constraints,
+            } => {
                 let declaration = declaration_owner(*owner, "record")?;
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::Record {
+                        type_parameters: type_parameters.clone(),
+                        fields: fields
+                            .iter()
+                            .map(|field| {
+                                table_value(&unit.tables.fields, field.field, "record field")
+                                    .map(|reference| reference.field)
+                            })
+                            .collect::<Result<_, _>>()?,
+                    },
+                )?;
+                insert_nominal_parameter_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    type_parameters,
+                    type_parameter_constraints,
+                )?;
                 for field in fields {
                     let reference =
                         table_value(&unit.tables.fields, field.field, "record field reference")?;
@@ -1240,8 +1311,33 @@ pub(crate) fn runtime_owner_expectations(
                     )?;
                 }
             }
-            CompilationPayload::Variant { cases } => {
+            CompilationPayload::Variant {
+                cases,
+                type_parameters,
+                type_parameter_constraints,
+            } => {
                 let declaration = declaration_owner(*owner, "variant")?;
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::Variant {
+                        type_parameters: type_parameters.clone(),
+                        cases: cases
+                            .iter()
+                            .map(|case| {
+                                table_value(&unit.tables.cases, case.case, "variant case")
+                                    .map(|reference| reference.case)
+                            })
+                            .collect::<Result<_, _>>()?,
+                    },
+                )?;
+                insert_nominal_parameter_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    type_parameters,
+                    type_parameter_constraints,
+                )?;
                 for case in cases {
                     let reference =
                         table_value(&unit.tables.cases, case.case, "variant case reference")?;
@@ -1366,6 +1462,30 @@ pub(crate) fn runtime_owner_expectations(
                 ports,
             } => {
                 let declaration = declaration_owner(*owner, "component")?;
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::Component {
+                        requirements: requirements
+                            .iter()
+                            .map(|requirement| {
+                                table_value(
+                                    &unit.tables.requirements,
+                                    requirement.requirement,
+                                    "component requirement",
+                                )
+                                .map(|reference| reference.requirement)
+                            })
+                            .collect::<Result<_, _>>()?,
+                        ports: ports
+                            .iter()
+                            .map(|port| {
+                                table_value(&unit.tables.ports, port.port, "component port")
+                                    .map(|reference| reference.port)
+                            })
+                            .collect::<Result<_, _>>()?,
+                    },
+                )?;
                 for requirement in requirements {
                     let reference = table_value(
                         &unit.tables.requirements,
@@ -1647,6 +1767,33 @@ fn validate_artifact_http_route_contracts(
                 "HTTP target unit or component escaped its exact package",
             ));
         }
+    }
+    Ok(())
+}
+
+fn insert_nominal_parameter_expectations(
+    expected: &mut BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>,
+    package: PackageId,
+    declaration: DeclarationId,
+    parameters: &[TypeParameterId],
+    constraints: &[crate::platform::kernel::TypeParameterConstraints],
+) -> Result<(), Diagnostic> {
+    if parameters.len() != constraints.len() {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_nominal_parameters",
+            "nominal parameter constraints have wrong arity",
+        ));
+    }
+    for (parameter, constraints) in parameters.iter().zip(constraints) {
+        insert_runtime_expectation(
+            expected,
+            (package, OwnerKey::TypeParameter(*parameter)),
+            RuntimeOwnerExpectation::TypeParameter {
+                declaration,
+                constraints: *constraints,
+            },
+        )?;
     }
     Ok(())
 }
@@ -1993,7 +2140,7 @@ fn trace_object_closure(
     }
     validate_package_interface_closure(&logical.revisions, &interfaces)?;
     let runtime_owners = validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
-    validate_reference_owners(
+    let reference_owners = validate_reference_owners(
         manifest,
         &units,
         &runtime_owners,
@@ -2017,7 +2164,7 @@ fn trace_object_closure(
         )?;
         let object = decode_type_object(&bytes, digest)?;
         match &object.form {
-            TypeForm::Named { declaration }
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
                 if !relocations
                     .declarations
                     .contains(&(declaration.package, declaration.declaration)) =>
@@ -2042,6 +2189,15 @@ fn trace_object_closure(
         type_roots.extend(object.child_types());
         types.insert(digest, object);
     }
+    validate_artifact_nominal_meaning(
+        manifest,
+        &units,
+        &runtime_owners,
+        &reference_owners,
+        &interfaces,
+        &types,
+    )?;
+    validate_nominal_instruction_inventory(&units, &reference_owners, &runtime_owners)?;
     validate_artifact_session_relations(manifest, &units, &runtime_owners, &interfaces, &types)?;
     for (digest, expected_length) in blobs {
         let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());
@@ -2066,6 +2222,385 @@ fn trace_object_closure(
 enum ArtifactSessionRecord {
     Local(OwnerRecord),
     Interface(PackageInterfaceRecord),
+}
+
+fn validate_nominal_instruction_inventory(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    owners: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    runtime: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+) -> Result<(), Diagnostic> {
+    use super::unit::{CompiledFieldSelector, CompiledInstruction};
+    use crate::platform::kernel::{ExpressionOperation, FieldSelector};
+    // Exact canonical constructor metadata is retained separately from executable tables.
+    // The baseline compiler emits each expression occurrence once (including both branches).
+    #[derive(Eq, PartialEq, Ord, PartialOrd)]
+    enum Constructor {
+        Record(
+            Option<DeclarationReference>,
+            Vec<TypeObjectDigest>,
+            Vec<FieldSelector>,
+        ),
+        Variant(CaseReference, Vec<TypeObjectDigest>, bool),
+    }
+    let mut work = 0usize;
+    let mut tick = || {
+        work = work
+            .checked_add(1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_nominal_work",
+                    "nominal instruction inventory exhausted its work bound",
+                )
+            })?;
+        Ok::<(), Diagnostic>(())
+    };
+    for ((package, owner), unit) in units {
+        let codes = match &unit.payload {
+            CompilationPayload::Function { code, .. }
+            | CompilationPayload::Constant { code, .. } => vec![code],
+            CompilationPayload::Test {
+                actual, expected, ..
+            } => vec![actual, expected],
+            CompilationPayload::Component { ports, .. } => ports
+                .iter()
+                .filter_map(|port| match &port.implementation {
+                    super::unit::CompiledPortImplementation::Expression(code) => Some(code),
+                    _ => None,
+                })
+                .collect(),
+            _ => continue,
+        };
+        tick()?;
+        let mut expected = BTreeMap::new();
+        let mut pending = if matches!(unit.payload, CompilationPayload::Component { .. }) {
+            // Component expressions belong to canonical ports, whose exact ownership and
+            // implementation bindings are independently checked by runtime-owner validation.
+            Vec::new()
+        } else {
+            owners
+                .get(&(*package, *owner))
+                .or_else(|| runtime.get(&(*package, *owner)))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_nominal_instruction_owner",
+                        "constructor inventory omits its canonical owner",
+                    )
+                })?
+                .expression_roots()
+        };
+        if let CompilationPayload::Component { ports, .. } = &unit.payload {
+            for port in ports {
+                tick()?;
+                if matches!(
+                    port.implementation,
+                    super::unit::CompiledPortImplementation::Expression(_)
+                ) {
+                    let reference =
+                        table_value(&unit.tables.ports, port.port, "nominal port expression")?;
+                    let canonical = runtime
+                        .get(&(reference.package, OwnerKey::Port(reference.port)))
+                        .ok_or_else(|| {
+                            artifact_error(
+                                DiagnosticClass::Corrupt,
+                                "artifact_nominal_instruction_owner",
+                                "constructor inventory omits a canonical port",
+                            )
+                        })?;
+                    pending.extend(canonical.expression_roots());
+                }
+            }
+        }
+        while let Some(expression) = pending.pop() {
+            tick()?;
+            let Some(OwnerRecord::Expression(record)) =
+                owners.get(&(*package, OwnerKey::Expression(expression)))
+            else {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_nominal_instruction_owner",
+                    "constructor inventory omits a canonical expression",
+                ));
+            };
+            let constructor = match &record.operation {
+                ExpressionOperation::Record {
+                    nominal_type,
+                    type_arguments,
+                    fields,
+                } => {
+                    for _ in type_arguments {
+                        tick()?;
+                    }
+                    for _ in fields {
+                        tick()?;
+                    }
+                    Some(Constructor::Record(
+                        *nominal_type,
+                        type_arguments.clone(),
+                        fields.iter().map(|field| field.selector.clone()).collect(),
+                    ))
+                }
+                ExpressionOperation::Variant {
+                    case,
+                    type_arguments,
+                    payload,
+                } => {
+                    for _ in type_arguments {
+                        tick()?;
+                    }
+                    Some(Constructor::Variant(
+                        *case,
+                        type_arguments.clone(),
+                        payload.is_some(),
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(constructor) = constructor {
+                let count = expected.entry(constructor).or_insert(0usize);
+                *count = count.checked_add(1).ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Resource,
+                        "artifact_nominal_work",
+                        "constructor count overflow",
+                    )
+                })?;
+            }
+            if let ExpressionOperation::Let { bindings, .. } = &record.operation {
+                for binding in bindings {
+                    tick()?;
+                    if let Some(owner) = owners.get(&(*package, OwnerKey::Binding(*binding))) {
+                        pending.extend(owner.expression_roots());
+                    }
+                }
+            }
+            for child in record.children() {
+                tick()?;
+                pending.push(child.expression);
+            }
+        }
+        let mut actual = BTreeMap::new();
+        for code in codes {
+            for instruction in &code.instructions {
+                tick()?;
+                let constructor = match instruction {
+                    CompiledInstruction::Record {
+                        nominal_type,
+                        type_arguments,
+                        fields,
+                    } => Some(Constructor::Record(
+                        nominal_type
+                            .map(|index| {
+                                table_value(
+                                    &unit.tables.declarations,
+                                    index,
+                                    "nominal constructor declaration",
+                                )
+                            })
+                            .transpose()?,
+                        type_arguments
+                            .iter()
+                            .map(|index| {
+                                tick()?;
+                                table_value(
+                                    &unit.tables.types,
+                                    *index,
+                                    "nominal constructor argument",
+                                )
+                            })
+                            .collect::<Result<_, _>>()?,
+                        fields
+                            .iter()
+                            .map(|field| {
+                                tick()?;
+                                match field {
+                                    CompiledFieldSelector::Nominal(index) => table_value(
+                                        &unit.tables.fields,
+                                        *index,
+                                        "nominal constructor field",
+                                    )
+                                    .map(FieldSelector::Nominal),
+                                    CompiledFieldSelector::Structural(index) => unit
+                                        .tables
+                                        .structural_names
+                                        .get(*index as usize)
+                                        .cloned()
+                                        .map(FieldSelector::Structural)
+                                        .ok_or_else(|| {
+                                            artifact_error(
+                                                DiagnosticClass::Corrupt,
+                                                "artifact_nominal_instruction_field",
+                                                "constructor field is absent",
+                                            )
+                                        }),
+                                }
+                            })
+                            .collect::<Result<_, _>>()?,
+                    )),
+                    CompiledInstruction::Variant {
+                        case,
+                        type_arguments,
+                        has_payload,
+                    } => Some(Constructor::Variant(
+                        table_value(&unit.tables.cases, *case, "nominal constructor case")?,
+                        type_arguments
+                            .iter()
+                            .map(|index| {
+                                tick()?;
+                                table_value(
+                                    &unit.tables.types,
+                                    *index,
+                                    "nominal constructor argument",
+                                )
+                            })
+                            .collect::<Result<_, _>>()?,
+                        *has_payload,
+                    )),
+                    _ => None,
+                };
+                if let Some(constructor) = constructor {
+                    let count = actual.entry(constructor).or_insert(0usize);
+                    *count = count.checked_add(1).ok_or_else(|| {
+                        artifact_error(
+                            DiagnosticClass::Resource,
+                            "artifact_nominal_work",
+                            "constructor count overflow",
+                        )
+                    })?;
+                }
+            }
+        }
+        if actual != expected {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_nominal_instruction_meaning",
+                "compiled constructor declaration, arguments or members differ from canonical expression occurrences",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_artifact_nominal_meaning(
+    manifest: &ArtifactManifest,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    reference: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    struct Read<'a> {
+        package: PackageId,
+        runtime: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+        reference: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+        interfaces: &'a BTreeMap<PackageId, &'a PackageInterfaceValidation>,
+        types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+    }
+    impl crate::platform::kernel::ExpressionRead for Read<'_> {
+        fn package_id(&self) -> PackageId {
+            self.package
+        }
+        fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+            Ok(self
+                .runtime
+                .get(&(self.package, owner))
+                .or_else(|| self.reference.get(&(self.package, owner)))
+                .cloned())
+        }
+        fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+            Ok(self.types.get(&ty).cloned())
+        }
+        fn package_interface_owner(
+            &self,
+            package: PackageId,
+            owner: OwnerKey,
+        ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            Ok(self
+                .interfaces
+                .get(&package)
+                .and_then(|interface| interface.owners.get(&owner))
+                .map(|owner| owner.record.clone()))
+        }
+        fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+            Ok(self.interfaces.contains_key(&package))
+        }
+    }
+    let interfaces = manifest
+        .packages
+        .iter()
+        .map(|package| {
+            interfaces
+                .get(&package.package_revision)
+                .map(|interface| (package.package, interface))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_nominal_interface",
+                        "nominal validation omits an exact package interface",
+                    )
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    let mut roots = BTreeMap::<PackageId, Vec<OwnerKey>>::new();
+    for ((package, owner), unit) in units {
+        if matches!(
+            unit.payload,
+            CompilationPayload::Record { .. }
+                | CompilationPayload::Variant { .. }
+                | CompilationPayload::Function { .. }
+                | CompilationPayload::External { .. }
+                | CompilationPayload::Constant { .. }
+                | CompilationPayload::Test { .. }
+        ) {
+            roots.entry(*package).or_default().push(*owner);
+        }
+    }
+    for ((package, owner), record) in runtime {
+        if matches!(record, OwnerRecord::Port(_)) {
+            roots.entry(*package).or_default().push(*owner);
+        }
+    }
+    let mut work = 0usize;
+    for (package, roots) in roots {
+        let read = Read {
+            package,
+            runtime,
+            reference,
+            interfaces: &interfaces,
+            types,
+        };
+        let mut diagnostics = Vec::new();
+        let exhausted = crate::platform::kernel::validate_expression_roots_with_limits(
+            &read,
+            roots,
+            &mut diagnostics,
+            &mut work,
+            crate::platform::kernel::ExpressionValidationLimits {
+                maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                maximum_diagnostics: 1,
+            },
+        );
+        if let Some(error) = diagnostics.into_iter().next() {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_nominal_meaning",
+                format!(
+                    "canonical nominal meaning is invalid: {}: {}",
+                    error.code, error.message
+                ),
+            ));
+        }
+        if exhausted.is_err() {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_nominal_work",
+                "artifact nominal validation exhausted its existing work budget",
+            ));
+        }
+    }
+    Ok(())
 }
 
 struct ArtifactSessionRead<'a> {
@@ -2099,6 +2634,51 @@ impl ArtifactSessionRead<'_> {
 }
 
 impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
+    fn nominal_parameters(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<crate::platform::semantic_id::TypeParameterId>, Diagnostic> {
+        if let Some(unit) = self.units.get(&(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        )) && let CompilationPayload::Record {
+            type_parameters, ..
+        }
+        | CompilationPayload::Variant {
+            type_parameters, ..
+        } = &unit.payload
+        {
+            return Ok(type_parameters.clone());
+        }
+        match self.record(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        )? {
+            ArtifactSessionRecord::Local(OwnerRecord::Declaration(record)) => {
+                Ok(record.payload.type_parameters().to_vec())
+            }
+            ArtifactSessionRecord::Interface(PackageInterfaceRecord::Declaration(record)) => {
+                match record.payload {
+                    PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => Ok(type_parameters),
+                    _ => Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_nominal_kind",
+                        "nominal state is not data",
+                    )),
+                }
+            }
+            _ => Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_nominal_kind",
+                "nominal state has no declaration",
+            )),
+        }
+    }
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
         self.types.get(&digest).cloned().ok_or_else(|| {
             artifact_error(
@@ -2118,7 +2698,7 @@ impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
             OwnerKey::Declaration(declaration.declaration),
         )) {
             match &unit.payload {
-                CompilationPayload::Record { fields } => {
+                CompilationPayload::Record { fields, .. } => {
                     let mut shape = BTreeMap::new();
                     for field in fields {
                         let reference = table_value(
@@ -2171,7 +2751,7 @@ impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
                     }
                     return Ok(crate::platform::session::SessionNominalShape::Record(shape));
                 }
-                CompilationPayload::Variant { cases } => {
+                CompilationPayload::Variant { cases, .. } => {
                     let mut shape = BTreeMap::new();
                     for case in cases {
                         let reference = table_value(
@@ -2244,11 +2824,11 @@ impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
         let (record, members) = match record {
             ArtifactSessionRecord::Local(OwnerRecord::Declaration(record)) => {
                 match record.payload {
-                    DeclarationPayload::Record { fields } => (
+                    DeclarationPayload::Record { fields, .. } => (
                         true,
                         fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
                     ),
-                    DeclarationPayload::Variant { cases } => (
+                    DeclarationPayload::Variant { cases, .. } => (
                         false,
                         cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
                     ),
@@ -2263,11 +2843,11 @@ impl crate::platform::session::SessionShapeRead for ArtifactSessionRead<'_> {
             }
             ArtifactSessionRecord::Interface(PackageInterfaceRecord::Declaration(record)) => {
                 match record.payload {
-                    PackageInterfaceDeclarationPayload::Record { fields } => (
+                    PackageInterfaceDeclarationPayload::Record { fields, .. } => (
                         true,
                         fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
                     ),
-                    PackageInterfaceDeclarationPayload::Variant { cases } => (
+                    PackageInterfaceDeclarationPayload::Variant { cases, .. } => (
                         false,
                         cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
                     ),
@@ -2738,7 +3318,7 @@ fn validate_reference_owners(
     store: &TrackingObjectStore<'_>,
     store_work: &mut StoreWork,
     total_map_work: &mut MapWork,
-) -> Result<(), Diagnostic> {
+) -> Result<BTreeMap<(PackageId, OwnerKey), OwnerRecord>, Diagnostic> {
     let mut records = BTreeMap::<(PackageId, OwnerKey), OwnerRecord>::new();
     for package in &manifest.packages {
         let reader = ObjectPageReader::new(store);
@@ -2914,7 +3494,7 @@ fn validate_reference_owners(
             ));
         }
     }
-    Ok(())
+    Ok(records)
 }
 
 fn reference_compilation_payload(payload: &CompilationPayload) -> bool {
@@ -3035,12 +3615,22 @@ fn validate_unit_relocations(
     let mut ports = BTreeSet::new();
     for unit in units.values() {
         match &unit.payload {
-            CompilationPayload::Record { fields: layouts } => {
+            CompilationPayload::Record {
+                fields: layouts,
+                type_parameters: parameters,
+                ..
+            } => {
+                type_parameters.extend(parameters.iter().copied());
                 for layout in layouts {
                     fields.insert(unit.tables.fields[layout.field as usize]);
                 }
             }
-            CompilationPayload::Variant { cases: layouts } => {
+            CompilationPayload::Variant {
+                cases: layouts,
+                type_parameters: parameters,
+                ..
+            } => {
+                type_parameters.extend(parameters.iter().copied());
                 for layout in layouts {
                     cases.insert(unit.tables.cases[layout.case as usize]);
                 }

@@ -660,7 +660,7 @@ fn generic_preparation_rejects_an_invalid_result_type_on_the_owner_frontier() {
 }
 
 #[test]
-fn request_expression_step_admission_stops_before_zero_and_accepts_exactly_one() {
+fn request_expression_and_declared_type_admission_stops_before_exact_limit() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("base witness");
     let callee = declaration_named(&base, "callee");
@@ -690,15 +690,43 @@ fn request_expression_step_admission_stops_before_zero_and_accepts_exactly_one()
 
     let mut one = ChangeBudget::default();
     one.validation.maximum_expression_steps = 1;
+    let diagnostics = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta.clone(),
+        one,
+        ChangeBudgetWork::default(),
+    )
+    .expect_err("one step cannot admit both declared type and expression validation");
+    assert_eq!(
+        diagnostics[0].code,
+        "change_budget_validation_expression_steps"
+    );
+    let mut exact = ChangeBudget::default();
+    exact.validation.maximum_expression_steps = 3;
+    assert_eq!(
+        prepare_change_analysis_with_budget(
+            &base,
+            &base_witness,
+            delta.clone(),
+            exact,
+            ChangeBudgetWork::default()
+        )
+        .expect_err("one less than the complete four-step proof rejects")[0]
+            .code,
+        "change_budget_validation_expression_steps"
+    );
+    let mut exact = ChangeBudget::default();
+    exact.validation.maximum_expression_steps = 4;
     let prepared = prepare_change_analysis_with_budget(
         &base,
         &base_witness,
         delta,
-        one,
+        exact,
         ChangeBudgetWork::default(),
     )
-    .expect("one-step expression validation must fit an exact one-step admission");
-    assert_eq!(prepared.validation.work.expression_work, 1);
+    .expect("parameter owner, parameter type, result type and body fit exactly four steps");
+    assert_eq!(prepared.validation.work.expression_work, 4);
 }
 
 #[test]

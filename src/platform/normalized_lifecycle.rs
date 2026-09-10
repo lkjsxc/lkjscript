@@ -169,23 +169,37 @@ pub fn prepare_application(project: &Path) -> Result<PreparedApplication, Diagno
 }
 
 pub fn prepare_repository(repository: GraphRepository) -> Result<PreparedApplication, Diagnostic> {
+    prepare_repository_with_control(repository, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn prepare_repository_with_control(
+    repository: GraphRepository,
+    control: &ExecutionControl,
+) -> Result<PreparedApplication, Diagnostic> {
+    control
+        .check()
+        .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))?;
     let current = repository.current()?;
     let closure = repository.export_package_container()?;
     let oracle = super::package_transport::oracle::reconstruct(&closure.container)?;
-    let mut schema = super::execution::normalized::NormalizedReferenceSchema::reconstruct(
-        oracle.snapshots.values(),
-    )
-    .map_err(|error| {
-        Diagnostic::new(
-            if error.class == super::execution::ExecutionFailureClass::Resource {
-                DiagnosticClass::Resource
-            } else {
-                DiagnosticClass::Corrupt
-            },
-            error.code,
-            error.message,
+    let mut schema =
+        super::execution::normalized::NormalizedReferenceSchema::reconstruct_with_control(
+            oracle.snapshots.values(),
+            control,
         )
-    })?;
+        .map_err(|error| {
+            Diagnostic::new(
+                match error.class {
+                    super::execution::ExecutionFailureClass::Resource => DiagnosticClass::Resource,
+                    super::execution::ExecutionFailureClass::Cancelled => {
+                        DiagnosticClass::Cancelled
+                    }
+                    _ => DiagnosticClass::Corrupt,
+                },
+                error.code,
+                error.message,
+            )
+        })?;
     // This inventory is prepared once with canonical admission, then shared immutably. Execution
     // observations charge their actual owner/blob reads, not a fictitious reconstruction per call.
     schema.work = Default::default();
@@ -411,7 +425,7 @@ pub fn prepare_repository(repository: GraphRepository) -> Result<PreparedApplica
     let artifact = load_artifact(&artifact_bytes)?;
     let artifact_manifest = artifact.manifest_digest;
     let artifact_bundle = artifact.bundle_digest;
-    let program = NormalizedProgram::prepare(artifact)?;
+    let program = NormalizedProgram::prepare_with_control(artifact, control)?;
     let prepared = PreparedApplication {
         repository,
         repository_id: current.head.repository_id,

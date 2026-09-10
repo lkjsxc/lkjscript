@@ -246,10 +246,18 @@ impl DeclarationRecord {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
         match &self.payload {
-            DeclarationPayload::Record { fields } => {
+            DeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                validate_ordered_unique("record type parameters", type_parameters, true)?;
                 validate_sorted_ids("record fields", fields, false)
             }
-            DeclarationPayload::Variant { cases } => {
+            DeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                validate_ordered_unique("variant type parameters", type_parameters, true)?;
                 validate_sorted_ids("variant cases", cases, false)
             }
             DeclarationPayload::Interface { operations } => {
@@ -324,9 +332,11 @@ pub enum DeclarationVisibility {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DeclarationPayload {
     Record {
+        type_parameters: Vec<TypeParameterId>,
         fields: Vec<FieldId>,
     },
     Variant {
+        type_parameters: Vec<TypeParameterId>,
         cases: Vec<CaseId>,
     },
     Interface {
@@ -347,6 +357,22 @@ pub enum DeclarationPayload {
         expected: ExpressionId,
         comparison: ComparisonPolicy,
     },
+}
+
+impl DeclarationPayload {
+    pub fn type_parameters(&self) -> &[TypeParameterId] {
+        match self {
+            Self::Record {
+                type_parameters, ..
+            }
+            | Self::Variant {
+                type_parameters, ..
+            } => type_parameters,
+            Self::Function(function) => &function.type_parameters,
+            Self::External(function) => &function.type_parameters,
+            _ => &[],
+        }
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

@@ -31,10 +31,10 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-8";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 8;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF08";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v8";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-9";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 9;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF09";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v9";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -286,9 +286,11 @@ impl PackageInterfaceSelection {
         }
         let declaration = declaration_id(record.header.owner)?;
         self.declarations.insert(declaration);
+        self.type_parameters
+            .extend(record.payload.type_parameters());
         match &record.payload {
-            DeclarationPayload::Record { fields } => self.fields.extend(fields),
-            DeclarationPayload::Variant { cases } => self.cases.extend(cases),
+            DeclarationPayload::Record { fields, .. } => self.fields.extend(fields),
+            DeclarationPayload::Variant { cases, .. } => self.cases.extend(cases),
             DeclarationPayload::Interface { operations } => self.operations.extend(operations),
             DeclarationPayload::External(ExternalDeclaration {
                 type_parameters,
@@ -584,8 +586,14 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
 pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -> u64 {
     let children = match &owner.record {
         PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => fields.len(),
-            PackageInterfaceDeclarationPayload::Variant { cases } => cases.len(),
+            PackageInterfaceDeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => fields.len().saturating_add(type_parameters.len()),
+            PackageInterfaceDeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => cases.len().saturating_add(type_parameters.len()),
             PackageInterfaceDeclarationPayload::Interface { operations } => operations.len(),
             PackageInterfaceDeclarationPayload::Function(function) => {
                 function.parameters.len()
@@ -631,7 +639,19 @@ fn validate_owner_closure(
             ));
         };
         match &declaration.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => {
+            PackageInterfaceDeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                for parameter in type_parameters {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::TypeParameter(*parameter),
+                        OwnerKind::TypeParameter,
+                        Some(*declaration_id),
+                    )?;
+                }
                 for field in fields {
                     require_child(
                         owners,
@@ -642,7 +662,19 @@ fn validate_owner_closure(
                     )?;
                 }
             }
-            PackageInterfaceDeclarationPayload::Variant { cases } => {
+            PackageInterfaceDeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                for parameter in type_parameters {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::TypeParameter(*parameter),
+                        OwnerKind::TypeParameter,
+                        Some(*declaration_id),
+                    )?;
+                }
                 for case in cases {
                     require_child(
                         owners,
@@ -933,7 +965,9 @@ fn validate_interface_type_reference(
                 ));
             }
         }
-        TypeForm::Named { declaration } if declaration.package == package => {
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+            if declaration.package == package =>
+        {
             let key = OwnerKey::Declaration(declaration.declaration);
             let Some(value) = owners.get(&key) else {
                 return Err(interface_error(
@@ -948,6 +982,28 @@ fn validate_interface_type_reference(
                     "package_interface_named_type_kind",
                     "public signature names a declaration that is not a record or variant",
                 ));
+            }
+            if let PackageInterfaceRecord::Declaration(record) = &value.record {
+                let parameters = match &record.payload {
+                    PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => type_parameters,
+                    _ => return Err(interface_corrupt("nominal interface has a foreign kind")),
+                };
+                let count = match form {
+                    TypeForm::Applied { arguments, .. } => arguments.len(),
+                    _ => 0,
+                };
+                if parameters.len() != count {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "package_interface_nominal_arity",
+                        "interface type has wrong nominal application arity",
+                    ));
+                }
             }
         }
         TypeForm::CapabilityResource { interface } if interface.package == package => {
@@ -968,6 +1024,7 @@ fn validate_interface_type_reference(
             }
         }
         TypeForm::Named { .. }
+        | TypeForm::Applied { .. }
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Unit
         | TypeForm::Bool

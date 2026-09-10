@@ -74,6 +74,10 @@ pub enum AuthoredType {
     Named {
         declaration: AuthoredDeclarationReference,
     },
+    Applied {
+        declaration: AuthoredDeclarationReference,
+        arguments: Vec<AuthoredType>,
+    },
     CapabilityResource {
         interface: AuthoredDeclarationReference,
     },
@@ -238,10 +242,12 @@ pub enum AuthoredExpressionOperation {
     },
     Record {
         nominal_type: Option<AuthoredDeclarationReference>,
+        type_arguments: Vec<AuthoredType>,
         fields: Vec<AuthoredRecordExpressionField>,
     },
     Variant {
         case: AuthoredCaseReference,
+        type_arguments: Vec<AuthoredType>,
         payload: Option<Box<AuthoredExpression>>,
     },
     Field {
@@ -565,6 +571,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredType::Named { declaration } => TypeForm::Named {
                 declaration: self.lower_declaration_reference(declaration)?,
             },
+            AuthoredType::Applied {
+                declaration,
+                arguments,
+            } => TypeForm::Applied {
+                declaration: self.lower_declaration_reference(declaration)?,
+                arguments: self.lower_types(arguments)?,
+            },
             AuthoredType::CapabilityResource { interface } => TypeForm::CapabilityResource {
                 interface: self.lower_declaration_reference(interface)?,
             },
@@ -784,6 +797,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             },
             AuthoredExpressionOperation::Record {
                 nominal_type,
+                type_arguments,
                 fields,
             } => {
                 let mut lowered = Vec::with_capacity(fields.len());
@@ -795,6 +809,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }
                 lowered.sort_by(|left, right| left.selector.cmp(&right.selector));
                 ExpressionOperation::Record {
+                    type_arguments: self.lower_types(type_arguments)?,
                     nominal_type: nominal_type
                         .as_ref()
                         .map(|value| self.lower_declaration_reference(value))
@@ -802,15 +817,18 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     fields: lowered,
                 }
             }
-            AuthoredExpressionOperation::Variant { case, payload } => {
-                ExpressionOperation::Variant {
-                    case: self.lower_case_reference(case)?,
-                    payload: payload
-                        .as_ref()
-                        .map(|value| self.lower_expression(value))
-                        .transpose()?,
-                }
-            }
+            AuthoredExpressionOperation::Variant {
+                case,
+                type_arguments,
+                payload,
+            } => ExpressionOperation::Variant {
+                type_arguments: self.lower_types(type_arguments)?,
+                case: self.lower_case_reference(case)?,
+                payload: payload
+                    .as_ref()
+                    .map(|value| self.lower_expression(value))
+                    .transpose()?,
+            },
             AuthoredExpressionOperation::Field { value, selector } => ExpressionOperation::Field {
                 value: self.lower_expression(value)?,
                 selector: self.lower_field_selector(selector)?,

@@ -10,7 +10,7 @@ pub(super) struct Request {
 }
 
 impl Request {
-    fn expression(&mut self, form: &str, fields: &str) -> String {
+    pub(crate) fn expression(&mut self, form: &str, fields: &str) -> String {
         let symbol = format!("$e{}", self.next);
         self.next += 1;
         self.text
@@ -18,15 +18,15 @@ impl Request {
         symbol
     }
 
-    fn local(&mut self, name: &str) -> String {
+    pub(crate) fn local(&mut self, name: &str) -> String {
         self.expression("local", &format!("value={name}"))
     }
 
-    fn integer(&mut self, value: i64) -> String {
+    pub(crate) fn integer(&mut self, value: i64) -> String {
         self.expression("i64", &format!("value={value}"))
     }
 
-    fn arguments(&mut self, symbol: &str, arguments: &[String]) {
+    pub(crate) fn arguments(&mut self, symbol: &str, arguments: &[String]) {
         for (index, argument) in arguments.iter().enumerate() {
             self.text.push_str(&format!(
                 "expression.argument parent={symbol} index={index} expression={argument}\n"
@@ -34,7 +34,7 @@ impl Request {
         }
     }
 
-    fn types(&mut self, symbol: &str, types: &[&str]) {
+    pub(crate) fn types(&mut self, symbol: &str, types: &[&str]) {
         for (index, ty) in types.iter().enumerate() {
             self.text.push_str(&format!(
                 "type.argument parent={symbol} index={index} type={ty}\n"
@@ -42,30 +42,36 @@ impl Request {
         }
     }
 
-    fn call(&mut self, function: &str, types: &[&str], arguments: &[String]) -> String {
+    pub(crate) fn call(&mut self, function: &str, types: &[&str], arguments: &[String]) -> String {
         let symbol = self.expression("call", &format!("function={function}"));
         self.types(&symbol, types);
         self.arguments(&symbol, arguments);
         symbol
     }
 
-    fn function_value(&mut self, function: &str) -> String {
+    pub(crate) fn function_value(&mut self, function: &str) -> String {
         self.expression("function-value", &format!("function={function}"))
     }
 
-    fn bind(&mut self, callee: &str, captures: &[String]) -> String {
+    pub(crate) fn bind(&mut self, callee: &str, captures: &[String]) -> String {
         let result = self.expression("bind", &format!("callee={callee}"));
         self.arguments(&result, captures);
         result
     }
 
-    fn invoke(&mut self, callee: &str, arguments: &[String]) -> String {
+    pub(crate) fn invoke(&mut self, callee: &str, arguments: &[String]) -> String {
         let result = self.expression("invoke", &format!("function={callee}"));
         self.arguments(&result, arguments);
         result
     }
 
-    fn function(&mut self, name: &str, result: &str, body: &str, parameters: &[(&str, &str)]) {
+    pub(crate) fn function(
+        &mut self,
+        name: &str,
+        result: &str,
+        body: &str,
+        parameters: &[(&str, &str)],
+    ) {
         self.text.push_str(&format!("create.function as=${name} module=$module name={name} visibility=public result={result} effect=pure body={body}\n"));
         for (parameter, ty) in parameters {
             self.text.push_str(&format!(
@@ -74,7 +80,7 @@ impl Request {
         }
     }
 
-    fn target(&mut self, name: &str, result: &str, parameters: &[&str]) {
+    pub(crate) fn target(&mut self, name: &str, result: &str, parameters: &[&str]) {
         self.text
             .push_str(&format!("type.function as=@{name} result={result}\n"));
         self.types(&format!("@{name}"), parameters);
@@ -100,11 +106,16 @@ impl Request {
         )
     }
 
-    fn field(&mut self, value: &str, name: &str) -> String {
+    pub(crate) fn field(&mut self, value: &str, name: &str) -> String {
         self.expression("field", &format!("value={value} name={name}"))
     }
 
-    fn capability(&mut self, requirement: &str, operation: &str, arguments: &[String]) -> String {
+    pub(crate) fn capability(
+        &mut self,
+        requirement: &str,
+        operation: &str,
+        arguments: &[String],
+    ) -> String {
         let value = self.expression(
             "capability-call",
             &format!("requirement={requirement} operation={operation}"),
@@ -118,8 +129,10 @@ pub(super) fn http(
     standard: &BTreeMap<String, String>,
     bindings: &BTreeMap<String, String>,
     helper: &str,
+    nominal: &BTreeMap<String, String>,
 ) -> String {
     let mut request = Request::default();
+    request.text.push_str(&format!("create.variant as=$Edit module={} name=Edit visibility=public\nadd.type-parameter as=$EditT declaration=$Edit name=T\ntype.parameter as=@EditT parameter=$EditT\ntype.application as=@EditBatch declaration={}\ntype.argument parent=@EditBatch index=0 type=@EditT\nadd.case as=$Keep variant=$Edit name=keep\nadd.case as=$Replace variant=$Edit name=replace payload=@EditBatch\ntype.application as=@StoredBatch declaration={}\ntype.argument parent=@StoredBatch index=0 type=i64\ntype.application as=@StoredEdit declaration=$Edit\ntype.argument parent=@StoredEdit index=0 type=i64\ntype.structural-record as=@Stored\ntype.field parent=@Stored index=0 name=batch type=@StoredBatch\ntype.field parent=@Stored index=1 name=edit type=@StoredEdit\n",bindings["module"],nominal["batch"],nominal["batch"]));
     request.text.push_str(&format!("type.list as=@items item=i64\ntype.named as=@key-part declaration={}\nadd.requirement as=$data component={} name=data interface={}\nrequirement.limit parent=$data index=0 name=maximum_calls maximum=16 unit=calls\n",standard["DataKeyPart"],bindings["component"],standard["DataStore"]));
     for (index, name) in [
         "schema-read",
@@ -175,7 +188,17 @@ pub(super) fn http(
     let key = request.expression("list", "item=@key-part");
     request.arguments(&key, &[part]);
     let value = request.local("$mapped-output");
-    let bytes = request.call(&standard["json-encode"], &["@items"], &[value]);
+    let revision = request.integer(7);
+    let batch = request.expression("record", &format!("type={}", nominal["batch"]));
+    request.types(&batch, &["i64"]);
+    request.text.push_str(&format!("expression.record-field parent={batch} index=0 field={} value={revision}\nexpression.record-field parent={batch} index=1 field={} value={value}\n",nominal["revision"],nominal["items"]));
+    let batch_value = request.local("$stored-batch");
+    let edit = request.expression("variant", &format!("case=$Replace payload={batch_value}"));
+    request.types(&edit, &["i64"]);
+    let stored = request.expression("record", "");
+    let batch_value = request.local("$stored-batch");
+    request.text.push_str(&format!("expression.record-field parent={stored} index=0 name=batch value={batch_value}\nexpression.record-field parent={stored} index=1 name=edit value={edit}\n"));
+    let bytes = request.call(&standard["data-encode"], &["@Stored"], &[stored]);
     request.text.push_str(&format!(
         "type.named as=@data-entry declaration={}\n",
         standard["DataEntry"]
@@ -207,11 +230,49 @@ pub(super) fn http(
         &standard["DataStore.put"],
         &[space, key, bytes, exact],
     );
-    let value = request.local("$mapped-output");
+    let read_space = request.expression("static-text", "value=tail");
+    let read_key = request.local("$write-key");
+    let read_part = request.expression(
+        "variant",
+        &format!("case={} payload={read_key}", standard["DataKeyPart.Text"]),
+    );
+    let read_key = request.expression("list", "item=@key-part");
+    request.arguments(&read_key, &[read_part]);
+    let entries = request.capability("$data", &standard["DataStore.get"], &[read_space, read_key]);
+    let zero = request.integer(0);
+    let entry = request.call(&standard["list-get"], &["@data-entry"], &[entries, zero]);
+    let bytes = request.expression(
+        "field",
+        &format!("value={entry} field={}", standard["DataEntry.value"]),
+    );
+    // A visibly different fallback prevents a broken decode from reproducing the mapped result.
+    let empty = request.expression("list", "item=i64");
+    let revision = request.integer(-1);
+    let fallback_batch = request.expression("record", &format!("type={}", nominal["batch"]));
+    request.types(&fallback_batch, &["i64"]);
+    request.text.push_str(&format!("expression.record-field parent={fallback_batch} index=0 field={} value={revision}\nexpression.record-field parent={fallback_batch} index=1 field={} value={empty}\n", nominal["revision"], nominal["items"]));
+    let keep = request.expression("variant", "case=$Keep");
+    request.types(&keep, &["i64"]);
+    let fallback = request.expression("record", "");
+    request.text.push_str(&format!("expression.record-field parent={fallback} index=0 name=batch value={fallback_batch}\nexpression.record-field parent={fallback} index=1 name=edit value={keep}\n"));
+    let decoded = request.call(
+        &standard["data-decode-or"],
+        &["@Stored"],
+        &[bytes, fallback],
+    );
+    let edit = request.field(&decoded, "edit");
+    let replacement = request.local("$read-replacement");
+    let value = request.expression(
+        "field",
+        &format!("value={replacement} field={}", nominal["items"]),
+    );
+    let read = request.expression("match", &format!("value={edit}"));
+    let empty = request.expression("list", "item=i64");
+    request.text.push_str(&format!("expression.match-arm parent={read} index=0 case=$Keep body={empty}\nexpression.match-arm parent={read} index=1 case=$Replace as=$read-replacement name=replacement type=@StoredBatch body={value}\n"));
     let saved = request.expression("sequence", "");
-    request.arguments(&saved, &[save, value]);
+    request.arguments(&saved, &[save, read]);
     let returned = request.expression("let", &format!("body={saved}"));
-    request.text.push_str(&format!("expression.binding parent={returned} index=0 as=$mapped-output name=mapped value={folded} type=@items\n"));
+    request.text.push_str(&format!("expression.binding parent={returned} index=0 as=$mapped-output name=mapped value={folded} type=@items\nexpression.binding parent={returned} index=1 as=$stored-batch name=batch value={batch} type=@StoredBatch\n"));
     let steps = request.expression("sequence", "");
     request.arguments(&steps, &[put, returned]);
     let transaction = request.expression(
@@ -300,9 +361,9 @@ type.argument parent=@helper-step index=1 type=@HI
     let body = request.invoke(&step, &[env, input]);
     request.text.push_str(&format!("create.function as=$configure-helper module=$module name=configure-helper visibility=private result=@HO effect=pure body={body}\n"));
     request.text.push_str(
-        r#"add.type-parameter as=$HE function=$configure-helper name=Env
-add.type-parameter as=$HI function=$configure-helper name=Input
-add.type-parameter as=$HO function=$configure-helper name=Output
+        r#"add.type-parameter as=$HE declaration=$configure-helper name=Env
+add.type-parameter as=$HI declaration=$configure-helper name=Input
+add.type-parameter as=$HO declaration=$configure-helper name=Output
 add.parameter as=$configure-helper_env function=$configure-helper name=env type=@HE
 add.parameter as=$configure-helper_step function=$configure-helper name=step type=@helper-step
 add.parameter as=$configure-helper_input function=$configure-helper name=input type=@HI
@@ -319,7 +380,7 @@ add.parameter as=$configure-helper_input function=$configure-helper name=input t
         &body,
         &[("env", "@Env"), ("step", "@generic-step")],
     );
-    request.text.push_str("add.type-parameter as=$Env function=$configure name=Env constraint=capture-safe\nadd.type-parameter as=$Input function=$configure name=Input\nadd.type-parameter as=$Output function=$configure name=Output\n");
+    request.text.push_str("add.type-parameter as=$Env declaration=$configure name=Env constraint=capture-safe\nadd.type-parameter as=$Input declaration=$configure name=Input\nadd.type-parameter as=$Output declaration=$configure name=Output\n");
 }
 
 pub(super) fn library(standard: &BTreeMap<String, String>) -> String {
@@ -351,7 +412,7 @@ pub(super) fn library(standard: &BTreeMap<String, String>) -> String {
         &body,
         &[("n", "i64"), ("a", "@A"), ("b", "@B")],
     );
-    request.text.push_str("add.type-parameter as=$A function=$keep name=A\nadd.type-parameter as=$B function=$keep name=B\n");
+    request.text.push_str("add.type-parameter as=$A declaration=$keep name=A\nadd.type-parameter as=$B declaration=$keep name=B\n");
     configure_factory(&mut request);
     request.text.push_str("type.function as=@reducer result=i64\ntype.argument parent=@reducer index=0 type=i64\ntype.argument parent=@reducer index=1 type=i64\n");
     let scale = request.local("$configured-step_scale");
@@ -552,7 +613,53 @@ pub(super) fn consumer(
     request.target("forward-generic", "i64", &["i64", "@items"]);
     binding_consumer(&mut request, standard, factory, configure);
     mapping_consumer(&mut request, standard, configure);
+    nominal_consumer(&mut request, standard, library, configure);
     request.text
+}
+
+fn nominal_consumer(
+    request: &mut Request,
+    standard: &BTreeMap<String, String>,
+    library: &str,
+    configure: &str,
+) {
+    request.text.push_str("create.record as=$Batch module=$module name=Batch visibility=public\nadd.type-parameter as=$BatchItem declaration=$Batch name=Item\ntype.parameter as=@BatchItem parameter=$BatchItem\ntype.list as=@BatchItems item=@BatchItem\nadd.field as=$BatchRevision record=$Batch name=revision type=i64\nadd.field as=$BatchValues record=$Batch name=items type=@BatchItems\ntype.application as=@Batch declaration=$Batch\ntype.argument parent=@Batch index=0 type=i64\n");
+    let n = request.local("$nominal-forward_n");
+    let batch = request.local("$nominal-forward_batch");
+    let flag = request.expression("bool", "value=true");
+    let passed = request.call(library, &["@Batch", "bool"], &[n, batch, flag]);
+    let items = request.expression("field", &format!("value={passed} field=$BatchValues"));
+    let length = request.call(&standard["list-length"], &["i64"], &[items]);
+    request.function(
+        "nominal-forward",
+        "i64",
+        &length,
+        &[("n", "i64"), ("batch", "@Batch")],
+    );
+    request.target("nominal-forward", "i64", &["i64", "@Batch"]);
+    let batch = request.local("$nominal-length_batch");
+    let items = request.expression("field", &format!("value={batch} field=$BatchValues"));
+    let length = request.call(&standard["list-length"], &["i64"], &[items]);
+    request.function(
+        "nominal-length",
+        "i64",
+        &length,
+        &[("batch", "@Batch"), ("ignored", "unit")],
+    );
+    let batch = request.local("$nominal-bound_batch");
+    let callback = request.function_value("$nominal-length");
+    let retained = request.call(configure, &["@Batch", "unit", "i64"], &[batch, callback]);
+    let unit = request.expression("unit", "");
+    let closure = request.bind(&retained, &[unit]);
+    let n = request.local("$nominal-bound_n");
+    let body = request.call("$forward-bound", &[], &[n, closure]);
+    request.function(
+        "nominal-bound",
+        "i64",
+        &body,
+        &[("n", "i64"), ("batch", "@Batch")],
+    );
+    request.target("nominal-bound", "i64", &["i64", "@Batch"]);
 }
 
 fn mapping_consumer(request: &mut Request, standard: &BTreeMap<String, String>, configure: &str) {

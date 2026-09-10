@@ -461,6 +461,11 @@ fn kernel_type(
         TypeForm::CapabilityResource { .. } => {
             return Err(signature_error("external cannot accept resource types"));
         }
+        TypeForm::Applied { .. } => {
+            return Err(signature_error(
+                "external contract does not declare a nominal application",
+            ));
+        }
         TypeForm::StructuralRecord { fields } => record(
             fields
                 .iter()

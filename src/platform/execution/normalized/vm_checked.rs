@@ -349,8 +349,12 @@ impl Value {
 
     // A free parent proves that every descendant is free. These methods expose only actual
     // children, not a caller-selected raw value or asserted classification.
-    pub(super) fn field(self, selector: &NormalizedFieldSelector) -> Result<Self, ExecutionError> {
-        let raw = super::select_field(self.raw, selector)?;
+    pub(super) fn field(
+        self,
+        selector: &NormalizedFieldSelector,
+        program: &NormalizedProgram,
+    ) -> Result<Self, ExecutionError> {
+        let raw = super::select_field(self.raw, selector, program)?;
         Ok(Self {
             raw,
             origin: self.origin,
@@ -708,19 +712,27 @@ impl Admission<'_> {
                         "capture type contains a secret, stream, resource, or unresolved stored parameter",
                     ));
                 }
-                TypeForm::Named { declaration } => {
-                    if let Ok(index) = program
-                        .records
-                        .binary_search_by_key(declaration, |record| record.declaration)
+                TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                    if let Some(index) = program
+                        .record_instances
+                        .get(&identity)
+                        .map(|index| index.0 as usize)
                     {
+                        for argument in program.records[index].arguments.iter().rev() {
+                            append(*argument)?;
+                        }
                         let fields = &program.records[index].fields;
                         for field in fields.iter().rev() {
                             append(field.ty)?;
                         }
-                    } else if let Ok(index) = program
-                        .variants
-                        .binary_search_by_key(declaration, |variant| variant.declaration)
+                    } else if let Some(index) = program
+                        .variant_instances
+                        .get(&identity)
+                        .map(|index| index.0 as usize)
                     {
+                        for argument in program.variants[index].arguments.iter().rev() {
+                            append(*argument)?;
+                        }
                         let cases = &program.variants[index].cases;
                         for case in cases.iter().rev() {
                             control.check()?;
@@ -829,6 +841,18 @@ impl Admission<'_> {
                 ));
             }
             let ty = self.parameter(ty, &bindings)?;
+            let identity = self
+                .type_identity(ty, &bindings, 0)
+                .ok_or_else(|| admission_error("raw nominal type substitution is unresolved"))?;
+            let application_free = self.program.application_free_types.contains(&ty)
+                && bindings
+                    .values()
+                    .all(|argument| self.program.application_free_types.contains(argument));
+            if !application_free && !self.program.ordinary_types.contains(&identity) {
+                return Err(admission_error(
+                    "raw application contains live authority, including empty or phantom arguments",
+                ));
+            }
             if capture {
                 self.require_capture_type(ty, &bindings, &mut capture_types)?;
                 if !matches!(class, Class::Free) || matches!(value, NormalizedValue::Resource(_)) {
@@ -856,9 +880,12 @@ impl Admission<'_> {
                 }
                 (
                     NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }),
-                    TypeForm::Named { declaration },
+                    TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
                 ) => {
-                    let definition = self.program.records.get(layout.0 as usize).filter(|definition| layout.1 == self.program.value_origin && definition.declaration == *declaration && definition.fields.len() == fields.len())
+                    let exact = self
+                        .type_identity(ty, &bindings, 0)
+                        .and_then(|ty| self.program.record_instances.get(&ty));
+                    let definition = self.program.records.get(layout.0 as usize).filter(|definition| exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration && definition.fields.len() == fields.len())
                         .ok_or_else(|| admission_error("raw nominal record has a foreign identity or shape; use the exact record layout"))?;
                     self.collection(fields.len())?;
                     for (field, definition) in fields.iter().zip(definition.fields.iter()) {
@@ -891,9 +918,12 @@ impl Admission<'_> {
                         case,
                         payload,
                     },
-                    TypeForm::Named { declaration },
+                    TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
                 ) => {
-                    let selected = self.program.variants.get(layout.0 as usize).filter(|definition| layout.1 == self.program.value_origin && definition.declaration == *declaration)
+                    let exact = self
+                        .type_identity(ty, &bindings, 0)
+                        .and_then(|ty| self.program.variant_instances.get(&ty));
+                    let selected = self.program.variants.get(layout.0 as usize).filter(|definition| exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration)
                         .and_then(|definition| definition.cases.get(*case as usize)).ok_or_else(|| admission_error("raw variant has a foreign identity or case; use the exact nominal layout"))?;
                     match (payload, selected.payload) {
                         (None, None) => {}
@@ -1147,8 +1177,22 @@ impl Admission<'_> {
         if depth > 256 {
             return None;
         }
+        if bindings.is_empty() {
+            return self.program.types.contains_key(&ty).then_some(ty);
+        }
         let descend = |ty| self.type_identity(ty, bindings, depth + 1);
         let form = match &self.program.types.get(&ty)?.form {
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => TypeForm::Applied {
+                declaration: *declaration,
+                arguments: arguments
+                    .iter()
+                    .copied()
+                    .map(descend)
+                    .collect::<Option<_>>()?,
+            },
             TypeForm::TypeParameter { parameter } => {
                 return bindings
                     .get(parameter)
@@ -1191,7 +1235,7 @@ impl Admission<'_> {
                     .collect::<Option<_>>()?,
                 result: descend(*result)?,
             },
-            form => form.clone(),
+            _ => return Some(ty),
         };
         crate::platform::kernel::encode_type_object(
             &crate::platform::kernel::TypeObject::new(form).ok()?,

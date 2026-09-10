@@ -61,6 +61,8 @@ pub struct NormalizedPreparationWork {
     pub compiler_units: u64,
     pub runtime_owners: u64,
     pub type_objects: u64,
+    pub type_derivation_steps: u64,
+    pub type_metadata_bytes: u64,
     pub instructions: u64,
     pub functions: u64,
     pub record_layouts: u64,
@@ -129,10 +131,12 @@ pub enum NormalizedInstruction {
     },
     Record {
         layout: Option<RecordLayoutIndex>,
+        type_arguments: Arc<[TypeObjectDigest]>,
         fields: Arc<[NormalizedFieldSelector]>,
     },
     Variant {
         layout: VariantLayoutIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
         case: u32,
         has_payload: bool,
     },
@@ -216,6 +220,9 @@ pub struct NormalizedRecordField {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedRecordLayout {
     pub declaration: DeclarationReference,
+    pub type_parameters: Arc<[TypeParameterId]>,
+    pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
+    pub arguments: Arc<[TypeObjectDigest]>,
     pub fields: Arc<[NormalizedRecordField]>,
 }
 
@@ -229,6 +236,9 @@ pub struct NormalizedVariantCase {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedVariantLayout {
     pub declaration: DeclarationReference,
+    pub type_parameters: Arc<[TypeParameterId]>,
+    pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
+    pub arguments: Arc<[TypeObjectDigest]>,
     pub cases: Arc<[NormalizedVariantCase]>,
 }
 
@@ -311,6 +321,9 @@ pub struct NormalizedProgram {
     pub(super) value_origin: super::value::ValueOrigin,
     pub(super) affine_variants: Arc<[bool]>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
+    pub(super) ordinary_types: BTreeSet<TypeObjectDigest>,
+    pub(super) comparable_types: BTreeSet<TypeObjectDigest>,
+    pub(super) application_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) capture_proof_bytes: usize,
     artifact: Arc<LoadedArtifact>,
     pub root_repository: RepositoryId,
@@ -323,6 +336,8 @@ pub struct NormalizedProgram {
     pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
     pub(crate) records: Arc<[NormalizedRecordLayout]>,
     pub(crate) variants: Arc<[NormalizedVariantLayout]>,
+    pub(super) record_instances: BTreeMap<TypeObjectDigest, RecordLayoutIndex>,
+    pub(super) variant_instances: BTreeMap<TypeObjectDigest, VariantLayoutIndex>,
     pub(crate) requirements: Arc<[NormalizedRequirement]>,
     pub(crate) operations: Arc<[NormalizedOperation]>,
     pub(crate) components: Arc<[NormalizedComponent]>,
@@ -335,6 +350,19 @@ pub struct NormalizedProgram {
 
 impl NormalizedProgram {
     pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
+        Self::prepare_with_control(
+            artifact,
+            &crate::platform::execution::ExecutionControl::uncancelled(),
+        )
+    }
+
+    pub(crate) fn prepare_with_control(
+        artifact: LoadedArtifact,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, Diagnostic> {
+        control.check().map_err(|error| {
+            Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+        })?;
         let artifact = Arc::new(artifact);
         let mut work = NormalizedPreparationWork::default();
         let LoadedCompilationInputs { units, manifests } = load_units(&artifact, &mut work)?;
@@ -426,6 +454,9 @@ impl NormalizedProgram {
             value_origin,
             affine_variants,
             capture_safe_types: BTreeSet::new(),
+            ordinary_types: BTreeSet::new(),
+            comparable_types: BTreeSet::new(),
+            application_free_types: BTreeSet::new(),
             capture_proof_bytes: 0,
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
@@ -437,6 +468,8 @@ impl NormalizedProgram {
             #[cfg(test)]
             function_by_declaration: indexes.functions,
             records: records.into(),
+            record_instances: BTreeMap::new(),
+            variant_instances: BTreeMap::new(),
             variants: variants.into(),
             requirements: requirements.into(),
             operations: operations.into(),
@@ -447,7 +480,7 @@ impl NormalizedProgram {
             tests,
             types,
         };
-        super::prepared_types::complete(&mut program)?;
+        super::prepared_types::complete_controlled(&mut program, control)?;
         super::session::validate_program_interactive_targets(&program)?;
         Ok(program)
     }
@@ -501,6 +534,16 @@ impl NormalizedProgram {
                         })
                     })
                     .collect::<Option<Vec<_>>>()?,
+            },
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => TypeForm::Applied {
+                declaration: *declaration,
+                arguments: arguments
+                    .iter()
+                    .map(|ty| self.substitute_type(*ty, substitutions, next))
+                    .collect::<Option<_>>()?,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute_type(*item, substitutions, next)?,
@@ -638,7 +681,9 @@ impl RuntimeIndexes {
                 declaration: *declaration,
             };
             match &unit.payload {
-                CompilationPayload::Record { fields: layouts } => {
+                CompilationPayload::Record {
+                    fields: layouts, ..
+                } => {
                     let layout = required_index(&records, declaration, "record layout")?;
                     for (offset, field) in layouts.iter().enumerate() {
                         let field = index_copy(
@@ -655,7 +700,7 @@ impl RuntimeIndexes {
                         }
                     }
                 }
-                CompilationPayload::Variant { cases: layouts } => {
+                CompilationPayload::Variant { cases: layouts, .. } => {
                     let layout = required_index(&variants, declaration, "variant layout")?;
                     for (tag, case) in layouts.iter().enumerate() {
                         let case =
@@ -846,7 +891,12 @@ fn prepare_records(
     let mut records = vec![None; indexes.records.len()];
     for (declaration, index) in &indexes.records {
         let unit = declaration_unit(units, *declaration)?;
-        let CompilationPayload::Record { fields } = &unit.payload else {
+        let CompilationPayload::Record {
+            fields,
+            type_parameters,
+            type_parameter_constraints,
+        } = &unit.payload
+        else {
             return Err(runtime_corrupt(
                 "normalized_record_payload",
                 "record layout index names another compiler payload",
@@ -872,12 +922,15 @@ fn prepare_records(
                 Ok(NormalizedRecordField {
                     reference,
                     name: record.name.clone(),
-                    ty: record.ty,
+                    ty: index_copy(&unit.tables.types, field.ty, "compiled nominal field type")?,
                 })
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         records[index.0 as usize] = Some(NormalizedRecordLayout {
             declaration: *declaration,
+            type_parameters: type_parameters.clone().into(),
+            type_parameter_constraints: type_parameter_constraints.clone().into(),
+            arguments: Arc::from([]),
             fields: fields.into(),
         });
     }
@@ -892,7 +945,12 @@ fn prepare_variants(
     let mut variants = vec![None; indexes.variants.len()];
     for (declaration, index) in &indexes.variants {
         let unit = declaration_unit(units, *declaration)?;
-        let CompilationPayload::Variant { cases } = &unit.payload else {
+        let CompilationPayload::Variant {
+            cases,
+            type_parameters,
+            type_parameter_constraints,
+        } = &unit.payload
+        else {
             return Err(runtime_corrupt(
                 "normalized_variant_payload",
                 "variant layout index names another compiler payload",
@@ -918,12 +976,20 @@ fn prepare_variants(
                 Ok(NormalizedVariantCase {
                     reference,
                     name: record.name.clone(),
-                    payload: record.payload,
+                    payload: case
+                        .payload
+                        .map(|ty| {
+                            index_copy(&unit.tables.types, ty, "compiled nominal payload type")
+                        })
+                        .transpose()?,
                 })
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         variants[index.0 as usize] = Some(NormalizedVariantLayout {
             declaration: *declaration,
+            type_parameters: type_parameters.clone().into(),
+            type_parameter_constraints: type_parameter_constraints.clone().into(),
+            arguments: Arc::from([]),
             cases: cases.into(),
         });
     }
@@ -1437,14 +1503,14 @@ fn normalized_type_contains_resource(
             } else {
                 let unit = declaration_unit(units, *declaration)?;
                 let members = match &unit.payload {
-                    CompilationPayload::Record { fields } => fields
+                    CompilationPayload::Record { fields, .. } => fields
                         .iter()
                         .map(|field| {
                             index_copy(&unit.tables.types, field.ty, "named record field type")
                                 .map(Some)
                         })
                         .collect::<Result<Vec<_>, Diagnostic>>()?,
-                    CompilationPayload::Variant { cases } => cases
+                    CompilationPayload::Variant { cases, .. } => cases
                         .iter()
                         .map(|case| {
                             case.payload
@@ -2301,6 +2367,7 @@ fn translate_code(
             }
             CompiledInstruction::Record {
                 nominal_type,
+                type_arguments,
                 fields,
             } => {
                 let layout = nominal_type
@@ -2331,14 +2398,28 @@ fn translate_code(
                 }
                 NormalizedInstruction::Record {
                     layout,
+                    type_arguments: type_arguments
+                        .iter()
+                        .map(|ty| index_copy(&unit.tables.types, *ty, "nominal type argument"))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
                     fields: fields.into(),
                 }
             }
-            CompiledInstruction::Variant { case, has_payload } => {
+            CompiledInstruction::Variant {
+                case,
+                type_arguments,
+                has_payload,
+            } => {
                 let reference = index_copy(&unit.tables.cases, *case, "normalized variant case")?;
                 let (layout, case) = required_index(&indexes.cases, reference, "case")?;
                 NormalizedInstruction::Variant {
                     layout,
+                    type_arguments: type_arguments
+                        .iter()
+                        .map(|ty| index_copy(&unit.tables.types, *ty, "nominal type argument"))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
                     case,
                     has_payload: *has_payload,
                 }

@@ -1,4 +1,4 @@
-//! Current Graph 12 immutable-store contract facts.
+//! Immutable-store contract facts used by the current semantic graph.
 
 pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store-1";
 pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack-1";

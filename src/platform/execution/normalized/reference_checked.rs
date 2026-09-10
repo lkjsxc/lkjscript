@@ -595,6 +595,17 @@ impl ReferenceState<'_> {
             {
                 expected = *bindings.get(parameter).ok_or_else(|| reject("raw boundary has an unbound type parameter; supply all exact type arguments"))?;
             }
+            let identity = self
+                .schema
+                .instantiated_identity(expected, &bindings, 0)
+                .ok_or_else(|| reject("canonical raw type cannot be instantiated"))?;
+            let application_free = self.schema.application_free_types.contains(&expected)
+                && bindings
+                    .values()
+                    .all(|argument| self.schema.application_free_types.contains(argument));
+            if !application_free && !self.schema.ordinary_types.contains(&identity) {
+                return Err(reject("nominal type contains a live argument or member"));
+            }
             if captured {
                 self.check_capture_type(expected, &bindings, &mut capture_types)?;
                 if node_ownership != Ownership::Ordinary
@@ -631,66 +642,75 @@ impl ReferenceState<'_> {
                     };
                     self.charge_allocation(length as u64)?;
                 }
-                TypeForm::Named { declaration } => match node {
-                    NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }) => {
-                        let definition = schema.records.get(layout.0 as usize).filter(|record| layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                    match node {
+                        NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }) => {
+                            let exact = schema
+                                .instantiated_identity(expected, &bindings, 0)
+                                .and_then(|ty| schema.record_instances.get(&ty).copied());
+                            let definition = schema.records.get(layout.0 as usize).filter(|record| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
                             .ok_or_else(|| reject("raw record has a foreign nominal identity or shape; decode against the selected program"))?;
-                        self.charge_admission_children(
-                            fields.len(),
-                            std::mem::size_of::<NormalizedValue>(),
-                        )?;
-                        for (child, field) in fields.iter().zip(definition.fields.iter()).rev() {
-                            visits.push((
-                                child,
-                                field.ty,
-                                next_depth,
-                                false,
-                                Arc::clone(&bindings),
-                                captured,
-                            ));
-                        }
-                    }
-                    NormalizedValue::Variant {
-                        layout,
-                        case,
-                        payload,
-                    } => {
-                        let definition = schema.variants.get(layout.0 as usize).filter(|variant| layout.1 == schema.value_origin && variant.declaration == *declaration)
-                            .and_then(|variant| variant.cases.get(*case as usize)).ok_or_else(|| reject("raw sum has a foreign nominal identity or case; decode its exact canonical layout"))?;
-                        match (definition.payload, payload.as_deref()) {
-                            (None, None) => {}
-                            (Some(ty), Some(payload)) => {
-                                self.charge_admission_children(
-                                    1,
-                                    std::mem::size_of::<NormalizedValue>(),
-                                )?;
-                                let direct = schema.types.get(&ty).is_some_and(|ty| {
-                                    matches!(ty.form, TypeForm::CapabilityResource { .. })
-                                });
+                            self.charge_admission_children(
+                                fields.len(),
+                                std::mem::size_of::<NormalizedValue>(),
+                            )?;
+                            for (child, field) in fields.iter().zip(definition.fields.iter()).rev()
+                            {
                                 visits.push((
-                                    payload,
-                                    ty,
+                                    child,
+                                    field.ty,
                                     next_depth,
-                                    owner_position
-                                        && node_ownership == Ownership::AffineVariant
-                                        && direct,
+                                    false,
                                     Arc::clone(&bindings),
                                     captured,
                                 ));
                             }
-                            _ => {
-                                return Err(reject(
-                                    "raw sum payload presence is foreign; provide the selected case's exact payload",
-                                ));
+                        }
+                        NormalizedValue::Variant {
+                            layout,
+                            case,
+                            payload,
+                        } => {
+                            let exact = schema
+                                .instantiated_identity(expected, &bindings, 0)
+                                .and_then(|ty| schema.variant_instances.get(&ty).copied());
+                            let definition = schema.variants.get(layout.0 as usize).filter(|variant| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && variant.declaration == *declaration)
+                            .and_then(|variant| variant.cases.get(*case as usize)).ok_or_else(|| reject("raw sum has a foreign nominal identity or case; decode its exact canonical layout"))?;
+                            match (definition.payload, payload.as_deref()) {
+                                (None, None) => {}
+                                (Some(ty), Some(payload)) => {
+                                    self.charge_admission_children(
+                                        1,
+                                        std::mem::size_of::<NormalizedValue>(),
+                                    )?;
+                                    let direct = schema.types.get(&ty).is_some_and(|ty| {
+                                        matches!(ty.form, TypeForm::CapabilityResource { .. })
+                                    });
+                                    visits.push((
+                                        payload,
+                                        ty,
+                                        next_depth,
+                                        owner_position
+                                            && node_ownership == Ownership::AffineVariant
+                                            && direct,
+                                        Arc::clone(&bindings),
+                                        captured,
+                                    ));
+                                }
+                                _ => {
+                                    return Err(reject(
+                                        "raw sum payload presence is foreign; provide the selected case's exact payload",
+                                    ));
+                                }
                             }
                         }
+                        _ => {
+                            return Err(reject(
+                                "raw nominal type is represented by a foreign value; use its exact record or sum",
+                            ));
+                        }
                     }
-                    _ => {
-                        return Err(reject(
-                            "raw nominal type is represented by a foreign value; use its exact record or sum",
-                        ));
-                    }
-                },
+                }
                 TypeForm::StructuralRecord { fields: expected } => {
                     let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = node
                     else {
@@ -1358,18 +1378,18 @@ impl ReferenceState<'_> {
                         append(field.ty)?;
                     }
                 }
-                TypeForm::Named { declaration } => {
-                    if let Ok(index) = schema
-                        .records
-                        .binary_search_by_key(declaration, |record| record.declaration)
-                    {
+                TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                    if let Some(index) = schema.record_instances.get(&identity).copied() {
+                        for argument in schema.records[index].arguments.iter().rev() {
+                            append(*argument)?;
+                        }
                         for field in schema.records[index].fields.iter().rev() {
                             append(field.ty)?;
                         }
-                    } else if let Ok(index) = schema
-                        .variants
-                        .binary_search_by_key(declaration, |variant| variant.declaration)
-                    {
+                    } else if let Some(index) = schema.variant_instances.get(&identity).copied() {
+                        for argument in schema.variants[index].arguments.iter().rev() {
+                            append(*argument)?;
+                        }
                         for case in schema.variants[index].cases.iter().rev() {
                             if let Some(payload) = case.payload {
                                 append(payload)?;

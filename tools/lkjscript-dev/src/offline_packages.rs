@@ -1,5 +1,8 @@
 //! Transferable, public-authored offline composition oracle. No producer API writes meaning.
 
+mod nominal;
+mod nominal_session;
+
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
     OfflinePackageInventory, OfflineProducerInventory, offline_package_inventory,
@@ -36,6 +39,7 @@ pub(crate) struct Receipt {
     pub producer_inventories: Vec<OfflineProducerInventory>,
     pub transport_digests: Vec<String>,
     pub observations: BTreeMap<String, String>,
+    pub nominal: nominal::NominalReceipt,
     pub files: Vec<evidence::FileProof>,
     pub cleanup_complete: bool,
     pub failure: Option<String>,
@@ -124,7 +128,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-3".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-4".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -139,6 +143,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             producer_inventories: Vec::new(),
             transport_digests: Vec::new(),
             observations: BTreeMap::new(),
+            nominal: nominal::NominalReceipt::default(),
             files: Vec::new(),
             cleanup_complete: false,
             failure: None,
@@ -424,17 +429,22 @@ impl Context {
         )
     }
 
-    fn check(&mut self, target: &Package) -> Result<(), DevError> {
+    fn check(
+        &mut self,
+        target: &Package,
+        expected_tests: u64,
+        expected_packages: u64,
+    ) -> Result<(), DevError> {
         let records = self.cli(Some(&target.path), &["check"], true)?;
         require(
-            field(&records, "tests", "passed")? == "34"
+            field(&records, "tests", "passed")? == expected_tests.to_string()
                 && field(&records, "tests", "failed")? == "0"
                 && field(&records, "tests", "differential")? == "equal",
-            "each of five selected packages must be tested exactly once (30+1+1+1+1)",
+            "selected exact packages must run the independently counted maintained and consumer tests",
         )?;
         require(
-            field(&records, "artifact", "packages")? == "5",
-            "compiled diamond lost or duplicated a selected package",
+            field(&records, "artifact", "packages")? == expected_packages.to_string(),
+            "compiled closure lost or duplicated a selected package",
         )
     }
 
@@ -601,7 +611,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             )
         ),
     )?;
-    let nominal_generic = "create.record as=$box module=$module name=Box visibility=public\nadd.field as=$field record=$box name=value type=i64\ntype.parameter as=@item parameter=$item_type\ncreate.function as=$identity module=$module name=identity visibility=public result=@item effect=pure body=$identity_body\nadd.type-parameter as=$item_type function=$identity name=Item\nadd.parameter as=$identity_arg function=$identity name=item type=@item\nexpression.local as=$identity_body value=$identity_arg\n".replace("module=$module", &format!("module={}", d.symbols["$module"]));
+    let nominal_generic = "create.record as=$box module=$module name=Box visibility=public\nadd.field as=$field record=$box name=value type=i64\ntype.parameter as=@item parameter=$item_type\ncreate.function as=$identity module=$module name=identity visibility=public result=@item effect=pure body=$identity_body\nadd.type-parameter as=$item_type declaration=$identity name=Item\nadd.parameter as=$identity_arg function=$identity name=item type=@item\nexpression.local as=$identity_body value=$identity_arg\n".replace("module=$module", &format!("module={}", d.symbols["$module"]));
     context.apply(&mut d, &nominal_generic)?;
     let http_body = format!(
         "create.function as=$http_body module={} name=wire-body visibility=public result=static-text effect=pure body=$wire\nexpression.static-text as=$wire value=offline-package-closure\n",
@@ -632,7 +642,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
  expression.argument parent=$map-result index=0 expression=$helper-env-value
  expression.argument parent=$map-result index=1 expression=$helper-item
  create.function as=$map-helper module=$module name=map-helper visibility=private result=i64 effect=pure body=$map-result
- add.type-parameter as=$helper-env function=$map-helper name=Env
+ add.type-parameter as=$helper-env declaration=$map-helper name=Env
  add.parameter as=$helper-env-parameter function=$map-helper name=env type=@helper-env
  add.parameter as=$helper-step-parameter function=$map-helper name=step type=@helper-step
  add.parameter as=$helper-item-parameter function=$map-helper name=item type=i64
@@ -644,7 +654,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
  expression.argument parent=$bound-mapper index=0 expression=$factory-env
  expression.argument parent=$bound-mapper index=1 expression=$factory-step
  create.function as=$mapper-factory module=$module name=mapper-factory visibility=public result=@mapper effect=pure body=$bound-mapper
- add.type-parameter as=$env function=$mapper-factory name=Env constraint=capture-safe
+ add.type-parameter as=$env declaration=$mapper-factory name=Env constraint=capture-safe
  add.parameter as=$mapper-env function=$mapper-factory name=env type=@env
  add.parameter as=$mapper-step function=$mapper-factory name=step type=@step
  "#.replace("module=$module", &format!("module={}", d.symbols["$module"]));
@@ -1012,7 +1022,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "producers_absent_before_execution".to_owned(),
         "true".to_owned(),
     );
-    context.check(&a)?;
+    context.check(&a, 37, 5)?;
     context.run(&a, 11)?;
     let mapped = context.cli(
         Some(&a.path),
@@ -1276,7 +1286,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         "change_authored_stale_base",
     )?;
-    context.check(&a)?;
+    context.check(&a, 37, 5)?;
     context.run(&a, 12)?;
     context.cache_recovery(&a, "a2")?;
     let second = context.export(&mut a)?;
@@ -1348,6 +1358,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     );
     fs::remove_dir_all(&a.path)?;
     standalone_http(context, &d)?;
+    nominal::workflow(context, &mut standard)?;
     Ok(())
 }
 
@@ -1654,7 +1665,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-3"
+        receipt.schema == "lkjscript-offline-packages-acceptance-4"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1666,6 +1677,7 @@ pub(crate) fn read_transferred_receipt(
             && receipt.copied_candidate_sha256 == receipt.candidate_sha256,
         "offline receipt does not bind the exact transferred candidate, verifier, and cleanup",
     )?;
+    nominal::validate(&receipt.nominal)?;
     for (key, value) in [
         (
             "generic_capture_factory",
@@ -1730,10 +1742,20 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     require(
-        receipt.runners.len() == 1 && receipt.runners[0].status == process::ProcessStatus::Passed,
+        receipt.runners.len() == 3
+            && receipt
+                .runners
+                .iter()
+                .all(|runner| runner.status == process::ProcessStatus::Passed),
         "standalone service observation missing or failed",
     )?;
-    for label in ["a1", "a2"] {
+    for label in [
+        "a1",
+        "a2",
+        "nominal-changed-body",
+        "nominal-reordered-arguments",
+        "nominal-replaced-template-case-bound",
+    ] {
         let exact = receipt
             .observations
             .get(&format!("artifact-{label}-exact"))
@@ -1747,6 +1769,33 @@ pub(crate) fn read_transferred_receipt(
                 "clean and recovered artifacts disagree",
             )?;
         }
+    }
+    for (before, after) in [
+        (
+            "nominal-after-producer-removal",
+            "nominal-changed-body-exact",
+        ),
+        (
+            "nominal-changed-body-exact",
+            "nominal-reordered-arguments-exact",
+        ),
+        (
+            "nominal-reordered-arguments-exact",
+            "nominal-replaced-template-case-bound-exact",
+        ),
+    ] {
+        let before = receipt
+            .observations
+            .get(&format!("artifact-{before}"))
+            .ok_or_else(|| DevError::corrupt("nominal predecessor artifact observation missing"))?;
+        let after = receipt
+            .observations
+            .get(&format!("artifact-{after}"))
+            .ok_or_else(|| DevError::corrupt("nominal successor artifact observation missing"))?;
+        require(
+            before != after,
+            "a body, argument or exact template change reused the predecessor artifact identity",
+        )?;
     }
     let mut previous = None;
     for file in &receipt.files {
@@ -1779,9 +1828,9 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 10
-            && receipt.transport_digests.len() == 10
-            && receipt.producer_inventories.len() == 10,
+        receipt.inventories.len() == 14
+            && receipt.transport_digests.len() == 14
+            && receipt.producer_inventories.len() == 14,
         "complete producer, replacement, and HTTP source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -1875,6 +1924,30 @@ pub(crate) fn read_transferred_receipt(
         "transferred missing-source failure was not observed",
     )?;
     verify_observation_files(&receipt.runners[0], &receipt.files, "standalone")?;
+    verify_observation_files(&receipt.runners[1], &receipt.files, "nominal-session")?;
+    verify_observation_files(&receipt.runners[2], &receipt.files, "nominal-session-state")?;
+    let retained: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("nominal-session-state.stdout"),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?;
+    require(
+        retained["states"] == serde_json::to_value(&receipt.nominal.retained_states)?
+            && retained["cleanup"]["remaining_tasks"] == 0
+            && retained["effects_replayed"] == false,
+        "nominal independently inspected state evidence changed",
+    )?;
+    let observed: crate::service::nominal::Observation =
+        serde_json::from_slice(&process::read_bounded(
+            &root.join("nominal-session-messages.json"),
+            MAXIMUM_OUTPUT_BYTES,
+        )?)?;
+    require(
+        observed.messages == receipt.nominal.session.messages
+            && observed.accept_matches == receipt.nominal.session.accept_matches
+            && observed.close_code == receipt.nominal.session.close_code
+            && observed.cleanup_complete == receipt.nominal.session.cleanup_complete,
+        "nominal raw session evidence differs from the transferred observation",
+    )?;
     require(
         process::read_bounded(&root.join("standalone-response.body"), MAXIMUM_OUTPUT_BYTES)?
             == b"offline-package-closure",

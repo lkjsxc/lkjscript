@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-7";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 7;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-4";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 4;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN07";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v7";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v7";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-8";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 8;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-5";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 5;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN08";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v8";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v8";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -135,9 +135,13 @@ pub enum CompiledText {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum CompilationPayload {
     Record {
+        type_parameters: Vec<TypeParameterId>,
+        type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
         fields: Vec<CompiledFieldLayout>,
     },
     Variant {
+        type_parameters: Vec<TypeParameterId>,
+        type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
         cases: Vec<CompiledCaseLayout>,
     },
     Interface {
@@ -277,10 +281,12 @@ pub enum CompiledInstruction {
     },
     Record {
         nominal_type: Option<u32>,
+        type_arguments: Vec<u32>,
         fields: Vec<CompiledFieldSelector>,
     },
     Variant {
         case: u32,
+        type_arguments: Vec<u32>,
         has_payload: bool,
     },
     Field(CompiledFieldSelector),
@@ -453,7 +459,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 12 inline bound",
+                        "compiled inline text exceeds the Graph 13 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -480,7 +486,12 @@ impl CompilationPayload {
         tables: &CompilationTables,
     ) -> Result<(), Diagnostic> {
         match self {
-            Self::Record { fields } => {
+            Self::Record {
+                fields,
+                type_parameters,
+                type_parameter_constraints,
+            } => {
+                validate_nominal_parameters(type_parameters, type_parameter_constraints)?;
                 require_kind(source, OwnerKind::Record)?;
                 require_item_count("compiled record fields", fields.len(), false)?;
                 for field in fields {
@@ -494,7 +505,12 @@ impl CompilationPayload {
                     }
                 }
             }
-            Self::Variant { cases } => {
+            Self::Variant {
+                cases,
+                type_parameters,
+                type_parameter_constraints,
+            } => {
+                validate_nominal_parameters(type_parameters, type_parameter_constraints)?;
                 require_kind(source, OwnerKind::Variant)?;
                 require_item_count("compiled variant cases", cases.len(), false)?;
                 for case in cases {
@@ -1013,8 +1029,19 @@ impl CompiledInstruction {
             }
             Self::Record {
                 nominal_type,
+                type_arguments,
                 fields,
             } => {
+                require_item_count("nominal type arguments", type_arguments.len(), true)?;
+                if nominal_type.is_none() && !type_arguments.is_empty() {
+                    return Err(unit_corrupt(
+                        "compiler_nominal_arguments",
+                        "structural record has nominal arguments",
+                    ));
+                }
+                for ty in type_arguments {
+                    require_index("nominal type argument", *ty, tables.types.len())?;
+                }
                 if let Some(declaration) = nominal_type {
                     require_index(
                         "nominal record declaration",
@@ -1028,7 +1055,17 @@ impl CompiledInstruction {
                 }
                 Ok(())
             }
-            Self::Variant { case, .. } => require_index("variant case", *case, tables.cases.len()),
+            Self::Variant {
+                case,
+                type_arguments,
+                ..
+            } => {
+                require_item_count("nominal type arguments", type_arguments.len(), true)?;
+                for ty in type_arguments {
+                    require_index("nominal type argument", *ty, tables.types.len())?;
+                }
+                require_index("variant case", *case, tables.cases.len())
+            }
             Self::Field(selector) => selector.validate(tables),
             Self::List { item_type, items } => {
                 require_runtime_count("list items", *items)?;
@@ -1144,6 +1181,22 @@ fn require_index(label: &str, index: u32, length: usize) -> Result<(), Diagnosti
         return Err(unit_corrupt(
             "compiler_unit_index",
             format!("{label} index {index} is outside table length {length}"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_nominal_parameters(
+    parameters: &[TypeParameterId],
+    constraints: &[crate::platform::kernel::TypeParameterConstraints],
+) -> Result<(), Diagnostic> {
+    require_item_count("nominal type parameters", parameters.len(), true)?;
+    if parameters.len() != constraints.len()
+        || parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len()
+    {
+        return Err(unit_corrupt(
+            "compiler_nominal_parameters",
+            "nominal parameters and constraints must form one exact ordered unique vector",
         ));
     }
     Ok(())

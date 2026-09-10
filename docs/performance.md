@@ -2,6 +2,24 @@
 
 Measurements are observations, not promises.
 
+## Parametric nominal preparation and forwarding
+
+The [nominal evidence](evidence/202609100459-parametric-nominal-data.json) records intermediate
+source-bound observations for applied batches at N = 1/256/4096 and K = 1/64/1024. Both evaluators
+report zero internal eligibility-guard descendant visits throughout the matrix. For the same
+program, production preparation charges 9,174 work steps and 264,648 metadata bytes; independent
+reference preparation charges 11,902 steps and 168,908 bytes. These are cumulative accounting units,
+not sampled live heap. Input/capture work scales with N and classification with K. A restored
+descendant scan fails the independent separability oracle with over 50 million visits at N=4096,
+K=1024. Actual preparation work remains included rather than hidden outside runtime counters.
+
+An exact predecessor run and current monomorphic fixture agree on deterministic counts: at
+N=4096/K=1024, both admit 4,098 input and 8,197 capture values; production/reference classification
+counts are 23,591/25,634 and both guard counts are zero. Applied identity/layout metadata adds work;
+these bounded synthetic observations establish neither a universal speedup nor a heap bound.
+Fresh full and target dispositions belong to the linked campaign evidence; intermediate runs do
+not substitute for them.
+
 ## Persistent lists, 2026-09-09
 
 A single predecessor-authored fold/bind/append program produces exactly the same artifact bytes

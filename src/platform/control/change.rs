@@ -28,10 +28,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-16";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 16;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-13";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 13;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-17";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 17;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-14";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 14;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -79,6 +79,8 @@ pub(crate) enum CompactChangeOperation {
     AddOperation,
     AddTypeParameter,
     SetTypeParameterConstraint,
+    SetFieldType,
+    SetCasePayload,
     AddParameter,
     AddRequirement,
     AddPort,
@@ -96,7 +98,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 29] = [
+    pub(crate) const ALL: [Self; 31] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -112,6 +114,8 @@ impl CompactChangeOperation {
         Self::AddOperation,
         Self::AddTypeParameter,
         Self::SetTypeParameterConstraint,
+        Self::SetFieldType,
+        Self::SetCasePayload,
         Self::AddParameter,
         Self::AddRequirement,
         Self::AddPort,
@@ -707,7 +711,7 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 form: FieldForm::RequestLocalSymbol,
             },
             CompactChangeOperationField {
-                name: "function",
+                name: "declaration",
                 required: true,
                 form: FieldForm::DeclarationSelector,
             },
@@ -737,6 +741,40 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "constraint",
                 required: true,
                 form: FieldForm::TypeParameterConstraint,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetFieldType,
+        name: "set.field-type",
+        fields: &[
+            CompactChangeOperationField {
+                name: "field",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetCasePayload,
+        name: "set.case-payload",
+        fields: &[
+            CompactChangeOperationField {
+                name: "case",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "payload",
+                required: false,
+                form: FieldForm::TypeReference,
             },
         ],
         direct: None,
@@ -1231,6 +1269,7 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "secret",
     "parameter",
     "named",
+    "application",
     "capability-resource",
     "structural-record",
     "list",
@@ -1336,6 +1375,18 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
     },
     CompactFormField {
         form: "named",
+        name: "declaration",
+        required: true,
+        syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "application",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "application",
         name: "declaration",
         required: true,
         syntax: "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
@@ -2517,6 +2568,7 @@ impl Decoder {
                 name: parse_name(record, "name")?,
             }),
             CompactChangeOperation::CreateRecord => Ok(AuthoredChange::CreateRecord {
+                type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
                 module: parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
@@ -2524,6 +2576,7 @@ impl Decoder {
                 fields: Vec::new(),
             }),
             CompactChangeOperation::CreateVariant => Ok(AuthoredChange::CreateVariant {
+                type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
                 module: parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
@@ -2647,7 +2700,7 @@ impl Decoder {
                 },
             }),
             CompactChangeOperation::AddTypeParameter => Ok(AuthoredChange::AddTypeParameter {
-                declaration: parse_declaration_selector(record, "function")?,
+                declaration: parse_declaration_selector(record, "declaration")?,
                 parameter: AuthoredTypeParameter {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
@@ -2660,6 +2713,16 @@ impl Decoder {
                     constraints: parse_type_parameter_constraint(record)?,
                 })
             }
+            CompactChangeOperation::SetFieldType => Ok(AuthoredChange::SetFieldType {
+                field: parse_owner_selector(record, "field")?,
+                ty: self.decode_type(required(record, "type")?)?,
+            }),
+            CompactChangeOperation::SetCasePayload => Ok(AuthoredChange::SetCasePayload {
+                case: parse_owner_selector(record, "case")?,
+                payload: optional(record, "payload")
+                    .map(|value| self.decode_type(value))
+                    .transpose()?,
+            }),
             CompactChangeOperation::AddParameter => {
                 let parent = match (optional(record, "function"), optional(record, "operation")) {
                     (Some(_), None) => ParameterParentSelector::Declaration {
@@ -2953,6 +3016,18 @@ impl Decoder {
                     declaration: parse_declaration_reference(&record, "declaration")?,
                 }
             }
+            "type.application" => {
+                check_fields(&record, &["as", "declaration"])?;
+                let arguments = self
+                    .ordered_edges(reference, true)?
+                    .iter()
+                    .map(|edge| self.decode_type(&edge.value))
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
+                AuthoredType::Applied {
+                    declaration: parse_declaration_reference(&record, "declaration")?,
+                    arguments,
+                }
+            }
             "type.capability-resource" => {
                 check_fields(&record, &["as", "interface"])?;
                 AuthoredType::CapabilityResource {
@@ -3164,6 +3239,11 @@ impl Decoder {
                 }
                 AuthoredExpressionOperation::Record {
                     nominal_type,
+                    type_arguments: self
+                        .ordered_edges(symbol, true)?
+                        .iter()
+                        .map(|edge| self.decode_type(&edge.value))
+                        .collect::<Result<Vec<_>, Diagnostic>>()?,
                     fields,
                 }
             }
@@ -3174,6 +3254,11 @@ impl Decoder {
                     .transpose()?;
                 AuthoredExpressionOperation::Variant {
                     case: parse_case_reference(&record, "case")?,
+                    type_arguments: self
+                        .ordered_edges(symbol, true)?
+                        .iter()
+                        .map(|edge| self.decode_type(&edge.value))
+                        .collect::<Result<Vec<_>, Diagnostic>>()?,
                     payload,
                 }
             }
@@ -3880,7 +3965,10 @@ fn parse_declaration_reference(
     field_name: &str,
 ) -> Result<AuthoredDeclarationReference, Diagnostic> {
     let value = required(record, field_name)?;
-    if let Some((package, declaration)) = value.split_once('/') {
+    if let Some((package, declaration)) = value
+        .split_once('/')
+        .filter(|(package, _)| package.starts_with(PackageId::PREFIX))
+    {
         return Ok(AuthoredDeclarationReference::Exact {
             package: package.parse().map_err(|error: Diagnostic| {
                 field_error(record, field_name, error.code, error.message)
@@ -4332,7 +4420,7 @@ mod tests {
              add.parameter as=$key operation=$get name=key type=bytes\n\
              type.parameter as=@item parameter=$item-type\n\
              create.external as=$encode module=$data name=data-encode visibility=public result=bytes implementation=core.data.encode\n\
-             add.type-parameter as=$item-type function=$encode name=Item\n\
+             add.type-parameter as=$item-type declaration=$encode name=Item\n\
              add.parameter as=$value function=$encode name=value type=@item\n",
             revision()
         );
@@ -4377,7 +4465,7 @@ mod tests {
              expression.argument parent=$apply_body index=0 expression=$value_local\n\
              create.module as=$module name=higher_order\n\
              create.function as=$apply module=$module name=apply visibility=private result=@item effect=pure body=$apply_body\n\
-             add.type-parameter as=$item_type function=$apply name=Item\n\
+             add.type-parameter as=$item_type declaration=$apply name=Item\n\
              add.parameter as=$value function=$apply name=value type=@item\n\
              add.parameter as=$step function=$apply name=step type=@step\n\
              expression.local as=$keep_body value=$keep_value\n\

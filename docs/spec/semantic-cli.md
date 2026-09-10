@@ -523,7 +523,7 @@ sandboxing, or multi-tenant isolation.
 The rank-one constraint authoring forms are:
 
 ```text
-add.type-parameter as=$T function=DECLARATION name=NAME [constraint=none|capture-safe]
+add.type-parameter as=$T declaration=DECLARATION name=NAME [constraint=none|capture-safe]
 set.type-parameter-constraint parameter=OWNER_SELECTOR constraint=none|capture-safe
 ```
 
@@ -535,3 +535,15 @@ constraint, body and callers together. Review reports affected dependents. Stale
 malformed constraints, cancellation and exhausted validation cannot partially advance accepted HEAD.
 Owner queries, full function definitions and built-in/staged interfaces expose `constraint=none` or
 `constraint=capture-safe`; definition continuations remain revision-pinned and reject after edits.
+
+The declaration selector accepts pure functions, records and variants. Nominal applications use
+`type.application as=@Applied declaration=DECLARATION` followed by ordered
+`type.argument parent=@Applied index=INDEX type=TYPE` records. Positive arity is mandatory; use
+`type.named` for zero-arity declarations. Record and variant constructors accept the same ordered
+`type.argument` records on their expression symbol. Arguments remain explicit in discovery and
+complete definitions.
+
+`set.field-type field=OWNER_SELECTOR type=TYPE` and
+`set.case-payload case=OWNER_SELECTOR [payload=TYPE]` edit exact nominal members. Omitting payload
+makes a case payloadless. These operations, parameter constraints, and dependent constructor/signature
+changes share normal plan/apply validation and atomic accepted publication.

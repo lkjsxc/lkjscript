@@ -1,5 +1,8 @@
 //! Focused normalized compiler-unit tests.
 
+#[path = "nominal_session_tests.rs"]
+mod nominal_session_tests;
+
 use super::*;
 use crate::platform::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget, PrimitiveEdit};
 use crate::platform::kernel::{
@@ -326,7 +329,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
     else {
         panic!("variant declaration kind")
     };
-    let crate::platform::kernel::DeclarationPayload::Variant { cases } =
+    let crate::platform::kernel::DeclarationPayload::Variant { cases, .. } =
         &mut variant_record.payload
     else {
         panic!("variant payload")
@@ -457,6 +460,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         &mut snapshot,
         13,
         ExpressionOperation::Record {
+            type_arguments: Vec::new(),
             nominal_type: None,
             fields: vec![crate::platform::kernel::RecordExpressionField {
                 selector: FieldSelector::Structural(structural_name.clone()),
@@ -650,6 +654,7 @@ fn task_unit_uses_exact_dense_nominal_and_capability_operands() {
             CompiledInstruction::Record {
                 nominal_type: Some(declaration),
                 fields,
+                ..
             } => {
                 saw_record = true;
                 assert!((*declaration as usize) < receipt.unit.tables.declarations.len());
@@ -827,7 +832,8 @@ fn every_graph9_expression_form_lowers_with_verified_control_flow() {
         value,
         CompiledInstruction::Record {
             nominal_type: None,
-            fields
+            fields,
+            ..
         } if fields.iter().all(|field| matches!(field, super::unit::CompiledFieldSelector::Structural(_)))
     )));
     assert!(has(|value| matches!(
@@ -1607,7 +1613,7 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
-    assert_eq!(first.work.runtime_owners, 8);
+    assert_eq!(first.work.runtime_owners, 11);
     assert_eq!(first.work.packages, 1);
     assert!(
         !first
@@ -1630,7 +1636,7 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
             .expect("root package")
             .runtime_owners
             .len(),
-        8
+        11
     );
 
     drop(created);
@@ -1638,6 +1644,14 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     let after_restart = link_artifact(&reopened, compilation.manifest_digest, &[])
         .expect("link after repository restart");
     assert_eq!(after_restart.artifact.bytes, first.artifact.bytes);
+}
+
+#[test]
+fn exact_artifact16_producer_bundle_rejects_at_the_format_boundary() {
+    let bytes = include_bytes!("../../../tests/fixtures/artifact16-standard.lkja");
+    let error = load_artifact(bytes).unwrap_err();
+    assert_eq!(error.class, crate::platform::DiagnosticClass::Source);
+    assert_eq!(error.code, "artifact_bundle_contract");
 }
 
 #[test]
@@ -2657,5 +2671,146 @@ fn artifact_rejects_erased_or_forged_compiled_parameter_constraints() {
             "{fault}: {error:?}"
         );
         println!("constraint-artifact-negative {fault} {}", error.code);
+    }
+}
+
+#[test]
+fn artifact_rejects_nominal_parameter_bound_member_and_application_forgery() {
+    let loaded = load_artifact(
+        &std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("packages/standard/generated/standard.lkja"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let units = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+        .collect::<Vec<_>>();
+    let (record_key, record) = units
+        .iter()
+        .find(|(_, unit)| {
+            matches!(&unit.payload,
+        CompilationPayload::Record { type_parameters, .. } if type_parameters.len() == 2)
+        })
+        .unwrap();
+    let (function_key, function) = units.iter().find(|(_,unit)|matches!(&unit.payload,
+        CompilationPayload::Function { code, .. } if code.instructions.iter().any(|instruction|matches!(instruction,
+            CompiledInstruction::Record { type_arguments, .. } if type_arguments.len() == 2)))).unwrap();
+    for fault in [
+        "erased-parameters",
+        "reordered-parameters",
+        "phantom-bound",
+        "member-layout",
+        "reordered-arguments",
+        "extra-argument",
+    ] {
+        let (old_key, mut unit) = if fault.ends_with("arguments") || fault == "extra-argument" {
+            (*function_key, function.clone())
+        } else {
+            (*record_key, record.clone())
+        };
+        match &mut unit.payload {
+            CompilationPayload::Record {
+                type_parameters,
+                type_parameter_constraints,
+                fields,
+            } => match fault {
+                "erased-parameters" => {
+                    type_parameters.clear();
+                    type_parameter_constraints.clear();
+                }
+                "reordered-parameters" => type_parameters.swap(0, 1),
+                "phantom-bound" => {
+                    type_parameter_constraints[0] =
+                        crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                }
+                "member-layout" => {
+                    let first = fields[0].ty;
+                    fields[0].ty = fields[1].ty;
+                    fields[1].ty = first;
+                }
+                _ => panic!("unknown nominal fixture"),
+            },
+            CompilationPayload::Function { code, .. } => {
+                let arguments = code
+                    .instructions
+                    .iter_mut()
+                    .find_map(|instruction| match instruction {
+                        CompiledInstruction::Record { type_arguments, .. }
+                            if type_arguments.len() == 2 =>
+                        {
+                            Some(type_arguments)
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                if fault == "extra-argument" {
+                    arguments.push(arguments[0]);
+                } else {
+                    arguments.swap(0, 1);
+                }
+            }
+            _ => panic!("nominal fixture payload"),
+        }
+        // Bypass the compiler encoder and rebind the complete content-addressed container.
+        let bytes = crate::platform::packed::encode(
+            super::unit::COMPILER_UNIT_MAGIC,
+            super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
+            &unit,
+            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        )
+        .unwrap();
+        let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
+        let mut objects = loaded.objects.clone();
+        objects.remove(&old_key);
+        objects.insert(key, bytes);
+        let mut manifest = loaded.manifest.clone();
+        let package = manifest
+            .packages
+            .iter_mut()
+            .find(|package| package.package == unit.source.package)
+            .unwrap();
+        let old_compilation = package.compilation;
+        let mut compilation =
+            CompilationManifest::decode(&objects[&old_compilation.object_key()], old_compilation)
+                .unwrap();
+        let mut entries = artifact_map_entries(&loaded, compilation.units);
+        let mut count = 0;
+        for (owner, value) in &mut entries {
+            let owner = crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap();
+            let mut binding = CompilationBinding::decode(value, owner).unwrap();
+            if binding.object.object_key() == old_key {
+                binding.object = CompilerUnitObjectDigest::from_bytes(key.digest.bytes());
+                *value = binding.encode(owner).unwrap();
+                count += 1;
+            }
+        }
+        assert_eq!(count, 1);
+        compilation.units = replace_artifact_map(&mut objects, entries);
+        let (digest, bytes) = compilation.encode().unwrap();
+        objects.remove(&old_compilation.object_key());
+        objects.insert(digest.object_key(), bytes);
+        package.compilation = digest;
+        let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
+        manifest.closure = closure;
+        manifest.object_count = count;
+        manifest.object_bytes = bytes;
+        let failure = super::artifact::encode_artifact(manifest, &objects).unwrap_err();
+        assert_eq!(
+            failure.class,
+            crate::platform::DiagnosticClass::Corrupt,
+            "{fault}: {failure:?}"
+        );
+        let expected = match fault {
+            "erased-parameters" => "artifact_runtime_owner_count",
+            "reordered-arguments" | "extra-argument" => "artifact_nominal_instruction_meaning",
+            _ => "artifact_runtime_owner_semantics",
+        };
+        assert_eq!(failure.code, expected, "{fault}: {failure:?}");
+        println!("nominal-artifact-negative {fault} {}", failure.code);
     }
 }

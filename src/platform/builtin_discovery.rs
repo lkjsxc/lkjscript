@@ -299,7 +299,18 @@ fn append_owner_detail(
 ) -> Result<(), Diagnostic> {
     match record {
         PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => {
+            PackageInterfaceDeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                for (index, parameter) in type_parameters.iter().enumerate() {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::TypeParameter(*parameter),
+                        index,
+                        records,
+                    )?;
+                }
                 records.push(declaration_detail(
                     declaration,
                     "record",
@@ -310,7 +321,18 @@ fn append_owner_detail(
                     append_child_owner(standard, OwnerKey::Field(*field), index, records)?;
                 }
             }
-            PackageInterfaceDeclarationPayload::Variant { cases } => {
+            PackageInterfaceDeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                for (index, parameter) in type_parameters.iter().enumerate() {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::TypeParameter(*parameter),
+                        index,
+                        records,
+                    )?;
+                }
                 records.push(declaration_detail(
                     declaration,
                     "variant",
@@ -678,7 +700,7 @@ fn append_type(
         TypeForm::TypeParameter { parameter } => {
             fields.push(("parameter".to_owned(), parameter.to_string()));
         }
-        TypeForm::Named { declaration } => {
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
             fields.push((
                 "reference".to_owned(),
                 format!("{}/{}", declaration.package, declaration.declaration),
@@ -714,6 +736,17 @@ fn append_type(
         fields,
     });
     match &ty.form {
+        TypeForm::Applied { arguments, .. } => {
+            for (index, argument) in arguments.iter().enumerate() {
+                append_type(
+                    standard,
+                    &format!("{path}.argument.{index}"),
+                    *argument,
+                    records,
+                    depth + 1,
+                )?;
+            }
+        }
         TypeForm::StructuralRecord { fields } => {
             for (index, field) in fields.iter().enumerate() {
                 let child = format!("{path}.{}", field.name);
@@ -847,6 +880,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::Secret => "secret",
         TypeForm::TypeParameter { .. } => "parameter",
         TypeForm::Named { .. } => "named",
+        TypeForm::Applied { .. } => "application",
         TypeForm::CapabilityResource { .. } => "capability-resource",
         TypeForm::StructuralRecord { .. } => "structural-record",
         TypeForm::List { .. } => "list",

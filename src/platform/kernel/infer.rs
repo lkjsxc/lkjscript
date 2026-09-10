@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 12.
+//! Independent exact-ID expression type and effect oracle for Graph 13.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -34,6 +34,17 @@ struct FunctionSignature {
     result: TypeObjectDigest,
     requirements: BTreeSet<RequirementReference>,
     task: bool,
+}
+
+fn nominal_parts(form: &TypeForm) -> Option<(DeclarationReference, &[TypeObjectDigest])> {
+    match form {
+        TypeForm::Named { declaration } => Some((*declaration, &[])),
+        TypeForm::Applied {
+            declaration,
+            arguments,
+        } => Some((*declaration, arguments)),
+        _ => None,
+    }
 }
 
 /// Exact point-read surface required by declaration-local expression validation.
@@ -243,6 +254,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     continue;
                 }
             };
+            if let Err(diagnostic) = self.validate_owner_nominals(&owner) {
+                self.push_diagnostic(diagnostic);
+                continue;
+            }
             match owner {
                 OwnerRecord::Declaration(declaration) => match declaration.payload {
                     DeclarationPayload::Function(function) => {
@@ -301,7 +316,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 self.push_diagnostic(actual);
                                 self.push_diagnostic(expected);
                             }
-                            (Ok(_), Ok(_)) => {}
+                            (Ok(ty), Ok(_)) => {
+                                if let Err(error) = self.validate_application_equality(
+                                    ty,
+                                    false,
+                                    &mut BTreeSet::new(),
+                                    0,
+                                ) {
+                                    self.push_diagnostic(error);
+                                }
+                            }
                         }
                     }
                     _ => {}
@@ -534,6 +558,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
         };
         let next = depth.saturating_add(1);
+        for ty in record.type_roots() {
+            self.validate_nominal_type(ty, context, 0)?;
+        }
         match record.operation {
             ExpressionOperation::Unit {} => self.canonical_type(TypeForm::Unit),
             ExpressionOperation::Bool { .. } => self.canonical_type(TypeForm::Bool),
@@ -681,21 +708,28 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             ExpressionOperation::Record {
                 nominal_type,
+                type_arguments,
                 fields,
-            } => self.infer_record(nominal_type, &fields, context, next),
-            ExpressionOperation::Variant { case, payload } => {
+            } => self.infer_record(nominal_type, &type_arguments, &fields, context, next),
+            ExpressionOperation::Variant {
+                case,
+                type_arguments,
+                payload,
+            } => {
                 let case_record = self.case_record(case.package, case.case)?;
-                self.validate_optional_payload(
-                    payload,
-                    case_record.payload,
-                    context,
-                    next,
-                    "variant",
-                )?;
-                self.named_type(DeclarationReference {
+                let declaration = DeclarationReference {
                     package: case.package,
                     declaration: case_record.declaration,
-                })
+                };
+                let bindings = self.nominal_bindings(declaration, &type_arguments)?;
+                let ty = self.nominal_type(declaration, &type_arguments)?;
+                self.validate_nominal_type(ty, context, 0)?;
+                let expected = case_record
+                    .payload
+                    .map(|ty| self.substitute(ty, &bindings, 0))
+                    .transpose()?;
+                self.validate_optional_payload(payload, expected, context, next, "variant")?;
+                Ok(ty)
             }
             ExpressionOperation::Field { value, selector } => {
                 let value_type = self.infer(value, context, next)?;
@@ -924,11 +958,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     fn infer_record(
         &mut self,
         nominal_type: Option<DeclarationReference>,
+        type_arguments: &[TypeObjectDigest],
         fields: &[super::expression::RecordExpressionField],
         context: &ExecutionContext,
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         if let Some(declaration) = nominal_type {
+            let bindings = self.nominal_bindings(declaration, type_arguments)?;
+            let ty = self.nominal_type(declaration, type_arguments)?;
+            self.validate_nominal_type(ty, context, 0)?;
             let expected = self.record_fields(declaration)?;
             if expected.len() != fields.len() {
                 return Err(type_error(
@@ -957,14 +995,20 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     })?;
                 let actual = self.infer(value, context, depth)?;
                 require_same(
-                    field_record.ty,
+                    self.substitute(field_record.ty, &bindings, 0)?,
                     actual,
                     "kernel_type_record_field",
                     "record field value",
                 )?;
             }
-            self.named_type(declaration)
+            Ok(ty)
         } else {
+            if !type_arguments.is_empty() {
+                return Err(type_error(
+                    "kernel_type_nominal_arity",
+                    "structural records cannot have nominal type arguments",
+                ));
+            }
             let mut structural = Vec::with_capacity(fields.len());
             for field in fields {
                 let FieldSelector::Structural(name) = &field.selector else {
@@ -991,18 +1035,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             FieldSelector::Nominal(reference) => {
                 let field = self.field_record(reference.package, reference.field)?;
                 let object = self.type_object(value_type)?;
-                if !matches!(
-                    object.form,
-                    TypeForm::Named { declaration }
-                        if declaration.package == reference.package
-                            && declaration.declaration == field.declaration
-                ) {
+                let (declaration, arguments) = nominal_parts(&object.form).ok_or_else(|| {
+                    type_error(
+                        "kernel_type_field_owner",
+                        "field selection requires a nominal record",
+                    )
+                })?;
+                if declaration.package != reference.package
+                    || declaration.declaration != field.declaration
+                {
                     return Err(type_error(
                         "kernel_type_field_owner",
                         "nominal field does not belong to the selected value type",
                     ));
                 }
-                Ok(field.ty)
+                let bindings = self.nominal_bindings(declaration, arguments)?;
+                self.substitute(field.ty, &bindings, 0)
             }
             FieldSelector::Structural(name) => {
                 let object = self.type_object(value_type)?;
@@ -1035,12 +1083,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         let value_type = self.infer(value, context, depth)?;
         let value_object = self.type_object(value_type)?;
-        let TypeForm::Named { declaration } = value_object.form else {
+        let Some((declaration, arguments)) = nominal_parts(&value_object.form) else {
             return Err(type_error(
                 "kernel_type_match_value",
                 "match value is not a nominal variant",
             ));
         };
+        let bindings = self.nominal_bindings(declaration, arguments)?;
         let expected_cases = self.variant_cases(declaration)?;
         let expected_cases = expected_cases
             .iter()
@@ -1067,6 +1116,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             match (case.payload, arm.payload_binding) {
                 (Some(expected), Some(binding)) => {
+                    let expected = self.substitute(expected, &bindings, 0)?;
                     let declared = match self.read.owner(OwnerKey::Binding(binding))? {
                         Some(OwnerRecord::Binding(record))
                             if record.kind == BindingKind::MatchPayload =>
@@ -1131,7 +1181,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 .owner(OwnerKey::Declaration(reference.declaration))?
             {
                 Some(OwnerRecord::Declaration(record)) => match record.payload {
-                    DeclarationPayload::Record { fields } => Ok(fields),
+                    DeclarationPayload::Record { fields, .. } => Ok(fields),
                     _ => Err(type_error(
                         "kernel_type_record_kind",
                         "nominal record expression names a non-record declaration",
@@ -1149,7 +1199,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             "record",
         )? {
             PackageInterfaceRecord::Declaration(record) => match record.payload {
-                PackageInterfaceDeclarationPayload::Record { fields } => Ok(fields),
+                PackageInterfaceDeclarationPayload::Record { fields, .. } => Ok(fields),
                 _ => Err(type_error(
                     "kernel_type_record_kind",
                     "nominal record expression names a non-record dependency declaration",
@@ -1169,7 +1219,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 .owner(OwnerKey::Declaration(reference.declaration))?
             {
                 Some(OwnerRecord::Declaration(record)) => match record.payload {
-                    DeclarationPayload::Variant { cases } => Ok(cases),
+                    DeclarationPayload::Variant { cases, .. } => Ok(cases),
                     _ => Err(type_error(
                         "kernel_type_match_kind",
                         "match value names a non-variant declaration",
@@ -1187,7 +1237,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             "match variant",
         )? {
             PackageInterfaceRecord::Declaration(record) => match record.payload {
-                PackageInterfaceDeclarationPayload::Variant { cases } => Ok(cases),
+                PackageInterfaceDeclarationPayload::Variant { cases, .. } => Ok(cases),
                 _ => Err(type_error(
                     "kernel_type_match_kind",
                     "match value names a non-variant dependency declaration",
@@ -1256,6 +1306,19 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                         }
                                         present
                                     }
+                                    DeclarationPayload::Record {
+                                        type_parameters, ..
+                                    }
+                                    | DeclarationPayload::Variant {
+                                        type_parameters, ..
+                                    } => {
+                                        let mut present = false;
+                                        for declared in type_parameters {
+                                            self.consume_work()?;
+                                            present |= declared == parameter;
+                                        }
+                                        present
+                                    }
                                     _ => false,
                                 }
                             }
@@ -1295,6 +1358,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 }
                 children
             }
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => self.nominal_children(declaration, &arguments)?,
             TypeForm::Named { declaration } => {
                 let payload = if declaration.package == self.read.package_id() {
                     match self
@@ -1302,8 +1369,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         .owner(OwnerKey::Declaration(declaration.declaration))?
                     {
                         Some(OwnerRecord::Declaration(record)) => match record.payload {
-                            DeclarationPayload::Record { fields } => Some((fields, Vec::new())),
-                            DeclarationPayload::Variant { cases } => Some((Vec::new(), cases)),
+                            DeclarationPayload::Record { fields, .. } => Some((fields, Vec::new())),
+                            DeclarationPayload::Variant { cases, .. } => Some((Vec::new(), cases)),
                             _ => None,
                         },
                         _ => None,
@@ -1315,10 +1382,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "captured nominal type",
                     )? {
                         PackageInterfaceRecord::Declaration(record) => match record.payload {
-                            PackageInterfaceDeclarationPayload::Record { fields } => {
+                            PackageInterfaceDeclarationPayload::Record { fields, .. } => {
                                 Some((fields, Vec::new()))
                             }
-                            PackageInterfaceDeclarationPayload::Variant { cases } => {
+                            PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
                                 Some((Vec::new(), cases))
                             }
                             _ => None,
@@ -1812,6 +1879,502 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         self.canonical_type(TypeForm::Named { declaration })
     }
 
+    fn nominal_type(
+        &mut self,
+        declaration: DeclarationReference,
+        arguments: &[TypeObjectDigest],
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        if arguments.is_empty() {
+            self.named_type(declaration)
+        } else {
+            self.canonical_type(TypeForm::Applied {
+                declaration,
+                arguments: arguments.to_vec(),
+            })
+        }
+    }
+
+    fn validate_application_equality(
+        &mut self,
+        ty: TypeObjectDigest,
+        applied: bool,
+        visited: &mut BTreeSet<(TypeObjectDigest, bool)>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_nominal_depth",
+                "equality type exceeds the existing depth bound",
+            ));
+        }
+        if !visited.insert((ty, applied)) {
+            return Ok(());
+        }
+        let object = self.type_object(ty)?;
+        let children = match &object.form {
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => {
+                for child in self.nominal_children(*declaration, arguments)? {
+                    self.validate_application_equality(child, true, visited, depth + 1)?;
+                }
+                return Ok(());
+            }
+            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
+            TypeForm::Function { .. }
+            | TypeForm::Secret
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::Stream { .. }
+            | TypeForm::TypeParameter { .. } => {
+                return if applied {
+                    Err(type_error(
+                        "kernel_type_nominal_equality",
+                        "applied data contains a noncomparable argument or member",
+                    ))
+                } else {
+                    Ok(())
+                };
+            }
+            _ => object.child_types(),
+        };
+        for child in children {
+            self.validate_application_equality(child, applied, visited, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    fn nominal_parameters(
+        &self,
+        reference: DeclarationReference,
+    ) -> Result<Vec<TypeParameterId>, Diagnostic> {
+        let parameters = if reference.package == self.read.package_id() {
+            match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => match record.payload {
+                    DeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | DeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => Some(type_parameters),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            match self.dependency_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                "nominal template",
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => Some(type_parameters),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        parameters.ok_or_else(|| {
+            type_error(
+                "kernel_type_nominal_kind",
+                "nominal type requires an exact record or variant declaration",
+            )
+        })
+    }
+
+    fn nominal_member_types(
+        &mut self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+        let kind = if declaration.package == self.read.package_id() {
+            self.read
+                .owner(OwnerKey::Declaration(declaration.declaration))?
+                .map(|record| record.kind())
+        } else {
+            Some(
+                self.dependency_owner(
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    "nominal template",
+                )?
+                .header()
+                .kind,
+            )
+        };
+        match kind {
+            Some(OwnerKind::Record) => {
+                let mut types = Vec::new();
+                for field in self.record_fields(declaration)? {
+                    self.consume_work()?;
+                    types.push(self.field_record(declaration.package, field)?.ty);
+                }
+                Ok(types)
+            }
+            Some(OwnerKind::Variant) => {
+                let mut types = Vec::new();
+                for case in self.variant_cases(declaration)? {
+                    self.consume_work()?;
+                    if let Some(ty) = self.case_record(declaration.package, case)?.payload {
+                        types.push(ty);
+                    }
+                }
+                Ok(types)
+            }
+            _ => Err(type_error(
+                "kernel_type_nominal_kind",
+                "nominal member traversal requires a record or variant",
+            )),
+        }
+    }
+
+    fn validate_owner_nominals(&mut self, owner: &OwnerRecord) -> Result<(), Diagnostic> {
+        // Expression roots inherit their exact executable context through inference, including
+        // dead branches. Signature and nominal templates also require admission when unused.
+        if matches!(owner, OwnerRecord::Expression(_) | OwnerRecord::Binding(_)) {
+            return Ok(());
+        }
+        let declaration = match owner {
+            OwnerRecord::Declaration(record) => match record.header.owner {
+                OwnerKey::Declaration(id) => Some(id),
+                _ => None,
+            },
+            OwnerRecord::Field(record) => Some(record.declaration),
+            OwnerRecord::Case(record) => Some(record.declaration),
+            OwnerRecord::Parameter(record) => match record.parent {
+                super::ParameterParent::Function(id) => Some(id),
+                _ => None,
+            },
+            _ => None,
+        };
+        let context = pure_context(declaration);
+        let mut roots = owner.type_roots();
+        if let OwnerRecord::Declaration(record) = owner {
+            let parameters = match &record.payload {
+                DeclarationPayload::Function(function) => &function.parameters[..],
+                DeclarationPayload::External(function) => &function.parameters[..],
+                _ => &[],
+            };
+            for parameter in parameters {
+                self.consume_work()?;
+                if let Some(OwnerRecord::Parameter(record)) =
+                    self.read.owner(OwnerKey::Parameter(*parameter))?
+                {
+                    roots.push(record.ty);
+                }
+            }
+            if matches!(
+                record.payload,
+                DeclarationPayload::Record { .. } | DeclarationPayload::Variant { .. }
+            ) {
+                let reference = DeclarationReference {
+                    package: self.read.package_id(),
+                    declaration: declaration.ok_or_else(|| {
+                        type_error("kernel_type_nominal_kind", "missing nominal identity")
+                    })?,
+                };
+                roots.extend(self.nominal_member_types(reference)?);
+                self.validate_nominal_cycles(reference, &mut Vec::new(), 0)?;
+            }
+        }
+        for ty in roots {
+            self.validate_nominal_type(ty, &context, 0)?;
+        }
+        Ok(())
+    }
+
+    fn validate_nominal_cycles(
+        &mut self,
+        declaration: DeclarationReference,
+        active: &mut Vec<(DeclarationReference, bool)>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_nominal_depth",
+                "nominal definition closure exceeds its type-depth limit",
+            ));
+        }
+        if let Some(index) = active
+            .iter()
+            .position(|(reference, _)| *reference == declaration)
+        {
+            return if active[index..].iter().any(|(_, generic)| *generic) {
+                Err(type_error(
+                    "kernel_type_nominal_recursion",
+                    "recursive generic nominal definitions are unsupported",
+                ))
+            } else {
+                Ok(())
+            };
+        }
+        active.push((
+            declaration,
+            !self.nominal_parameters(declaration)?.is_empty(),
+        ));
+        let mut pending = self
+            .nominal_member_types(declaration)?
+            .into_iter()
+            .map(|ty| (ty, depth))
+            .collect::<Vec<_>>();
+        let mut visited = BTreeSet::new();
+        while let Some((ty, type_depth)) = pending.pop() {
+            self.consume_work()?;
+            if type_depth > MAXIMUM_TYPE_DEPTH {
+                return Err(type_error(
+                    "kernel_type_nominal_depth",
+                    "nominal member traversal exceeds its type-depth limit",
+                ));
+            }
+            if !visited.insert(ty) {
+                continue;
+            }
+            let object = self.type_object(ty)?;
+            if let Some((reference, _)) = nominal_parts(&object.form) {
+                self.validate_nominal_cycles(reference, active, type_depth + 1)?;
+            }
+            for child in object.child_types() {
+                self.consume_work()?;
+                pending.push((child, type_depth + 1));
+            }
+        }
+        active.pop();
+        Ok(())
+    }
+
+    fn nominal_bindings(
+        &mut self,
+        declaration: DeclarationReference,
+        arguments: &[TypeObjectDigest],
+    ) -> Result<BTreeMap<TypeParameterId, TypeObjectDigest>, Diagnostic> {
+        let parameters = self.nominal_parameters(declaration)?;
+        if parameters.len() != arguments.len() {
+            return Err(type_error(
+                "kernel_type_nominal_arity",
+                "nominal type arguments must exactly match its ordered declaration parameters",
+            ));
+        }
+        let mut bindings = BTreeMap::new();
+        for (parameter, argument) in parameters.into_iter().zip(arguments) {
+            self.consume_work()?;
+            bindings.insert(parameter, *argument);
+        }
+        Ok(bindings)
+    }
+
+    fn nominal_children(
+        &mut self,
+        declaration: DeclarationReference,
+        arguments: &[TypeObjectDigest],
+    ) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+        let bindings = self.nominal_bindings(declaration, arguments)?;
+        for _ in arguments {
+            self.consume_work()?;
+        }
+        let mut children = arguments.to_vec();
+        for ty in self.nominal_member_types(declaration)? {
+            self.consume_work()?;
+            children.push(self.substitute(ty, &bindings, 0)?);
+        }
+        Ok(children)
+    }
+
+    fn validate_nominal_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        context: &ExecutionContext,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_nominal_depth",
+                "nominal type exceeds the existing type-depth limit",
+            ));
+        }
+        let object = self.type_object(ty)?;
+        if let TypeForm::TypeParameter { parameter } = &object.form {
+            let parameter = match self.read.owner(OwnerKey::TypeParameter(*parameter))? {
+                Some(OwnerRecord::TypeParameter(parameter)) => parameter,
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_parameter_scope",
+                        "type parameter has no exact local owner",
+                    ));
+                }
+            };
+            if context.declaration != Some(parameter.declaration) {
+                return Err(type_error(
+                    "kernel_type_parameter_scope",
+                    "type parameter escapes its exact declaration scope",
+                ));
+            }
+        }
+        if let Some((declaration, arguments)) = nominal_parts(&object.form) {
+            let parameters = self.nominal_parameters(declaration)?;
+            if parameters.len() != arguments.len() {
+                return Err(type_error(
+                    "kernel_type_nominal_arity",
+                    "generic nominal types require their complete explicit ordered arguments",
+                ));
+            }
+            for (parameter, argument) in parameters.iter().zip(arguments) {
+                self.consume_work()?;
+                let owner = if declaration.package == self.read.package_id() {
+                    match self.read.owner(OwnerKey::TypeParameter(*parameter))? {
+                        Some(OwnerRecord::TypeParameter(record)) => Some(record),
+                        _ => None,
+                    }
+                } else {
+                    match self.dependency_owner(
+                        declaration.package,
+                        OwnerKey::TypeParameter(*parameter),
+                        "nominal parameter",
+                    )? {
+                        PackageInterfaceRecord::TypeParameter(record) => Some(record),
+                        _ => None,
+                    }
+                }
+                .filter(|record| record.declaration == declaration.declaration)
+                .ok_or_else(|| {
+                    type_error(
+                        "kernel_type_parameter_scope",
+                        "nominal parameter has a foreign declaration owner",
+                    )
+                })?;
+                if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
+                    self.require_capture_safe(*argument, context, &mut BTreeSet::new(), depth + 1)
+                        .map_err(|error| {
+                            if error.code == "kernel_type_bind_capture" {
+                                type_error("kernel_type_constraint", error.message)
+                            } else {
+                                error
+                            }
+                        })?;
+                }
+            }
+            if !arguments.is_empty() {
+                self.validate_application_cycles(ty, &mut BTreeSet::new(), &mut Vec::new(), depth)?;
+                self.require_ordinary_application(
+                    ty,
+                    &mut BTreeSet::new(),
+                    &mut Vec::new(),
+                    depth,
+                )?;
+            }
+        }
+        for child in object.child_types() {
+            self.validate_nominal_type(child, context, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    fn require_ordinary_application(
+        &mut self,
+        ty: TypeObjectDigest,
+        visited: &mut BTreeSet<TypeObjectDigest>,
+        active: &mut Vec<(TypeObjectDigest, bool)>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_nominal_depth",
+                "nominal member closure exceeds the existing type-depth limit",
+            ));
+        }
+        if let Some(index) = active.iter().position(|(candidate, _)| *candidate == ty) {
+            return if active[index..].iter().any(|(_, applied)| *applied) {
+                Err(type_error(
+                    "kernel_type_nominal_cycle",
+                    "concrete application introduces a recursive nominal layout",
+                ))
+            } else {
+                Ok(())
+            };
+        }
+        if visited.contains(&ty) {
+            return Ok(());
+        }
+        let object = self.type_object(ty)?;
+        active.push((ty, matches!(object.form, TypeForm::Applied { .. })));
+        let children = match &object.form {
+            TypeForm::CapabilityResource { .. } | TypeForm::Stream { .. } => {
+                return Err(type_error(
+                    "kernel_type_nominal_resource",
+                    "applied nominal data cannot contain live resources, including phantom arguments and absent cases",
+                ));
+            }
+            TypeForm::Function { .. } => Vec::new(),
+            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => self.nominal_children(*declaration, arguments)?,
+            _ => object.child_types(),
+        };
+        for child in children {
+            self.require_ordinary_application(child, visited, active, depth + 1)?;
+        }
+        active.pop();
+        visited.insert(ty);
+        Ok(())
+    }
+
+    fn validate_application_cycles(
+        &mut self,
+        ty: TypeObjectDigest,
+        visited: &mut BTreeSet<TypeObjectDigest>,
+        active: &mut Vec<(TypeObjectDigest, bool)>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_nominal_depth",
+                "concrete nominal closure exceeds the existing type-depth limit",
+            ));
+        }
+        if let Some(index) = active.iter().position(|(candidate, _)| *candidate == ty) {
+            return if active[index..].iter().any(|(_, applied)| *applied) {
+                Err(type_error(
+                    "kernel_type_nominal_cycle",
+                    "concrete application introduces a recursive nominal layout",
+                ))
+            } else {
+                Ok(())
+            };
+        }
+        if visited.contains(&ty) {
+            return Ok(());
+        }
+        let object = self.type_object(ty)?;
+        active.push((ty, matches!(object.form, TypeForm::Applied { .. })));
+        let children = match &object.form {
+            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => self.nominal_children(*declaration, arguments)?,
+            _ => object.child_types(),
+        };
+        for child in children {
+            self.validate_application_cycles(child, visited, active, depth + 1)?;
+        }
+        active.pop();
+        visited.insert(ty);
+        Ok(())
+    }
+
     fn substitute(
         &mut self,
         digest: TypeObjectDigest,
@@ -1849,6 +2412,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         })
                     })
                     .collect::<Result<_, Diagnostic>>()?,
+            },
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => TypeForm::Applied {
+                declaration,
+                arguments: arguments
+                    .into_iter()
+                    .map(|argument| self.substitute(argument, substitutions, next))
+                    .collect::<Result<_, _>>()?,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute(item, substitutions, next)?,
@@ -2044,7 +2617,7 @@ mod tests {
     use crate::platform::semantic_id::ModuleId;
 
     #[test]
-    fn expression_step_admission_stops_before_limits_zero_and_one_are_exceeded() {
+    fn expression_and_declared_type_steps_stop_before_zero_and_exact_limits() {
         let snapshot = super::super::tests::witness_snapshot();
         let constant = snapshot
             .owners
@@ -2077,7 +2650,7 @@ mod tests {
 
         let mut diagnostics = Vec::new();
         let mut work = 0;
-        validate_expression_roots_with_limits(
+        let exhausted = validate_expression_roots_with_limits(
             &snapshot,
             [constant],
             &mut diagnostics,
@@ -2086,9 +2659,24 @@ mod tests {
                 maximum_steps: 1,
                 maximum_diagnostics: 1,
             },
-        )
-        .expect("one expression step fits an exact one-step admission");
+        );
+        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Steps));
         assert_eq!(work, 1);
+        assert!(diagnostics.is_empty());
+
+        let mut work = 0;
+        validate_expression_roots_with_limits(
+            &snapshot,
+            [constant],
+            &mut diagnostics,
+            &mut work,
+            ExpressionValidationLimits {
+                maximum_steps: 2,
+                maximum_diagnostics: 1,
+            },
+        )
+        .expect("one declared type and one expression fit exactly two steps");
+        assert_eq!(work, 2);
         assert!(diagnostics.is_empty());
     }
 

@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 12 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 13 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -58,6 +58,8 @@ pub struct NormalizedRunObservation {
     pub capability_calls: u64,
     pub allocated_bytes: u64,
     pub allocation_charges: u64,
+    pub type_derivation_steps: u64,
+    pub type_metadata_bytes: u64,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub maximum_call_depth: usize,
@@ -359,11 +361,13 @@ impl<'a> NormalizedVm<'a> {
                 capability_calls: 0,
                 allocated_bytes: 0,
                 allocation_charges: 0,
+                type_derivation_steps: self.program.work.type_derivation_steps,
+                type_metadata_bytes: self.program.work.type_metadata_bytes,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph12_dense_bytecode_7",
+                production_tier: "graph13_dense_bytecode_8",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -709,7 +713,29 @@ impl Machine<'_> {
                         .is_some_and(|function| function.pure_graph);
                     self.dispatch_call(function, type_arguments, arguments, tail)?;
                 }
-                NormalizedInstruction::Record { layout, fields } => {
+                NormalizedInstruction::Record {
+                    layout,
+                    fields,
+                    type_arguments,
+                } => {
+                    let arguments = self.resolve_type_arguments(&type_arguments)?;
+                    let layout = layout
+                        .map(|template| {
+                            let declaration = self.program.records[template.0 as usize].declaration;
+                            let ty = super::value_schema::nominal_identity(declaration, &arguments)
+                                .map_err(|_| type_error("invalid nominal application"))?;
+                            if !arguments.is_empty() && !self.program.ordinary_types.contains(&ty) {
+                                return Err(type_error("record application is not ordinary data"));
+                            }
+                            self.program
+                                .record_instances
+                                .get(&ty)
+                                .copied()
+                                .ok_or_else(|| {
+                                    type_error("record application has no prepared layout")
+                                })
+                        })
+                        .transpose()?;
                     let values = self.pop_many(fields.len())?;
                     let value = self.record(layout, &fields, values)?;
                     self.push(value)?;
@@ -718,7 +744,19 @@ impl Machine<'_> {
                     layout,
                     case,
                     has_payload,
+                    type_arguments,
                 } => {
+                    let arguments = self.resolve_type_arguments(&type_arguments)?;
+                    let declaration = self.program.variants[layout.0 as usize].declaration;
+                    let ty = super::value_schema::nominal_identity(declaration, &arguments)
+                        .map_err(|_| type_error("invalid nominal application"))?;
+                    if !arguments.is_empty() && !self.program.ordinary_types.contains(&ty) {
+                        return Err(type_error("variant application is not ordinary data"));
+                    }
+                    let layout =
+                        *self.program.variant_instances.get(&ty).ok_or_else(|| {
+                            type_error("variant application has no prepared layout")
+                        })?;
                     let payload = has_payload.then(|| self.pop()).transpose()?;
                     self.charge_allocation(if payload.is_some() {
                         std::mem::size_of::<NormalizedValue>() as u64
@@ -736,7 +774,7 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::Field(field) => {
                     let value = self.pop()?;
-                    self.push(value.field(&field)?)?;
+                    self.push(value.field(&field, self.program)?)?;
                 }
                 NormalizedInstruction::List { items } => {
                     let items = self.pop_many(items as usize)?;
@@ -787,7 +825,11 @@ impl Machine<'_> {
                     let (layout, case, payload) = self.pop()?.split_variant(self.program)?;
                     let jump = jumps
                         .iter()
-                        .find(|jump| jump.layout == layout && jump.case == case)
+                        .find(|jump| {
+                            self.program.variants[jump.layout.0 as usize].declaration
+                                == self.program.variants[layout.0 as usize].declaration
+                                && jump.case == case
+                        })
                         .ok_or_else(|| {
                             runtime_error(
                                 "normalized_match_case",
@@ -1387,7 +1429,9 @@ impl Machine<'_> {
                         "nominal record contains a structural field selector",
                     ));
                 };
-                if *field_layout != layout {
+                if self.program.records[field_layout.0 as usize].declaration
+                    != self.program.records[layout.0 as usize].declaration
+                {
                     return Err(runtime_error(
                         "normalized_record_field_layout",
                         "nominal record field belongs to another dense layout",
@@ -1665,6 +1709,7 @@ impl Machine<'_> {
 fn select_field(
     value: NormalizedValue,
     selector: &NormalizedFieldSelector,
+    program: &NormalizedProgram,
 ) -> Result<NormalizedValue, ExecutionError> {
     match (value, selector) {
         (
@@ -1673,12 +1718,21 @@ fn select_field(
                 layout: expected,
                 offset,
             },
-        ) if layout == *expected => fields.get(*offset as usize).cloned().ok_or_else(|| {
-            runtime_error(
-                "normalized_field_offset",
-                "nominal field offset escaped its runtime record layout",
-            )
-        }),
+        ) if layout.1 == program.value_origin
+            && expected.1 == program.value_origin
+            && program
+                .records
+                .get(layout.0 as usize)
+                .zip(program.records.get(expected.0 as usize))
+                .is_some_and(|(actual, template)| actual.declaration == template.declaration) =>
+        {
+            fields.get(*offset as usize).cloned().ok_or_else(|| {
+                runtime_error(
+                    "normalized_field_offset",
+                    "nominal field offset escaped its runtime record layout",
+                )
+            })
+        }
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields }),
             NormalizedFieldSelector::Structural(name),
@@ -2182,6 +2236,15 @@ fn call_core_intrinsic(
             ))
         }
         "core.value.equal" => {
+            if type_arguments.iter().any(|ty| {
+                !program.application_free_types.contains(ty)
+                    && !program.comparable_types.contains(ty)
+            }) {
+                return Err(trap_error(
+                    "normalized_value_not_comparable",
+                    "nominal application's complete type does not support equality",
+                ));
+            }
             let [left, right] = arguments.as_slice() else {
                 return Err(type_error("value equality received a foreign arity"));
             };

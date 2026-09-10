@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR13";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR14";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -381,6 +381,7 @@ impl Writer {
                 module,
                 name,
                 visibility,
+                type_parameters,
                 fields,
             } => {
                 self.tag(3)?;
@@ -388,6 +389,9 @@ impl Writer {
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
+                self.list(type_parameters, |writer, value| {
+                    writer.type_parameter(value, definitions)
+                })?;
                 self.list(fields, |writer, value| writer.field(value, definitions))
             }
             AuthoredChange::CreateVariant {
@@ -395,6 +399,7 @@ impl Writer {
                 module,
                 name,
                 visibility,
+                type_parameters,
                 cases,
             } => {
                 self.tag(4)?;
@@ -402,6 +407,9 @@ impl Writer {
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
+                self.list(type_parameters, |writer, value| {
+                    writer.type_parameter(value, definitions)
+                })?;
                 self.list(cases, |writer, value| writer.case(value, definitions))
             }
             AuthoredChange::CreateInterface {
@@ -900,70 +908,110 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
         depth: usize,
     ) -> Result<(), Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(codec_error(
-                "change_authored_type_depth",
-                "authored type exceeds the maximum structural depth",
-            ));
+        use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
+        enum Frame<'a> {
+            Type(&'a AuthoredType, usize),
+            Types(&'a [AuthoredType], usize),
+            Fields(&'a [AuthoredStructuralTypeField], usize),
         }
-        let next = depth.saturating_add(1);
-        match value {
-            AuthoredType::Unit {} => self.tag(1),
-            AuthoredType::Bool {} => self.tag(2),
-            AuthoredType::I64 {} => self.tag(3),
-            AuthoredType::Bytes {} => self.tag(4),
-            AuthoredType::Text {} => self.tag(5),
-            AuthoredType::StaticText {} => self.tag(6),
-            AuthoredType::Secret {} => self.tag(7),
-            AuthoredType::TypeParameter { parameter } => {
-                self.tag(8)?;
-                self.type_parameter_reference(parameter, definitions)
+        // Lazy slice frames keep pending metadata proportional to depth, including wide
+        // function/application arguments. Admission precedes every child and stack growth.
+        let mut pending = vec![Frame::Type(value, depth)];
+        while let Some(frame) = pending.pop() {
+            if pending.len() > 2 * MAXIMUM_TYPE_DEPTH {
+                return Err(codec_error(
+                    "change_authored_type_depth",
+                    "authored type traversal exceeds its bounded depth",
+                ));
             }
-            AuthoredType::Named { declaration } => {
-                self.tag(9)?;
-                self.declaration_reference(declaration, definitions)
+            let (value, depth) = match frame {
+                Frame::Type(value, depth) => (value, depth),
+                Frame::Types(values, depth) => {
+                    if let Some((first, rest)) = values.split_first() {
+                        pending.push(Frame::Types(rest, depth));
+                        pending.push(Frame::Type(first, depth));
+                    }
+                    continue;
+                }
+                Frame::Fields(fields, depth) => {
+                    if let Some((first, rest)) = fields.split_first() {
+                        self.name(&first.name)?;
+                        pending.push(Frame::Fields(rest, depth));
+                        pending.push(Frame::Type(&first.ty, depth));
+                    }
+                    continue;
+                }
+            };
+            if depth > MAXIMUM_TYPE_DEPTH {
+                return Err(codec_error(
+                    "change_authored_type_depth",
+                    "authored type exceeds the maximum structural depth",
+                ));
             }
-            AuthoredType::CapabilityResource { interface } => {
-                self.tag(17)?;
-                self.declaration_reference(interface, definitions)
-            }
-            AuthoredType::StructuralRecord { fields } => {
-                self.tag(10)?;
-                self.list(fields, |writer, value| {
-                    writer.name(&value.name)?;
-                    writer.authored_type(&value.ty, definitions, next)
-                })
-            }
-            AuthoredType::List { item } => {
-                self.tag(11)?;
-                self.authored_type(item, definitions, next)
-            }
-            AuthoredType::Map { key, value } => {
-                self.tag(12)?;
-                self.authored_type(key, definitions, next)?;
-                self.authored_type(value, definitions, next)
-            }
-            AuthoredType::Option { item } => {
-                self.tag(13)?;
-                self.authored_type(item, definitions, next)
-            }
-            AuthoredType::Result { ok, error } => {
-                self.tag(14)?;
-                self.authored_type(ok, definitions, next)?;
-                self.authored_type(error, definitions, next)
-            }
-            AuthoredType::Stream { item } => {
-                self.tag(15)?;
-                self.authored_type(item, definitions, next)
-            }
-            AuthoredType::Function { parameters, result } => {
-                self.tag(16)?;
-                self.list(parameters, |writer, value| {
-                    writer.authored_type(value, definitions, next)
-                })?;
-                self.authored_type(result, definitions, next)
+            let next = depth + 1;
+            match value {
+                AuthoredType::Unit {} => self.tag(1)?,
+                AuthoredType::Bool {} => self.tag(2)?,
+                AuthoredType::I64 {} => self.tag(3)?,
+                AuthoredType::Bytes {} => self.tag(4)?,
+                AuthoredType::Text {} => self.tag(5)?,
+                AuthoredType::StaticText {} => self.tag(6)?,
+                AuthoredType::Secret {} => self.tag(7)?,
+                AuthoredType::TypeParameter { parameter } => {
+                    self.tag(8)?;
+                    self.type_parameter_reference(parameter, definitions)?;
+                }
+                AuthoredType::Named { declaration } => {
+                    self.tag(9)?;
+                    self.declaration_reference(declaration, definitions)?;
+                }
+                AuthoredType::Applied {
+                    declaration,
+                    arguments,
+                } => {
+                    self.tag(18)?;
+                    self.declaration_reference(declaration, definitions)?;
+                    self.length(arguments.len())?;
+                    pending.push(Frame::Types(arguments, next));
+                }
+                AuthoredType::CapabilityResource { interface } => {
+                    self.tag(17)?;
+                    self.declaration_reference(interface, definitions)?;
+                }
+                AuthoredType::StructuralRecord { fields } => {
+                    self.tag(10)?;
+                    self.length(fields.len())?;
+                    pending.push(Frame::Fields(fields, next));
+                }
+                AuthoredType::List { item }
+                | AuthoredType::Option { item }
+                | AuthoredType::Stream { item } => {
+                    self.tag(match value {
+                        AuthoredType::List { .. } => 11,
+                        AuthoredType::Option { .. } => 13,
+                        _ => 15,
+                    })?;
+                    pending.push(Frame::Type(item, next));
+                }
+                AuthoredType::Map { key, value } => {
+                    self.tag(12)?;
+                    pending.push(Frame::Type(value, next));
+                    pending.push(Frame::Type(key, next));
+                }
+                AuthoredType::Result { ok, error } => {
+                    self.tag(14)?;
+                    pending.push(Frame::Type(error, next));
+                    pending.push(Frame::Type(ok, next));
+                }
+                AuthoredType::Function { parameters, result } => {
+                    self.tag(16)?;
+                    self.length(parameters.len())?;
+                    pending.push(Frame::Type(result, next));
+                    pending.push(Frame::Types(parameters, next));
+                }
             }
         }
+        Ok(())
     }
 
     fn parameter_use(&mut self, value: ParameterUse) -> Result<(), Diagnostic> {
@@ -1257,9 +1305,13 @@ impl Writer {
             }
             AuthoredExpressionOperation::Record {
                 nominal_type,
+                type_arguments,
                 fields,
             } => {
                 self.tag(14)?;
+                self.list(type_arguments, |writer, value| {
+                    writer.authored_type(value, definitions, 1)
+                })?;
                 self.optional(nominal_type.as_ref(), |writer, value| {
                     writer.declaration_reference(value, definitions)
                 })?;
@@ -1268,8 +1320,15 @@ impl Writer {
                     writer.expression(&field.value, definitions, next)
                 })
             }
-            AuthoredExpressionOperation::Variant { case, payload } => {
+            AuthoredExpressionOperation::Variant {
+                case,
+                type_arguments,
+                payload,
+            } => {
                 self.tag(15)?;
+                self.list(type_arguments, |writer, value| {
+                    writer.authored_type(value, definitions, 1)
+                })?;
                 self.case_reference(case, definitions)?;
                 self.optional(payload.as_deref(), |writer, value| {
                     writer.expression(value, definitions, next)
@@ -1589,7 +1648,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "fef62cd4c91d2e89e7eb9b38a0375630658a888f2458f8353f0bb5e1d576efeb"
+            "073725ec7d23ee566d493e9dceb01fb850964bf2f381e9a21552f12de778a5cf"
         );
     }
 
@@ -1722,6 +1781,61 @@ mod tests {
             canonical_authored_intent_bytes(&first).unwrap(),
             canonical_authored_intent_bytes(&swapped).unwrap()
         );
+    }
+
+    #[test]
+    fn iterative_authored_types_preserve_wire_order_and_exact_depth_admission() {
+        let ty = AuthoredType::StructuralRecord {
+            fields: vec![
+                AuthoredStructuralTypeField {
+                    name: Name::new("a").unwrap(),
+                    ty: AuthoredType::Function {
+                        parameters: vec![
+                            AuthoredType::List {
+                                item: Box::new(AuthoredType::I64 {}),
+                            },
+                            AuthoredType::Option {
+                                item: Box::new(AuthoredType::Text {}),
+                            },
+                        ],
+                        result: Box::new(AuthoredType::Result {
+                            ok: Box::new(AuthoredType::Unit {}),
+                            error: Box::new(AuthoredType::Bytes {}),
+                        }),
+                    },
+                },
+                AuthoredStructuralTypeField {
+                    name: Name::new("b").unwrap(),
+                    ty: AuthoredType::Map {
+                        key: Box::new(AuthoredType::Bool {}),
+                        value: Box::new(AuthoredType::Stream {
+                            item: Box::new(AuthoredType::Secret {}),
+                        }),
+                    },
+                },
+            ],
+        };
+        let mut expected = vec![10];
+        expected.extend_from_slice(&2_u64.to_be_bytes());
+        expected.extend_from_slice(&1_u64.to_be_bytes());
+        expected.extend_from_slice(&[b'a', 16]);
+        expected.extend_from_slice(&2_u64.to_be_bytes());
+        expected.extend_from_slice(&[11, 3, 13, 5, 14, 1, 4]);
+        expected.extend_from_slice(&1_u64.to_be_bytes());
+        expected.extend_from_slice(&[b'b', 12, 2, 15, 7]);
+        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
+        assert_eq!(writer.finish(), expected);
+
+        let mut ty = AuthoredType::Unit {};
+        for _ in 1..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            ty = AuthoredType::List { item: Box::new(ty) };
+        }
+        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
+        let mut expected = vec![11; crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1];
+        expected.push(1);
+        assert_eq!(writer.finish(), expected);
     }
 
     #[test]

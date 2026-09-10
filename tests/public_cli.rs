@@ -3004,7 +3004,7 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
                 "request base={initial_revision}\n\
                  expression.unit as=$task_body\n\
                  create.function as=$task module={application} name=generic-task visibility=private result=unit effect=task body=$task_body\n\
-                 add.type-parameter as=$task_type function=$task name=Item\n"
+                 add.type-parameter as=$task_type declaration=$task name=Item\n"
             ),
             "kernel_owner_generic_task",
         ),
@@ -3030,7 +3030,7 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
                  type.parameter as=@item parameter=$item_type\n\
                  expression.local as=$identity_body value=$identity_value\n\
                  create.function as=$identity module={application} name=generic-identity visibility=private result=@item effect=pure body=$identity_body\n\
-                 add.type-parameter as=$item_type function=$identity name=Item\n\
+                 add.type-parameter as=$item_type declaration=$identity name=Item\n\
                  add.parameter as=$identity_value function=$identity name=value type=@item\n\
                  expression.function-value as=$identity_value_expression function=$identity\n\
                  expression.unit as=$done\n\
@@ -3136,7 +3136,7 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
          expression.invoke as=$apply_body function=$step_local\n\
          expression.argument parent=$apply_body index=0 expression=$value_local\n\
          create.function as=$apply module={application} name=apply visibility=private result=@item effect=pure body=$apply_body\n\
-         add.type-parameter as=$item_type function=$apply name=Item\n\
+         add.type-parameter as=$item_type declaration=$apply name=Item\n\
          add.parameter as=$value function=$apply name=value type=@item\n\
          add.parameter as=$step function=$apply name=step type=@step\n\
          expression.local as=$keep_body value=$keep_value\n\
@@ -3911,7 +3911,7 @@ fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
     ] {
         cases.push((name, format!("{types}type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$target module={module} name=target visibility=private result=unit effect=pure body=$unit\nadd.parameter as=$ignored function=$target name=ignored type={ty}\nexpression.function-value as=$callee function=$target\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.parameter as=$input function=$factory name=input type={ty}\n")));
     }
-    cases.push(("bare-type-parameter", format!("type.parameter as=@T parameter=$T\ntype.parameter as=@U parameter=$U\ntype.function as=@thunk result=@T\nexpression.local as=$value value=$value-parameter\ncreate.function as=$identity module={module} name=identity visibility=private result=@U effect=pure body=$value\nadd.type-parameter as=$U function=$identity name=U\nadd.parameter as=$value-parameter function=$identity name=value type=@U\nexpression.function-value as=$callee function=$identity\ntype.argument parent=$callee index=0 type=@T\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.type-parameter as=$T function=$factory name=T\nadd.parameter as=$input function=$factory name=input type=@T\n")));
+    cases.push(("bare-type-parameter", format!("type.parameter as=@T parameter=$T\ntype.parameter as=@U parameter=$U\ntype.function as=@thunk result=@T\nexpression.local as=$value value=$value-parameter\ncreate.function as=$identity module={module} name=identity visibility=private result=@U effect=pure body=$value\nadd.type-parameter as=$U declaration=$identity name=U\nadd.parameter as=$value-parameter function=$identity name=value type=@U\nexpression.function-value as=$callee function=$identity\ntype.argument parent=$callee index=0 type=@T\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.type-parameter as=$T declaration=$factory name=T\nadd.parameter as=$input function=$factory name=input type=@T\n")));
     cases.push(("task-empty-binding", format!("type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$task module={module} name=task visibility=private result=unit effect=task body=$unit\nexpression.function-value as=$callee function=$task\nexpression.bind as=$bound callee=$callee\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\n")));
     for (name, capture, result, arguments) in [
         (
@@ -4116,7 +4116,7 @@ fn copied_binary_checks_capture_safe_instantiation_constraints_before_publicatio
                 "request base={base}\n{types}\n\
                 expression.unit as=$unit\n\
                 create.function as=$target module={module} name=unused-bound visibility=private result=unit effect=pure body=$unit\n\
-                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                add.type-parameter as=$T declaration=$target name=T constraint=capture-safe\n\
                 expression.{invocation} as=$site function=$target\n\
                 type.argument parent=$site index=0 type={supplied}\n\
                 type.function as=@thunk result=unit\n\
@@ -4190,12 +4190,12 @@ fn copied_binary_checks_capture_safe_instantiation_constraints_before_publicatio
                 type.parameter as=@U parameter=$U\n\
                 expression.unit as=$unit\n\
                 create.function as=$target module={module} name=unused-bound visibility=private result=unit effect=pure body=$unit\n\
-                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                add.type-parameter as=$T declaration=$target name=T constraint=capture-safe\n\
                 expression.{invocation} as=$site function=$target\n\
                 type.argument parent=$site index=0 type={supplied}\n\
                 type.function as=@thunk result=unit\n\
                 create.function as=$caller module={module} name=caller visibility=private result={} effect=pure body=$site\n\
-                add.type-parameter as=$U function=$caller name=U constraint={assumption}\n",
+                add.type-parameter as=$U declaration=$caller name=U constraint={assumption}\n",
                 if invocation == "call" {
                     "unit"
                 } else {
@@ -4264,10 +4264,10 @@ fn copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity(
                 type.parameter as=@U parameter=$U\n\
                 expression.unit as=$other-unit\n\
                 create.function as=$other module=application name=other visibility=private result=unit effect=pure body=$other-unit\n\
-                add.type-parameter as=$U function=$other name=U constraint=capture-safe\n\
+                add.type-parameter as=$U declaration=$other name=U constraint=capture-safe\n\
                 expression.unit as=$unit\n\
                 create.function as=$target module=application name=target visibility=private result=unit effect=pure body=$unit\n\
-                add.type-parameter as=$T function=$target name=T constraint=capture-safe\n\
+                add.type-parameter as=$T declaration=$target name=T constraint=capture-safe\n\
                 expression.{invocation} as=$site function=$target\n{supplied}\
                 type.function as=@thunk result=unit\n\
                 create.function as=$caller module=application name=caller visibility=private result={} effect=pure body=$site\n",
@@ -5155,7 +5155,7 @@ add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_leas
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.unit as=$bad_body
 create.function as=$bad_function module={application} name=generic-resource-signature visibility=private result=unit effect=task body=$bad_body
-add.type-parameter as=$bad_type function=$bad_function name=Item
+add.type-parameter as=$bad_type declaration=$bad_function name=Item
 add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
@@ -7878,7 +7878,7 @@ fn copied_binary_extracts_one_function_with_stable_identity_and_atomic_failures(
          expression.sequence as=$generic_body\n\
          expression.argument parent=$generic_body index=0 expression=$generic_selected\n\
          create.function as=$generic module=$module name=generic-identity visibility=private result=@generic_item effect=pure body=$generic_body\n\
-         add.type-parameter as=$generic_type function=$generic name=Item\n\
+         add.type-parameter as=$generic_type declaration=$generic name=Item\n\
          add.parameter as=$generic_value function=$generic name=value type=@generic_item\n\
          expression.unit as=$recursive_prefix\n\
          expression.call as=$recursive_call function=$recursive\n\
@@ -10545,6 +10545,414 @@ fn path(value: &Path) -> &str {
 }
 
 #[test]
+fn copied_binary_authors_parametric_nominal_data_and_checks_complete_candidates() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let project = temporary.path().join("nominal");
+    let run = |arguments: &[&str]| compact_success_at(&copied, temporary.path(), arguments);
+    run(&[
+        "new",
+        path(&project),
+        "--template",
+        "command",
+        "--name",
+        "nominal",
+    ]);
+    let apply = |changes: &str| {
+        let base = current_revision_at(&copied, temporary.path(), &project);
+        let request = format!("request base={base}\n{changes}");
+        let plan = run(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &request,
+        ]);
+        let token = compact_field(compact_record(&plan, "plan"), "token").unwrap();
+        run(&[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &request,
+            "--plan",
+            token,
+        ]);
+        plan
+    };
+    let plan = apply(
+        r#"
+create.module as=$module name=nominal
+create.record as=$batch module=$module name=batch visibility=public
+add.type-parameter as=$Item declaration=$batch name=Item
+type.parameter as=@Item parameter=$Item
+type.list as=@Items item=@Item
+add.field as=$revision record=$batch name=revision type=i64
+add.field as=$items record=$batch name=items type=@Items
+create.variant as=$edit module=$module name=edit visibility=public
+add.type-parameter as=$EditItem declaration=$edit name=Item
+type.parameter as=@EditItem parameter=$EditItem
+type.application as=@EditBatch declaration=$batch
+type.argument parent=@EditBatch index=0 type=@EditItem
+add.case as=$keep variant=$edit name=keep
+add.case as=$replace variant=$edit name=replace payload=@EditBatch
+create.function as=$apply module=$module name=apply-edit visibility=public result=@ApplyBatch effect=pure body=$match
+add.type-parameter as=$ApplyItem declaration=$apply name=Item
+type.parameter as=@ApplyItem parameter=$ApplyItem
+type.application as=@ApplyBatch declaration=$batch
+type.argument parent=@ApplyBatch index=0 type=@ApplyItem
+type.application as=@ApplyEdit declaration=$edit
+type.argument parent=@ApplyEdit index=0 type=@ApplyItem
+add.parameter as=$original function=$apply name=original type=@ApplyBatch
+add.parameter as=$change function=$apply name=change type=@ApplyEdit
+expression.local as=$edit_value value=$change
+expression.local as=$original_value value=$original
+expression.local as=$replacement_value value=$replacement
+expression.match as=$match value=$edit_value
+expression.match-arm parent=$match index=0 case=$keep body=$original_value
+expression.match-arm parent=$match index=1 case=$replace as=$replacement name=replacement type=@ApplyBatch body=$replacement_value
+create.record as=$token module=$module name=token visibility=public
+add.field as=$token_text record=$token name=text type=text
+"#,
+    );
+    let identity = |symbol| {
+        plan.iter()
+            .find(|record| {
+                record.operation == "identity" && compact_field(record, "symbol") == Some(symbol)
+            })
+            .and_then(|record| compact_field(record, "id"))
+            .unwrap()
+            .to_owned()
+    };
+    let module = identity("$module");
+    let batch = identity("$batch");
+    let status = run(&["--project", path(&project), "status"]);
+    let package = compact_field(compact_record(&status, "package"), "id").unwrap();
+    let edit = identity("$edit");
+    let reducer = identity("$apply");
+    let token = identity("$token");
+    for (label, ty, type_definition, original_items, replacement_items) in [
+        (
+            "integers",
+            "i64",
+            String::new(),
+            serde_json::json!([1, 2, 4]),
+            serde_json::json!([-2, 0, 9]),
+        ),
+        (
+            "texts",
+            "text",
+            String::new(),
+            serde_json::json!(["a", "b"]),
+            serde_json::json!(["replacement"]),
+        ),
+        (
+            "nested",
+            "@Item",
+            "type.list as=@Item item=i64\n".to_owned(),
+            serde_json::json!([[1, 2], [], [4]]),
+            serde_json::json!([[9], [-2, 0]]),
+        ),
+        (
+            "owned",
+            "@Item",
+            format!("type.named as=@Item declaration={token}\n"),
+            serde_json::json!([{"text":"first"}]),
+            serde_json::json!([{"text":"second"},{"text":"third"}]),
+        ),
+        (
+            "applied",
+            "@Item",
+            format!(
+                "type.application as=@Item declaration={batch}\ntype.argument parent=@Item index=0 type=i64\n"
+            ),
+            serde_json::json!([{"revision":2,"items":[1,2]}]),
+            serde_json::json!([{"revision":3,"items":[]}]),
+        ),
+    ] {
+        apply(&format!(
+            r#"{type_definition}
+type.application as=@Batch declaration={batch}
+type.argument parent=@Batch index=0 type={ty}
+type.application as=@Edit declaration={edit}
+type.argument parent=@Edit index=0 type={ty}
+create.function as=$entry module={module} name={label} visibility=private result=@Batch effect=pure body=$call
+add.parameter as=$original function=$entry name=original type=@Batch
+add.parameter as=$change function=$entry name=change type=@Edit
+expression.local as=$original_value value=$original
+expression.local as=$change_value value=$change
+expression.call as=$call function={reducer}
+type.argument parent=$call index=0 type={ty}
+expression.argument parent=$call index=0 expression=$original_value
+expression.argument parent=$call index=1 expression=$change_value
+type.function as=@Entry result=@Batch
+type.argument parent=@Entry index=0 type=@Batch
+type.argument parent=@Entry index=1 type=@Edit
+create.component as=$component module={module} name={label}-component visibility=private
+add.port as=$port component=$component name=main type=@Entry function=$entry
+create.target as=$target name={label} component=$component port=$port runner=command
+"#
+        ));
+        let original = serde_json::json!({"revision":7,"items":original_items});
+        let replacement = serde_json::json!({"revision":8,"items":replacement_items});
+        for (change, expected) in [
+            (serde_json::json!({"case":"keep"}), original.clone()),
+            (
+                serde_json::json!({"case":"replace","value":replacement}),
+                replacement.clone(),
+            ),
+        ] {
+            let arguments = serde_json::json!([original, change]).to_string();
+            let output = run(&[
+                "--project",
+                path(&project),
+                "run",
+                label,
+                "--arguments",
+                &arguments,
+            ]);
+            let execution = compact_record(&output, "execution");
+            assert_eq!(compact_field(execution, "differential"), Some("equal"));
+            let actual: Value =
+                serde_json::from_str(compact_field(execution, "value").unwrap()).unwrap();
+            assert_eq!(actual, expected, "all ordered fields and items for {label}");
+        }
+    }
+    let head = std::fs::read(project.join("HEAD")).unwrap();
+    for types in [
+        format!("type.named as=@Invalid declaration={batch}\n"),
+        format!(
+            "type.application as=@Invalid declaration={batch}\ntype.argument parent=@Invalid index=0 type=i64\ntype.argument parent=@Invalid index=1 type=text\n"
+        ),
+        format!(
+            "type.application as=@Invalid declaration={token}\ntype.argument parent=@Invalid index=0 type=i64\n"
+        ),
+        format!(
+            "type.application as=@Invalid declaration={batch}\ntype.stream as=@Live item=i64\ntype.argument parent=@Invalid index=0 type=@Live\n"
+        ),
+    ] {
+        let base = current_revision_at(&copied, temporary.path(), &project);
+        let invalid = format!(
+            "request base={base}\n{types}expression.unit as=$body\ncreate.function as=$bad module={module} name=invalid visibility=private result=unit effect=pure body=$body\nadd.parameter as=$unused function=$bad name=unused type=@Invalid\n"
+        );
+        let rejected = compact_failure_output(command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &invalid,
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "class"),
+            Some("semantic")
+        );
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), head);
+    }
+    let renamed = apply(&format!("rename.owner owner={batch} name=renamed-batch\n"));
+    assert!(renamed.iter().any(|record| record.operation == "revision"));
+    let current = std::fs::read(project.join("HEAD")).unwrap();
+    for (index,definition) in [
+        "create.record as=$R module=MODULE name=Cycle visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@T\nadd.field as=$field record=$R name=next type=@Cycle\n",
+        "create.record as=$R module=MODULE name=Growing visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.list as=@Ts item=@T\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@Ts\nadd.field as=$field record=$R name=next type=@Cycle\n",
+        "create.record as=$R module=MODULE name=HiddenCycle visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@T\ntype.function as=@Function result=@Cycle\nadd.field as=$field record=$R name=next type=@Function\n",
+        "create.record as=$R module=MODULE name=Phantom visibility=private\nadd.type-parameter as=$T declaration=$R name=T constraint=capture-safe\nadd.field as=$nothing record=$R name=nothing type=unit\ntype.application as=@Bad declaration=$R\ntype.argument parent=@Bad index=0 type=secret\nexpression.unit as=$unit\ncreate.function as=$user module=MODULE name=unused visibility=private result=unit effect=pure body=$unit\nadd.parameter as=$ignored function=$user name=ignored type=@Bad\n",
+        "create.record as=$R module=MODULE name=Scope visibility=private\nadd.type-parameter as=$T declaration=$R name=T\nadd.field as=$nothing record=$R name=nothing type=unit\ntype.parameter as=@Foreign parameter=$T\ncreate.record as=$S module=MODULE name=OtherScope visibility=private\nadd.field as=$field record=$S name=foreign type=@Foreign\n",
+        "create.record as=$R module=MODULE name=Indirect visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ncreate.variant as=$S module=MODULE name=IndirectSum visibility=private\nadd.type-parameter as=$U declaration=$S name=U\ntype.parameter as=@U parameter=$U\ntype.application as=@Next declaration=$S\ntype.argument parent=@Next index=0 type=@T\nadd.field as=$field record=$R name=next type=@Next\ntype.application as=@Back declaration=$R\ntype.argument parent=@Back index=0 type=@U\nadd.case as=$case variant=$S name=back payload=@Back\n",
+        "create.record as=$R module=MODULE name=Wrapped visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.function as=@Callback result=@T\nadd.field as=$callback record=$R name=callback type=@Callback\ncreate.record as=$W module=MODULE name=Wrapper visibility=private\ntype.named as=@W declaration=$W\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@W\nadd.field as=$field record=$W name=value type=@Cycle\n",
+    ].into_iter().enumerate() {
+        let base = current_revision_at(&copied, temporary.path(), &project);
+        let request = format!("request base={base}\n{}",definition.replace("MODULE",&module));
+        let rejected = compact_failure_output(command_at(&copied,temporary.path(), &["--project",path(&project),"change","plan","--input",&request]));
+        assert_eq!(compact_field(compact_record(&rejected,"diagnostic"),"class"),Some("semantic"));
+        let expected = ["kernel_type_nominal_recursion","kernel_type_nominal_recursion","kernel_type_nominal_recursion","kernel_type_constraint","kernel_type_parameter_scope","kernel_type_nominal_recursion","kernel_type_nominal_cycle"][index];
+        assert!(rejected.iter().any(|record|record.operation == "diagnostic" && compact_field(record,"code") == Some(expected)),"{index}: {rejected:?}");
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(),current);
+    }
+    let duo = format!(
+        r#"create.record as=$Duo module={module} name=Duo visibility=private
+add.type-parameter as=$First declaration=$Duo name=First
+add.type-parameter as=$Second declaration=$Duo name=Second
+type.parameter as=@First parameter=$First
+type.parameter as=@Second parameter=$Second
+add.field as=$first record=$Duo name=first type=@First
+add.field as=$second record=$Duo name=second type=@Second
+type.application as=@Duo declaration=$Duo
+type.argument parent=@Duo index=0 type=text
+type.argument parent=@Duo index=1 type=i64
+expression.i64 as=$one value=1
+expression.text as=$text value=a
+expression.record as=$wrong type=$Duo
+type.argument parent=$wrong index=0 type=text
+type.argument parent=$wrong index=1 type=i64
+expression.record-field parent=$wrong index=0 field=$first value=$one
+expression.record-field parent=$wrong index=1 field=$second value=$text
+create.function as=$bad module={module} name=wrong-order visibility=private result=@Duo effect=pure body=$wrong
+"#
+    );
+    let partial_match = format!(
+        "type.application as=@Edit declaration={edit}\ntype.argument parent=@Edit index=0 type=i64\nexpression.local as=$value value=$input\nexpression.unit as=$unit\nexpression.match as=$match value=$value\nexpression.match-arm parent=$match index=0 case={} body=$unit\ncreate.function as=$bad module={module} name=incomplete-match visibility=private result=unit effect=pure body=$match\nadd.parameter as=$input function=$bad name=input type=@Edit\n",
+        format_args!("{package}/{}", identity("$keep"))
+    );
+    let illegal = format!(
+        "create.component as=$C module={module} name=Illegal visibility=private\nadd.type-parameter as=$T declaration=$C name=T\n"
+    );
+    for (changes, expected) in [
+        (duo.clone(), "kernel_type_record_field"),
+        (
+            duo.replace("field=$second value=$text", "field=$second value=$one")
+                .replace(
+                    "field=$first value=$one",
+                    &format!("field={package}/{} value=$text", identity("$token_text")),
+                ),
+            "kernel_type_record_field_missing",
+        ),
+        (
+            duo.replace(
+                "expression.record-field parent=$wrong index=1 field=$second value=$text\n",
+                "",
+            )
+            .replace("expression.text as=$text value=a\n", ""),
+            "kernel_type_record_field_count",
+        ),
+        (partial_match, "kernel_type_match_exhaustive"),
+        (illegal, "change_mutation_owner_kind"),
+        (
+            format!(
+                "expression.unit as=$unit\ncreate.function as=$bad module={module} name=generic-task visibility=private result=unit effect=task body=$unit\nadd.type-parameter as=$T declaration=$bad name=T\n"
+            ),
+            "kernel_owner_generic_task",
+        ),
+    ] {
+        let base = current_revision_at(&copied, temporary.path(), &project);
+        let request = format!("request base={base}\n{changes}");
+        let rejected = compact_failure_output(command_at(
+            &copied,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input",
+                &request,
+            ],
+        ));
+        assert!(
+            rejected
+                .iter()
+                .any(|record| record.operation == "diagnostic"
+                    && compact_field(record, "code") == Some(expected)),
+            "{expected}: {rejected:?}"
+        );
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), current);
+    }
+    let stale_base = current_revision_at(&copied, temporary.path(), &project);
+    let stale_request =
+        format!("request base={stale_base}\nrename.owner owner={batch} name=stale-name\n");
+    let stale_plan = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &stale_request,
+    ]);
+    let token = compact_field(compact_record(&stale_plan, "plan"), "token").unwrap();
+    apply(&format!(
+        "rename.owner owner={} name=Element\n",
+        identity("$Item")
+    ));
+    let accepted = std::fs::read(project.join("HEAD")).unwrap();
+    let rejected = command_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &stale_request,
+            "--plan",
+            token,
+        ],
+    );
+    assert_eq!(rejected.status.code(), Some(7));
+    assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), accepted);
+    let convertible = apply(&format!(
+        r#"create.record as=$C module={module} name=Convertible visibility=private
+add.field as=$value record=$C name=value type=i64
+type.named as=@C declaration=$C
+expression.i64 as=$seven value=7
+expression.record as=$original type=$C
+expression.record-field parent=$original index=0 field=$value value=$seven
+create.function as=$constructor module={module} name=convertible visibility=private result=@C effect=pure body=$original
+"#
+    ));
+    let new_identity = |symbol| {
+        convertible
+            .iter()
+            .find(|record| {
+                record.operation == "identity" && compact_field(record, "symbol") == Some(symbol)
+            })
+            .and_then(|record| compact_field(record, "id"))
+            .unwrap()
+            .to_owned()
+    };
+    let nominal = new_identity("$C");
+    let value = new_identity("$value");
+    let constructor = new_identity("$constructor");
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let incomplete =
+        format!("request base={base}\nadd.type-parameter as=$T declaration={nominal} name=T\n");
+    let before = std::fs::read(project.join("HEAD")).unwrap();
+    compact_failure_output(command_at(
+        &copied,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &incomplete,
+        ],
+    ));
+    assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), before);
+    let converted = apply(&format!(
+        r#"add.type-parameter as=$T declaration={nominal} name=T
+type.parameter as=@T parameter=$T
+set.field-type field={value} type=@T
+type.application as=@C declaration={nominal}
+type.argument parent=@C index=0 type=i64
+expression.i64 as=$seven value=7
+expression.record as=$new type={nominal}
+type.argument parent=$new index=0 type=i64
+expression.record-field parent=$new index=0 field={package}/{value} value=$seven
+set.function-contract as=%contract function={constructor} result=@C effect=pure
+replace.body function={constructor} body=$new
+"#
+    ));
+    let parameter = converted
+        .iter()
+        .find(|record| {
+            record.operation == "identity" && compact_field(record, "symbol") == Some("$T")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .unwrap();
+    apply(&format!("rename.owner owner={parameter} name=Element\n"));
+    run(&["--project", path(&project), "check"]);
+}
+
+#[test]
 fn copied_binary_constraint_edits_preserve_identity_and_validate_complete_callers() {
     let temporary = tempfile::TempDir::new().unwrap();
     let copied = temporary.path().join("lkjscript");
@@ -10592,7 +11000,7 @@ fn copied_binary_constraint_edits_preserve_identity_and_validate_complete_caller
     };
     let base = current_revision_at(&copied, temporary.path(), &project);
     let initial = format!(
-        "request base={base}\nexpression.unit as=$body\ncreate.function as=$generic module={module} name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T function=$generic name=T\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=secret\ncreate.function as=$caller module={module} name=caller visibility=private result=unit effect=pure body=$call\n"
+        "request base={base}\nexpression.unit as=$body\ncreate.function as=$generic module={module} name=generic visibility=private result=unit effect=pure body=$body\nadd.type-parameter as=$T declaration=$generic name=T\nexpression.call as=$call function=$generic\ntype.argument parent=$call index=0 type=secret\ncreate.function as=$caller module={module} name=caller visibility=private result=unit effect=pure body=$call\n"
     );
     let plan = apply(&initial);
     let identity = |symbol| {

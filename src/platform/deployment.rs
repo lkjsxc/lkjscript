@@ -1716,6 +1716,13 @@ impl PreparedWorkerApplication {
 pub struct PreparedSessionApplication(NormalizedSessionApplication);
 
 impl PreparedSessionApplication {
+    pub(crate) async fn contributor_states(
+        &self,
+        schema: &super::execution::normalized::NormalizedReferenceSchema,
+    ) -> Result<Vec<serde_json::Value>, super::execution::ExecutionError> {
+        self.0.contributor_states(schema).await
+    }
+
     pub async fn serve(
         self,
         listener: TcpListener,

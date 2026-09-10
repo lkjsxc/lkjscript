@@ -1,4 +1,4 @@
-//! Stable-ID Graph 12 expression records.
+//! Stable-ID Graph 13 expression records.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_INLINE_TEXT_BYTES};
 use super::digest::{BlobObjectDigest, TypeObjectDigest};
@@ -51,7 +51,9 @@ impl ExpressionRecord {
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
             ExpressionOperation::Call { type_arguments, .. }
-            | ExpressionOperation::FunctionValue { type_arguments, .. } => type_arguments.clone(),
+            | ExpressionOperation::FunctionValue { type_arguments, .. }
+            | ExpressionOperation::Record { type_arguments, .. }
+            | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.clone(),
             ExpressionOperation::List { item_type, .. } => vec![*item_type],
             ExpressionOperation::Map {
                 key_type,
@@ -112,10 +114,12 @@ pub enum ExpressionOperation {
     },
     Record {
         nominal_type: Option<DeclarationReference>,
+        type_arguments: Vec<TypeObjectDigest>,
         fields: Vec<RecordExpressionField>,
     },
     Variant {
         case: CaseReference,
+        type_arguments: Vec<TypeObjectDigest>,
         payload: Option<ExpressionId>,
     },
     Field {
@@ -268,6 +272,9 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::FunctionValue { type_arguments, .. } => {
             require_count("function type arguments", type_arguments.len(), true)?;
         }
+        ExpressionOperation::Variant { type_arguments, .. } => {
+            require_count("variant type arguments", type_arguments.len(), true)?;
+        }
         ExpressionOperation::Invoke { arguments, .. } => {
             require_count("invoke arguments", arguments.len(), true)?;
         }
@@ -276,8 +283,16 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         }
         ExpressionOperation::Record {
             nominal_type,
+            type_arguments,
             fields,
         } => {
+            require_count("nominal type arguments", type_arguments.len(), true)?;
+            if nominal_type.is_none() && !type_arguments.is_empty() {
+                return Err(expression_error(
+                    "kernel_expression_record_arguments",
+                    "structural records cannot have nominal type arguments",
+                ));
+            }
             require_count("record fields", fields.len(), false)?;
             let nominal = nominal_type.is_some();
             if fields
@@ -333,7 +348,6 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         | ExpressionOperation::Local { .. }
         | ExpressionOperation::Constant { .. }
         | ExpressionOperation::If { .. }
-        | ExpressionOperation::Variant { .. }
         | ExpressionOperation::Field { .. }
         | ExpressionOperation::Transaction { .. } => {}
     }
@@ -362,7 +376,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(expression_error(
             "kernel_expression_child_count",
-            format!("{label} count {count} is outside the Graph 12 bound"),
+            format!("{label} count {count} is outside the Graph 13 bound"),
         ));
     }
     Ok(())

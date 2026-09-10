@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-09 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-10 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -22,28 +22,40 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_06b6477bb1564352ddf42a0567371ed383d3d58725135d5edaebd54fd50bc5ef`; state `semantic_state_a96f15872291261b3c45f4b80648dba23a75a587a621c30d906449d6577fb259` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_d07643ae5daa20e47582e8be62911a640b5f1338b791c34a47f35fb02729a130`; state `semantic_state_9083ae6473d929c830bc955e62a6ce464f1352a32f588025009371a63689a816` |
-| built-in standard dependency | package revision `package_revision_12e7d9a0ba281bd8e438acf80553fe405d05d5db3ca0c4e4fbb564cf8197e94b`; transport `package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1`; artifact manifest `artifact_manifest_45939572d0cdf759a10314cbd0f4cb006e012fa4f88cee5be084119cbd508d73` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_7cbf14efbdd7938c347c7b7d3379e239b0f71c7eac72ea0fb36bf5dc675073d5`; state `semantic_state_17eb44525d2da78286816f854e5b0c1433eec9896fe0f14d588670aa4260b781` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_168275843037fb10801cfc4fcfa0c675664a0ba93e5d77f697f5feec18f1c9c6`; state `semantic_state_4ebbc44aa5b4c28610fddb16fc0916550560fad03a9a249959c90995c4a6c385` |
+| built-in standard dependency | package revision `package_revision_e269ce05d689c60ae7323637a9db74ed5f726ce8df185b78bd4a70096d398071`; transport `package_transport_50750a298f483b06c18abe312ba46d5ee18c645aa39e4e98b0107564c84df718`; artifact manifest `artifact_manifest_ecdd94a11857deb65ccea3d39adb58c1de49dfa6e560b79643ba5828f2fdb53f` |
 
-The standard package owns 723 live semantic owners, 126 compiler units, and 30 graph tests. Its
-current artifact has 1,292 closure objects and 397,334 bytes. `lkjournal` owns 2,040 live semantic
-owners and one exact standard dependency; its two-package artifact has 216 compiler units, 3,773
-closure objects, and 1,131,294 bytes. Its complete dependency closure runs 37 graph tests. Both
+The standard package owns 802 live semantic owners, 136 compiler units, and 33 graph tests. Its
+current artifact has 1,629 closure objects and 493,527 bytes. `lkjournal` owns 2,040 live semantic
+owners and one exact standard dependency; its two-package artifact has 226 compiler units, 4,130
+closure objects, and 1,233,974 bytes. Its complete dependency closure runs 40 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 275,085 bytes | `3ead1a17ab28bf52ae3fcfb13b29c86352836cc328f1ec15eda079c0f3dc5b0b` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 397,334 bytes | `7ffe836adf786bcc65f66181d26cd168d5a709a18725c0d0afffd3cbf940d6ed` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,131,294 bytes | `eeb3215ed6e4628724785211c8ce3ff778a0ee4c635d007e1b20fdbe613febbc` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 343,974 bytes | `72420edcc0ea7f122b7c85669aab46def05f01cca2fb39068150fa4aefd8b2f4` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 493,527 bytes | `b4eb62db86426c352dc93dea63aba35fa2108128dcdc8c322e95ef790f96f576` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,233,974 bytes | `45d0568a06b33a14565d18914d45fb7181749177a0971fcfda763ae9d9b5d523` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
 also performs a fresh public `lkjournal` build, requires byte equality with the checked-in bundle,
 and stages that one artifact for isolated `serve` and `worker` acceptance.
+
+## Parametric nominal data in source
+
+Untagged source adds ordinary parametric records and variants with ordered stable parameters,
+explicit applications and capture-safe bounds. Canonical authoring, exact package interfaces,
+compiler/runtime layouts, independent reference derivation, JSON/data and concrete session state
+carry the application identity. The standard owns the pair family. A newly authored batch/edit
+library is the public composition witness; lkjournal receives the encoding and exact dependency
+cutover without application policy or operational-data changes.
+
+The [nominal campaign](campaigns/202609100459.md) is in progress. Final full-profile, exact local
+musl and integration proof remain pending. This source state is not a public distribution or deployment.
 
 ## Capture-safe rank-one abstraction
 
@@ -51,7 +63,7 @@ Graph-owned parameters carry explicit capture-safe constraints. The compact add/
 complete-candidate validation, interface summaries, compiled signatures, strict loading and both
 evaluators carry that meaning. The standard owns function-constant over a private generic graph
 helper; copied-product witnesses author configurable callbacks with runtime nominal environments,
-Text and nested lists. lkjournal receives only the Graph 12 and exact dependency migration.
+Text and nested lists. At that cutover lkjournal received only the Graph 12 and exact dependency migration.
 Existing type/data bytes and owner identities are preserved. This is a new reusable library
 capability; no generic tasks, user-defined traits, equality/serialization constraints, resource
 polymorphism or application feature was added.
@@ -133,19 +145,19 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-Current product source and immutable public latest are `0.1.28`, published from the
+Current product source is untagged `0.1.29`; immutable public latest remains `0.1.28` from the
 exact release-input source commit named above. The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
-Graph 12, TypeObject 10, validation witness 7, owner summary 7,
-validator 12, package 3, package interface 8, compiler-unit 7, bytecode 4, Artifact 16, resident
-runtime 3, function-definition projection 4, service receipt 10, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 16, authored change 13,
+Graph 13, TypeObject 10 plus nominal application envelope 1, validation witness 8, owner summary 8,
+validator 13, package 3, package interface 9, compiler-unit 8, bytecode 5, Artifact 17, resident
+runtime 3, function-definition projection 5, service receipt 10, distributed-HTTP receipt 4,
+outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 17, authored change 14,
 logical change plan 5, query 7,
-project creation 5, registry 15, CLI 29, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 16, CLI 30, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 

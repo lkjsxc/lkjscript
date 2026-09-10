@@ -55,6 +55,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("pure-tail") => pure_tail::command(arguments),
         Some("pure-tail-probe") => pure_tail::probe_command(arguments),
         Some("pure-tail-transaction-probe") => pure_tail::transaction_probe_command(arguments),
+        Some("nominal-session-state-probe") => service::nominal::state_probe_command(arguments),
         Some("release") => release::command(arguments),
         Some("service") => service::command(arguments),
         Some("stateful-http") => stateful_http::command(arguments),

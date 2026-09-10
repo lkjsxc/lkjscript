@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 12 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 13 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -24,7 +24,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, ExpressionId, FieldId, HttpRouteId, OperationId, ParameterId,
-    PortId, RequirementId,
+    PortId, RequirementId, TypeParameterId,
 };
 use crate::platform::session::{CanonicalSessionRead, validate_session_function_type};
 use crate::platform::storage::object::ObjectKey;
@@ -429,7 +429,12 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         record: DeclarationRecord,
     ) -> Result<CompilationPayload, Diagnostic> {
         match record.payload {
-            DeclarationPayload::Record { fields } => {
+            DeclarationPayload::Record {
+                fields,
+                type_parameters,
+            } => {
+                let type_parameter_constraints =
+                    self.compile_type_parameter_constraints(declaration, &type_parameters)?;
                 let mut compiled = Vec::with_capacity(fields.len());
                 for field in fields {
                     let field_record = self.required_field(field, declaration)?;
@@ -441,9 +446,18 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                         ty: self.tables.ty(field_record.ty)?,
                     });
                 }
-                Ok(CompilationPayload::Record { fields: compiled })
+                Ok(CompilationPayload::Record {
+                    type_parameters,
+                    type_parameter_constraints,
+                    fields: compiled,
+                })
             }
-            DeclarationPayload::Variant { cases } => {
+            DeclarationPayload::Variant {
+                cases,
+                type_parameters,
+            } => {
+                let type_parameter_constraints =
+                    self.compile_type_parameter_constraints(declaration, &type_parameters)?;
                 let mut compiled = Vec::with_capacity(cases.len());
                 for case in cases {
                     let case_record = self.required_case(case, declaration)?;
@@ -458,7 +472,11 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                             .transpose()?,
                     });
                 }
-                Ok(CompilationPayload::Variant { cases: compiled })
+                Ok(CompilationPayload::Variant {
+                    type_parameters,
+                    type_parameter_constraints,
+                    cases: compiled,
+                })
             }
             DeclarationPayload::Interface { operations } => {
                 let mut compiled = Vec::with_capacity(operations.len());
@@ -526,6 +544,31 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         }
     }
 
+    fn compile_type_parameter_constraints(
+        &mut self,
+        declaration: DeclarationId,
+        parameters: &[TypeParameterId],
+    ) -> Result<Vec<crate::platform::kernel::TypeParameterConstraints>, Diagnostic> {
+        let mut constraints = Vec::new();
+        for parameter in parameters {
+            match self.required_owner(
+                OwnerKey::TypeParameter(*parameter),
+                "declaration references a missing type parameter",
+            )? {
+                OwnerRecord::TypeParameter(record) if record.declaration == declaration => {
+                    constraints.push(record.constraints)
+                }
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_unit_type_parameter_parent",
+                        "type parameter has no exact declaration owner",
+                    ));
+                }
+            }
+        }
+        Ok(constraints)
+    }
+
     fn compile_signature(
         &mut self,
         declaration: DeclarationId,
@@ -534,29 +577,8 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         result: TypeObjectDigest,
         effect: &FunctionEffect,
     ) -> Result<CompiledSignature, Diagnostic> {
-        let mut type_parameter_constraints = Vec::with_capacity(type_parameters.len());
-        for type_parameter in type_parameters {
-            match self.required_owner(
-                OwnerKey::TypeParameter(*type_parameter),
-                "function signature references a missing type parameter",
-            )? {
-                OwnerRecord::TypeParameter(record) if record.declaration == declaration => {
-                    type_parameter_constraints.push(record.constraints);
-                }
-                OwnerRecord::TypeParameter(_) => {
-                    return Err(compiler_corrupt(
-                        "compiler_unit_type_parameter_parent",
-                        "function type parameter belongs to another declaration",
-                    ));
-                }
-                _ => {
-                    return Err(compiler_corrupt(
-                        "compiler_unit_type_parameter_kind",
-                        "function type-parameter identity names another owner kind",
-                    ));
-                }
-            }
-        }
+        let type_parameter_constraints =
+            self.compile_type_parameter_constraints(declaration, type_parameters)?;
         let mut compiled_parameters = Vec::with_capacity(parameters.len());
         for parameter in parameters {
             let parameter_record = self.required_parameter(
@@ -1338,8 +1360,13 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
             }
             ExpressionOperation::Record {
                 nominal_type,
+                type_arguments,
                 fields,
             } => {
+                let type_arguments = type_arguments
+                    .into_iter()
+                    .map(|ty| self.unit.tables.ty(ty))
+                    .collect::<Result<_, _>>()?;
                 let nominal_type = nominal_type
                     .map(|declaration| self.unit.tables.declaration(declaration))
                     .transpose()?;
@@ -1352,10 +1379,19 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 }
                 self.push(CompiledInstruction::Record {
                     nominal_type,
+                    type_arguments,
                     fields: selectors,
                 })?;
             }
-            ExpressionOperation::Variant { case, payload } => {
+            ExpressionOperation::Variant {
+                case,
+                type_arguments,
+                payload,
+            } => {
+                let type_arguments = type_arguments
+                    .into_iter()
+                    .map(|ty| self.unit.tables.ty(ty))
+                    .collect::<Result<_, _>>()?;
                 let resource_payload = self.unit.case_payload_is_resource(case)?;
                 let case = self.unit.tables.case(case)?;
                 if let Some(payload) = payload {
@@ -1370,6 +1406,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     )?;
                 }
                 self.push(CompiledInstruction::Variant {
+                    type_arguments,
                     case,
                     has_payload: payload.is_some(),
                 })?;

@@ -7,10 +7,10 @@ use super::value::{
 use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::json::{JsonLimits, decode_strict};
-use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
+use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use base64::Engine;
 use serde_json::{Map, Value as JsonValue};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub fn decode_typed(
@@ -29,6 +29,7 @@ pub fn decode_value(
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<NormalizedValue, Diagnostic> {
+    require_application_encoding(program, ty, true, limits)?;
     from_json(program, value, ty, limits, "$", 0)
 }
 
@@ -66,8 +67,146 @@ pub fn encode_value(
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<JsonValue, Diagnostic> {
+    require_application_encoding(program, ty, false, limits)?;
     let mut state = EncodeState { limits, items: 0 };
     to_json(program, value, ty, &mut state, "$", 0)
+}
+
+// Properties of an applied container cover its complete type, even when the value is empty.
+// The ambient non-applied codec retains its existing rules.
+fn require_application_encoding(
+    program: &dyn NormalizedValueSchema,
+    root: TypeObjectDigest,
+    decoding: bool,
+    limits: JsonLimits,
+) -> Result<(), Diagnostic> {
+    if program.application_free(root) {
+        return Ok(());
+    }
+    fn charge(work: &mut usize, bytes: &mut usize, size: usize) -> Result<(), Diagnostic> {
+        *work = work
+            .checked_add(1)
+            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                json_error(
+                    DiagnosticClass::Resource,
+                    "normalized_json_type_work",
+                    "JSON type eligibility exhausted validation work",
+                )
+            })?;
+        *bytes = bytes
+            .checked_add(size)
+            .filter(|count| {
+                *count as u64 <= super::vm::NormalizedRunPolicy::default().maximum_allocated_bytes
+            })
+            .ok_or_else(|| {
+                json_error(
+                    DiagnosticClass::Resource,
+                    "normalized_json_type_storage",
+                    "JSON type eligibility exhausted the existing allocation limit",
+                )
+            })?;
+        Ok(())
+    }
+    let mut pending = vec![(root, false, 0usize)];
+    let mut seen = BTreeSet::new();
+    let mut work = 0usize;
+    let mut bytes = std::mem::size_of::<(TypeObjectDigest, bool, usize)>();
+    while let Some((ty, strict, depth)) = pending.pop() {
+        work = work
+            .checked_add(1)
+            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                json_error(
+                    DiagnosticClass::Resource,
+                    "normalized_json_type_work",
+                    "JSON type eligibility exhausted validation work",
+                )
+            })?;
+        require_depth(limits, "$", depth)?;
+        if seen.contains(&(ty, strict)) {
+            continue;
+        }
+        charge(
+            &mut work,
+            &mut bytes,
+            std::mem::size_of::<(TypeObjectDigest, bool)>() + 3 * std::mem::size_of::<usize>(),
+        )?;
+        seen.insert((ty, strict));
+        let form = type_form(program, ty)?;
+        let strict = strict || matches!(form, TypeForm::Applied { .. });
+        let mut push = |ty| -> Result<(), Diagnostic> {
+            charge(
+                &mut work,
+                &mut bytes,
+                std::mem::size_of::<(TypeObjectDigest, bool, usize)>(),
+            )?;
+            pending.push((ty, strict, depth + 1));
+            Ok(())
+        };
+        match form {
+            TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                if let Some(index) = program.record_index(ty) {
+                    let record = &program.records()[index];
+                    for ty in record
+                        .arguments
+                        .iter()
+                        .copied()
+                        .chain(record.fields.iter().map(|field| field.ty))
+                    {
+                        push(ty)?;
+                    }
+                } else if let Some(index) = program.variant_index(ty) {
+                    let variant = &program.variants()[index];
+                    for ty in variant
+                        .arguments
+                        .iter()
+                        .copied()
+                        .chain(variant.cases.iter().filter_map(|case| case.payload))
+                    {
+                        push(ty)?;
+                    }
+                } else {
+                    return Err(type_error(
+                        "$",
+                        "nominal JSON type has no exact application layout",
+                    ));
+                }
+            }
+            TypeForm::Function { .. }
+            | TypeForm::Secret
+            | TypeForm::Stream { .. }
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::TypeParameter { .. }
+            | TypeForm::Option { .. }
+            | TypeForm::Result { .. }
+                if strict =>
+            {
+                return Err(type_error(
+                    "$",
+                    "nominal application contains a type unsupported by JSON",
+                ));
+            }
+            TypeForm::StaticText if strict && decoding => {
+                return Err(type_error(
+                    "$",
+                    "nominal StaticText cannot originate in JSON",
+                ));
+            }
+            TypeForm::StructuralRecord { fields } => {
+                for field in fields {
+                    push(field.ty)?;
+                }
+            }
+            TypeForm::List { item } => push(*item)?,
+            TypeForm::Map { key, value } => {
+                push(*key)?;
+                push(*value)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn from_json(
@@ -100,8 +239,8 @@ fn from_json(
             path,
             "static text must originate in accepted meaning and cannot be decoded from JSON",
         )),
-        TypeForm::Named { declaration } => {
-            decode_named(program, value, *declaration, limits, path, depth)
+        TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+            decode_named(program, value, ty, limits, path, depth)
         }
         TypeForm::StructuralRecord { fields } => {
             let object = value
@@ -206,12 +345,12 @@ fn from_json(
 fn decode_named(
     program: &dyn NormalizedValueSchema,
     value: &JsonValue,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
     limits: JsonLimits,
     path: &str,
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    if let Some((index, layout)) = record_layout(program, declaration) {
+    if let Some((index, layout)) = record_layout(program, ty) {
         let object = value
             .as_object()
             .ok_or_else(|| type_error(path, "expected nominal-record object"))?;
@@ -241,7 +380,7 @@ fn decode_named(
             fields: Arc::new(fields),
         }));
     }
-    if let Some((index, layout)) = variant_layout(program, declaration) {
+    if let Some((index, layout)) = variant_layout(program, ty) {
         let object = value
             .as_object()
             .ok_or_else(|| type_error(path, "expected nominal-variant object"))?;
@@ -348,8 +487,8 @@ fn to_json(
             }
             Ok(JsonValue::String(value.to_string()))
         }
-        (value, TypeForm::Named { declaration }) => {
-            encode_named(program, value, *declaration, state, path, depth)
+        (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
+            encode_named(program, value, ty, state, path, depth)
         }
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
@@ -454,12 +593,12 @@ fn to_json(
 fn encode_named(
     program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
     state: &mut EncodeState,
     path: &str,
     depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
-    if let Some((index, layout)) = record_layout(program, declaration) {
+    if let Some((index, layout)) = record_layout(program, ty) {
         let NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: actual,
             fields,
@@ -484,7 +623,7 @@ fn encode_named(
         }
         return Ok(JsonValue::Object(object));
     }
-    if let Some((index, layout)) = variant_layout(program, declaration) {
+    if let Some((index, layout)) = variant_layout(program, ty) {
         let NormalizedValue::Variant {
             layout: actual,
             case,
@@ -542,13 +681,11 @@ fn encode_named(
 
 fn record_layout(
     program: &dyn NormalizedValueSchema,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
 ) -> Option<(RecordLayoutIndex, &NormalizedRecordLayout)> {
     program
-        .records()
-        .iter()
-        .enumerate()
-        .find(|(_, layout)| layout.declaration == declaration)
+        .record_index(ty)
+        .and_then(|index| program.records().get(index).map(|layout| (index, layout)))
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()
@@ -558,13 +695,11 @@ fn record_layout(
 
 fn variant_layout(
     program: &dyn NormalizedValueSchema,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
 ) -> Option<(VariantLayoutIndex, &NormalizedVariantLayout)> {
     program
-        .variants()
-        .iter()
-        .enumerate()
-        .find(|(_, layout)| layout.declaration == declaration)
+        .variant_index(ty)
+        .and_then(|index| program.variants().get(index).map(|layout| (index, layout)))
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()

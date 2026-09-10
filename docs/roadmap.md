@@ -25,7 +25,7 @@ rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
 PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source is
-`0.1.28`, also the supported immutable public `x86_64-unknown-linux-musl` distribution. Exact and
+untagged `0.1.29`; `0.1.28` remains the supported immutable public `x86_64-unknown-linux-musl` distribution. Exact and
 latest downloads independently passed static inspection and five behavioral owners covering
 distributed HTTP, outbound HTTPS/TLS/DNS, offline package closures, pure-tail execution, and stateful
 HTTP. Capture-safe generic factories, retained runtime configuration, and ordered persistent-list
@@ -65,7 +65,8 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    roots, an independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O
    observations before any deletion, packing, or compaction mechanism.
 5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
-   and member/case edits, inline, and repair only from demonstrated public workflows. Keep typed
+   edits, inline, and repair only from demonstrated public workflows. Field/case type edits now use
+   the current public nominal-data path. Keep typed
    intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
    and predecessor rejection in each vertical slice.
 6. **Additional platform releases one target at a time.** Treat each architecture and operating
@@ -92,7 +93,9 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
    recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
    constraints are also implemented, with graph-owned list-map and function-constant families.
-   Parametric nominal data, richer state/resource composition, automatic lexical capture, component
+   Explicit parametric nominal data is implemented in source through the
+   [selected nominal campaign](campaigns/202609100459.md), with final admission tracked there.
+   Richer state/resource composition, automatic lexical capture, component
    composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
    witness, independent semantic/reference behavior, measurements where relevant, and reversal
    conditions. Explicit prefix binding does not imply anonymous bodies or free-variable inference.

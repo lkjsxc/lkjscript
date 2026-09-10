@@ -27,6 +27,11 @@ objects, and foreign standard declarations reject. Authoring validation, accepte
 compiler lowering, strict artifact loading, and deployment preparation each reconstruct this
 relation rather than trusting a stored assertion.
 
+Closed parametric records and variants may be State. All repeated positions must name the same
+complete application, including phantom arguments. State eligibility checks every argument and
+substituted member, including absent cases and empty containers; a forbidden nested or phantom
+argument rejects before readiness. Runtime state layout also binds the preparation origin.
+
 The standard package owns `SessionEvent`, its payload records, `SessionMessageKind`,
 `SessionDecisionKind`, `SessionOutbound`, `SessionReject`, and `SessionClose`. The parameterized
 decision is the canonical structural record:

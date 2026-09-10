@@ -339,6 +339,10 @@ pub(crate) enum SessionNominalShape {
 
 pub(crate) trait SessionShapeRead {
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic>;
+    fn nominal_parameters(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<super::semantic_id::TypeParameterId>, Diagnostic>;
     fn nominal_shape(
         &self,
         declaration: DeclarationReference,
@@ -424,6 +428,34 @@ enum CanonicalNominalRecord {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_, B> {
+    fn nominal_parameters(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<super::semantic_id::TypeParameterId>, Diagnostic> {
+        match self.record(declaration, OwnerKey::Declaration(declaration.declaration))? {
+            CanonicalNominalRecord::Local(OwnerRecord::Declaration(record)) => {
+                Ok(record.payload.type_parameters().to_vec())
+            }
+            CanonicalNominalRecord::Foreign(PackageInterfaceRecord::Declaration(record)) => {
+                match record.payload {
+                    PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => Ok(type_parameters),
+                    _ => Err(session_semantic(
+                        "session_state_nominal_kind",
+                        "state references a non-data declaration",
+                    )),
+                }
+            }
+            _ => Err(session_semantic(
+                "session_state_nominal_kind",
+                "state references a non-declaration",
+            )),
+        }
+    }
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
         let read = self.read.read_type_object(digest)?;
         self.add_work(read.work);
@@ -442,7 +474,7 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
         match self.record(declaration, OwnerKey::Declaration(declaration.declaration))? {
             CanonicalNominalRecord::Local(OwnerRecord::Declaration(record)) => {
                 match record.payload {
-                    DeclarationPayload::Record { fields } => {
+                    DeclarationPayload::Record { fields, .. } => {
                         let mut output = BTreeMap::new();
                         for field in fields {
                             let CanonicalNominalRecord::Local(OwnerRecord::Field(record)) =
@@ -457,7 +489,7 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
                         }
                         Ok(SessionNominalShape::Record(output))
                     }
-                    DeclarationPayload::Variant { cases } => {
+                    DeclarationPayload::Variant { cases, .. } => {
                         let mut output = BTreeMap::new();
                         for case in cases {
                             let CanonicalNominalRecord::Local(OwnerRecord::Case(record)) =
@@ -480,7 +512,7 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
             }
             CanonicalNominalRecord::Foreign(PackageInterfaceRecord::Declaration(record)) => {
                 match record.payload {
-                    PackageInterfaceDeclarationPayload::Record { fields } => {
+                    PackageInterfaceDeclarationPayload::Record { fields, .. } => {
                         let mut output = BTreeMap::new();
                         for field in fields {
                             let CanonicalNominalRecord::Foreign(PackageInterfaceRecord::Field(
@@ -496,7 +528,7 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
                         }
                         Ok(SessionNominalShape::Record(output))
                     }
-                    PackageInterfaceDeclarationPayload::Variant { cases } => {
+                    PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
                         let mut output = BTreeMap::new();
                         for case in cases {
                             let CanonicalNominalRecord::Foreign(PackageInterfaceRecord::Case(
@@ -527,6 +559,36 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
 }
 
 impl<R: super::kernel::ExpressionRead> SessionShapeRead for ExpressionSessionRead<'_, R> {
+    fn nominal_parameters(
+        &self,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<super::semantic_id::TypeParameterId>, Diagnostic> {
+        if declaration.package == self.read.package_id() {
+            if let Some(OwnerRecord::Declaration(record)) = self
+                .read
+                .owner(OwnerKey::Declaration(declaration.declaration))?
+            {
+                return Ok(record.payload.type_parameters().to_vec());
+            }
+        } else if let Some(PackageInterfaceRecord::Declaration(record)) =
+            self.read.package_interface_owner(
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+            )?
+            && let PackageInterfaceDeclarationPayload::Record {
+                type_parameters, ..
+            }
+            | PackageInterfaceDeclarationPayload::Variant {
+                type_parameters, ..
+            } = record.payload
+        {
+            return Ok(type_parameters);
+        }
+        Err(session_semantic(
+            "session_state_nominal_kind",
+            "state references a non-data declaration",
+        ))
+    }
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
         self.read.type_object(digest)?.ok_or_else(|| {
             session_semantic(
@@ -561,11 +623,11 @@ impl<R: super::kernel::ExpressionRead> SessionShapeRead for ExpressionSessionRea
         let members = match declaration_record {
             ExpressionNominalRecord::Local(OwnerRecord::Declaration(record)) => {
                 match record.payload {
-                    DeclarationPayload::Record { fields } => (
+                    DeclarationPayload::Record { fields, .. } => (
                         true,
                         fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
                     ),
-                    DeclarationPayload::Variant { cases } => (
+                    DeclarationPayload::Variant { cases, .. } => (
                         false,
                         cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
                     ),
@@ -579,11 +641,11 @@ impl<R: super::kernel::ExpressionRead> SessionShapeRead for ExpressionSessionRea
             }
             ExpressionNominalRecord::Foreign(PackageInterfaceRecord::Declaration(record)) => {
                 match record.payload {
-                    PackageInterfaceDeclarationPayload::Record { fields } => (
+                    PackageInterfaceDeclarationPayload::Record { fields, .. } => (
                         true,
                         fields.into_iter().map(OwnerKey::Field).collect::<Vec<_>>(),
                     ),
-                    PackageInterfaceDeclarationPayload::Variant { cases } => (
+                    PackageInterfaceDeclarationPayload::Variant { cases, .. } => (
                         false,
                         cases.into_iter().map(OwnerKey::Case).collect::<Vec<_>>(),
                     ),
@@ -913,33 +975,65 @@ fn validate_ordinary_state<R: SessionShapeRead>(
     read: &R,
     root: TypeObjectDigest,
 ) -> Result<(), Diagnostic> {
+    type Bindings = BTreeMap<super::semantic_id::TypeParameterId, TypeObjectDigest>;
     fn visit<R: SessionShapeRead>(
         read: &R,
         ty: TypeObjectDigest,
-        visiting: &mut BTreeSet<TypeObjectDigest>,
-        complete: &mut BTreeSet<TypeObjectDigest>,
+        bindings: &Bindings,
+        visiting: &mut BTreeSet<(TypeObjectDigest, Bindings)>,
+        complete: &mut BTreeSet<(TypeObjectDigest, Bindings)>,
         depth: usize,
     ) -> Result<(), Diagnostic> {
-        if complete.contains(&ty) {
+        if complete.len() >= MAXIMUM_SESSION_STATE_NODES
+            || bindings.len() > super::kernel::contract::MAXIMUM_CHILDREN
+        {
+            return Err(session_semantic(
+                "session_state_limit",
+                "retained state type exceeds its bounded closure",
+            ));
+        }
+        let identity = (ty, bindings.clone());
+        if complete.contains(&identity) {
             return Ok(());
         }
-        if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH || !visiting.insert(ty) {
+        if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH || !visiting.insert(identity.clone())
+        {
             return Err(session_semantic(
                 "session_state_cycle",
                 "retained session state type is cyclic or too deep",
             ));
         }
         match read.type_object(ty)?.form {
+            TypeForm::TypeParameter { parameter } => {
+                let actual = bindings.get(&parameter).copied().ok_or_else(|| {
+                    session_semantic(
+                        "session_state_parameter",
+                        "state type parameter is unresolved",
+                    )
+                })?;
+                visit(read, actual, bindings, visiting, complete, depth + 1)?;
+            }
             TypeForm::Unit | TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text => {}
             TypeForm::StructuralRecord { fields } => {
                 for field in fields {
-                    visit(read, field.ty, visiting, complete, depth + 1)?;
+                    visit(read, field.ty, bindings, visiting, complete, depth + 1)?;
                 }
             }
             TypeForm::List { item } | TypeForm::Option { item } => {
-                visit(read, item, visiting, complete, depth + 1)?;
+                visit(read, item, bindings, visiting, complete, depth + 1)?;
             }
             TypeForm::Map { key, value } => {
+                let key = match read.type_object(key)?.form {
+                    TypeForm::TypeParameter { parameter } => {
+                        bindings.get(&parameter).copied().ok_or_else(|| {
+                            session_semantic(
+                                "session_state_parameter",
+                                "map key parameter is unresolved",
+                            )
+                        })?
+                    }
+                    _ => key,
+                };
                 if !matches!(
                     read.type_object(key)?.form,
                     TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text
@@ -949,24 +1043,52 @@ fn validate_ordinary_state<R: SessionShapeRead>(
                         "retained session state map keys must be deterministic primitive values",
                     ));
                 }
-                visit(read, value, visiting, complete, depth + 1)?;
+                visit(read, value, bindings, visiting, complete, depth + 1)?;
             }
-            TypeForm::Named { declaration } => match read.nominal_shape(declaration)? {
-                SessionNominalShape::Record(fields) => {
-                    for field in fields.into_values() {
-                        visit(read, field, visiting, complete, depth + 1)?;
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                let arguments = match read.type_object(ty)?.form {
+                    TypeForm::Applied { arguments, .. } => arguments,
+                    _ => Vec::new(),
+                };
+                let parameters = read.nominal_parameters(declaration)?;
+                if arguments.len() != parameters.len() {
+                    return Err(session_semantic(
+                        "session_state_arity",
+                        "state nominal application has wrong arity",
+                    ));
+                }
+                let mut applied = bindings.clone();
+                for (parameter, argument) in parameters.into_iter().zip(arguments) {
+                    visit(read, argument, bindings, visiting, complete, depth + 1)?;
+                    let argument = match read.type_object(argument)?.form {
+                        TypeForm::TypeParameter { parameter } => {
+                            bindings.get(&parameter).copied().ok_or_else(|| {
+                                session_semantic(
+                                    "session_state_parameter",
+                                    "application argument is unresolved",
+                                )
+                            })?
+                        }
+                        _ => argument,
+                    };
+                    applied.insert(parameter, argument);
+                }
+                match read.nominal_shape(declaration)? {
+                    SessionNominalShape::Record(fields) => {
+                        for field in fields.into_values() {
+                            visit(read, field, &applied, visiting, complete, depth + 1)?;
+                        }
+                    }
+                    SessionNominalShape::Variant(cases) => {
+                        for payload in cases.into_values().flatten() {
+                            visit(read, payload, &applied, visiting, complete, depth + 1)?;
+                        }
                     }
                 }
-                SessionNominalShape::Variant(cases) => {
-                    for payload in cases.into_values().flatten() {
-                        visit(read, payload, visiting, complete, depth + 1)?;
-                    }
-                }
-            },
+            }
             TypeForm::StaticText
             | TypeForm::Secret
             | TypeForm::Result { .. }
-            | TypeForm::TypeParameter { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. } => {
@@ -976,11 +1098,18 @@ fn validate_ordinary_state<R: SessionShapeRead>(
                 ));
             }
         }
-        visiting.remove(&ty);
-        complete.insert(ty);
+        visiting.remove(&identity);
+        complete.insert(identity);
         Ok(())
     }
-    visit(read, root, &mut BTreeSet::new(), &mut BTreeSet::new(), 0)
+    visit(
+        read,
+        root,
+        &Bindings::new(),
+        &mut BTreeSet::new(),
+        &mut BTreeSet::new(),
+        0,
+    )
 }
 
 fn nominal_record_fields<R: SessionShapeRead>(
@@ -1204,14 +1333,30 @@ mod tests {
         Ordinary,
         Mismatched,
         Stream,
+        Nominal,
+        NominalMismatch,
+        NominalSecret,
+        NominalFunction,
+        NominalNestedSecret,
     }
 
     struct ShapeOracle {
         objects: BTreeMap<TypeObjectDigest, TypeObject>,
         shapes: BTreeMap<DeclarationReference, SessionNominalShape>,
+        parameters: BTreeMap<DeclarationReference, Vec<super::super::semantic_id::TypeParameterId>>,
     }
 
     impl SessionShapeRead for ShapeOracle {
+        fn nominal_parameters(
+            &self,
+            declaration: DeclarationReference,
+        ) -> Result<Vec<super::super::semantic_id::TypeParameterId>, Diagnostic> {
+            Ok(self
+                .parameters
+                .get(&declaration)
+                .cloned()
+                .unwrap_or_default())
+        }
         fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
             self.objects.get(&digest).cloned().ok_or_else(|| {
                 session_semantic(
@@ -1341,13 +1486,45 @@ mod tests {
         );
         let message = structural(&mut types, [("body", stream_bytes), ("kind", message_kind)]);
         let peer_close = structural(&mut types, [("code", optional_code), ("reason", text)]);
+        let nominal = declaration(6);
+        let parameter = super::super::semantic_id::TypeParameterId::migrate(SEED, 0);
+        let secret = types.intern(TypeForm::Secret).expect("secret");
+        let callable = types
+            .intern(TypeForm::Function {
+                parameters: vec![],
+                result: unit,
+            })
+            .expect("callable");
+        let nested = types
+            .intern(TypeForm::List { item: secret })
+            .expect("nested secret");
+        let argument = match state_kind {
+            StateKind::NominalSecret => secret,
+            StateKind::NominalFunction => callable,
+            StateKind::NominalNestedSecret => nested,
+            _ => i64,
+        };
+        let application = types
+            .intern(TypeForm::Applied {
+                declaration: nominal,
+                arguments: vec![argument],
+            })
+            .expect("application");
+        let other_application = types
+            .intern(TypeForm::Applied {
+                declaration: nominal,
+                arguments: vec![text],
+            })
+            .expect("other application");
         let state = match state_kind {
             StateKind::Ordinary | StateKind::Mismatched => unit,
             StateKind::Stream => stream_bytes,
+            _ => application,
         };
         let repeated_state = match state_kind {
             StateKind::Mismatched => text,
-            StateKind::Ordinary | StateKind::Stream => state,
+            StateKind::NominalMismatch => other_application,
+            _ => state,
         };
         let state_option = types
             .intern(TypeForm::Option { item: state })
@@ -1383,6 +1560,12 @@ mod tests {
             })
             .expect("session function");
         let shapes = BTreeMap::from([
+            // Phantom argument: the value's only case is payloadless, so inspecting an
+            // active payload cannot establish state eligibility.
+            (
+                nominal,
+                SessionNominalShape::Variant(cases([("absent", None)])),
+            ),
             (
                 standard.message_kind,
                 SessionNominalShape::Variant(cases([("binary", None), ("text", None)])),
@@ -1431,6 +1614,7 @@ mod tests {
             ShapeOracle {
                 objects: types.into_objects(),
                 shapes,
+                parameters: BTreeMap::from([(nominal, vec![parameter])]),
             },
             standard,
             function,
@@ -1543,5 +1727,25 @@ mod tests {
                 .code,
             "session_state_live_type"
         );
+    }
+
+    #[test]
+    fn independent_applied_state_oracle_checks_repeated_identity_and_phantom_arguments() {
+        let (read, standard, function) = session_oracle(StateKind::Nominal);
+        validate_session_function_type(&read, standard, function).expect("closed applied state");
+        for (kind, code) in [
+            (StateKind::NominalMismatch, "session_port_state_identity"),
+            (StateKind::NominalSecret, "session_state_live_type"),
+            (StateKind::NominalFunction, "session_state_live_type"),
+            (StateKind::NominalNestedSecret, "session_state_live_type"),
+        ] {
+            let (read, standard, function) = session_oracle(kind);
+            assert_eq!(
+                validate_session_function_type(&read, standard, function)
+                    .unwrap_err()
+                    .code,
+                code
+            );
+        }
     }
 }

@@ -549,11 +549,21 @@ signatures are leaves for capture safety, allowing generic composition; a stored
 parameter remains rejected. Runtime environments have neither semantic equality nor external or
 durable encoding.
 
-Graph 12 versions changed owner meaning independently of the current TypeObject 10 representation.
-The type codec's existing magic, digest domains, and bytes remain stable, preserving unchanged
-typed-data layout identity. Maintained standard and application graphs were materialized through
-the accepted repository writer with stable existing owner identities and exact successor dependency
-bindings; predecessor graph and artifact inputs reject.
+Graph 13 adds ordered nominal parameters and explicit applications. Existing TypeObject 10 magic,
+digest domains and bytes remain stable; a separate application envelope binds the exact declaration
+and ordered arguments. Unchanged monomorphic typed-data identities remain stable. Applied typed-data
+layouts describe all arguments and substituted members, including phantom and inactive types.
+Maintained standard and application graphs are materialized through the accepted repository writer
+with stable existing owner identities and exact successor dependency bindings; predecessor graph
+and artifact inputs reject.
+
+Production preparation closes concrete compiled roots over nominal members and generic calls;
+canonical reference preparation derives its closure independently from accepted owners. Layout keys
+contain the complete application and preparation origin. Both preparations account work and metadata
+under existing limits, check cancellation, and derive separate ordinary/capture/equality facts.
+Strict artifact loading cross-checks nominal parameter order, bounds, members and constructor argument
+inventory against canonical owners. Canonical data and session shape readers apply their own whole-type
+eligibility rules. No application identity or host adapter implements pair, batch or edit policy.
 
 Pure graph tail calls replace the current activation in both execution tiers. Preparation derives
 terminal-only continuations once by an iterative linear traversal of strictly loaded Return/Jump

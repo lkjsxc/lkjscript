@@ -749,7 +749,8 @@ fn validate_interface_dependencies(
             )
         })?;
         for ty in interface.type_objects.values() {
-            if let TypeForm::Named { declaration } = ty.form {
+            if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = ty.form
+            {
                 closure.require_owner(
                     revision,
                     declaration.package,

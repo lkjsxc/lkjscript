@@ -2,8 +2,9 @@
 
 use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
+use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -129,9 +130,11 @@ fn encode_value(
     let form = type_form(program, ty)?;
     match (value, form) {
         (NormalizedValue::Unit, TypeForm::Unit) => {}
-        (NormalizedValue::Bool(value), TypeForm::Bool) => output.push(u8::from(*value)),
+        (NormalizedValue::Bool(value), TypeForm::Bool) => {
+            append_bytes(output, &[u8::from(*value)])?
+        }
         (NormalizedValue::I64(value), TypeForm::I64) => {
-            output.extend_from_slice(&value.to_be_bytes());
+            append_bytes(output, &value.to_be_bytes())?;
         }
         (NormalizedValue::Bytes(value), TypeForm::Bytes) => push_blob(output, value)?,
         (NormalizedValue::Text(value), TypeForm::Text) => push_blob(output, value.as_bytes())?,
@@ -151,8 +154,8 @@ fn encode_value(
                 encode_value(program, value, field.ty, output, state, depth + 1)?;
             }
         }
-        (value, TypeForm::Named { declaration }) => {
-            encode_named(program, value, *declaration, output, state, depth)?;
+        (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
+            encode_named(program, value, ty, output, state, depth)?;
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
             push_count(output, values.len())?;
@@ -193,12 +196,12 @@ fn encode_value(
 fn encode_named(
     program: &NormalizedProgram,
     value: &NormalizedValue,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
     output: &mut Vec<u8>,
     state: &mut CodecState,
     depth: usize,
 ) -> Result<(), Diagnostic> {
-    if let Some((layout_index, layout)) = record_layout(program, declaration) {
+    if let Some((layout_index, layout)) = record_layout(program, ty) {
         let NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: actual,
             fields,
@@ -214,7 +217,7 @@ fn encode_named(
         }
         return Ok(());
     }
-    if let Some((layout_index, layout)) = variant_layout(program, declaration) {
+    if let Some((layout_index, layout)) = variant_layout(program, ty) {
         let NormalizedValue::Variant {
             layout: actual,
             case,
@@ -232,7 +235,7 @@ fn encode_named(
             .cases
             .get(case_index)
             .ok_or_else(|| runtime_layout_error("variant case"))?;
-        output.extend_from_slice(&case.to_be_bytes());
+        append_bytes(output, &case.to_be_bytes())?;
         match (payload, layout_case.payload) {
             (None, None) => Ok(()),
             (Some(value), Some(ty)) => encode_value(program, value, ty, output, state, depth + 1),
@@ -293,8 +296,8 @@ fn decode_value(
                 fields: Arc::new(output),
             }))
         }
-        TypeForm::Named { declaration } => {
-            decode_named(program, *declaration, cursor, state, depth)
+        TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+            decode_named(program, ty, cursor, state, depth)
         }
         TypeForm::List { item } => {
             let count = cursor.count("normalized_data_list_count")?;
@@ -352,12 +355,12 @@ fn decode_value(
 
 fn decode_named(
     program: &NormalizedProgram,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
     state: &mut CodecState,
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    if let Some((layout, record)) = record_layout(program, declaration) {
+    if let Some((layout, record)) = record_layout(program, ty) {
         let mut fields = Vec::with_capacity(record.fields.len());
         for field in record.fields.iter() {
             fields.push(decode_value(program, field.ty, cursor, state, depth + 1)?);
@@ -367,7 +370,7 @@ fn decode_named(
             fields: Arc::new(fields),
         }));
     }
-    if let Some((layout, variant)) = variant_layout(program, declaration) {
+    if let Some((layout, variant)) = variant_layout(program, ty) {
         let case = cursor.u32("normalized_data_variant_case")?;
         let case_layout = variant
             .cases
@@ -409,7 +412,7 @@ fn layout_identity(
 fn describe_layout(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    active: &mut BTreeSet<DeclarationReference>,
+    active: &mut BTreeSet<TypeObjectDigest>,
     output: &mut Vec<u8>,
     depth: usize,
 ) -> Result<(), Diagnostic> {
@@ -420,24 +423,32 @@ fn describe_layout(
             "typed data layout exceeds the nesting-depth limit",
         ));
     }
-    output.extend_from_slice(&ty.bytes());
+    append_bytes(output, &ty.bytes())?;
     match type_form(program, ty)? {
-        TypeForm::Unit => output.push(0),
-        TypeForm::Bool => output.push(1),
-        TypeForm::I64 => output.push(2),
-        TypeForm::Bytes => output.push(3),
-        TypeForm::Text => output.push(4),
-        TypeForm::Named { declaration } => {
-            output.push(5);
+        TypeForm::Unit => append_bytes(output, &[0])?,
+        TypeForm::Bool => append_bytes(output, &[1])?,
+        TypeForm::I64 => append_bytes(output, &[2])?,
+        TypeForm::Bytes => append_bytes(output, &[3])?,
+        TypeForm::Text => append_bytes(output, &[4])?,
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+            if let TypeForm::Applied { arguments, .. } = type_form(program, ty)? {
+                append_bytes(output, &[9])?;
+                push_count(output, arguments.len())?;
+                for argument in arguments {
+                    describe_layout(program, *argument, active, output, depth + 1)?;
+                }
+            } else {
+                append_bytes(output, &[5])?;
+            }
             push_blob(output, declaration.package.to_string().as_bytes())?;
             push_blob(output, declaration.declaration.to_string().as_bytes())?;
-            if !active.insert(*declaration) {
-                output.push(0);
+            if !active.insert(ty) {
+                append_bytes(output, &[0])?;
                 return Ok(());
             }
-            output.push(1);
-            if let Some((_, layout)) = record_layout(program, *declaration) {
-                output.push(0);
+            append_bytes(output, &[1])?;
+            if let Some((_, layout)) = record_layout(program, ty) {
+                append_bytes(output, &[0])?;
                 push_count(output, layout.fields.len())?;
                 for field in layout.fields.iter() {
                     push_blob(output, field.reference.package.to_string().as_bytes())?;
@@ -445,8 +456,8 @@ fn describe_layout(
                     push_blob(output, field.name.as_str().as_bytes())?;
                     describe_layout(program, field.ty, active, output, depth + 1)?;
                 }
-            } else if let Some((_, layout)) = variant_layout(program, *declaration) {
-                output.push(1);
+            } else if let Some((_, layout)) = variant_layout(program, ty) {
+                append_bytes(output, &[1])?;
                 push_count(output, layout.cases.len())?;
                 for case in layout.cases.iter() {
                     push_blob(output, case.reference.package.to_string().as_bytes())?;
@@ -454,10 +465,10 @@ fn describe_layout(
                     push_blob(output, case.name.as_str().as_bytes())?;
                     match case.payload {
                         Some(payload) => {
-                            output.push(1);
+                            append_bytes(output, &[1])?;
                             describe_layout(program, payload, active, output, depth + 1)?;
                         }
-                        None => output.push(0),
+                        None => append_bytes(output, &[0])?,
                     }
                 }
             } else {
@@ -467,10 +478,10 @@ fn describe_layout(
                     "named typed data layout has no prepared declaration",
                 ));
             }
-            active.remove(declaration);
+            active.remove(&ty);
         }
         TypeForm::StructuralRecord { fields } => {
-            output.push(6);
+            append_bytes(output, &[6])?;
             push_count(output, fields.len())?;
             for field in fields {
                 push_blob(output, field.name.as_str().as_bytes())?;
@@ -478,11 +489,11 @@ fn describe_layout(
             }
         }
         TypeForm::List { item } => {
-            output.push(7);
+            append_bytes(output, &[7])?;
             describe_layout(program, *item, active, output, depth + 1)?;
         }
         TypeForm::Map { key, value } => {
-            output.push(8);
+            append_bytes(output, &[8])?;
             describe_layout(program, *key, active, output, depth + 1)?;
             describe_layout(program, *value, active, output, depth + 1)?;
         }
@@ -503,13 +514,11 @@ fn describe_layout(
 
 fn record_layout(
     program: &NormalizedProgram,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
 ) -> Option<(super::value::RecordLayoutIndex, &NormalizedRecordLayout)> {
     program
-        .records
-        .iter()
-        .enumerate()
-        .find(|(_, layout)| layout.declaration == declaration)
+        .record_index(ty)
+        .and_then(|index| program.records.get(index).map(|layout| (index, layout)))
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()
@@ -520,13 +529,11 @@ fn record_layout(
 
 fn variant_layout(
     program: &NormalizedProgram,
-    declaration: DeclarationReference,
+    ty: TypeObjectDigest,
 ) -> Option<(super::value::VariantLayoutIndex, &NormalizedVariantLayout)> {
     program
-        .variants
-        .iter()
-        .enumerate()
-        .find(|(_, layout)| layout.declaration == declaration)
+        .variant_index(ty)
+        .and_then(|index| program.variants.get(index).map(|layout| (index, layout)))
         .and_then(|(index, layout)| {
             u32::try_from(index)
                 .ok()
@@ -558,9 +565,25 @@ fn map_key_value(key: &NormalizedMapKey) -> NormalizedValue {
     }
 }
 
+fn append_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Diagnostic> {
+    if output
+        .len()
+        .checked_add(bytes.len())
+        .is_none_or(|count| count > MAXIMUM_VALUE_BYTES)
+    {
+        return Err(codec_error(
+            DiagnosticClass::Resource,
+            "normalized_data_value_bytes",
+            "typed data or layout exceeds its byte limit",
+        ));
+    }
+    output.extend_from_slice(bytes);
+    Ok(())
+}
+
 fn push_count(output: &mut Vec<u8>, value: usize) -> Result<(), Diagnostic> {
     let value = u32::try_from(value).map_err(|_| item_limit())?;
-    output.extend_from_slice(&value.to_be_bytes());
+    append_bytes(output, &value.to_be_bytes())?;
     Ok(())
 }
 
@@ -572,8 +595,8 @@ fn push_blob(output: &mut Vec<u8>, value: &[u8]) -> Result<(), Diagnostic> {
             "typed data field exceeds the canonical byte domain",
         )
     })?;
-    output.extend_from_slice(&length.to_be_bytes());
-    output.extend_from_slice(value);
+    append_bytes(output, &length.to_be_bytes())?;
+    append_bytes(output, value)?;
     Ok(())
 }
 

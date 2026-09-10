@@ -764,14 +764,27 @@ pub(crate) fn aggregation_children(
     record: &OwnerRecord,
 ) -> Result<Vec<(OwnershipRole, OwnerKey)>, Diagnostic> {
     let mut children = Vec::new();
+    if let OwnerRecord::Declaration(record) = record
+        && matches!(
+            record.payload,
+            DeclarationPayload::Record { .. } | DeclarationPayload::Variant { .. }
+        )
+    {
+        children.extend(record.payload.type_parameters().iter().map(|parameter| {
+            (
+                OwnershipRole::DeclarationTypeParameter,
+                OwnerKey::TypeParameter(*parameter),
+            )
+        }));
+    }
     match record {
         OwnerRecord::Declaration(record) => match &record.payload {
-            DeclarationPayload::Record { fields } => children.extend(
+            DeclarationPayload::Record { fields, .. } => children.extend(
                 fields
                     .iter()
                     .map(|field| (OwnershipRole::DeclarationField, OwnerKey::Field(*field))),
             ),
-            DeclarationPayload::Variant { cases } => children.extend(
+            DeclarationPayload::Variant { cases, .. } => children.extend(
                 cases
                     .iter()
                     .map(|case| (OwnershipRole::DeclarationCase, OwnerKey::Case(*case))),
@@ -986,13 +999,21 @@ fn local_summary(
             presentation.piece(1, &record.name)?;
             interface.piece(1, &record.visibility)?;
             match &record.payload {
-                DeclarationPayload::Record { fields } => {
+                DeclarationPayload::Record {
+                    fields,
+                    type_parameters,
+                } => {
                     interface.raw_piece(2, &[1]);
                     interface.piece(3, fields)?;
+                    interface.piece(4, type_parameters)?;
                 }
-                DeclarationPayload::Variant { cases } => {
+                DeclarationPayload::Variant {
+                    cases,
+                    type_parameters,
+                } => {
                     interface.raw_piece(2, &[2]);
                     interface.piece(3, cases)?;
+                    interface.piece(4, type_parameters)?;
                 }
                 DeclarationPayload::Interface { operations } => {
                     interface.raw_piece(2, &[3]);

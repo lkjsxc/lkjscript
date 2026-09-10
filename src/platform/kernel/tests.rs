@@ -135,6 +135,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("Payload"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Record {
+                type_parameters: Vec::new(),
                 fields: vec![field],
             },
         }),
@@ -155,7 +156,10 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             module: first_module,
             name: name("State"),
             visibility: DeclarationVisibility::Public,
-            payload: DeclarationPayload::Variant { cases: vec![case] },
+            payload: DeclarationPayload::Variant {
+                type_parameters: Vec::new(),
+                cases: vec![case],
+            },
         }),
     );
     insert(
@@ -353,6 +357,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         4,
         ExpressionOperation::Record {
+            type_arguments: Vec::new(),
             nominal_type: Some(DeclarationReference {
                 package,
                 declaration: record,
@@ -368,6 +373,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         6,
         ExpressionOperation::Record {
+            type_arguments: Vec::new(),
             nominal_type: Some(DeclarationReference {
                 package,
                 declaration: record,
@@ -390,6 +396,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         8,
         ExpressionOperation::Variant {
+            type_arguments: Vec::new(),
             case: CaseReference { package, case },
             payload: None,
         },
@@ -398,6 +405,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         9,
         ExpressionOperation::Variant {
+            type_arguments: Vec::new(),
             case: CaseReference { package, case },
             payload: None,
         },
@@ -1673,7 +1681,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "43d7a15e98befb478a67f05e3a3aca2b55e7fce4ab35d3abed373129e97fec39"
+        "0166937445972bb896c4c09606f0a959021c6c48c931d84c2ef5a08c97c43384"
     );
 }
 
@@ -2000,6 +2008,7 @@ fn full_oracle_types_foreign_nominal_and_capability_uses_from_the_interface() {
                 ExpressionOperation::Record {
                     nominal_type,
                     fields,
+                    ..
                 } if nominal_type.is_some_and(|reference| reference.declaration == record) => {
                     nominal_type.as_mut().unwrap().package = foreign_package;
                     for field in fields {

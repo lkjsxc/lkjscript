@@ -4,8 +4,31 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Parametric nominal acceptance extends these same owners. Offline receipt 4 requires one independent
+batch/edit library, complete I64/Text/nested-list/consumer-nominal results after producer removal,
+retained snapshots, heterogeneous and changed-body mapping, and an exact dependency replacement
+changing field, case and bound meaning. It also requires a copied-artifact pair session's raw
+WebSocket messages and a separate source-bound observation of all three actual retained states.
+The latter executes each graph callback once against an isolated in-memory stream and compares its
+state with canonical-owner-derived shape inspection; it is explicitly not copied-binary evidence.
+Pure-tail receipt 6 requires applied forwarding/capture cost cells, separate preparation work and
+metadata bytes, and independently constructed stored batch/edit bytes with typed HTTP readback,
+transaction trap/cancellation rollback and recovery. Missing required observations reject transfer.
+
+Public CLI and source owners additionally cover full-candidate cutover, rejected application/scope/
+cycle/property requests, fully rehashed transport and artifact forgeries, unchanged TypeObject and
+monomorphic data golden bytes, phantom identity/origin, layout-alias fault detection and bounded
+preparation cancellation/recovery. Host full proof and fresh exact musl admission remain distinct;
+the target owner runs both pinned userlands and its complete named behavioral inventory.
+
+The strict session fixture first admits a command with an applied state signature, then changes
+canonical and compiled runner metadata to interactive and independently repacks all affected hashes.
+The ordinary control must load and prepare; mismatched repeated applications and phantom/nested
+secret or callable state must reject during strict artifact loading and deployment preparation,
+before readiness. This complements public request rejection and the copied live session witness.
+
 Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
-source-bound evaluator owners. Receipt contracts are pure-tail 5 and offline-packages 3. Transferred
+source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 4. Transferred
 receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
 mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
 removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its
@@ -583,10 +606,10 @@ Capture-safe abstraction extends these same acceptance owners. The public CLI su
 constraint matrix and atomic set/clear checks; evaluator fixtures exercise raw generic admission,
 constraint metadata erasure/forgery with recomputed checksums, exact allocation/work limits and
 cancellation during type traversal. The retained-environment N/K fault oracle uses a constrained
-generic factory. `pure-tail` receipt 5 adds a separately authored `configure<Env: capture-safe, Input,
+generic factory. `pure-tail` receipt 6 retains a separately authored `configure<Env: capture-safe, Input,
 Output>`, runtime nominal environments, simultaneous results `[8,11,17]` and `[2,0,-4]`, standard
 `function-constant` over runtime Text and nested lists, and the generic configured HTTP mapping path.
-`offline-packages` receipt 3 retains imported constraints and a consumer-owned nominal environment
+`offline-packages` receipt 4 retains imported constraints and a consumer-owned nominal environment
 passed through a returned private generic helper after producer removal. Receipt readers require these
 cases on both the host and exact local musl candidate. Existing 900-second/1,073,741,824-owned-byte
 pure-tail bounds and sampling policy remain unchanged. Preparation-local constraint proof storage and

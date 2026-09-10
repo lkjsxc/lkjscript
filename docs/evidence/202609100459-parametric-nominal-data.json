@@ -1,0 +1,2196 @@
+{
+  "schema": "lkjscript-parametric-nominal-data-evidence-1",
+  "campaign": "202609100459-parametric-nominal-data",
+  "status": "in progress; required final full, exact local target admission and integration not yet run",
+  "capability": "One graph-owned generic record or variant composes across pure functions, retained environments, exact offline packages, typed persistence and concrete structured-session state.",
+  "start": {
+    "branch": "main",
+    "commit": "c0c4975851f34a9a2b3be8cbd3008a1f8bbafc18",
+    "tree": "809b5bc3c203e9b61a3207244be3012b9bfd6a2b",
+    "index": "clean",
+    "worktree": "supplied AGENTS.md replacement and untracked named mandate only",
+    "origin": "https://github.com/lkjsxc/lkjscript",
+    "divergence": [
+      0,
+      0
+    ],
+    "preserved_stash": "87c2265f6faf0e815d80450ec2480d46c5e774fb",
+    "guidance_sha256": "1ba27df19bad4f37313593e234c34fb1a28f93eb97560653e5a5510451d92883",
+    "initial_mandate_sha256": "3c6c86416f166d958086af31530103e673af1198d73b19fbc15382e7f9007cff",
+    "initial_mandate_bytes": 60359,
+    "instructions": "Full supplied/root mandate and complete predecessor lifecycle reconciled; no scoped overrides or configured instruction-size override found; no configuration change."
+  },
+  "source": {
+    "version": "0.1.29",
+    "archive_commit": "15e3ff94749e5e25b50075878551c357218350f7",
+    "implementation_commit": null,
+    "implementation_tree": null,
+    "containing_record": "Final containing commit/tree and checks invalidated by reporting are reported out of band; this file never hashes itself."
+  },
+  "contracts": {
+    "graph": 13,
+    "type_object_base": 10,
+    "nominal_application": 1,
+    "nominal_application_magic": "LKJTAP01",
+    "nominal_application_domain": "lkjscript.kernel.nominal-application-envelope.v1",
+    "package_interface": 9,
+    "compiler_unit": 8,
+    "bytecode": 5,
+    "artifact": 17,
+    "compact_request": 17,
+    "authored_intent": 14,
+    "registry": 16,
+    "function_definition": 5,
+    "offline_receipt": 4,
+    "pure_tail_receipt": 6,
+    "type_data_application_tag": 9,
+    "type_data_monomorphic_tag": 5,
+    "unchanged": [
+      "base TypeObject bytes/digests",
+      "zero-arity Named",
+      "monomorphic typed-data bytes/layout identities",
+      "pack/object-store/operational data/queue/backup/deployment framing"
+    ]
+  },
+  "maintained": {
+    "standard": {
+      "repository": "repo_c1358d64c351873b51c954b69d1ac988",
+      "package": "pkg_10000000000000000000000000000001",
+      "revision": "rev_7cbf14efbdd7938c347c7b7d3379e239b0f71c7eac72ea0fb36bf5dc675073d5",
+      "semantic_state": "semantic_state_17eb44525d2da78286816f854e5b0c1433eec9896fe0f14d588670aa4260b781",
+      "stable_owners": 723,
+      "new_owners": 79,
+      "live_owners": 802,
+      "retirements": 37,
+      "units": 136,
+      "graph_tests": 33,
+      "unchanged_type_fixtures": 110,
+      "stable_owner_meaning_blake3": "ad58bbd0161878ad7bd54529c9b5e5f9fc3cdc64195cd2cc76111543d68b2b53",
+      "retirement_meaning_blake3": "fac9383cd0e3aaebb9163b7ce4a1047f1d468936aeb1ee5fb26ae731c782e96a",
+      "package_revision": "package_revision_e269ce05d689c60ae7323637a9db74ed5f726ce8df185b78bd4a70096d398071",
+      "transport": "package_transport_50750a298f483b06c18abe312ba46d5ee18c645aa39e4e98b0107564c84df718",
+      "artifact_manifest": "artifact_manifest_ecdd94a11857deb65ccea3d39adb58c1de49dfa6e560b79643ba5828f2fdb53f",
+      "artifact_bundle": "artifact_bundle_4ec2eaab49812a4e647e11a0478024bf44f5665028162323a6e2de0dfb17a424",
+      "fixture": "tests/fixtures/graph12-standard-nominal-cutover.json"
+    },
+    "lkjournal": {
+      "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+      "package": "pkg_20000000000000000000000000000001",
+      "revision": "rev_168275843037fb10801cfc4fcfa0c675664a0ba93e5d77f697f5feec18f1c9c6",
+      "semantic_state": "semantic_state_4ebbc44aa5b4c28610fddb16fc0916550560fad03a9a249959c90995c4a6c385",
+      "stable_owners": 2040,
+      "new_owners": 0,
+      "root_units": 90,
+      "closure_units": 226,
+      "closure_tests": 40,
+      "unchanged_type_fixtures": 163,
+      "stable_owner_meaning_blake3": "f78a54bf8bed0a5f26a06fb7614867d8c8d9701ed3a43945d9e7998f3b3db70e",
+      "retirement_meaning_blake3": "761c8410da18c7e20be57896fad7ee1b63f0a882f56761a225403c4d6355a7b0",
+      "package_revision": "package_revision_c9aac009cd8a30b95d1daf57920b79014b7fc338c5f28f9437f6be9ecccd63c8",
+      "artifact_manifest": "artifact_manifest_ee0538170a5c8cbc5d832f7bb82a37b1ccb92e8bd2a83c8f12ca05b106845606",
+      "artifact_bundle": "artifact_bundle_9413fb799ba1d788f8a8cf00916c18455efeb5b8ed82a083d18b17638c453f01",
+      "fixture": "tests/fixtures/graph12-lkjournal-nominal-cutover.json",
+      "cutover": "generation, exact standard dependency and canonical derived assets only; no application feature or operational-data migration"
+    },
+    "assets": [
+      {
+        "path": "packages/standard/generated/standard.lkjp",
+        "bytes": 343974,
+        "sha256": "72420edcc0ea7f122b7c85669aab46def05f01cca2fb39068150fa4aefd8b2f4"
+      },
+      {
+        "path": "packages/standard/generated/standard.lkja",
+        "bytes": 493527,
+        "objects": 1629,
+        "sha256": "b4eb62db86426c352dc93dea63aba35fa2108128dcdc8c322e95ef790f96f576"
+      },
+      {
+        "path": "applications/lkjournal/generated/lkjournal.lkja",
+        "bytes": 1233974,
+        "objects": 4130,
+        "sha256": "45d0568a06b33a14565d18914d45fb7181749177a0971fcfda763ae9d9b5d523"
+      }
+    ],
+    "method": "Actual predecessor Rust exported sorted canonical owner/retirement tuples and type bytes before cutover. Current comparison removes only generation fields and empty nominal parameter/constructor vectors, excludes exactly the 79 listed new owners and requires each to exist. All other retained meaning must match. Canonical public graph producers regenerated assets; temporary migration access was removed."
+  },
+  "public_witness": {
+    "provenance": "New witness adoption, not pre-existing application adoption. All semantic authorship uses copied CLI plan/apply; producers are removed before consumer build/run.",
+    "owners": [
+      "tests/public_cli.rs::copied_binary_authors_parametric_nominal_data_and_checks_complete_candidates",
+      "tools/lkjscript-dev/src/offline_packages/nominal.rs",
+      "tools/lkjscript-dev/src/offline_packages/nominal_session.rs",
+      "tools/lkjscript-dev/src/pure_tail_program.rs",
+      "tools/lkjscript-dev/src/service/nominal.rs"
+    ],
+    "public_library_request": {
+      "iteration": "offline-10",
+      "bytes": 4412,
+      "sha256": "acb606b2d4e26beeb5d1c29654abc65390ff3f3ca6ccc7e9638beb6704acddc9",
+      "records": "request base=rev_9e55e25cae38d0ac9d1b2bc3001dcbe1a8b31d0c7fb19830896c5ca9dd76570d idempotency=offline-113\nadd.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_7cbf14efbdd7938c347c7b7d3379e239b0f71c7eac72ea0fb36bf5dc675073d5 package-revision=package_revision_e269ce05d689c60ae7323637a9db74ed5f726ce8df185b78bd4a70096d398071\ncreate.module as=$module name=library\n\ncreate.record as=$batch module=$module name=batch visibility=public\nadd.type-parameter as=$T declaration=$batch name=T\ntype.parameter as=@T parameter=$T\ntype.list as=@Ts item=@T\nadd.field as=$revision record=$batch name=revision type=i64\nadd.field as=$items record=$batch name=items type=@Ts\ncreate.variant as=$edit module=$module name=edit visibility=public\nadd.type-parameter as=$E declaration=$edit name=T\ntype.parameter as=@E parameter=$E\ntype.application as=@EBatch declaration=$batch\ntype.argument parent=@EBatch index=0 type=@E\nadd.case as=$keep variant=$edit name=keep\nadd.case as=$replace variant=$edit name=replace payload=@EBatch\ncreate.function as=$apply module=$module name=apply-edit visibility=public result=@ABatch effect=pure body=$matched\nadd.type-parameter as=$A declaration=$apply name=T\ntype.parameter as=@A parameter=$A\ntype.application as=@ABatch declaration=$batch\ntype.argument parent=@ABatch index=0 type=@A\ntype.application as=@AEdit declaration=$edit\ntype.argument parent=@AEdit index=0 type=@A\nadd.parameter as=$original function=$apply name=original type=@ABatch\nadd.parameter as=$change function=$apply name=change type=@AEdit\nexpression.local as=$change-value value=$change\nexpression.local as=$original-value value=$original\nexpression.local as=$replacement-value value=$replacement\nexpression.match as=$matched value=$change-value\nexpression.match-arm parent=$matched index=0 case=$keep body=$original-value\nexpression.match-arm parent=$matched index=1 case=$replace as=$replacement name=replacement type=@ABatch body=$replacement-value\ncreate.function as=$map module=$module name=map-batch visibility=public result=@OutBatch effect=pure body=$mapped-batch\nadd.type-parameter as=$In declaration=$map name=Input\nadd.type-parameter as=$Out declaration=$map name=Output\ntype.parameter as=@In parameter=$In\ntype.parameter as=@Out parameter=$Out\ntype.application as=@InBatch declaration=$batch\ntype.argument parent=@InBatch index=0 type=@In\ntype.application as=@OutBatch declaration=$batch\ntype.argument parent=@OutBatch index=0 type=@Out\ntype.function as=@Mapper result=@Out\ntype.argument parent=@Mapper index=0 type=@In\nadd.parameter as=$map-input function=$map name=batch type=@InBatch\nadd.parameter as=$map-callback function=$map name=callback type=@Mapper\nexpression.local as=$map-source value=$map-input\nexpression.field as=$map-revision value=$map-source field=$revision\nexpression.local as=$map-source2 value=$map-input\nexpression.field as=$map-items value=$map-source2 field=$items\nexpression.local as=$mapper value=$map-callback\nexpression.call as=$mapped-items function=pkg_10000000000000000000000000000001/decl_9ca145d9a773745bb3f85dc25beb8962\ntype.argument parent=$mapped-items index=0 type=@In\ntype.argument parent=$mapped-items index=1 type=@Out\nexpression.argument parent=$mapped-items index=0 expression=$map-items\nexpression.argument parent=$mapped-items index=1 expression=$mapper\nexpression.record as=$mapped-batch type=$batch\ntype.argument parent=$mapped-batch index=0 type=@Out\nexpression.record-field parent=$mapped-batch index=0 field=$revision value=$map-revision\nexpression.record-field parent=$mapped-batch index=1 field=$items value=$mapped-items\ncreate.function as=$snapshot module=$module name=snapshot visibility=public result=@Snapshot effect=pure body=$retained\nadd.type-parameter as=$S declaration=$snapshot name=T constraint=capture-safe\ntype.parameter as=@S parameter=$S\ntype.application as=@SBatch declaration=$batch\ntype.argument parent=@SBatch index=0 type=@S\ntype.function as=@Snapshot result=@SBatch\ntype.argument parent=@Snapshot index=0 type=unit\nadd.parameter as=$snapshot-input function=$snapshot name=batch type=@SBatch\nexpression.local as=$saved value=$snapshot-input\nexpression.call as=$retained function=pkg_10000000000000000000000000000001/decl_c72fde90ede14030b6cce171d97e937e\ntype.argument parent=$retained index=0 type=@SBatch\ntype.argument parent=$retained index=1 type=unit\nexpression.argument parent=$retained index=0 expression=$saved\n"
+    },
+    "consumer_request": {
+      "iteration": "offline-10",
+      "bytes": 34551,
+      "sha256": "a598a09291ba375cbc2f2e6284a371d1b6587f2477491138d2f4b875dac6c6e6",
+      "reproduce": "consumer_request in the offline-package nominal owner; observed complete results retained below"
+    },
+    "fixed_types": [
+      "I64",
+      "Text",
+      "List<I64>",
+      "consumer Owned{Text}",
+      "Batch<Batch<I64>> in copied public CLI"
+    ],
+    "preliminary_offline": {
+      "nominal": {
+        "library_package": "pkg_74bed77017490efe5f22ce7fb4fa3ca9",
+        "library_revision": "rev_8dd176504ab9cc157afc3d1d3bd583fb4eb7c5f371e5b763b9891e6383a24f70",
+        "generic_declarations": [
+          "pkg_74bed77017490efe5f22ce7fb4fa3ca9/decl_d2c91ca0eb6dae6d145a5e621ab0abe0",
+          "pkg_74bed77017490efe5f22ce7fb4fa3ca9/decl_8131d34cea77f7d34576a0a6cec6b78f"
+        ],
+        "producer_removed_before_execution": true,
+        "results": {
+          "heterogeneous": {
+            "items": [
+              {
+                "text": "1"
+              },
+              {
+                "text": "2"
+              },
+              {
+                "text": "4"
+              }
+            ],
+            "revision": 7
+          },
+          "i64-identity": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "i64-keep": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "i64-replace": {
+            "items": [
+              -2,
+              0,
+              9
+            ],
+            "revision": 8
+          },
+          "i64-retention": {
+            "changed": {
+              "items": [
+                -2,
+                0,
+                9
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                1,
+                2,
+                4
+              ],
+              "revision": 7
+            }
+          },
+          "i64-snapshot": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "map-empty": {
+            "items": [],
+            "revision": 7
+          },
+          "map-first": {
+            "items": [
+              8,
+              11,
+              17
+            ],
+            "revision": 7
+          },
+          "map-second": {
+            "items": [
+              2,
+              0,
+              -4
+            ],
+            "revision": 7
+          },
+          "nested-identity": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "nested-keep": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "nested-retention": {
+            "changed": {
+              "items": [
+                [
+                  9
+                ],
+                []
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                [
+                  1,
+                  2
+                ],
+                [],
+                [
+                  4
+                ]
+              ],
+              "revision": 7
+            }
+          },
+          "nested-snapshot": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "owned-identity": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "owned-keep": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "owned-retention": {
+            "changed": {
+              "items": [
+                {
+                  "text": "changed"
+                }
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                {
+                  "text": "one"
+                },
+                {
+                  "text": "two"
+                }
+              ],
+              "revision": 7
+            }
+          },
+          "owned-snapshot": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "pair-first": 1,
+          "pair-reordered-arguments": 1,
+          "pair-second": "a",
+          "text-identity": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          },
+          "text-keep": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          },
+          "text-retention": {
+            "changed": {
+              "items": [
+                "changed"
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                "a",
+                "bc"
+              ],
+              "revision": 7
+            }
+          },
+          "text-snapshot": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          }
+        },
+        "maximum_map_items": 8192,
+        "maximum_map_sum": 100691968,
+        "changed_body_result": {
+          "items": [
+            1,
+            5,
+            9
+          ],
+          "revision": 9
+        },
+        "replacement_library_revision": "rev_d923b63d45d0db7c8d1255f511f535a83be5c009ed0466aaa0c3c97a5dd9bacb",
+        "replacement_result": {
+          "items": [
+            1,
+            5,
+            9
+          ],
+          "revision": "next"
+        },
+        "replacement_keep_result": {
+          "items": [
+            1,
+            2,
+            4
+          ],
+          "revision": "retained"
+        },
+        "session": {
+          "messages": [
+            {
+              "first": 1,
+              "second": "a"
+            },
+            {
+              "first": 2,
+              "second": "ab"
+            }
+          ],
+          "accept_matches": true,
+          "close_code": 1000,
+          "cleanup_complete": true
+        },
+        "state_steps": [
+          {
+            "first": 1,
+            "second": "a"
+          },
+          {
+            "first": 2,
+            "second": "ab"
+          }
+        ],
+        "retained_states": [
+          {
+            "first": 0,
+            "second": ""
+          },
+          {
+            "first": 1,
+            "second": "a"
+          },
+          {
+            "first": 2,
+            "second": "ab"
+          }
+        ],
+        "session_rejections": [
+          "mismatched-application",
+          "phantom-secret",
+          "phantom-callable",
+          "nested-secret"
+        ]
+      },
+      "candidate_sha256": "9bb427bd42e9f11b7bf60d71923a6186e7caa5d6d1e1f336ed207366b4c3362a",
+      "verifier_sha256": "9c800ac57c06b2267166386a61d1efb02b0dd25ad09398d88957c5e5814204a3",
+      "elapsed_nanoseconds": 83495118637,
+      "commands": 210,
+      "runners": 3,
+      "inventories": 14,
+      "cleanup_complete": true,
+      "cache_observations": {
+        "artifact-nominal-after-producer-removal": "02b49d5a86f9bb3227d30bc83c02a90a6c9ab15d59d01507d8ce46973bffdba3",
+        "artifact-nominal-changed-body-corrupt-cache": "b892368434fc51cd73d281c0ca156ecd66f2689b27572bbf52719be387e88895",
+        "artifact-nominal-changed-body-exact": "b892368434fc51cd73d281c0ca156ecd66f2689b27572bbf52719be387e88895",
+        "artifact-nominal-changed-body-missing-cache": "b892368434fc51cd73d281c0ca156ecd66f2689b27572bbf52719be387e88895",
+        "artifact-nominal-reordered-arguments-corrupt-cache": "70fd905250aad3e3b8f0ac63c8274d5f7aac5ecdaead699cc76953ccc3131125",
+        "artifact-nominal-reordered-arguments-exact": "70fd905250aad3e3b8f0ac63c8274d5f7aac5ecdaead699cc76953ccc3131125",
+        "artifact-nominal-reordered-arguments-missing-cache": "70fd905250aad3e3b8f0ac63c8274d5f7aac5ecdaead699cc76953ccc3131125",
+        "artifact-nominal-replaced-template-case-bound-corrupt-cache": "02f4041f07cfbc5649cab9acb2dea493280e0adcad835f2c412934d76a61810e",
+        "artifact-nominal-replaced-template-case-bound-exact": "02f4041f07cfbc5649cab9acb2dea493280e0adcad835f2c412934d76a61810e",
+        "artifact-nominal-replaced-template-case-bound-missing-cache": "02f4041f07cfbc5649cab9acb2dea493280e0adcad835f2c412934d76a61810e"
+      }
+    },
+    "public_negative_codes": [
+      "kernel_type_nominal_arity",
+      "kernel_type_parameter_scope",
+      "kernel_type_constraint",
+      "change_mutation_owner_kind",
+      "kernel_type_record_field",
+      "kernel_type_record_field_missing",
+      "kernel_type_record_field_count",
+      "kernel_type_match_exhaustive",
+      "kernel_owner_generic_task",
+      "kernel_type_nominal_recursion",
+      "kernel_type_nominal_cycle",
+      "change_authored_stale_base"
+    ],
+    "authority": "Every rejected plan/apply retains the last accepted HEAD. Complete nominal-to-generic conversion retains declaration/member IDs and updates every dependent type/constructor in one candidate; rename and stale-plan behavior are explicit tests.",
+    "inspection_projections": {
+      "iteration": "offline-11",
+      "candidate_sha256": "33bbeaf5ea0f99bd93ff22bd20006f3ad3f6623d3a0a9409b934e4d23992fdfb",
+      "verifier_sha256": "5557db2c974acd19838842de4e00aded2779616ecd213b69ab9817bf88677993",
+      "records": {
+        "batch": [
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "decl_d2be87f7dc5d0f51ba9108a37eff6f7e",
+              "kind": "record",
+              "name": "batch",
+              "parent": "package",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_d2be87f7dc5d0f51ba9108a37eff6f7e"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "constraint": "none",
+              "id": "typeparam_e4cb2a462468045e36138003d95eb7cf",
+              "kind": "type_parameter",
+              "name": "T",
+              "parent": "decl_d2be87f7dc5d0f51ba9108a37eff6f7e",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/typeparam_e4cb2a462468045e36138003d95eb7cf"
+            }
+          },
+          {
+            "operation": "type-parameter",
+            "fields": {
+              "constraint": "none",
+              "index": "0",
+              "name": "T"
+            }
+          },
+          {
+            "operation": "declaration",
+            "fields": {
+              "children": "2",
+              "kind": "record",
+              "name": "batch"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "field_6f2707767203e4d75edf3a95fdacbf89",
+              "kind": "field",
+              "name": "revision",
+              "parent": "decl_d2be87f7dc5d0f51ba9108a37eff6f7e",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/field_6f2707767203e4d75edf3a95fdacbf89"
+            }
+          },
+          {
+            "operation": "field",
+            "fields": {
+              "index": "0",
+              "name": "revision",
+              "type-path": "field.revision"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062",
+              "form": "i64",
+              "path": "field.revision"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "field_94a5e9ebcdec41cd68987d2bfcc48fb2",
+              "kind": "field",
+              "name": "items",
+              "parent": "decl_d2be87f7dc5d0f51ba9108a37eff6f7e",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/field_94a5e9ebcdec41cd68987d2bfcc48fb2"
+            }
+          },
+          {
+            "operation": "field",
+            "fields": {
+              "index": "1",
+              "name": "items",
+              "type-path": "field.items"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_bd6f76a373b5805dc874beeaed7ece3b5890eee59c94f578b2462b99bf1bf735",
+              "form": "list",
+              "path": "field.items"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_8b59eceb7756b18ef512457834cb9756592b73e3c698f86393f4444f8bbb1619",
+              "form": "parameter",
+              "parameter": "typeparam_e4cb2a462468045e36138003d95eb7cf",
+              "path": "field.items.item"
+            }
+          }
+        ],
+        "edit": [
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "decl_fa936b75a4684ffbe75e6e0230b20014",
+              "kind": "variant",
+              "name": "edit",
+              "parent": "package",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_fa936b75a4684ffbe75e6e0230b20014"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "constraint": "none",
+              "id": "typeparam_8c9cf511ba5b8401bbeb3df5035525c3",
+              "kind": "type_parameter",
+              "name": "T",
+              "parent": "decl_fa936b75a4684ffbe75e6e0230b20014",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/typeparam_8c9cf511ba5b8401bbeb3df5035525c3"
+            }
+          },
+          {
+            "operation": "type-parameter",
+            "fields": {
+              "constraint": "none",
+              "index": "0",
+              "name": "T"
+            }
+          },
+          {
+            "operation": "declaration",
+            "fields": {
+              "children": "2",
+              "kind": "variant",
+              "name": "edit"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "case_1deaf0cac29c489235ebcab75d6b89b1",
+              "kind": "case",
+              "name": "keep",
+              "parent": "decl_fa936b75a4684ffbe75e6e0230b20014",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/case_1deaf0cac29c489235ebcab75d6b89b1"
+            }
+          },
+          {
+            "operation": "case",
+            "fields": {
+              "index": "0",
+              "name": "keep",
+              "payload": "false"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "case_2893b895bbf4e0a5f55751538c747bcc",
+              "kind": "case",
+              "name": "replace",
+              "parent": "decl_fa936b75a4684ffbe75e6e0230b20014",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/case_2893b895bbf4e0a5f55751538c747bcc"
+            }
+          },
+          {
+            "operation": "case",
+            "fields": {
+              "index": "1",
+              "name": "replace",
+              "payload": "true"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_7dd8fa7db13f82cd49088cf24c85a55285568180f74dfbbcf681aa2985504016",
+              "form": "application",
+              "path": "case.replace",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_d2be87f7dc5d0f51ba9108a37eff6f7e"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_499f93e16f3074b527d9953614ac27a9c138532e8a8f9eeb01fef3892c6f0d68",
+              "form": "parameter",
+              "parameter": "typeparam_8c9cf511ba5b8401bbeb3df5035525c3",
+              "path": "case.replace.argument.0"
+            }
+          }
+        ],
+        "pair": [
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "decl_5743b1f5767767410b5def08f635d1db",
+              "kind": "record",
+              "name": "pair",
+              "parent": "package",
+              "reference": "pkg_10000000000000000000000000000001/decl_5743b1f5767767410b5def08f635d1db"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "constraint": "none",
+              "id": "typeparam_2c26e74b1bc0d96e042718a3d936a162",
+              "kind": "type_parameter",
+              "name": "First",
+              "parent": "decl_5743b1f5767767410b5def08f635d1db",
+              "reference": "pkg_10000000000000000000000000000001/typeparam_2c26e74b1bc0d96e042718a3d936a162"
+            }
+          },
+          {
+            "operation": "type-parameter",
+            "fields": {
+              "constraint": "none",
+              "index": "0",
+              "name": "First"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "constraint": "none",
+              "id": "typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3",
+              "kind": "type_parameter",
+              "name": "Second",
+              "parent": "decl_5743b1f5767767410b5def08f635d1db",
+              "reference": "pkg_10000000000000000000000000000001/typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3"
+            }
+          },
+          {
+            "operation": "type-parameter",
+            "fields": {
+              "constraint": "none",
+              "index": "1",
+              "name": "Second"
+            }
+          },
+          {
+            "operation": "declaration",
+            "fields": {
+              "children": "2",
+              "kind": "record",
+              "name": "pair"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "field_a18279e763112ba0fccf9f751c54f3f9",
+              "kind": "field",
+              "name": "first",
+              "parent": "decl_5743b1f5767767410b5def08f635d1db",
+              "reference": "pkg_10000000000000000000000000000001/field_a18279e763112ba0fccf9f751c54f3f9"
+            }
+          },
+          {
+            "operation": "field",
+            "fields": {
+              "index": "0",
+              "name": "first",
+              "type-path": "field.first"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_a5387397a44b8519a2b4d3229500b46f18cf167194dc0b5254fa8edbbd5310d9",
+              "form": "parameter",
+              "parameter": "typeparam_2c26e74b1bc0d96e042718a3d936a162",
+              "path": "field.first"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "field_c9e17ff30e2344fa053a8b8297897260",
+              "kind": "field",
+              "name": "second",
+              "parent": "decl_5743b1f5767767410b5def08f635d1db",
+              "reference": "pkg_10000000000000000000000000000001/field_c9e17ff30e2344fa053a8b8297897260"
+            }
+          },
+          {
+            "operation": "field",
+            "fields": {
+              "index": "1",
+              "name": "second",
+              "type-path": "field.second"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_8074d423e607fd0f353528d56b86eafed3952ccaaca7126a917dccb373decf9c",
+              "form": "parameter",
+              "parameter": "typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3",
+              "path": "field.second"
+            }
+          }
+        ],
+        "snapshot": [
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71",
+              "kind": "pure_function",
+              "name": "snapshot",
+              "parent": "package",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_38d9dbb384e8e0dfe1ff8d1cc385df71"
+            }
+          },
+          {
+            "operation": "declaration",
+            "fields": {
+              "children": "1",
+              "effect": "pure",
+              "kind": "pure_function",
+              "name": "snapshot"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "constraint": "capture-safe",
+              "id": "typeparam_9d45bf173c897039d9c3e7d7b91199c0",
+              "kind": "type_parameter",
+              "name": "T",
+              "parent": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/typeparam_9d45bf173c897039d9c3e7d7b91199c0"
+            }
+          },
+          {
+            "operation": "type-parameter",
+            "fields": {
+              "constraint": "capture-safe",
+              "index": "0",
+              "name": "T"
+            }
+          },
+          {
+            "operation": "owner",
+            "fields": {
+              "id": "param_566aa1ccfcba8e5f8e8122b7b7d394d3",
+              "kind": "parameter",
+              "name": "batch",
+              "parent": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/param_566aa1ccfcba8e5f8e8122b7b7d394d3"
+            }
+          },
+          {
+            "operation": "parameter",
+            "fields": {
+              "index": "0",
+              "name": "batch",
+              "type-path": "parameter.batch",
+              "use": "unrestricted"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_b39c016d7b6d2193cac75037d705bcdda5ff8ccddba3c026a7472cf87209552a",
+              "form": "application",
+              "path": "parameter.batch",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_d2be87f7dc5d0f51ba9108a37eff6f7e"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_93ede182c0c9fadb3394b9a10d992227272addbab6b46a365f5b0f49d94b0fc9",
+              "form": "parameter",
+              "parameter": "typeparam_9d45bf173c897039d9c3e7d7b91199c0",
+              "path": "parameter.batch.argument.0"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_1e64b75d319abc8edd17e4dc79a05a7e390748892a9d2bdc61501a1bcbf19106",
+              "form": "function",
+              "parameters": "1",
+              "path": "result"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_ff693bf3312c85ec1fd1c0c607f00aad3aa1ef1c8b855ab8f495681a26d3f779",
+              "form": "unit",
+              "path": "result.parameter.0"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_b39c016d7b6d2193cac75037d705bcdda5ff8ccddba3c026a7472cf87209552a",
+              "form": "application",
+              "path": "result.result",
+              "reference": "pkg_a2e77c95a54055c5a2b0358cc48e473b/decl_d2be87f7dc5d0f51ba9108a37eff6f7e"
+            }
+          },
+          {
+            "operation": "type",
+            "fields": {
+              "digest": "type_object_93ede182c0c9fadb3394b9a10d992227272addbab6b46a365f5b0f49d94b0fc9",
+              "form": "parameter",
+              "parameter": "typeparam_9d45bf173c897039d9c3e7d7b91199c0",
+              "path": "result.result.argument.0"
+            }
+          }
+        ],
+        "snapshot-definition": [
+          {
+            "operation": "definition.function",
+            "fields": {
+              "body": "expr_fe5c5ae60a6ab886a87618bc19f35487",
+              "effect": "pure",
+              "id": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71",
+              "kind": "pure_function",
+              "module": "pkg_a2e77c95a54055c5a2b0358cc48e473b/mod_6fb97614648be67c2abd1be9b51087cd",
+              "name": "snapshot",
+              "parameters": "1",
+              "requirements": "0",
+              "result": "type_object_1e64b75d319abc8edd17e4dc79a05a7e390748892a9d2bdc61501a1bcbf19106",
+              "type-parameters": "1",
+              "visibility": "public"
+            }
+          },
+          {
+            "operation": "definition.type-parameter",
+            "fields": {
+              "constraint": "capture-safe",
+              "id": "typeparam_9d45bf173c897039d9c3e7d7b91199c0",
+              "index": "0",
+              "name": "T",
+              "parent": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71"
+            }
+          },
+          {
+            "operation": "definition.parameter",
+            "fields": {
+              "id": "param_566aa1ccfcba8e5f8e8122b7b7d394d3",
+              "index": "0",
+              "name": "batch",
+              "parent": "decl_38d9dbb384e8e0dfe1ff8d1cc385df71",
+              "requirement": "none",
+              "type": "type_object_b39c016d7b6d2193cac75037d705bcdda5ff8ccddba3c026a7472cf87209552a",
+              "use": "unrestricted"
+            }
+          }
+        ]
+      },
+      "checks": "Exact ordered parameters, stable parameter identities, bounds, full member/application types and matching local snapshot function-definition signature. Typed receipt omission faults cover the complete inspection map and every named projection."
+    }
+  },
+  "independent_proof": {
+    "fixtures": [
+      {
+        "path": "tests/fixtures/graph12-standard.lkjp",
+        "sha256": "3ead1a17ab28bf52ae3fcfb13b29c86352836cc328f1ec15eda079c0f3dc5b0b",
+        "expected": "object_digest_mismatch before readiness; HEAD unchanged"
+      },
+      {
+        "path": "tests/fixtures/artifact16-standard.lkja",
+        "sha256": "7ffe836adf786bcc65f66181d26cd168d5a709a18725c0d0afffd3cbf940d6ed",
+        "expected": "artifact_bundle_contract"
+      },
+      {
+        "path": "tests/fixtures/graph10-unchanged-types-and-data.json",
+        "sha256": "04cf51f115e27b1ebef16db6d996889abc60a458d0607be3aef4c19508906767",
+        "expected": "all unchanged base type bytes, nominal/nested data layouts and payload bytes exact"
+      },
+      {
+        "path": "tests/fixtures/nominal-session-command.lkchg",
+        "sha256": "7af177725691df1f854f9b034f9c17e04e09c6df292ebaa53994470e47254ca1",
+        "expected": "ordinary control passes; rehashed interactive variants reject repeated application mismatch or forbidden phantom/nested state before readiness"
+      }
+    ],
+    "artifact_faults": {
+      "owner": "src/platform/compiler/tests.rs::artifact_rejects_nominal_parameter_bound_member_and_application_forgery",
+      "rehashing": "independent packed compiler-unit bytes; replacement compilation map/manifest and complete outer artifact hashes",
+      "outcomes": {
+        "erased-parameters": "artifact_runtime_owner_count",
+        "reordered-parameters": "artifact_runtime_owner_semantics",
+        "phantom-bound": "artifact_runtime_owner_semantics",
+        "member-layout": "artifact_runtime_owner_semantics",
+        "reordered-arguments": "artifact_nominal_instruction_meaning",
+        "extra-argument": "artifact_nominal_instruction_meaning"
+      }
+    },
+    "transport_faults": {
+      "owner": "src/platform/package_transport/source.rs",
+      "outcomes": {
+        "erased-parameter": "kernel_full_parent_mismatch",
+        "extra-parameter": "kernel_type_nominal_arity",
+        "reordered-parameter": "kernel_type_argument",
+        "changed-bound": "kernel_type_constraint",
+        "wrong-constructor-argument": "kernel_type_record_field",
+        "member-layout": "kernel_type_argument",
+        "missing-argument-type": "package_interface_type_missing",
+        "missing-private-helper": "package_source_missing"
+      },
+      "meaning": "Both independent reconstruction and production admission reject fully rehashed semantic forgeries; every failure retains old authority/readiness."
+    },
+    "property_matrix": {
+      "owner": "src/platform/execution/normalized/tests.rs::nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_independent",
+      "template": "Marker<Phantom>{value:I64}; identical raw I64(7) payload",
+      "arguments": {
+        "I64": {
+          "ordinary": true,
+          "capture": true,
+          "equality": true,
+          "json": true,
+          "data": true
+        },
+        "Text": {
+          "ordinary": true,
+          "capture": true,
+          "equality": true,
+          "json": true,
+          "data": true
+        },
+        "Secret": {
+          "ordinary": true,
+          "capture": false,
+          "equality": false,
+          "json": false,
+          "data": false
+        },
+        "Function()->Secret": {
+          "ordinary": true,
+          "capture": true,
+          "equality": false,
+          "json": false,
+          "data": false
+        }
+      },
+      "fault": "Aliasing production instance layouts permits a wrong application under the injected fault; the independent raw-value oracle and canonical reference still reject. Normal production rejects wrong application and foreign preparation before the downstream body.",
+      "codecs": "Independent production/reference descriptors differ for phantom arguments; wrong expected application, rehashed trailing/truncated payload, checksum/layout faults reject. JSON authenticates expected shape, not phantom identity."
+    },
+    "session_boundaries": {
+      "owner": "src/platform/compiler/nominal_session_tests.rs",
+      "method": "Publicly authored command signatures are well-formed. Change both target records to interactive, rehash compiled and canonical bindings and independently pack the artifact. Ordinary control strictly loads, prepares and shuts down; four negative rows reject both load_artifact and PreparedDeployment::load.",
+      "negative_results": {
+        "I64/Text": "session_port_state_identity",
+        "Secret/Secret": "session_state_live_type",
+        "Function/Function": "session_state_live_type",
+        "List<Secret>/List<Secret>": "session_state_live_type"
+      },
+      "loader_code": "artifact_session_relation",
+      "effects_replayed": false
+    },
+    "pair_callback_order": {
+      "owner": "src/platform/execution/normalized/tests.rs::maintained_pair_map_calls_each_callback_once_in_order_and_stops_on_traps",
+      "normal": [
+        "core.i64.add",
+        "core.text.concat"
+      ],
+      "trap_at_first": [
+        "core.i64.add"
+      ],
+      "trap_at_second": [
+        "core.i64.add",
+        "core.text.concat"
+      ],
+      "tiers": [
+        "production",
+        "canonical reference"
+      ]
+    },
+    "boundedness": {
+      "work_limit": 10000000,
+      "metadata_budget_bytes": 268435456,
+      "maximum_type_depth": 256,
+      "changed_defaults": false,
+      "checks": [
+        "generic definition cycles through direct/indirect/growing/function/monomorphic-wrapper paths",
+        "concrete substitution cycle; finite nesting and wholly monomorphic recursion",
+        "preparation metadata exact fit/one over and overflow before growth",
+        "deterministic mid-derivation cancellation and healthy recovery in both independent preparations",
+        "raw-value/codec depth and item limits plus stack-safe disposal",
+        "iterative authored intent preserves fixed bytes and exact 256/257 type-depth admission"
+      ]
+    },
+    "shared_machinery": "Canonical bytes, digest identities, neutral values and persistent-list carrier are shared. Expected eligibility, layout descriptors, raw stored bytes, fixed ordered outputs, Vec history oracle, source-derived physical-work schedule and faults are independent. The reference never selects production layout tables and live effects are never replayed.",
+    "receipt_omission": "Current offline/pure-tail typed readers and transferred-admission tests require named nominal inventories, results, projections, changed-body/argument/dependency artifacts, complete session states, typed bytes and cost matrices. Removing required observations rejects."
+  },
+  "cost": {
+    "units": "Counts are evaluator-local work and cumulative accounting, not allocator telemetry. Preparation work and bytes are separate from payload admission and forwarding. Wall/RSS observations are advisory; intermediate execution overlapped some contributor checking.",
+    "unchanged_monomorphic": {
+      "source_before": "c0c4975851f34a9a2b3be8cbd3008a1f8bbafc18",
+      "owner": "src/platform/execution/normalized/tests.rs::bound_environment_cost_oracle_detects_real_per_invoke_rescanning",
+      "command": "cargo test --release --locked -p lkjscript --lib bound_environment_cost_oracle_detects_real_per_invoke_rescanning -- --nocapture",
+      "n": 4096,
+      "k": 1024,
+      "production": {
+        "input_admission_nodes": 4098,
+        "capture_admission_nodes": 8197,
+        "classification_decisions": 23591,
+        "guard_descendants": 0,
+        "list_node_visits": 399
+      },
+      "reference": {
+        "input_admission_nodes": 4098,
+        "capture_admission_nodes": 8197,
+        "classification_decisions": 25634,
+        "guard_descendants": 0,
+        "list_node_visits": 399
+      },
+      "comparison": "These counters are exactly equal before/after at the same N/K; no speedup claim.",
+      "predecessor_log_sha256": "8f02fb751e120f780393eb499edc5520cf6107565765e465ef8e4117b9ffcb01"
+    },
+    "restored_scan_fault": {
+      "n": 4096,
+      "k": 1024,
+      "applied": true,
+      "regular_guard_descendants": 0,
+      "restored_production_guard_descendants": 50442286,
+      "restored_reference_guard_descendants": 50436138,
+      "normal_separability": true,
+      "fault_separability": false,
+      "patch_owner": "test-only force_rescan in normalized/value_oracle.rs; bound-environment oracle executes it in both tiers"
+    },
+    "preliminary_pure_tail": {
+      "candidate_sha256": "9bb427bd42e9f11b7bf60d71923a6186e7caa5d6d1e1f336ed207366b4c3362a",
+      "verifier_sha256": "9c800ac57c06b2267166386a61d1efb02b0dd25ad09398d88957c5e5814204a3",
+      "elapsed_nanoseconds": 123807617580,
+      "peak_owned_file_bytes": 33686830,
+      "cleanup_complete": true,
+      "typed_data": {
+        "complete_batch_and_edit": true,
+        "expected_bytes": 131174,
+        "expected_sha256": "b95b6fb1da83f7124cdca2d069514559986bbcbba5e2c4dfff8dbaf5c67c05c4",
+        "identities": {
+          "batch": "decl_0181cd55d58d75814574f6bcdc9ada07",
+          "batch_package": "pkg_d51917b450b5220231b7948ef38d1ff6",
+          "edit": "decl_b9fe45f375dcbf1eff35080f47e9ffa1",
+          "edit_package": "pkg_9466f38005f3f175f24cc00c9fc3fde2",
+          "items": "field_676fb976ad39f947328177304f5da7a0",
+          "keep": "case_b83245e7c051224aaeef6da694bd8f55",
+          "replace": "case_a6e32584f075761d126815d14d01abbb",
+          "revision": "field_ae04fe1541b3c041282db2db893560eb"
+        },
+        "independent_layout_and_payload": true,
+        "items": 8192,
+        "revision": 7
+      },
+      "preparation": {
+        "production_bytes": 264648,
+        "production_steps": 9174,
+        "reference_bytes": 168908,
+        "reference_steps": 11902
+      },
+      "matrices": {
+        "checked-value-nominal-bound-matrix": [
+          {
+            "n": 1,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 77,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 72,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 3,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 1,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 1841,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 1962,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 3,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 1,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 28721,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 16,
+              "classification_decisions": 30762,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 3,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 77,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 72,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 27,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 1841,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 1962,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 27,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 28721,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 526,
+              "classification_decisions": 30762,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 27,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 77,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 72,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 399,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 1841,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 1962,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 399,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 28721,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 8206,
+              "classification_decisions": 30762,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 399,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          }
+        ],
+        "checked-value-nominal-forward-matrix": [
+          {
+            "n": 1,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 29,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 1,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 34,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 1,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1037,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 1,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1168,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 1,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 16397,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 1,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 18448,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 5,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 2,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 29,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 9,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 34,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1037,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 9,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1168,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 256,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 16397,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 9,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 18448,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 260,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 18,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 1,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 29,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 133,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 34,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 64,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1037,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 133,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 1168,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          },
+          {
+            "n": 4096,
+            "k": 1024,
+            "production": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 16397,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 133,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            },
+            "reference": {
+              "capture_admission_nodes": 0,
+              "classification_decisions": 18448,
+              "constructor_child_visits": 0,
+              "input_admission_nodes": 4100,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 0,
+                "element_handle_copies": 0,
+                "element_slots_reserved": 0,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 266,
+                "nodes_allocated": 0
+              },
+              "raw_result_admission_nodes": 0
+            }
+          }
+        ]
+      },
+      "http": {
+        "after_configured_changes": 3,
+        "after_recovery_changes": 2,
+        "after_trap_changes": 1,
+        "artifact_sha256": "d30ca9a84893e49fc161f0528873d5d99c3dc2ce77a4a7c7251d9ae4eec5d059",
+        "keys": [
+          "after_configured_changes",
+          "after_recovery_changes",
+          "after_trap_changes",
+          "artifact_sha256",
+          "committed",
+          "configured_request",
+          "configured_response",
+          "final_data_verification",
+          "fixed_response_length",
+          "fixed_response_sum",
+          "initial_committed_changes",
+          "initial_data_revisions",
+          "mapped_data_matches_independent_typed_bytes",
+          "maximum_live_transactions",
+          "project_directories_absent",
+          "pure_effects_replayed",
+          "trap"
+        ]
+      },
+      "cancellation": {
+        "cancelled_key_absent": true,
+        "committed_changes": 4,
+        "data_verification": {
+          "bytes_read": 2102178,
+          "objects": 5,
+          "records": 4,
+          "revision": "data_revision_07f93435aacc35f2703b254798d3499c8f293ca97c627cc4fc2ec6297886d5b9",
+          "revisions": 5,
+          "schemas": 0,
+          "staging_leftovers": 0,
+          "store": "data_store_676d7fc0a5aef704f65c3686d738c967d3111b0382a9d1e4e608c10d0fa9fe58"
+        },
+        "execution": {
+          "cancellation_checks": 20000,
+          "classification": "fresh passed",
+          "cleanup_complete": true,
+          "effects_replayed": false,
+          "failure": {
+            "class": "cancelled",
+            "code": "execution_cancelled",
+            "message": "execution was cancelled by its owning task scope",
+            "possibly_visible": false,
+            "retryable": false
+          },
+          "observation": {
+            "allocated_bytes": 2360346,
+            "allocation_charges": 2447,
+            "calls": 623,
+            "capability_calls": 2,
+            "collection_items": 10188,
+            "external_calls": 370,
+            "instructions": 2198,
+            "live_call_frames_after": 0,
+            "live_handles_after": 0,
+            "live_locals_after": 0,
+            "live_operands_after": 0,
+            "live_transactions_after": 0,
+            "live_type_bindings_after": 0,
+            "maximum_call_depth": 5,
+            "maximum_control_frames": 5,
+            "maximum_live_locals": 22,
+            "maximum_live_transactions": 1,
+            "maximum_live_type_bindings": 7,
+            "maximum_value_stack": 5,
+            "production_tier": "graph12_dense_bytecode_7",
+            "tail_transfers": 125,
+            "type_derivation_steps": 10047,
+            "type_metadata_bytes": 287566,
+            "value_work": {
+              "capture_admission_nodes": 22,
+              "classification_decisions": 3568,
+              "constructor_child_visits": 126,
+              "input_admission_nodes": 8196,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 0,
+                "branch_slots_reserved": 0,
+                "element_handle_allocations": 62,
+                "element_handle_copies": 902,
+                "element_slots_reserved": 1984,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 838,
+                "nodes_allocated": 62
+              },
+              "raw_result_admission_nodes": 1
+            }
+          },
+          "recovery_length": 8192,
+          "recovery_observation": {
+            "allocated_bytes": 35460747,
+            "allocation_charges": 311987,
+            "calls": 81934,
+            "capability_calls": 5,
+            "collection_items": 302148,
+            "external_calls": 49159,
+            "instructions": 286821,
+            "live_call_frames_after": 0,
+            "live_handles_after": 0,
+            "live_locals_after": 0,
+            "live_operands_after": 0,
+            "live_transactions_after": 0,
+            "live_type_bindings_after": 0,
+            "maximum_call_depth": 5,
+            "maximum_control_frames": 5,
+            "maximum_live_locals": 22,
+            "maximum_live_transactions": 1,
+            "maximum_live_type_bindings": 7,
+            "maximum_value_stack": 5,
+            "production_tier": "graph12_dense_bytecode_7",
+            "tail_transfers": 16387,
+            "type_derivation_steps": 10047,
+            "type_metadata_bytes": 287566,
+            "value_work": {
+              "capture_admission_nodes": 22,
+              "classification_decisions": 467058,
+              "constructor_child_visits": 16404,
+              "input_admission_nodes": 8196,
+              "internal_guard_descendant_visits": 0,
+              "lists": {
+                "branch_slot_copies": 15126,
+                "branch_slots_reserved": 45792,
+                "element_handle_allocations": 24582,
+                "element_handle_copies": 126976,
+                "element_slots_reserved": 278720,
+                "full_materializations": 0,
+                "materialized_elements": 0,
+                "node_visits": 44390,
+                "nodes_allocated": 10141
+              },
+              "raw_result_admission_nodes": 16402
+            }
+          },
+          "recovery_sum": 33558528,
+          "stack_bytes": 2097152
+        }
+      }
+    },
+    "map": {
+      "sizes": [
+        256,
+        1024,
+        4096,
+        8192
+      ],
+      "formula": "3*i+5, i=0..N-1",
+      "maximum_sum": 100691968,
+      "every_item_compared": true,
+      "warmups_per_size": 1,
+      "measurements_per_size": 3,
+      "owner_wall_bound_seconds": 900,
+      "owner_file_bound_bytes": 1073741824
+    }
+  },
+  "proof_dispositions": {
+    "intermediate": [
+      {
+        "name": "offline-10",
+        "classification": "fresh passed",
+        "receipt": ".artifacts/campaign/202609100459/offline-10/receipt.json",
+        "sha256": "d8eafe2cb22cff9f959cd123fc15e30bca47f44e1faa012fc11b45a87b7dc720",
+        "owned_digest": "verification_e6816c30b5425f3128b48715f153d381ccd16c644712bf02218a2e3d694240b1"
+      },
+      {
+        "name": "pure-tail-03",
+        "classification": "fresh passed",
+        "receipt": ".artifacts/campaign/202609100459/pure-tail-03/receipt.json",
+        "sha256": "be23709896c467311198cd738a14743809e3dcc723cee5034853d2a7848be7fa",
+        "owned_digest": "verification_9d3ba423b9256f84d406a5279cb21981f3c66c2b79c6367a5c78e42d3440d185"
+      },
+      {
+        "name": "public-nominal-06",
+        "classification": "fresh passed",
+        "tests": 1
+      },
+      {
+        "name": "session-strict-02",
+        "classification": "fresh passed",
+        "tests": 1
+      },
+      {
+        "name": "intent-depth-01",
+        "classification": "fresh passed",
+        "tests": 8
+      },
+      {
+        "name": "offline-11",
+        "classification": "fresh passed",
+        "receipt": ".artifacts/campaign/202609100459/offline-11/receipt.json",
+        "sha256": "ca8c66b0d0d1e42d3e551d0b002dcf35d572d86fa67fa357c93924a63f6a35f9",
+        "commands": 215,
+        "elapsed_nanoseconds": 84590984589,
+        "cleanup_complete": true
+      }
+    ],
+    "binding_limit": "Intermediate copied candidate/verifier hashes bind actual bytes and retained requests/results. They were built during worktree iteration and are not relabelled as a final committed-source full/target receipt.",
+    "required_full": {
+      "classification": "not run"
+    },
+    "required_exact_musl": {
+      "classification": "not run"
+    },
+    "normal_integration": {
+      "classification": "not run"
+    },
+    "NOM_1": "pending final source/target receipts",
+    "NOM_2": "pending final source/target receipts",
+    "NOM_3": "pending final source/target receipts",
+    "NOM_4": "pending final source/target receipts",
+    "NOM_5": "pending final source/target receipts",
+    "NOM_6": "pending fresh full and exact musl admission",
+    "NOM_7": "pending final evidence and normal integration"
+  },
+  "attempts": [
+    "Initial public fixture proved predecessor rejects adding a type parameter to a record; first invocation used the wrong input option and is retained as failed.",
+    "Early compilation/check iterations repaired missing affected owner matches and stale format/count assertions; no budget or lint boundary was relaxed.",
+    "Library-03: 528 passed, two stale expected runtime-owner counts failed, two intentionally ignored scale tests; corrected to include canonical component metadata.",
+    "Offline-03 through offline-09 failed on fixture query/ownership/receipt counts, component metadata, removed standard transport, unqualified case IDs or a pure target sharing a capability-bearing component; each distinct cause repaired before rerun. Offline-10 passed.",
+    "Public-nominal-02 through public-nominal-05 failed on fixture package metadata, empty phantom/scope records or unintended wrong-field-type precedence. Public-nominal-06 passed the full intended matrix.",
+    "Clippy found and corrected collapsible conditions and fixture formatting/expect_err use; warnings remain denied.",
+    "Library-04 debug execution exposed host stack overflow at the existing excessive authored-type depth test. The type-intent encoder now uses bounded lazy iterative frames, retains exact bytes and admits 256/rejects 257 without changing limits.",
+    "Library-05: 533 passed, one new session positive control lacked an explicit byte-stream grant, two scale tests intentionally ignored. The fixture was corrected; session-strict-02 passed all four hostile states and its ordinary control.",
+    "The first independent session packer retained unreachable old map pages; exact closure reconstruction removed those pages before fresh hashing. No strict-loader check was weakened."
+  ],
+  "deviations": [
+    "Source advanced to untagged 0.1.29 for the implemented semantic/consumer cutover; no release identity is reserved.",
+    "Strict compiled nominal validation needs canonical component metadata for port context, so current lkjournal's derived artifact gains three canonical component objects. No accepted application owner or operation changed.",
+    "A release-only debug_assert containing reference transaction binding insertion was corrected to preserve required execution in optimized builds.",
+    "Added explicit public field/case type editing through existing typed mutations and fixed exact local declaration selectors needed by ordinary authoring.",
+    "Additional per-member validation work is charged before collecting nominal member types. New preparation metadata is charged against existing defaults.",
+    "Temporary contributor materializer/export access was removed after canonical consumer cutover; only bounded test fixtures remain."
+  ],
+  "cleanup": {
+    "predecessor_worktree": "removed after saving read-only exporter patch/source and measurements",
+    "owned_predecessor_temp_project": "removed",
+    "migration_production_access": "removed",
+    "ephemeral_oracle_projects_services": "each passing owner reports cleanup_complete; failed disposable roots are parent-owned and removed",
+    "retained_owned_artifacts": ".artifacts/campaign/202609100459 contains raw attempts, frozen intermediate binaries, predecessor outputs and migration backups; intentionally ignored and not committed",
+    "preserved": "Initial unrelated stash remains untouched; unknown Codex process/project ownership was not altered."
+  },
+  "external": {
+    "normal_pushes": [],
+    "public_latest": "v0.1.28",
+    "public_release_id": 385653688,
+    "public_source_commit": "221beca0df7b31dbf10c9b22fe35c6db3af1b903",
+    "published_tag_object": "c317df24fe90edff1acbd7440dd0c4c6b3e5f488",
+    "publication": "not selected and not performed",
+    "tags": "no creation, movement or push",
+    "workflow_dispatch_or_rerun": "none",
+    "release_controls_settings_credentials": "unchanged",
+    "deployment": "none",
+    "live_data_migration": "none",
+    "paid_infrastructure": "none"
+  },
+  "limitations": [
+    "Generic nominal definitions are nonrecursive in this slice; wholly monomorphic recursion and finite nested applications remain supported.",
+    "No generic task/component/interface, resource polymorphism, automatic lexical capture or higher-kinded types.",
+    "Capture safety, equality, JSON/data and session retention are distinct; functions remain transient and JSON does not authenticate phantom identity.",
+    "Local target evidence proves only the selected x86_64 musl target and pinned userlands; no general portability, isolation or signing claim.",
+    "Public v0.1.28 does not acquire the new source capability."
+  ]
+}

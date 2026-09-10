@@ -531,10 +531,25 @@ fn internal_type(
     schema: &mut NormalizedReferenceSchema,
     form: TypeForm,
 ) -> TypeObjectDigest {
+    // The fixture admits a new canonical type outside normal preparation. Extend the
+    // independent no-application fact explicitly; applied instances require real layouts.
+    let application_free = match &form {
+        TypeForm::Applied { .. } => false,
+        TypeForm::Function { .. } => true,
+        _ => TypeObject::new(form.clone())
+            .unwrap()
+            .child_types()
+            .iter()
+            .all(|ty| program.application_free_types.contains(ty)),
+    };
     let object = TypeObject::new(form).expect("internal boundary fixture type");
     let (digest, _) = encode_type_object(&object).expect("canonical type identity");
     program.types.insert(digest, object.clone());
     schema.types.insert(digest, object);
+    if application_free {
+        program.application_free_types.insert(digest);
+        schema.application_free_types.insert(digest);
+    }
     digest
 }
 
@@ -621,7 +636,7 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     );
     let selector = NormalizedFieldSelector::Structural(Name::new("left".to_owned()).unwrap());
     let child = record
-        .field(&selector)
+        .field(&selector, &program)
         .expect("field proof")
         .map_get(&NormalizedMapKey::I64(0))
         .expect("map proof")
@@ -927,6 +942,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
         let object = TypeObject::new(TypeForm::Option { item: ty }).unwrap();
         let (digest, _) = encode_type_object(&object).unwrap();
         program.types.insert(digest, object.clone());
+        program.application_free_types.insert(digest);
         snapshot.types.insert(digest, object);
         ty = digest;
         nested_types.push(ty);

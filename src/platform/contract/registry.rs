@@ -99,16 +99,16 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-15";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 15;
-pub const CLI_CONTRACT_VERSION: u16 = 29;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-16";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 16;
+pub const CLI_CONTRACT_VERSION: u16 = 30;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-4";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 4;
+    "lkjscript-function-definition-projection-5";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 5;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -375,7 +375,7 @@ const FACT_MANIFEST_MAGIC_TEXT: &str = "LKJSFI03";
 pub(crate) const FACT_MANIFEST_MAGIC: [u8; 8] = magic_bytes(FACT_MANIFEST_MAGIC_TEXT);
 pub(crate) const FACT_MANIFEST_DOMAIN: &str = "lkjscript.semantic-fact-manifest.v3";
 pub(crate) const SEMANTIC_CERTIFICATE_DOMAIN: &str = "lkjscript.semantic-certificate.v3";
-const SUMMARY_MAGIC_TEXT: &str = "LKJSUM03";
+const SUMMARY_MAGIC_TEXT: &str = "LKJSUM13";
 pub(crate) const SUMMARY_MAGIC: [u8; 8] = magic_bytes(SUMMARY_MAGIC_TEXT);
 pub(crate) const SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.semantic-summary-envelope.v3";
 pub(crate) const VALIDATOR_DIGEST_DOMAIN: &str = "lkjscript.semantic-validator-contract.v3";
@@ -398,6 +398,7 @@ pub enum ContractKey {
     Cli,
     MeaningGraph,
     TypeObject,
+    NominalApplication,
     ImmutableObjectStore,
     ImmutablePack,
     ObjectCatalog,
@@ -450,6 +451,7 @@ impl ContractKey {
             Self::Cli => "cli",
             Self::MeaningGraph => "meaning_graph",
             Self::TypeObject => "type_object",
+            Self::NominalApplication => "nominal_application",
             Self::ImmutableObjectStore => "immutable_object_store",
             Self::ImmutablePack => "immutable_pack",
             Self::ObjectCatalog => "object_catalog",
@@ -606,7 +608,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN11", "LKJSMR01", "LKJDEP11", "LKJRET11"],
+            magic_values: &["LKJOWN13", "LKJSMR01", "LKJDEP13", "LKJRET13"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
@@ -636,6 +638,17 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
+        },
+        ContractDescriptor {
+            key: ContractKey::NominalApplication,
+            name: "positive-arity nominal application encoding",
+            identity: "lkjscript-nominal-application-1",
+            version: super::super::kernel::contract::NOMINAL_APPLICATION_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::CanonicalMeaning,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJTAP01"],
+            digest_domains: &[super::super::kernel::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN],
         },
         simple_contract(
             ContractKey::ImmutableObjectStore,
@@ -744,7 +757,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM10"],
+            magic_values: &["LKJSUM13"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -767,7 +780,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT07"],
+            magic_values: &["LKJWIT08"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -804,7 +817,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR12", "LKJABG01"],
+            magic_values: &["LKJACR14", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -883,7 +896,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF07"],
+            magic_values: &["LKJPIF09"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -948,7 +961,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN06"],
+            magic_values: &["LKJCUN08"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -970,7 +983,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF16"],
+            magic_values: &["LKJAMF17"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -984,7 +997,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART16", "LKJAEN16"],
+            magic_values: &["LKJART17", "LKJAEN17"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -3674,6 +3687,150 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use a structurally safe type or declare the exact caller parameter's capture-safe constraint; review all affected callers.",
         ),
         diagnostic(
+            "kernel_type_nominal_arity",
+            DiagnosticClass::Semantic,
+            "A nominal reference or constructor has missing, extra or implicit type arguments.",
+            "Use Named for zero arity and supply every ordered argument explicitly for a generic record or variant.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_kind",
+            DiagnosticClass::Semantic,
+            "An application or nominal member reference names a non-record/non-variant declaration.",
+            "Select the exact visible record or variant in the current package closure.",
+        ),
+        diagnostic(
+            "kernel_type_parameter_scope",
+            DiagnosticClass::Semantic,
+            "A type parameter is outside its exact owning declaration scope.",
+            "Use the current declaration's parameter identity or a closed concrete argument.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_recursion",
+            DiagnosticClass::Semantic,
+            "A nominal definition cycle passes through a generic declaration, including a signature or wrapper path.",
+            "Break the generic definition cycle; finite explicit nesting and existing wholly monomorphic recursion retain their contracts.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_cycle",
+            DiagnosticClass::Semantic,
+            "Concrete substitution introduces a cycle through a nominal application.",
+            "Supply an argument whose complete substituted member closure is finite.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_depth",
+            DiagnosticClass::Semantic,
+            "Nominal definition or application traversal exceeds the current type-depth limit.",
+            "Reduce nesting in the complete declaration and argument closure.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_resource",
+            DiagnosticClass::Semantic,
+            "An application contains a resource or stream through an argument or substituted member.",
+            "Keep live values in their explicitly admitted affine/task forms, outside ordinary parametric data.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_equality",
+            DiagnosticClass::Semantic,
+            "An applied nominal graph-test value contains an incomparable argument or member, including phantom or inactive positions.",
+            "Compare only complete ordinary comparable data; capture safety does not grant equality.",
+        ),
+        diagnostic(
+            "kernel_nominal_application_tag",
+            DiagnosticClass::Corrupt,
+            "The disjoint nominal application envelope contains an unknown kind tag.",
+            "Regenerate the canonical application object; do not reinterpret it as a base TypeObject.",
+        ),
+        diagnostic(
+            "normalized_instantiation_storage",
+            DiagnosticClass::Resource,
+            "Prepared nominal/type metadata exceeds the existing allocation budget before growth.",
+            "Reduce the concrete type/layout closure and retry; no partial preparation is admitted.",
+        ),
+        diagnostic(
+            "reference_instantiation_storage",
+            DiagnosticClass::Resource,
+            "Independent canonical type/layout derivation exceeds its metadata allocation budget.",
+            "Reduce the concrete closure; preserve both evaluator observations when diagnosing the limit.",
+        ),
+        diagnostic(
+            "normalized_json_type_work",
+            DiagnosticClass::Resource,
+            "Whole-application JSON eligibility exceeds the existing work or depth limit.",
+            "Reduce the argument/member closure before retrying typed JSON conversion.",
+        ),
+        diagnostic(
+            "normalized_json_type_storage",
+            DiagnosticClass::Resource,
+            "Whole-application JSON eligibility exceeds its bounded temporary metadata allowance.",
+            "Reduce the concrete type closure; no partial value is returned.",
+        ),
+        diagnostic(
+            "session_state_arity",
+            DiagnosticClass::Semantic,
+            "Retained state names a nominal application with the wrong ordered arity.",
+            "Use one closed exact application in every State position.",
+        ),
+        diagnostic(
+            "session_state_parameter",
+            DiagnosticClass::Semantic,
+            "Retained state has an unresolved parameter after nominal substitution.",
+            "Supply closed arguments throughout the concrete session state.",
+        ),
+        diagnostic(
+            "session_state_limit",
+            DiagnosticClass::Semantic,
+            "The complete concrete state type exceeds the bounded node or substitution inventory.",
+            "Reduce state type structure within the existing session and type limits.",
+        ),
+        diagnostic(
+            "artifact_nominal_parameters",
+            DiagnosticClass::Corrupt,
+            "Strict-loaded nominal metadata omits its ordered canonical parameters.",
+            "Rebuild from the exact accepted graph and complete dependency closure.",
+        ),
+        diagnostic(
+            "artifact_nominal_kind",
+            DiagnosticClass::Corrupt,
+            "Strict-loaded nominal metadata names another declaration kind.",
+            "Rebuild the artifact from canonical record/variant meaning.",
+        ),
+        diagnostic(
+            "artifact_nominal_interface",
+            DiagnosticClass::Corrupt,
+            "Nominal artifact validation lacks an exact package interface.",
+            "Relink the complete exact dependency closure.",
+        ),
+        diagnostic(
+            "artifact_nominal_meaning",
+            DiagnosticClass::Corrupt,
+            "Canonical nominal signatures or expressions in the artifact fail complete type validation.",
+            "Inspect the nested semantic diagnostic and regenerate the artifact from accepted meaning.",
+        ),
+        diagnostic(
+            "artifact_nominal_instruction_owner",
+            DiagnosticClass::Corrupt,
+            "Constructor validation lacks a canonical function, expression, binding or port owner.",
+            "Relink the complete canonical source closure; compiled metadata cannot replace it.",
+        ),
+        diagnostic(
+            "artifact_nominal_instruction_field",
+            DiagnosticClass::Corrupt,
+            "A compiled constructor's field selector is absent from its exact table.",
+            "Recompile from the accepted member identities.",
+        ),
+        diagnostic(
+            "artifact_nominal_instruction_meaning",
+            DiagnosticClass::Corrupt,
+            "Compiled constructor declarations, ordered arguments or members disagree with canonical expression occurrences.",
+            "Recompile from the exact accepted graph; rehashing altered metadata does not validate it.",
+        ),
+        diagnostic(
+            "artifact_nominal_work",
+            DiagnosticClass::Resource,
+            "Strict nominal artifact validation exceeds the existing bounded work inventory.",
+            "Reduce the linked nominal closure before retrying; no partial artifact is admitted.",
+        ),
+        diagnostic(
             "kernel_type_bind_capture_depth",
             DiagnosticClass::Semantic,
             "Capture-type validation exceeded its bounded structural depth.",
@@ -6090,6 +6247,48 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ],
             )?);
             records.push(compact_record(
+                "execution.nominal",
+                &[
+                    ("application", "explicit-positive-arity".to_owned()),
+                    ("named", "zero-arity-only".to_owned()),
+                    (
+                        "identity",
+                        "exact-declaration-and-all-ordered-arguments".to_owned(),
+                    ),
+                    ("layout-origin", "one-validated-preparation".to_owned()),
+                    (
+                        "constraints",
+                        "none,capture-safe-in-exact-declaration-scope".to_owned(),
+                    ),
+                    (
+                        "eligibility",
+                        "all-arguments-and-substituted-members-including-phantom-empty-inactive"
+                            .to_owned(),
+                    ),
+                    (
+                        "properties",
+                        "separate-ordinary-capture-equality-json-data-session".to_owned(),
+                    ),
+                    (
+                        "generic-cycles",
+                        "reject-including-signature-and-wrapper-paths".to_owned(),
+                    ),
+                    (
+                        "closure",
+                        "concrete-signatures-constants-tests-ports-constructors-calls-and-members"
+                            .to_owned(),
+                    ),
+                    (
+                        "reference",
+                        "independent-canonical-owner-derivation".to_owned(),
+                    ),
+                    (
+                        "preparation-accounting",
+                        "cumulative-steps-and-metadata-bytes-before-growth".to_owned(),
+                    ),
+                ],
+            )?);
+            records.push(compact_record(
                 "execution.binding",
                 &[
                     ("expression", "bind".to_owned()),
@@ -6174,6 +6373,14 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("classification-decisions", "internal-root-classification"),
                     ("allocated-bytes", "cumulative-byte"),
                     ("allocation-charges", "successful-nonzero-byte-charge"),
+                    (
+                        "type-derivation-steps",
+                        "preparation-type-layout-property-step",
+                    ),
+                    (
+                        "type-metadata-bytes",
+                        "preparation-type-layout-property-byte",
+                    ),
                     ("collection-items", "cumulative-item"),
                     ("list-node-visits", "physical-node-visits"),
                     (
@@ -6646,6 +6853,7 @@ fn validate_compact_change_inventory(
         let optional = [
             ("add.type-parameter", "constraint"),
             ("add.case", "payload"),
+            ("set.case-payload", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
@@ -6665,6 +6873,7 @@ fn validate_compact_change_inventory(
     }
     for (operation, name) in [
         ("add.case", "payload"),
+        ("set.case-payload", "payload"),
         ("add.parameter", "function"),
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
@@ -6843,9 +7052,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-4"
+            "lkjscript-function-definition-projection-5"
         );
-        assert_eq!(contract.version, 4);
+        assert_eq!(contract.version, 5);
         assert_eq!(
             contract_descriptors()
                 .iter()

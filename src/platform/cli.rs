@@ -674,6 +674,22 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 run.production.allocated_bytes.to_string(),
             ),
             (
+                "production-type-derivation-steps",
+                run.production.type_derivation_steps.to_string(),
+            ),
+            (
+                "production-type-metadata-bytes",
+                run.production.type_metadata_bytes.to_string(),
+            ),
+            (
+                "reference-type-derivation-steps",
+                run.reference.type_derivation_steps.to_string(),
+            ),
+            (
+                "reference-type-metadata-bytes",
+                run.reference.type_metadata_bytes.to_string(),
+            ),
+            (
                 "production-collection-items",
                 run.production.collection_items.to_string(),
             ),
@@ -4261,7 +4277,12 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::Record {
                 nominal_type,
                 fields: values,
+                type_arguments,
             } => {
+                fields.push(("type-arguments", type_arguments.len().to_string()));
+                for (index, ty) in type_arguments.iter().enumerate() {
+                    self.add_type_reference("record_type_argument", owner, index, *ty)?;
+                }
                 fields.push(("form", "record".to_owned()));
                 fields.push(("fields", values.len().to_string()));
                 if let Some(nominal) = nominal_type {
@@ -4285,7 +4306,15 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     }
                 }
             }
-            ExpressionOperation::Variant { case, payload } => {
+            ExpressionOperation::Variant {
+                case,
+                payload,
+                type_arguments,
+            } => {
+                fields.push(("type-arguments", type_arguments.len().to_string()));
+                for (index, ty) in type_arguments.iter().enumerate() {
+                    self.add_type_reference("variant_type_argument", owner, index, *ty)?;
+                }
                 fields.push(("form", "variant".to_owned()));
                 fields.push(("case", format!("{}/{}", case.package, case.case)));
                 fields.push(("payload", payload.is_some().to_string()));
@@ -4543,6 +4572,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::Variant {
                 case,
                 payload: Some(payload),
+                ..
             } => self.visit_expression_child(
                 owner,
                 payload,

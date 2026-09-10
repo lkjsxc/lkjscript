@@ -25,6 +25,30 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 const OWNER_DIGEST_DOMAIN: &str = "lkjscript.contributor.owner-identities.v1";
+
+#[cfg(test)]
+mod nominal_cutover_tests;
+
+/// Neutral canonical type identity for independent contributor byte oracles. This
+/// performs no graph authoring, scope proof, layout derivation or value encoding.
+pub fn canonical_type_object_identity(form_json: &[u8]) -> Result<([u8; 32], String), Diagnostic> {
+    if form_json.len() > super::kernel::contract::MAXIMUM_TYPE_OBJECT_BYTES {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "contributor_type_bytes",
+            "type identity input exceeds the canonical object bound",
+        ));
+    }
+    let form: TypeForm = serde_json::from_slice(form_json).map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Source,
+            "contributor_type_form",
+            error.to_string(),
+        )
+    })?;
+    let (digest, _) = super::kernel::encode_type_object(&super::kernel::TypeObject::new(form)?)?;
+    Ok((digest.bytes(), digest.to_string()))
+}
 const RELATION_DIGEST_DOMAIN: &str = "lkjscript.contributor.relations.v1";
 const DEFINITION_OWNER_DIGEST_DOMAIN: &str = "lkjscript.contributor.function-definition.owners.v1";
 const DEFINITION_FACT_DIGEST_DOMAIN: &str = "lkjscript.contributor.function-definition.facts.v1";
@@ -44,6 +68,94 @@ pub fn pure_tail_transaction_probe(
     function: &str,
 ) -> Result<serde_json::Value, Diagnostic> {
     super::execution::normalized::pure_tail_probe::observe_transaction(deployment, function)
+}
+
+/// Isolated source-bound session state observation. The caller supplies the exact transported
+/// source of a disposable byte-stream-only deployment; no live effect is replayed for comparison.
+pub fn nominal_session_state_probe(
+    deployment: &Path,
+    source: &[u8],
+    transport: &str,
+) -> Result<serde_json::Value, Diagnostic> {
+    use std::io::Read;
+    let mut descriptor_bytes = Vec::new();
+    std::fs::File::open(deployment)
+        .and_then(|file| {
+            file.take(super::deployment::MAXIMUM_DEPLOYMENT_BYTES as u64 + 1)
+                .read_to_end(&mut descriptor_bytes)
+        })
+        .map_err(|error| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "contributor_session_descriptor",
+                error.to_string(),
+            )
+        })?;
+    let descriptor = super::deployment::decode_deployment(&descriptor_bytes)?;
+    if !descriptor.secrets.is_empty()
+        || !descriptor.configuration.is_empty()
+        || descriptor.grants.iter().any(|grant| {
+            !matches!(
+                grant.adapter,
+                super::deployment::AdapterDescriptor::ByteStream
+            )
+        })
+    {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "contributor_session_authority",
+            "the isolated state probe admits only byte-stream grants and no configuration or secrets",
+        ));
+    }
+    let container =
+        super::package_transport::source::PackageContainer::decode(source, transport.parse()?)?;
+    let oracle = super::package_transport::oracle::reconstruct(&container)?;
+    let schema = super::execution::normalized::NormalizedReferenceSchema::reconstruct(
+        oracle.snapshots.values(),
+    )
+    .map_err(|error| Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message))?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .map_err(|error| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "contributor_session_runtime",
+                error.to_string(),
+            )
+        })?;
+    let deployment =
+        super::deployment::PreparedDeployment::load(deployment, runtime.handle().clone())?;
+    let resident = deployment.resident()?;
+    let root = oracle
+        .snapshots
+        .get(&resident.program().root_package)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "contributor_session_source",
+                "session source omits the exact root package",
+            )
+        })?;
+    if super::kernel::semantic_state_digest(root)? != resident.program().root_semantic_state {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Corrupt,
+            "contributor_session_source",
+            "session artifact differs from its independently transported source",
+        ));
+    }
+    let session = deployment.session_application()?;
+    let (states, cleanup) = runtime.block_on(async {
+        let observed = session.contributor_states(&schema).await;
+        let cleanup = session.shutdown().await;
+        (observed, cleanup)
+    });
+    let states = states
+        .map_err(|error| Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message))?;
+    Ok(
+        serde_json::json!({"states":states,"cleanup":cleanup,"source_semantic_state":resident.program().root_semantic_state,"effects_replayed":false}),
+    )
 }
 
 /// Implementation-disjoint complete package inventory. Only neutral container decoding and
@@ -1456,7 +1568,7 @@ fn oracle_named_member_types(
             ));
         };
         return match &declaration.payload {
-            DeclarationPayload::Record { fields } => fields
+            DeclarationPayload::Record { fields, .. } => fields
                 .iter()
                 .map(
                     |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -1469,7 +1581,7 @@ fn oracle_named_member_types(
                     },
                 )
                 .collect(),
-            DeclarationPayload::Variant { cases } => cases
+            DeclarationPayload::Variant { cases, .. } => cases
                 .iter()
                 .map(|case| match snapshot.owners.get(&OwnerKey::Case(*case)) {
                     Some(OwnerRecord::Case(record)) => Ok(record.payload),
@@ -1491,7 +1603,7 @@ fn oracle_named_member_types(
     )?;
     match record {
         PackageInterfaceRecord::Declaration(declaration) => match declaration.payload {
-            PackageInterfaceDeclarationPayload::Record { fields } => fields
+            PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
                 .into_iter()
                 .map(|field| {
                     match oracle_dependency_owner(
@@ -1508,7 +1620,7 @@ fn oracle_named_member_types(
                     }
                 })
                 .collect(),
-            PackageInterfaceDeclarationPayload::Variant { cases } => cases
+            PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
                 .into_iter()
                 .map(|case| {
                     match oracle_dependency_owner(
@@ -2570,7 +2682,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 723);
+        assert_eq!(inventory.owners, 802);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

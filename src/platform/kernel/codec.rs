@@ -1,4 +1,4 @@
-//! Strict canonical Graph 10 record codecs.
+//! Strict Graph 13 owner codecs, unchanged base TypeObject 10 and disjoint nominal applications.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -23,6 +23,88 @@ use crate::platform::packed;
 pub const OWNER_BINDING_BYTES: usize = 33;
 pub const DEPENDENCY_BINDING_BYTES: usize = 32;
 pub const RETIREMENT_BINDING_BYTES: usize = 32;
+
+#[cfg(test)]
+mod nominal_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::{DeclarationReference, TypeForm};
+
+    #[test]
+    fn positive_application_has_one_encoding_and_ordered_nominal_identity() {
+        let declaration = DeclarationReference {
+            package: "pkg_10000000000000000000000000000001".parse().unwrap(),
+            declaration: "decl_72b38e6cd864cb4239b329b7e337577f".parse().unwrap(),
+        };
+        let integer = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let text = encode_type_object(&TypeObject::new(TypeForm::Text).unwrap())
+            .unwrap()
+            .0;
+        let application = TypeObject::new(TypeForm::Applied {
+            declaration,
+            arguments: vec![integer, text],
+        })
+        .unwrap();
+        let (digest, bytes) = encode_type_object(&application).unwrap();
+        assert_eq!(&bytes[..8], b"LKJTAP01");
+        assert_eq!(decode_type_object(&bytes, digest).unwrap(), application);
+        assert_eq!(
+            encode_type_object(&decode_type_object(&bytes, digest).unwrap()).unwrap(),
+            (digest, bytes.clone())
+        );
+        let reversed = TypeObject::new(TypeForm::Applied {
+            declaration,
+            arguments: vec![text, integer],
+        })
+        .unwrap();
+        assert_ne!(encode_type_object(&reversed).unwrap().0, digest);
+        assert!(
+            TypeObject::new(TypeForm::Applied {
+                declaration,
+                arguments: vec![]
+            })
+            .is_err()
+        );
+        for tag in [0, 2, 255] {
+            let forged = packed::encode(
+                super::super::contract::NOMINAL_APPLICATION_MAGIC,
+                super::super::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN,
+                &NominalApplicationObject {
+                    contract_version: 1,
+                    tag,
+                    declaration,
+                    arguments: vec![integer],
+                },
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )
+            .unwrap();
+            let error = decode_type_object(&forged, TypeObjectDigest::of(&forged)).unwrap_err();
+            assert_eq!(error.code, "kernel_nominal_application_tag");
+        }
+        let mixed = packed::encode(
+            TYPE_OBJECT_MAGIC,
+            TYPE_OBJECT_ENVELOPE_DOMAIN,
+            &application,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )
+        .unwrap();
+        assert!(decode_type_object(&mixed, TypeObjectDigest::of(&mixed)).is_err());
+        let empty = packed::encode(
+            super::super::contract::NOMINAL_APPLICATION_MAGIC,
+            super::super::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN,
+            &NominalApplicationObject {
+                contract_version: 1,
+                tag: 1,
+                declaration,
+                arguments: vec![],
+            },
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )
+        .unwrap();
+        assert!(decode_type_object(&empty, TypeObjectDigest::of(&empty)).is_err());
+    }
+}
 
 pub fn encode_owner_binding(binding: &OwnerBinding) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(OWNER_BINDING_BYTES);
@@ -148,6 +230,24 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if let super::type_object::TypeForm::Applied {
+        declaration,
+        arguments,
+    } = &object.form
+    {
+        let bytes = packed::encode(
+            super::contract::NOMINAL_APPLICATION_MAGIC,
+            super::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN,
+            &NominalApplicationObject {
+                contract_version: object.contract_version,
+                tag: 1,
+                declaration: *declaration,
+                arguments: arguments.clone(),
+            },
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     let bytes = packed::encode(
         TYPE_OBJECT_MAGIC,
         TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -155,6 +255,14 @@ pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<
         MAXIMUM_TYPE_OBJECT_BYTES,
     )?;
     Ok((TypeObjectDigest::of(&bytes), bytes))
+}
+
+#[derive(bincode::Encode, bincode::Decode)]
+struct NominalApplicationObject {
+    contract_version: u16,
+    tag: u8,
+    declaration: super::reference::DeclarationReference,
+    arguments: Vec<TypeObjectDigest>,
 }
 
 pub fn decode_type_object(
@@ -166,6 +274,36 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::NOMINAL_APPLICATION_MAGIC) {
+        let application: NominalApplicationObject = packed::decode(
+            bytes,
+            super::contract::NOMINAL_APPLICATION_MAGIC,
+            super::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        if application.tag != 1 {
+            return Err(codec_error(
+                "kernel_nominal_application_tag",
+                "unknown nominal application tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version: application.contract_version,
+            form: super::type_object::TypeForm::Applied {
+                declaration: application.declaration,
+                arguments: application.arguments,
+            },
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     let object: TypeObject = packed::decode(
         bytes,
         TYPE_OBJECT_MAGIC,
