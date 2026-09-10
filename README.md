@@ -14,7 +14,12 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Current source is untagged `0.1.29`. The immutable supported release remains `0.1.28`, from exact
+Untagged source `0.1.29` adds explicit parametric records and variants, the graph-owned pair family,
+and independently authored batch/edit libraries composing with retained functions, offline packages,
+typed persistence and concrete session state. The [nominal evidence](docs/evidence/202609100459-parametric-nominal-data.json)
+records fresh source and exact local musl acceptance. This capability has not been publicly released.
+
+The immutable supported release remains `0.1.28`, from exact
 release-source commit `221beca0df7b31dbf10c9b22fe35c6db3af1b903`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact

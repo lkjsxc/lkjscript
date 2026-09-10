@@ -54,8 +54,13 @@ carry the application identity. The standard owns the pair family. A newly autho
 library is the public composition witness; lkjournal receives the encoding and exact dependency
 cutover without application policy or operational-data changes.
 
-The [nominal campaign](campaigns/202609100459.md) is in progress. Final full-profile, exact local
-musl and integration proof remain pending. This source state is not a public distribution or deployment.
+NOM-1–NOM-7 pass at integrated implementation `0851b635`: 26 fresh full-profile gates, nine fresh
+local musl admission classifications and 40 independently mutated receipt faults. Both pinned
+userlands and all six behavioral oracles pass with complete cleanup. The
+[campaign](campaigns/202609100459.md) and [evidence](evidence/202609100459-parametric-nominal-data.json)
+retain exact source/candidate/verifier identities, public requests/results, preserved identities,
+failed attempts and limitations. Final containing-record revalidation is reported out of band.
+This source state is not a public distribution or deployment.
 
 ## Capture-safe rank-one abstraction
 

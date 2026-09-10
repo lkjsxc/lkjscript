@@ -4,12 +4,22 @@ Measurements are observations, not promises.
 
 ## Parametric nominal preparation and forwarding
 
-The [nominal evidence](evidence/202609100459-parametric-nominal-data.json) records intermediate
-source-bound observations for applied batches at N = 1/256/4096 and K = 1/64/1024. Both evaluators
-report zero internal eligibility-guard descendant visits throughout the matrix. For the same
-program, production preparation charges 9,174 work steps and 264,648 metadata bytes; independent
-reference preparation charges 11,902 steps and 168,908 bytes. These are cumulative accounting units,
-not sampled live heap. Input/capture work scales with N and classification with K. A restored
+The [nominal evidence](evidence/202609100459-parametric-nominal-data.json) binds source `0851b635`
+and separately authored host/target batches at N = 1/256/4096 and K = 1/64/1024. Both evaluators
+report zero internal eligibility-guard descendant visits throughout each matrix. Preparation counts
+are constant across N/K within each exact program; they are not promised constants across fresh
+program identities. The completed admissions observed:
+
+| Boundary | Production steps / metadata bytes | Reference steps / metadata bytes |
+|---|---:|---:|
+| host full | 9,182 / 265,160 | 11,902 / 168,908 |
+| exact local musl | 9,175 / 264,616 | 11,902 / 168,908 |
+
+These are cumulative accounting units, not sampled live heap. Complete 191-command pure-tail
+workloads took 139.654 seconds on the host and 201.033 seconds on musl; maximum sampled child RSS
+was 49,096 / 36,324 KiB respectively, and owned files peaked at 33,712,281 / 33,787,265 bytes.
+Those totals include discovery, authoring and build as well as execution; they are not mapping-only
+latencies or whole-host memory bounds. Input/capture work scales with N and classification with K. A restored
 descendant scan fails the independent separability oracle with over 50 million visits at N=4096,
 K=1024. Actual preparation work remains included rather than hidden outside runtime counters.
 
@@ -17,8 +27,7 @@ An exact predecessor run and current monomorphic fixture agree on deterministic 
 N=4096/K=1024, both admit 4,098 input and 8,197 capture values; production/reference classification
 counts are 23,591/25,634 and both guard counts are zero. Applied identity/layout metadata adds work;
 these bounded synthetic observations establish neither a universal speedup nor a heap bound.
-Fresh full and target dispositions belong to the linked campaign evidence; intermediate runs do
-not substitute for them.
+Fresh full and target dispositions and distinct intermediate attempts belong to the linked evidence.
 
 ## Persistent lists, 2026-09-09
 

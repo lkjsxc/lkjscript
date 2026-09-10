@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-parametric-nominal-data-evidence-1",
   "campaign": "202609100459-parametric-nominal-data",
-  "status": "in progress; remaining acceptance consumers reconciled; successor fresh full, exact target, receipt faults and integration pending",
+  "status": "complete for the normally integrated implementation 0851b635; final containing-record revalidation is reported out of band",
   "capability": "One graph-owned generic record or variant composes across pure functions, retained environments, exact offline packages, typed persistence and concrete structured-session state.",
   "start": {
     "branch": "main",
@@ -23,9 +23,34 @@
   "source": {
     "version": "0.1.29",
     "archive_commit": "15e3ff94749e5e25b50075878551c357218350f7",
-    "implementation_commit": null,
-    "implementation_tree": null,
-    "containing_record": "Final containing commit/tree and checks invalidated by reporting are reported out of band; this file never hashes itself."
+    "implementation_commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+    "implementation_tree": "5b2a8c56979e410315ca661bf9c89d962b3212cf",
+    "containing_record": "This report binds the independently identifiable integrated implementation above. Its own containing commit/tree and freshly invalidated checks are reported out of band after execution; no self hash or unexecuted passing receipt is embedded.",
+    "implementation_subtrees": {
+      "src": "8d06e147515e31243f9acad6b5d668d1301b5b2f",
+      "tools": "afdfd1215d5c532445198f4e03aacba9f5c29ac3",
+      "tests": "5a2a16ddaa79a433baac5fba9c19d7694bab942d",
+      "packages/standard": "66f6fd7c05a7653aa657a989cf816fac2807d3a7",
+      "applications/lkjournal": "9ca7b5eb939982798bf616b755db0ad94cf619ec"
+    },
+    "commits": [
+      {
+        "commit": "15e3ff94749e5e25b50075878551c357218350f7",
+        "role": "archive initial mandate and install reconciled root guidance"
+      },
+      {
+        "commit": "699e68327609323c135946f064c0ce75139365fe",
+        "role": "complete nominal implementation, maintained cutover and public witnesses"
+      },
+      {
+        "commit": "151019302c048512c53cb4bc1b9faf420140c968",
+        "role": "service acceptance cutover and target receipt fault owner"
+      },
+      {
+        "commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+        "role": "complete public/distributed verification and diagnostic reconciliation"
+      }
+    ]
   },
   "contracts": {
     "graph": 13,
@@ -964,6 +989,796 @@
         ]
       },
       "checks": "Exact ordered parameters, stable parameter identities, bounds, full member/application types and matching local snapshot function-definition signature. Typed receipt omission faults cover the complete inspection map and every named projection."
+    },
+    "admitted_exact_musl": {
+      "schema": "lkjscript-offline-packages-acceptance-4",
+      "status": "fresh passed",
+      "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+      "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+      "elapsed_nanoseconds": 142449416706,
+      "cleanup_complete": true,
+      "nominal": {
+        "library_package": "pkg_cfc50d05286ece9390ec86b58dcc38e2",
+        "library_revision": "rev_bd355e74df46febe2fd5583278ad310a4da8605f489e3b1ed649e7422381045c",
+        "generic_declarations": [
+          "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1e634392d64ac9d60f33cb2906b13ac0",
+          "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1eb25cf03039efe20dd6375e6ae9c863"
+        ],
+        "producer_removed_before_execution": true,
+        "results": {
+          "heterogeneous": {
+            "items": [
+              {
+                "text": "1"
+              },
+              {
+                "text": "2"
+              },
+              {
+                "text": "4"
+              }
+            ],
+            "revision": 7
+          },
+          "i64-identity": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "i64-keep": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "i64-replace": {
+            "items": [
+              -2,
+              0,
+              9
+            ],
+            "revision": 8
+          },
+          "i64-retention": {
+            "changed": {
+              "items": [
+                -2,
+                0,
+                9
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                1,
+                2,
+                4
+              ],
+              "revision": 7
+            }
+          },
+          "i64-snapshot": {
+            "items": [
+              1,
+              2,
+              4
+            ],
+            "revision": 7
+          },
+          "map-empty": {
+            "items": [],
+            "revision": 7
+          },
+          "map-first": {
+            "items": [
+              8,
+              11,
+              17
+            ],
+            "revision": 7
+          },
+          "map-second": {
+            "items": [
+              2,
+              0,
+              -4
+            ],
+            "revision": 7
+          },
+          "nested-identity": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "nested-keep": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "nested-retention": {
+            "changed": {
+              "items": [
+                [
+                  9
+                ],
+                []
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                [
+                  1,
+                  2
+                ],
+                [],
+                [
+                  4
+                ]
+              ],
+              "revision": 7
+            }
+          },
+          "nested-snapshot": {
+            "items": [
+              [
+                1,
+                2
+              ],
+              [],
+              [
+                4
+              ]
+            ],
+            "revision": 7
+          },
+          "owned-identity": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "owned-keep": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "owned-retention": {
+            "changed": {
+              "items": [
+                {
+                  "text": "changed"
+                }
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                {
+                  "text": "one"
+                },
+                {
+                  "text": "two"
+                }
+              ],
+              "revision": 7
+            }
+          },
+          "owned-snapshot": {
+            "items": [
+              {
+                "text": "one"
+              },
+              {
+                "text": "two"
+              }
+            ],
+            "revision": 7
+          },
+          "pair-first": 1,
+          "pair-reordered-arguments": 1,
+          "pair-second": "a",
+          "text-identity": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          },
+          "text-keep": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          },
+          "text-retention": {
+            "changed": {
+              "items": [
+                "changed"
+              ],
+              "revision": 8
+            },
+            "snapshot": {
+              "items": [
+                "a",
+                "bc"
+              ],
+              "revision": 7
+            }
+          },
+          "text-snapshot": {
+            "items": [
+              "a",
+              "bc"
+            ],
+            "revision": 7
+          }
+        },
+        "maximum_map_items": 8192,
+        "maximum_map_sum": 100691968,
+        "changed_body_result": {
+          "items": [
+            1,
+            5,
+            9
+          ],
+          "revision": 9
+        },
+        "replacement_library_revision": "rev_58090b3fc600ee361fc5b451db7ea1d6bfde55aba9842505d7cc9d5730404bfc",
+        "replacement_result": {
+          "items": [
+            1,
+            5,
+            9
+          ],
+          "revision": "next"
+        },
+        "replacement_keep_result": {
+          "items": [
+            1,
+            2,
+            4
+          ],
+          "revision": "retained"
+        },
+        "session": {
+          "messages": [
+            {
+              "first": 1,
+              "second": "a"
+            },
+            {
+              "first": 2,
+              "second": "ab"
+            }
+          ],
+          "accept_matches": true,
+          "close_code": 1000,
+          "cleanup_complete": true
+        },
+        "state_steps": [
+          {
+            "first": 1,
+            "second": "a"
+          },
+          {
+            "first": 2,
+            "second": "ab"
+          }
+        ],
+        "retained_states": [
+          {
+            "first": 0,
+            "second": ""
+          },
+          {
+            "first": 1,
+            "second": "a"
+          },
+          {
+            "first": 2,
+            "second": "ab"
+          }
+        ],
+        "session_rejections": [
+          "mismatched-application",
+          "phantom-secret",
+          "phantom-callable",
+          "nested-secret"
+        ],
+        "inspections": {
+          "batch": [
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "decl_1e634392d64ac9d60f33cb2906b13ac0",
+                "kind": "record",
+                "name": "batch",
+                "parent": "package",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1e634392d64ac9d60f33cb2906b13ac0"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "constraint": "none",
+                "id": "typeparam_531323de6422acda7cbade4b34e91cef",
+                "kind": "type_parameter",
+                "name": "T",
+                "parent": "decl_1e634392d64ac9d60f33cb2906b13ac0",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/typeparam_531323de6422acda7cbade4b34e91cef"
+              }
+            },
+            {
+              "operation": "type-parameter",
+              "fields": {
+                "constraint": "none",
+                "index": "0",
+                "name": "T"
+              }
+            },
+            {
+              "operation": "declaration",
+              "fields": {
+                "children": "2",
+                "kind": "record",
+                "name": "batch"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "field_c0d0af5774aeb9dbcff45a9ac9ab5373",
+                "kind": "field",
+                "name": "items",
+                "parent": "decl_1e634392d64ac9d60f33cb2906b13ac0",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/field_c0d0af5774aeb9dbcff45a9ac9ab5373"
+              }
+            },
+            {
+              "operation": "field",
+              "fields": {
+                "index": "0",
+                "name": "items",
+                "type-path": "field.items"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_7e14838ea7c4428cb9877a041ac3002ee800a4e53afb5bd1f41f74849e786b8f",
+                "form": "list",
+                "path": "field.items"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_14dab75c90be408a20c3d162412b69fc0a30a977a895eb81fb62626f72249b0e",
+                "form": "parameter",
+                "parameter": "typeparam_531323de6422acda7cbade4b34e91cef",
+                "path": "field.items.item"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "field_ccd0d34ec5376eaad9327df11a04bbf4",
+                "kind": "field",
+                "name": "revision",
+                "parent": "decl_1e634392d64ac9d60f33cb2906b13ac0",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/field_ccd0d34ec5376eaad9327df11a04bbf4"
+              }
+            },
+            {
+              "operation": "field",
+              "fields": {
+                "index": "1",
+                "name": "revision",
+                "type-path": "field.revision"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062",
+                "form": "i64",
+                "path": "field.revision"
+              }
+            }
+          ],
+          "edit": [
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "decl_1eb25cf03039efe20dd6375e6ae9c863",
+                "kind": "variant",
+                "name": "edit",
+                "parent": "package",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1eb25cf03039efe20dd6375e6ae9c863"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "constraint": "none",
+                "id": "typeparam_9453ca12706f0879bf62e14c966e271e",
+                "kind": "type_parameter",
+                "name": "T",
+                "parent": "decl_1eb25cf03039efe20dd6375e6ae9c863",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/typeparam_9453ca12706f0879bf62e14c966e271e"
+              }
+            },
+            {
+              "operation": "type-parameter",
+              "fields": {
+                "constraint": "none",
+                "index": "0",
+                "name": "T"
+              }
+            },
+            {
+              "operation": "declaration",
+              "fields": {
+                "children": "2",
+                "kind": "variant",
+                "name": "edit"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "case_36704db4fecc2597cae106f57c021ba8",
+                "kind": "case",
+                "name": "replace",
+                "parent": "decl_1eb25cf03039efe20dd6375e6ae9c863",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/case_36704db4fecc2597cae106f57c021ba8"
+              }
+            },
+            {
+              "operation": "case",
+              "fields": {
+                "index": "0",
+                "name": "replace",
+                "payload": "true"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_ac7e14bbe082c94f9c4a75a111287d6ce151b9c3c3e26970c10b77dced6af77f",
+                "form": "application",
+                "path": "case.replace",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1e634392d64ac9d60f33cb2906b13ac0"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_a0eba66d71e39c1055ff5d227617aa0c6c09fd417fdc7afc971e6abd71cec104",
+                "form": "parameter",
+                "parameter": "typeparam_9453ca12706f0879bf62e14c966e271e",
+                "path": "case.replace.argument.0"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "case_65a70f0de2d7a57b40a1231a6ec4e717",
+                "kind": "case",
+                "name": "keep",
+                "parent": "decl_1eb25cf03039efe20dd6375e6ae9c863",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/case_65a70f0de2d7a57b40a1231a6ec4e717"
+              }
+            },
+            {
+              "operation": "case",
+              "fields": {
+                "index": "1",
+                "name": "keep",
+                "payload": "false"
+              }
+            }
+          ],
+          "pair": [
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "decl_5743b1f5767767410b5def08f635d1db",
+                "kind": "record",
+                "name": "pair",
+                "parent": "package",
+                "reference": "pkg_10000000000000000000000000000001/decl_5743b1f5767767410b5def08f635d1db"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "constraint": "none",
+                "id": "typeparam_2c26e74b1bc0d96e042718a3d936a162",
+                "kind": "type_parameter",
+                "name": "First",
+                "parent": "decl_5743b1f5767767410b5def08f635d1db",
+                "reference": "pkg_10000000000000000000000000000001/typeparam_2c26e74b1bc0d96e042718a3d936a162"
+              }
+            },
+            {
+              "operation": "type-parameter",
+              "fields": {
+                "constraint": "none",
+                "index": "0",
+                "name": "First"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "constraint": "none",
+                "id": "typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3",
+                "kind": "type_parameter",
+                "name": "Second",
+                "parent": "decl_5743b1f5767767410b5def08f635d1db",
+                "reference": "pkg_10000000000000000000000000000001/typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3"
+              }
+            },
+            {
+              "operation": "type-parameter",
+              "fields": {
+                "constraint": "none",
+                "index": "1",
+                "name": "Second"
+              }
+            },
+            {
+              "operation": "declaration",
+              "fields": {
+                "children": "2",
+                "kind": "record",
+                "name": "pair"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "field_a18279e763112ba0fccf9f751c54f3f9",
+                "kind": "field",
+                "name": "first",
+                "parent": "decl_5743b1f5767767410b5def08f635d1db",
+                "reference": "pkg_10000000000000000000000000000001/field_a18279e763112ba0fccf9f751c54f3f9"
+              }
+            },
+            {
+              "operation": "field",
+              "fields": {
+                "index": "0",
+                "name": "first",
+                "type-path": "field.first"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_a5387397a44b8519a2b4d3229500b46f18cf167194dc0b5254fa8edbbd5310d9",
+                "form": "parameter",
+                "parameter": "typeparam_2c26e74b1bc0d96e042718a3d936a162",
+                "path": "field.first"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "field_c9e17ff30e2344fa053a8b8297897260",
+                "kind": "field",
+                "name": "second",
+                "parent": "decl_5743b1f5767767410b5def08f635d1db",
+                "reference": "pkg_10000000000000000000000000000001/field_c9e17ff30e2344fa053a8b8297897260"
+              }
+            },
+            {
+              "operation": "field",
+              "fields": {
+                "index": "1",
+                "name": "second",
+                "type-path": "field.second"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_8074d423e607fd0f353528d56b86eafed3952ccaaca7126a917dccb373decf9c",
+                "form": "parameter",
+                "parameter": "typeparam_00b95d3f95cfb9e104ce0e3ca2fa2de3",
+                "path": "field.second"
+              }
+            }
+          ],
+          "snapshot": [
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "decl_c309a3b3f564f9328ea50859ad213b93",
+                "kind": "pure_function",
+                "name": "snapshot",
+                "parent": "package",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_c309a3b3f564f9328ea50859ad213b93"
+              }
+            },
+            {
+              "operation": "declaration",
+              "fields": {
+                "children": "1",
+                "effect": "pure",
+                "kind": "pure_function",
+                "name": "snapshot"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "constraint": "capture-safe",
+                "id": "typeparam_920de268dd18aee3a49d04e8ef8e87ec",
+                "kind": "type_parameter",
+                "name": "T",
+                "parent": "decl_c309a3b3f564f9328ea50859ad213b93",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/typeparam_920de268dd18aee3a49d04e8ef8e87ec"
+              }
+            },
+            {
+              "operation": "type-parameter",
+              "fields": {
+                "constraint": "capture-safe",
+                "index": "0",
+                "name": "T"
+              }
+            },
+            {
+              "operation": "owner",
+              "fields": {
+                "id": "param_22e1b264c6b4981a313515042c02475c",
+                "kind": "parameter",
+                "name": "batch",
+                "parent": "decl_c309a3b3f564f9328ea50859ad213b93",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/param_22e1b264c6b4981a313515042c02475c"
+              }
+            },
+            {
+              "operation": "parameter",
+              "fields": {
+                "index": "0",
+                "name": "batch",
+                "type-path": "parameter.batch",
+                "use": "unrestricted"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_6fc22165438af6c80916631065ef885055f8fab8794809cb3455579912ff6042",
+                "form": "application",
+                "path": "parameter.batch",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1e634392d64ac9d60f33cb2906b13ac0"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_c7cc2c06d9e70cc87e892406f7c6c49dd3ad260e7b457633de534c447771a096",
+                "form": "parameter",
+                "parameter": "typeparam_920de268dd18aee3a49d04e8ef8e87ec",
+                "path": "parameter.batch.argument.0"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_4fa19cf949e474e2d98119b457c0d4262f0f88089a105b7d4f97c5bc4045f4d9",
+                "form": "function",
+                "parameters": "1",
+                "path": "result"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_ff693bf3312c85ec1fd1c0c607f00aad3aa1ef1c8b855ab8f495681a26d3f779",
+                "form": "unit",
+                "path": "result.parameter.0"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_6fc22165438af6c80916631065ef885055f8fab8794809cb3455579912ff6042",
+                "form": "application",
+                "path": "result.result",
+                "reference": "pkg_cfc50d05286ece9390ec86b58dcc38e2/decl_1e634392d64ac9d60f33cb2906b13ac0"
+              }
+            },
+            {
+              "operation": "type",
+              "fields": {
+                "digest": "type_object_c7cc2c06d9e70cc87e892406f7c6c49dd3ad260e7b457633de534c447771a096",
+                "form": "parameter",
+                "parameter": "typeparam_920de268dd18aee3a49d04e8ef8e87ec",
+                "path": "result.result.argument.0"
+              }
+            }
+          ],
+          "snapshot-definition": [
+            {
+              "operation": "definition.function",
+              "fields": {
+                "body": "expr_c25d7ed33b194b8a107f06f8a69b309a",
+                "effect": "pure",
+                "id": "decl_c309a3b3f564f9328ea50859ad213b93",
+                "kind": "pure_function",
+                "module": "pkg_cfc50d05286ece9390ec86b58dcc38e2/mod_9f5b14449f2d71b1a4329bda947223fc",
+                "name": "snapshot",
+                "parameters": "1",
+                "requirements": "0",
+                "result": "type_object_4fa19cf949e474e2d98119b457c0d4262f0f88089a105b7d4f97c5bc4045f4d9",
+                "type-parameters": "1",
+                "visibility": "public"
+              }
+            },
+            {
+              "operation": "definition.type-parameter",
+              "fields": {
+                "constraint": "capture-safe",
+                "id": "typeparam_920de268dd18aee3a49d04e8ef8e87ec",
+                "index": "0",
+                "name": "T",
+                "parent": "decl_c309a3b3f564f9328ea50859ad213b93"
+              }
+            },
+            {
+              "operation": "definition.parameter",
+              "fields": {
+                "id": "param_22e1b264c6b4981a313515042c02475c",
+                "index": "0",
+                "name": "batch",
+                "parent": "decl_c309a3b3f564f9328ea50859ad213b93",
+                "requirement": "none",
+                "type": "type_object_6fc22165438af6c80916631065ef885055f8fab8794809cb3455579912ff6042",
+                "use": "unrestricted"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "independent_proof": {
@@ -2084,6 +2899,576 @@
       "measurements_per_size": 3,
       "owner_wall_bound_seconds": 900,
       "owner_file_bound_bytes": 1073741824
+    },
+    "admitted_source_and_target": {
+      "source_commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+      "host": {
+        "schema": "lkjscript-pure-tail-acceptance-6",
+        "status": "fresh passed",
+        "candidate_sha256": "51916acd6eddfe70ea186c37272904f5ebb0b4a5fb7cd36bde7393c4b6e9e41f",
+        "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+        "elapsed_nanoseconds": 139654302918,
+        "peak_owned_file_bytes": 33712281,
+        "cleanup_complete": true,
+        "nominal_typed_data": {
+          "complete_batch_and_edit": true,
+          "expected_bytes": 131174,
+          "expected_sha256": "6a4462749af4023010039787d00ff51ff3e6f4d689aa126f1b46f186b7e7a199",
+          "identities": {
+            "batch": "decl_b539a91dbeac7c8c9d77638587871dd0",
+            "batch_package": "pkg_e784c8d1253419d91100c23f551274bf",
+            "edit": "decl_81b8e6be9b0d7783348e624cfc8a3ba0",
+            "edit_package": "pkg_2dd31bd2fe878a907c2dbbfe3fa5b143",
+            "items": "field_d82c5c019994e18d31219b00b40fc1f4",
+            "keep": "case_50c19a0b197c8a634affd582d7e04607",
+            "replace": "case_1748d77d3e00a0620e4cb74b741a88a8",
+            "revision": "field_88d919b0e3f329e93962116e827e016f"
+          },
+          "independent_layout_and_payload": true,
+          "items": 8192,
+          "revision": 7
+        },
+        "preparation": {
+          "production_bytes": 265160,
+          "production_steps": 9182,
+          "reference_bytes": 168908,
+          "reference_steps": 11902
+        },
+        "cancellation": {
+          "cancelled_key_absent": true,
+          "committed_changes": 4,
+          "verification_keys": [
+            "bytes_read",
+            "objects",
+            "records",
+            "revision",
+            "revisions",
+            "schemas",
+            "staging_leftovers",
+            "store"
+          ],
+          "execution_keys": [
+            "cancellation_checks",
+            "classification",
+            "cleanup_complete",
+            "effects_replayed",
+            "failure",
+            "observation",
+            "recovery_length",
+            "recovery_observation",
+            "recovery_sum",
+            "stack_bytes"
+          ],
+          "failure": {
+            "class": "cancelled",
+            "code": "execution_cancelled",
+            "message": "execution was cancelled by its owning task scope",
+            "possibly_visible": false,
+            "retryable": false
+          },
+          "cleanup_complete": true
+        }
+      },
+      "target": {
+        "schema": "lkjscript-pure-tail-acceptance-6",
+        "status": "fresh passed",
+        "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+        "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+        "elapsed_nanoseconds": 201032872436,
+        "peak_owned_file_bytes": 33787265,
+        "cleanup_complete": true,
+        "nominal_typed_data": {
+          "complete_batch_and_edit": true,
+          "expected_bytes": 131174,
+          "expected_sha256": "15ad916aa98c5bbefbfb531161b4a7104bfd6f7e95926bfa565c5f9495027961",
+          "identities": {
+            "batch": "decl_e6851e53f6abce11a529779f3556e429",
+            "batch_package": "pkg_20a7fd82626faee7289f1e29c0fc112e",
+            "edit": "decl_e74bf6779de7faa1dd00555163dca854",
+            "edit_package": "pkg_dde435cedb9e3eb5bbc441a17d1142b7",
+            "items": "field_463469cffae094e5f6debeb1f2dd9d12",
+            "keep": "case_20fddf0cff6f371f585fe0a6ecb7c1b0",
+            "replace": "case_d8a4cf9a4e855c7427768547102a5a62",
+            "revision": "field_c6761aae353c9528d4b309258d558d7a"
+          },
+          "independent_layout_and_payload": true,
+          "items": 8192,
+          "revision": 7
+        },
+        "preparation": {
+          "production_bytes": 264616,
+          "production_steps": 9175,
+          "reference_bytes": 168908,
+          "reference_steps": 11902
+        },
+        "cancellation": {
+          "cancelled_key_absent": true,
+          "committed_changes": 4,
+          "verification": {
+            "bytes_read": 2102178,
+            "objects": 5,
+            "records": 4,
+            "revision": "data_revision_c19dc180b7e95460831c866cd1c08ec7719d6919dfc5681d31b3e70dad4bc040",
+            "revisions": 5,
+            "schemas": 0,
+            "staging_leftovers": 0,
+            "store": "data_store_b2a5b6b2b8c0f02dfa46fa1c12cba2956b355aecc7df9c2e3c7e2072ec5b57fb"
+          },
+          "execution": {
+            "cancellation_checks": 20000,
+            "classification": "fresh passed",
+            "cleanup_complete": true,
+            "effects_replayed": false,
+            "failure": {
+              "class": "cancelled",
+              "code": "execution_cancelled",
+              "message": "execution was cancelled by its owning task scope",
+              "possibly_visible": false,
+              "retryable": false
+            },
+            "observation": {
+              "allocated_bytes": 2360442,
+              "allocation_charges": 2447,
+              "calls": 623,
+              "capability_calls": 2,
+              "collection_items": 10188,
+              "external_calls": 370,
+              "instructions": 2198,
+              "live_call_frames_after": 0,
+              "live_handles_after": 0,
+              "live_locals_after": 0,
+              "live_operands_after": 0,
+              "live_transactions_after": 0,
+              "live_type_bindings_after": 0,
+              "maximum_call_depth": 5,
+              "maximum_control_frames": 5,
+              "maximum_live_locals": 22,
+              "maximum_live_transactions": 1,
+              "maximum_live_type_bindings": 7,
+              "maximum_value_stack": 5,
+              "production_tier": "graph13_dense_bytecode_8",
+              "tail_transfers": 125,
+              "type_derivation_steps": 10050,
+              "type_metadata_bytes": 287662,
+              "value_work": {
+                "capture_admission_nodes": 22,
+                "classification_decisions": 3568,
+                "constructor_child_visits": 126,
+                "input_admission_nodes": 8196,
+                "internal_guard_descendant_visits": 0,
+                "lists": {
+                  "branch_slot_copies": 0,
+                  "branch_slots_reserved": 0,
+                  "element_handle_allocations": 62,
+                  "element_handle_copies": 902,
+                  "element_slots_reserved": 1984,
+                  "full_materializations": 0,
+                  "materialized_elements": 0,
+                  "node_visits": 838,
+                  "nodes_allocated": 62
+                },
+                "raw_result_admission_nodes": 1
+              }
+            },
+            "recovery_length": 8192,
+            "recovery_sum": 33558528,
+            "recovery_observation": {
+              "allocated_bytes": 35460843,
+              "allocation_charges": 311987,
+              "calls": 81934,
+              "capability_calls": 5,
+              "collection_items": 302148,
+              "external_calls": 49159,
+              "instructions": 286821,
+              "live_call_frames_after": 0,
+              "live_handles_after": 0,
+              "live_locals_after": 0,
+              "live_operands_after": 0,
+              "live_transactions_after": 0,
+              "live_type_bindings_after": 0,
+              "maximum_call_depth": 5,
+              "maximum_control_frames": 5,
+              "maximum_live_locals": 22,
+              "maximum_live_transactions": 1,
+              "maximum_live_type_bindings": 7,
+              "maximum_value_stack": 5,
+              "production_tier": "graph13_dense_bytecode_8",
+              "tail_transfers": 16387,
+              "type_derivation_steps": 10050,
+              "type_metadata_bytes": 287662,
+              "value_work": {
+                "capture_admission_nodes": 22,
+                "classification_decisions": 467058,
+                "constructor_child_visits": 16404,
+                "input_admission_nodes": 8196,
+                "internal_guard_descendant_visits": 0,
+                "lists": {
+                  "branch_slot_copies": 15126,
+                  "branch_slots_reserved": 45792,
+                  "element_handle_allocations": 24582,
+                  "element_handle_copies": 126976,
+                  "element_slots_reserved": 278720,
+                  "full_materializations": 0,
+                  "materialized_elements": 0,
+                  "node_visits": 44390,
+                  "nodes_allocated": 10141
+                },
+                "raw_result_admission_nodes": 16402
+              }
+            },
+            "stack_bytes": 2097152
+          }
+        }
+      },
+      "target_matrices": [
+        {
+          "name": "checked-value-nominal-bound-matrix",
+          "cells": [
+            {
+              "n": 1,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 77,
+                "list_node_visits": 2
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 72,
+                "list_node_visits": 3
+              }
+            },
+            {
+              "n": 1,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1841,
+                "list_node_visits": 2
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1962,
+                "list_node_visits": 3
+              }
+            },
+            {
+              "n": 1,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 28721,
+                "list_node_visits": 2
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 16,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 30762,
+                "list_node_visits": 3
+              }
+            },
+            {
+              "n": 256,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 77,
+                "list_node_visits": 18
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 72,
+                "list_node_visits": 27
+              }
+            },
+            {
+              "n": 256,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1841,
+                "list_node_visits": 18
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1962,
+                "list_node_visits": 27
+              }
+            },
+            {
+              "n": 256,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 28721,
+                "list_node_visits": 18
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 526,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 30762,
+                "list_node_visits": 27
+              }
+            },
+            {
+              "n": 4096,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 77,
+                "list_node_visits": 266
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 72,
+                "list_node_visits": 399
+              }
+            },
+            {
+              "n": 4096,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1841,
+                "list_node_visits": 266
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1962,
+                "list_node_visits": 399
+              }
+            },
+            {
+              "n": 4096,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 28721,
+                "list_node_visits": 266
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 8206,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 30762,
+                "list_node_visits": 399
+              }
+            }
+          ]
+        },
+        {
+          "name": "checked-value-nominal-forward-matrix",
+          "cells": [
+            {
+              "n": 1,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 29,
+                "list_node_visits": 1
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 34,
+                "list_node_visits": 2
+              }
+            },
+            {
+              "n": 1,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1037,
+                "list_node_visits": 1
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1168,
+                "list_node_visits": 2
+              }
+            },
+            {
+              "n": 1,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 16397,
+                "list_node_visits": 1
+              },
+              "reference": {
+                "input_admission_nodes": 5,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 18448,
+                "list_node_visits": 2
+              }
+            },
+            {
+              "n": 256,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 29,
+                "list_node_visits": 9
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 34,
+                "list_node_visits": 18
+              }
+            },
+            {
+              "n": 256,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1037,
+                "list_node_visits": 9
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1168,
+                "list_node_visits": 18
+              }
+            },
+            {
+              "n": 256,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 16397,
+                "list_node_visits": 9
+              },
+              "reference": {
+                "input_admission_nodes": 260,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 18448,
+                "list_node_visits": 18
+              }
+            },
+            {
+              "n": 4096,
+              "k": 1,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 29,
+                "list_node_visits": 133
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 34,
+                "list_node_visits": 266
+              }
+            },
+            {
+              "n": 4096,
+              "k": 64,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1037,
+                "list_node_visits": 133
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 1168,
+                "list_node_visits": 266
+              }
+            },
+            {
+              "n": 4096,
+              "k": 1024,
+              "production": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 16397,
+                "list_node_visits": 133
+              },
+              "reference": {
+                "input_admission_nodes": 4100,
+                "capture_admission_nodes": 0,
+                "internal_guard_descendant_visits": 0,
+                "classification_decisions": 18448,
+                "list_node_visits": 266
+              }
+            }
+          ]
+        }
+      ],
+      "host_child_resources": {
+        "commands": 191,
+        "summed_child_elapsed_nanoseconds": 139002053472,
+        "summed_child_cpu_nanoseconds": 124570000000,
+        "maximum_sampled_rss_kib": 49096
+      },
+      "target_child_resources": {
+        "commands": 191,
+        "summed_child_elapsed_nanoseconds": 200429141218,
+        "summed_child_cpu_nanoseconds": 194320000000,
+        "maximum_sampled_rss_kib": 36324
+      },
+      "scope": "Host and target witnesses were separately authored and carry different exact graph identities. Preparation counts are constant across N/K within each program, not promised constants across distinct fresh programs. Child resource totals include the complete 191-command workload, including discovery/authoring/build; sampled RSS is KiB. No speedup, constant heap or production measurement is inferred."
     }
   },
   "proof_dispositions": {
@@ -2129,44 +3514,792 @@
     ],
     "binding_limit": "Intermediate copied candidate/verifier hashes bind actual bytes and retained requests/results. They were built during worktree iteration and are not relabelled as a final committed-source full/target receipt.",
     "required_full": {
-      "classification": "not run",
-      "reason": "Fresh successor source after acceptance-owner corrections required."
+      "classification": "fresh passed",
+      "command": "cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine",
+      "source_commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+      "source_tree": "5b2a8c56979e410315ca661bf9c89d962b3212cf",
+      "receipt": ".artifacts/lkjscript-dev/check/1789001556215735227-521754-0/receipt.json",
+      "sha256": "7e6b1fa3f7b3b197a01f930e7d1335b8f61b41a35af07c1f00da514782d9d9d4",
+      "owned_digest": "verification_060996cb1aca817076a53566eb1c836a7ffcb2f787b74314720ef9db4633ee1a",
+      "worktree_input_digest": "verification_0a605fc2fe122bc97051e992841812a8fa42a852898e2bbdd92a56ede4f2dfc8",
+      "final_worktree_input_digest": "verification_0a605fc2fe122bc97051e992841812a8fa42a852898e2bbdd92a56ede4f2dfc8",
+      "input_stable": true,
+      "selected": 26,
+      "fresh_passed": 26,
+      "reused_passed": 0,
+      "elapsed_nanoseconds": 260566673008,
+      "host_candidate_sha256": "51916acd6eddfe70ea186c37272904f5ebb0b4a5fb7cd36bde7393c4b6e9e41f",
+      "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+      "gates": [
+        {
+          "name": "fmt",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 1610531016,
+          "evidence_digest": "verification_6b7a0b1f058c291979a7f4b45b7b8d41f8cb454e5f5f8e75ee8436e19545152e",
+          "input_fingerprint": "verification_206eaec19612355373d42e961960f6a76fd3a690a0ba64b5a93d79a69ed327ab"
+        },
+        {
+          "name": "clippy",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 2160785190,
+          "evidence_digest": "verification_e1e3aa19a24671ce5934d5306de35d0193fbc442a255084872f4c4fa8e8f916f",
+          "input_fingerprint": "verification_23d653a07ed0fc6a21ae2c2774aa101d6971c00ca543c00e618278be031cd316"
+        },
+        {
+          "name": "workspace_tests",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 256478112827,
+          "evidence_digest": "verification_8dc4f56840eb177eee2846c30adc17fc924391b16f869c2bf1276533bcffe005",
+          "input_fingerprint": "verification_fed2df36948b2b8b53f04301ca2d82f8fa061434118089c05860f89b216ab4f7"
+        },
+        {
+          "name": "release_build",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 217915038,
+          "evidence_digest": "verification_937334255c0a5978cb351f245954859ed675457e161f9661f492874a79f27f05",
+          "input_fingerprint": "verification_109faf6b7503a9902be93994af934545b60d1832dfee6f213a32c444bcc6b487"
+        },
+        {
+          "name": "release_command_lifecycle",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 64918485270,
+          "evidence_digest": "verification_a7145db51555d137425b3753cf423fa651706df79526f46eebaa6861a19ac195",
+          "input_fingerprint": "verification_46d6ac6d96563032e2a4727198f44220f46e5da28754d483fc5f4e2c68d977d7"
+        },
+        {
+          "name": "distributed_http_application",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 4849145634,
+          "evidence_digest": "verification_4003ec07d90167fc2bbac34b990c43f4d61f58f6ecc108445ac6f4d7334c3141",
+          "input_fingerprint": "verification_4eb5862c98afcd22edd6c96e97d000ff1b31b8dcec37507a929dfe52ab44e588"
+        },
+        {
+          "name": "outbound_http_application",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 13611655857,
+          "evidence_digest": "verification_f651aed0caaf9db01cf62292997a1b241cba2730fb28e877a757fdcecab132ad",
+          "input_fingerprint": "verification_bd0e8cf0d2b883531dffcad9296791dda130db89f84689855104abe023daeafb"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 106040953454,
+          "evidence_digest": "verification_26e88ec2c5ebb51065f8eaa1b0682f66b68cbf724e4de72e82035a412844e2a1",
+          "input_fingerprint": "verification_0ec41e6fab68c3651df148a2e63dbec759d921947be63897a31091265e5bb535"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 139788057082,
+          "evidence_digest": "verification_ae71eb3a0a283c49c1f8bb201cb3e756a00aabbc06c22441a5c2d9380cac2ccf",
+          "input_fingerprint": "verification_f014b0f91a874728d7ce2547245312ff14881e13ca05a4ac72e85677b012224a"
+        },
+        {
+          "name": "stateful_http_application",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 43584055496,
+          "evidence_digest": "verification_776ef3aec58d7d248671be3c6ba3c5cb6c886ad5227ddd89eea667dc896a644e",
+          "input_fingerprint": "verification_c65fa021bdcd92febdbfc846c2f632986ed46fa315891faba51b0ce193b029f5"
+        },
+        {
+          "name": "checker_self_test",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 253709759,
+          "evidence_digest": "verification_71a89f57893943f59a427e4af607d7962ab5dabdf7418c391edb87e9f094b767",
+          "input_fingerprint": "verification_15f2355b4ffb0194bd220d8100d67acd1e411f8d30d3bf5997cf085a6d12f791"
+        },
+        {
+          "name": "rust_only_tooling",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 24012776,
+          "evidence_digest": "verification_eb8381dcc9378fbb9944ab2d232b24c9fedc9805cf242fa66abd84b32e548474",
+          "input_fingerprint": "verification_9e148d13922ff70a9a5c35c1d4415f7fb393c8d9de516da86241663e1be9638c"
+        },
+        {
+          "name": "generated_public_guides",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 141533810,
+          "evidence_digest": "verification_3175c855939f578207ba833e5f0b3f26a2a8d5566b84919e359823d6e51355ed",
+          "input_fingerprint": "verification_55958644c18e97e6de76c418807970efeb6fb3f18c223948037ddf02312b6ca5"
+        },
+        {
+          "name": "product_surface_audit",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 93174971,
+          "evidence_digest": "verification_71269e9dd3e2d104a6c48ab63bbe7b84fc6f5a81051edf126b70bd0e3877bbab",
+          "input_fingerprint": "verification_4218de300b4e82d6c7634f608435a08057b8e3ad06dd7213edcae3920ce61852"
+        },
+        {
+          "name": "standard_package_test",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 1371091097,
+          "evidence_digest": "verification_e2a8aa253ece3396efe4f6321a77fc9d1cd99822b969c9604b95ae381d1e919a",
+          "input_fingerprint": "verification_4a278520f761eb42efa45c8d2a99d92a2a9ebe9ff647819ab2081de8aade9542"
+        },
+        {
+          "name": "application_package_test",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 2983225496,
+          "evidence_digest": "verification_ed09890fa2d1660c2dafd244e2b5913a1e05e98e066b44b039eb7b555e8a0d8a",
+          "input_fingerprint": "verification_9438a771855b6fccdd7989d999a20793144478e974c9b713fe98fbc296f12a15"
+        },
+        {
+          "name": "standard_artifact_build",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 1484890880,
+          "evidence_digest": "verification_44cb366facc1ee059b9149d2396f1f4d683ab4f7cc00902f0f4f27997ad9fff9",
+          "input_fingerprint": "verification_4e292e94fd9314ada47a1bdb3149e4c7d41bd91694dccf78c7e9031cbd7601e6"
+        },
+        {
+          "name": "standard_artifact_compare",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 15330431,
+          "evidence_digest": "verification_4fb3919afe0b5a1f757a64b19896f872cc6ddd528147fe31fc54a893a927dd39",
+          "input_fingerprint": "verification_b2bf03370c6c318db6b0801df62ebdd68d7d59d16da4ba738329a4f66c15461a"
+        },
+        {
+          "name": "builtin_package_export",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 156892244,
+          "evidence_digest": "verification_8856c0ed2454ccb69b5ebc5bba6c8dc1c635cc662291aadbc4db653d53630103",
+          "input_fingerprint": "verification_cea5cd61cc91871eeab474a7e53836bb5a47189ce335605a8cdf1e18e90d1b76"
+        },
+        {
+          "name": "builtin_package_compare",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 16469695,
+          "evidence_digest": "verification_662e8e16713a6dbd507cae471d57843701d57e202f7c8de75aa108baca82c63d",
+          "input_fingerprint": "verification_4b55dbdeb8b566807c67bc614742fd1357e66db8d8dd36bcac97b34d7bc6657f"
+        },
+        {
+          "name": "builtin_transport_export",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 161333109,
+          "evidence_digest": "verification_3e74de90e74e99e3a24c7cdc2c9df68f11b868378ad00b8237d27f3d958d87dc",
+          "input_fingerprint": "verification_b1432781b0a4ec15cd513deb3ec5a9c1c38eacfe57197308a531664d1ef6d877"
+        },
+        {
+          "name": "builtin_transport_compare",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 14763675,
+          "evidence_digest": "verification_ae993d7a7af69b96cb32b8b34f04ee0978a9c783f63b046c7c23fef621e7a60c",
+          "input_fingerprint": "verification_555475d16eae437b38842b71cb34fc0730fa644240dffe4e343de30e4e6aa454"
+        },
+        {
+          "name": "application_artifact_build",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 2984861853,
+          "evidence_digest": "verification_e549db9534601b0d4994cdb7d705155452bab2a977803090fbc268c224187a82",
+          "input_fingerprint": "verification_deba1ca2af72d23f8e27a088029f2990f7e6fa09d4fb5e18784551fbaad23388"
+        },
+        {
+          "name": "application_artifact_compare",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 15447482,
+          "evidence_digest": "verification_6cd1da0cc5506a21a76ae611d08b7cdad64c60649b20644df217b45a49da162f",
+          "input_fingerprint": "verification_f57095980a17262abc39eea0ab4a8a8b7d8ac301a67820ae414bd3d49941ffe9"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 12258731240,
+          "evidence_digest": "verification_9547075aece9a18d034c3f54dbc63d342d3c1992721f90cc368a633895daaa1e",
+          "input_fingerprint": "verification_e268847dd85271cc8bf6da68dbd06815d7f09fa96637fc90ba1e676c3f45fb8a"
+        },
+        {
+          "name": "diff_check",
+          "classification": "fresh passed",
+          "elapsed_nanoseconds": 19605133,
+          "evidence_digest": "verification_fb5d54d6d3b4a530d28d40b2078e8e3c39060b05754fbf174a59bcb5de11217c",
+          "input_fingerprint": "verification_f71434bca94461d1df8c3e435604a9d24daeab4a0157554ea943aeba1f940375"
+        }
+      ]
     },
     "required_exact_musl": {
-      "classification": "not run",
-      "first_candidate_build": {
-        "classification": "fresh passed",
-        "source_commit": "699e68327609323c135946f064c0ce75139365fe",
-        "bytes": 21256448,
+      "classification": "fresh passed",
+      "source_commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+      "source_tree": "5b2a8c56979e410315ca661bf9c89d962b3212cf",
+      "ordinary_clean_clone": true,
+      "prior_target_directory": false,
+      "build_command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--bin",
+        "lkjscript",
+        "--target",
+        "x86_64-unknown-linux-musl"
+      ],
+      "build_receipt": ".artifacts/campaign/202609100459/target-C/build-receipt.json",
+      "build_receipt_sha256": "b4e117e7f7088134290e2d7dc7192a6e0516b4abddb9c8388f93f2af88e9cf73",
+      "build_elapsed_nanoseconds": 258314954238,
+      "build_process_observation": {
+        "elapsed_nanoseconds": 258238639035,
+        "cpu_nanoseconds": 510000000,
+        "peak_rss_kib": 80260,
+        "scope": "owning process sampler; not a whole-host or simultaneous-build memory bound"
+      },
+      "candidate": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/lkjscript",
+        "byte_length": 21256448,
+        "mode": 493,
         "sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
-        "receipt": ".artifacts/campaign/202609100459/target-A/build-receipt.json",
-        "elapsed_nanoseconds": 239198965456,
-        "clean_ordinary_clone": true,
-        "prior_target_directory": false,
-        "cargo_build_jobs": 2,
-        "static_elf": {
+        "elf": {
+          "class": "ELF64",
+          "machine": "x86-64",
+          "object_type": "position-independent-executable",
+          "inspector": "lkjscript-elf64-little-endian-inspector-1",
+          "program_headers": 9,
+          "load_headers": 4,
+          "dynamic_entries": 21,
           "interpreter_headers": 0,
           "needed_libraries": 0,
-          "glibc_version_requirements": 0
+          "glibc_version_requirements": 0,
+          "position_independent": true,
+          "runtime_linkage": "static-musl"
         }
       },
-      "reason": "The first full candidate failed before target admission. Corrections require a successor source and independent new build/admission."
+      "verifier": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/verifier",
+        "byte_length": 23970544,
+        "mode": 493,
+        "sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0"
+      },
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "admission_receipt": ".artifacts/campaign/202609100459/target-C/admission/receipt.json",
+      "admission_receipt_sha256": "d40c6049b30013cd788e1e1f1baee1a8510be7d9081e0400bda09b83b45437ad",
+      "admission_receipt_digest": "verification_141f622d707775296fc2aa5c239e805bdff6b247be8a2aca250ac66bec1cad26",
+      "elapsed_nanoseconds": 446725061623,
+      "classifications": [
+        {
+          "name": "static_linkage",
+          "classification": "fresh_passed",
+          "detail": "exact candidate passed first-party ELF inspection"
+        },
+        {
+          "name": "musl_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned musl userland"
+        },
+        {
+          "name": "older_glibc_userland",
+          "classification": "fresh_passed",
+          "detail": "complete command lifecycle passed in the pinned older-glibc userland"
+        },
+        {
+          "name": "distributed_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary HTTP oracle passed"
+        },
+        {
+          "name": "outbound_http",
+          "classification": "fresh_passed",
+          "detail": "transferred copied-binary deployment-bound outbound HTTP oracle passed"
+        },
+        {
+          "name": "offline_packages",
+          "classification": "fresh_passed",
+          "detail": "transferred public-authored offline package closure and standalone HTTP oracle passed"
+        },
+        {
+          "name": "pure_tail",
+          "classification": "fresh_passed",
+          "detail": "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed"
+        },
+        {
+          "name": "stateful_http",
+          "classification": "fresh_passed",
+          "detail": "transferred first-party-data BBS oracle passed"
+        },
+        {
+          "name": "service_acceptance",
+          "classification": "fresh_passed",
+          "detail": "maintained lkjournal service oracle passed with the exact candidate"
+        }
+      ],
+      "userlands": [
+        {
+          "role": "musl",
+          "status": "passed",
+          "image": {
+            "requested": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "image_id": "sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "repository_digests": [
+              "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 3789228
+          },
+          "expected_libc": "musl-1.2",
+          "os_release_sha256": "11213d9953a7256acf4108d617411219dc05b17b251661cda0fa5bea33913b8d",
+          "os_release": [
+            "NAME=\"Alpine Linux\"",
+            "ID=alpine",
+            "VERSION_ID=3.22.5",
+            "PRETTY_NAME=\"Alpine Linux v3.22\"",
+            "HOME_URL=\"https://alpinelinux.org/\"",
+            "BUG_REPORT_URL=\"https://gitlab.alpinelinux.org/alpine/aports/-/issues\""
+          ],
+          "rootfs_archive_bytes": 8577024,
+          "rootfs_archive_sha256": "398c59a6eee11bff10394ec05cb4a0e9831e1cc644801687ca8848c9452b6ae2",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "candidate_mode": 493,
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "product_version": "0.1.29",
+          "capabilities_digest": "b83cf4784a6bdaa3d135448fe5b440f76f1ebfbe05a0fbaf392be43f6d2beea2",
+          "initial_revision": "rev_72d9a0c71ec5c59ecfb878ede4496813abc189eef51ab59dcd4f7744a8b58427",
+          "accepted_revision": "rev_39d5fa9a8edb503882ffb16ad34b4931b0971559f55a6875b40f0b136a146b74",
+          "artifact_bytes": 500155,
+          "artifact_sha256": "619189e025a92622617cf0ad3190ca3023ff86efd3a9fcc7c5e805b77d45d393",
+          "clean_artifact_sha256": "619189e025a92622617cf0ad3190ca3023ff86efd3a9fcc7c5e805b77d45d393",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        },
+        {
+          "role": "older-glibc",
+          "status": "passed",
+          "image": {
+            "requested": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "image_id": "sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "repository_digests": [
+              "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba"
+            ],
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "virtual_size_bytes": 30261201
+          },
+          "expected_libc": "glibc-2.31",
+          "os_release_sha256": "11f039f212d535c1d7e14fa8e6960c3d7724de5e0d4e71938d787496a5d08470",
+          "os_release": [
+            "PRETTY_NAME=\"Debian GNU/Linux 11 (bullseye)\"",
+            "NAME=\"Debian GNU/Linux\"",
+            "VERSION_ID=\"11\"",
+            "VERSION=\"11 (bullseye)\"",
+            "VERSION_CODENAME=bullseye",
+            "ID=debian",
+            "HOME_URL=\"https://www.debian.org/\"",
+            "SUPPORT_URL=\"https://www.debian.org/support\"",
+            "BUG_REPORT_URL=\"https://bugs.debian.org/\""
+          ],
+          "rootfs_archive_bytes": 84230144,
+          "rootfs_archive_sha256": "1355eec36eb4ad2c2ecc989a9c7f874957f49b7057ad1a1f6fe624eafa13fc8b",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "candidate_mode": 493,
+          "network_policy": "sudo-unshare-network-namespace-no-host-library-mounts",
+          "candidate_commands": 12,
+          "product_version": "0.1.29",
+          "capabilities_digest": "b83cf4784a6bdaa3d135448fe5b440f76f1ebfbe05a0fbaf392be43f6d2beea2",
+          "initial_revision": "rev_f66d22fa5bbb50f023dafdf5b816af17488a6420a6f3997b8af998f62368ee94",
+          "accepted_revision": "rev_b3046716e222411ba0404cc4e64fc04e3a8d60e2f9cd02a8c5746d27a5d7e285",
+          "artifact_bytes": 500155,
+          "artifact_sha256": "62bfa57082800d5354b3768dd780a7caa9fa471b0b6c2728aad9f7685ef86bb4",
+          "clean_artifact_sha256": "62bfa57082800d5354b3768dd780a7caa9fa471b0b6c2728aad9f7685ef86bb4",
+          "execution_value": "\"hello\"",
+          "differential_equal": true,
+          "container_cleanup_complete": true,
+          "temporary_root_removed": true
+        }
+      ],
+      "oracles": [
+        {
+          "name": "distributed_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/admission/distributed-http/receipt.json",
+            "byte_length": 80392,
+            "sha256": "37a6f8e9fa8988098d684368d9d6ad9cbb2eac20c12911d6b93a24a6af2eaf34"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 6762093237,
+          "commands": 46,
+          "runners": 2,
+          "requests": 14,
+          "cleanup_complete": true,
+          "prerequisite": "none"
+        },
+        {
+          "name": "outbound_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/admission/outbound-http/receipt.json",
+            "byte_length": 59653,
+            "sha256": "ef05cb18edb3c6597c9a867c035df5d51364378fa8ae26f22be9c5ba5e3c4754"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 15786202477,
+          "commands": 18,
+          "runners": 8,
+          "requests": 17,
+          "cleanup_complete": true,
+          "prerequisite": "http_client_adapter_1"
+        },
+        {
+          "name": "offline_packages",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/admission/offline-packages/receipt.json",
+            "byte_length": 3731154,
+            "sha256": "47410754936b631fe165cc45b9a8e1c959b783d2984eb30d4bc2f7bc5edc6fe4"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 142449416706,
+          "commands": 215,
+          "runners": 3,
+          "requests": 1,
+          "cleanup_complete": true,
+          "prerequisite": "code_complete_package_container_1"
+        },
+        {
+          "name": "pure_tail",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/admission/pure-tail/receipt.json",
+            "byte_length": 11016749,
+            "sha256": "a2df3a10837e8a8ab583b2e452e338ddf67c4610dbcb89fa48c11e4e6cb4cfcc"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 201032872436,
+          "commands": 191,
+          "runners": 1,
+          "requests": 4,
+          "cleanup_complete": true,
+          "prerequisite": "pure-tail-execution"
+        },
+        {
+          "name": "stateful_http",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/campaign/202609100459/target-C/admission/stateful-http/receipt.json",
+            "byte_length": 331448,
+            "sha256": "10a26ce8634ea705cd5d9ac8b2bad083d19680bac53636f4e518f47ad179e727"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 52266357572,
+          "commands": 235,
+          "runners": 3,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        },
+        {
+          "name": "service_acceptance",
+          "status": "passed",
+          "receipt": {
+            "path": "/home/coder/workspace/lkjscript/.artifacts/lkjscript-dev/service/1789002258910505966-539345-0/receipt.json",
+            "byte_length": 175766,
+            "sha256": "621e83384f4a3663b51a777835b5313ca8bf9f24bcddb5fae370a1827cab0d32"
+          },
+          "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0",
+          "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+          "elapsed_nanoseconds": 16981580540,
+          "commands": 69,
+          "runners": 8,
+          "requests": 26,
+          "cleanup_complete": true,
+          "prerequisite": "lkjscript-data-store-1"
+        }
+      ],
+      "cleanup_complete": true
     },
     "normal_integration": {
-      "classification": "not run"
+      "classification": "fresh passed",
+      "branch": "main",
+      "old_remote": "c0c4975851f34a9a2b3be8cbd3008a1f8bbafc18",
+      "new_remote": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+      "command": "git push --no-follow-tags origin HEAD:refs/heads/main",
+      "log": ".artifacts/campaign/202609100459/push-C.log",
+      "completed_utc": "2026-09-10T01:06:40.878870182Z",
+      "forced": false,
+      "follow_tags": false,
+      "preconditions": "refreshed origin, zero behind/four ahead, ancestor check, clean index/worktree, no branch rules, no active workflow among latest 30, only tag/manual workflow triggers"
     },
-    "NOM_1": "pending final source/target receipts",
-    "NOM_2": "pending final source/target receipts",
-    "NOM_3": "pending final source/target receipts",
-    "NOM_4": "pending final source/target receipts",
-    "NOM_5": "pending final source/target receipts",
-    "NOM_6": "pending fresh full and exact musl admission",
-    "NOM_7": "pending final evidence and normal integration",
+    "NOM_1": {
+      "classification": "fresh passed",
+      "detail": "Copied public authoring, complete generic projections, stable rename, exact arity/order/scope/bounds, atomic cutover and stale-plan/HEAD failures; public_cli plus exact-target offline owner."
+    },
+    "NOM_2": {
+      "classification": "fresh passed",
+      "detail": "Both evaluators, fixed complete values, ordered/trapping pair callbacks, retained snapshots, phantom identity/origin, separate whole-type property matrix and injected layout-alias sensitivity."
+    },
+    "NOM_3": {
+      "classification": "fresh passed",
+      "detail": "Exact removed-producer packages, private helper closure, rehashed transport/artifact faults, predecessor rejection and clean/cache/body/argument/template/case/bound/dependency invalidation."
+    },
+    "NOM_4": {
+      "classification": "fresh passed",
+      "detail": "Independent applied JSON/data layout and monomorphic golden bytes, one real typed HTTP commit, staged trap/cancellation rollback and recovery, raw WebSocket messages and disjoint retained-state observations, before-readiness session rejection."
+    },
+    "NOM_5": {
+      "classification": "fresh passed",
+      "detail": "Finite type closure, exact work/depth/metadata limits and cancellation recovery, every 8192 mapped item and fixed sum, zero internal guard visits, accounted preparation, predecessor/current monomorphic comparison and restored-scan failure."
+    },
+    "NOM_6": {
+      "classification": "fresh passed",
+      "detail": "Maintained owner/type/retirement continuity and exact generated assets, 26 fresh full gates, nine fresh local musl classifications and forty frozen-reader omission faults."
+    },
+    "NOM_7": {
+      "classification": "fresh passed",
+      "detail": "Current/generated contracts, decision and durable bounded evidence, normally integrated scoped commits and explicit source/local-target/public/deployment boundaries; later containing-record checks are separate."
+    },
     "required_receipt_omissions": {
-      "classification": "not run",
+      "classification": "fresh passed",
       "owner": "tools/lkjscript-dev/src/release/admission/nominal_tests.rs",
-      "test": "live_nominal_receipt_omissions_reject_at_target_admission",
-      "requires": "actual fresh target admission; source-bound frozen-reader proof separate from ordinary workspace tests"
+      "command": "LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE=/absolute/admission/root cargo test --locked -p lkjscript-dev --lib live_nominal_receipt_omissions_reject_at_target_admission -- --ignored --nocapture",
+      "receipt": ".artifacts/campaign/202609100459/target-C/admission/nominal-receipt-faults.json",
+      "sha256": "f40d558a6a2f5f6d9e50f2c443c93c55bf4a742c460862fad14885944e226979",
+      "tests": 1,
+      "faults": 40,
+      "elapsed_seconds": 15.38,
+      "observed": {
+        "baseline_and_recovery_passed": true,
+        "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+        "cleanup_complete": true,
+        "faults": [
+          {
+            "fault": "omit-oracle/distributed_http",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "omit-oracle/outbound_http",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "omit-oracle/offline_packages",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "omit-oracle/pure_tail",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "omit-oracle/stateful_http",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "omit-oracle/service_acceptance",
+            "rejection": "lkjscript-dev: corrupt: target admission receipt binding or required evidence mismatch\n"
+          },
+          {
+            "fault": "/nominal/generic_declarations",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal declarations omitted\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal inspection inventory changed\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections/batch",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal declaration projection missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections/edit",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal declaration projection missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections/snapshot",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal declaration projection missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections/pair",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: standard pair parameter order changed\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/inspections/snapshot-definition",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: function definition did not preserve the exact applied signature\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/producer_removed_before_execution",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal package inventory or producer deletion witness missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/results/i64-snapshot",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal keep, map or retained snapshot differs from the fixed complete value\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/results/i64-retention",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal snapshot was not retained across a distinct applied replacement\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/results/heterogeneous",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal fixed result missing or changed\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/results/pair-reordered-arguments",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal fixed result missing or changed\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/maximum_map_items",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal full-list or changed-body observation missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/maximum_map_sum",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal full-list or changed-body observation missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/changed_body_result",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal full-list or changed-body observation missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/session/messages",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal session omitted exact ordered state messages or clean close\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/state_steps",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal source-bound state steps missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/retained_states",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal independently inspected retained session state missing\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/session_rejections",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal session omitted a required complete-type rejection\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/replacement_library_revision",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal exact dependency field, case and bound replacement was not revalidated\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/replacement_result",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal exact dependency field, case and bound replacement was not revalidated\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/nominal/replacement_keep_result",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal exact dependency field, case and bound replacement was not revalidated\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/observations/artifact-nominal-changed-body-exact",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: clean and recovered artifacts disagree\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/observations/artifact-nominal-reordered-arguments-exact",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: clean and recovered artifacts disagree\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/observations/artifact-nominal-replaced-template-case-bound-exact",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: clean and recovered artifacts disagree\n",
+            "role": "offline-packages"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-forward-matrix",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: forwarding matrix must contain all nine pairs\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-bound-matrix",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: forwarding matrix must contain all nine pairs\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-bound-matrix/0/preparation/production_steps",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: type/layout/property preparation is missing or depends on payload/call count\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-bound-matrix/0/preparation/reference_steps",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: type/layout/property preparation is missing or depends on payload/call count\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-bound-matrix/0/preparation/production_bytes",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: type/layout/property preparation is missing or depends on payload/call count\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/checked-value-nominal-bound-matrix/0/preparation/reference_bytes",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: type/layout/property preparation is missing or depends on payload/call count\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/nominal_typed_data/complete_batch_and_edit",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal typed layout or complete stored payload differs from fixed independent bytes\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/nominal_typed_data/independent_layout_and_payload",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal typed layout or complete stored payload differs from fixed independent bytes\n",
+            "role": "pure-tail"
+          },
+          {
+            "fault": "/outcomes/nominal_typed_data/expected_sha256",
+            "recomputed_outer_hash": true,
+            "rejection": "lkjscript-dev: corrupt: nominal typed layout or complete stored payload differs from fixed independent bytes\n",
+            "role": "pure-tail"
+          }
+        ],
+        "original_receipt_sha256": "d40c6049b30013cd788e1e1f1baee1a8510be7d9081e0400bda09b83b45437ad",
+        "restored": true,
+        "schema": "lkjscript-nominal-target-receipt-faults-1",
+        "source_commit": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+        "verifier_sha256": "b151b94c1199d50d69dc4171c65a8ffc30966f44f1a6c668e5481882e546a6d0"
+      }
     },
     "failed_full_attempts": [
       {
@@ -2219,7 +4352,36 @@
         "failed_child_receipt_sha256": "0641a353f7ab0f176796331f920db3a4900f0e3ec3780bf42d03e286e1e6b61b",
         "disposition": "New clean-clone build and both pinned userland command sequences finished. Distributed HTTP stopped at its predecessor function-definition contract expectation. No aggregate admission receipt was produced; later behavioral owners were not run in this attempt."
       }
-    ]
+    ],
+    "preliminary_target_build": {
+      "classification": "fresh passed",
+      "source_commit": "699e68327609323c135946f064c0ce75139365fe",
+      "bytes": 21256448,
+      "sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+      "receipt": ".artifacts/campaign/202609100459/target-A/build-receipt.json",
+      "elapsed_nanoseconds": 239198965456,
+      "clean_ordinary_clone": true,
+      "prior_target_directory": false,
+      "cargo_build_jobs": 2,
+      "static_elf": {
+        "interpreter_headers": 0,
+        "needed_libraries": 0,
+        "glibc_version_requirements": 0
+      }
+    },
+    "not_selected": {
+      "classification": "skipped",
+      "items": [
+        "historical scale-only ignored tests",
+        "the two existing release-transfer fixture tests requiring a release rehearsal",
+        "publication/download/deployment admission"
+      ],
+      "reason": "Not selected by this source/local-target mandate. The new required target receipt test was executed separately and passed; no required proof is omitted."
+    },
+    "containing_record_revalidation": {
+      "classification": "not run at report authorship",
+      "disposition": "The final containing commit and actual revalidation receipts are reported out of band. The preceding implementation receipts remain bound only to 0851b635."
+    }
   },
   "attempts": [
     "Initial public fixture proved predecessor rejects adding a type parameter to a record; first invocation used the wrong input option and is retained as failed.",
@@ -2232,7 +4394,8 @@
     "Library-05: 533 passed, one new session positive control lacked an explicit byte-stream grant, two scale tests intentionally ignored. The fixture was corrected; session-strict-02 passed all four hostile states and its ordinary control.",
     "The first independent session packer retained unreachable old map pages; exact closure reconstruction removed those pages before fresh hashing. No strict-loader check was weakened.",
     "Full-A at 699e6832: six fresh gates passed, workspace_tests and release_command_lifecycle failed, eighteen dependent gates skipped. The failures were a stale Artifact 16 service assertion and two stale 31-test lifecycle expectations after standard pair added three tests. Corrected to exact Artifact 17 and 34 tests, with Artifact 16 public predecessor rejection added; no gate weakened.",
-    "Full-B at 15101930: 24 fresh gates passed, two failed, none skipped or reused. All maintained regeneration, offline, pure-tail, service and outbound/stateful owners passed. Public CLI exposed the omitted two new mutation names/fields, stale 37-versus-40 maintained test count and changed exact-scope diagnostic precedence; distributed HTTP still expected definition projection 4 and 31 tests. Fixed exact expectations, with all 38 ordinary public CLI tests subsequently passing (one historical scale test ignored)."
+    "Full-B at 15101930: 24 fresh gates passed, two failed, none skipped or reused. All maintained regeneration, offline, pure-tail, service and outbound/stateful owners passed. Public CLI exposed the omitted two new mutation names/fields, stale 37-versus-40 maintained test count and changed exact-scope diagnostic precedence; distributed HTTP still expected definition projection 4 and 31 tests. Fixed exact expectations, with all 38 ordinary public CLI tests subsequently passing (one historical scale test ignored).",
+    "Full-C at 0851b635 passed all 26 fresh gates. Independent clean-clone musl build/admission passed both pinned userlands and all six behavioral oracles; forty target-receipt faults then rejected with baseline/recovery and cleanup passing. Normal non-forced integration completed before this reporting record."
   ],
   "deviations": [
     "Source advanced to untagged 0.1.29 for the implemented semantic/consumer cutover; no release identity is reserved.",
@@ -2251,10 +4414,26 @@
     "ephemeral_oracle_projects_services": "each passing owner reports cleanup_complete; failed disposable roots are parent-owned and removed",
     "retained_owned_artifacts": ".artifacts/campaign/202609100459 contains raw attempts, frozen intermediate binaries, predecessor outputs and migration backups; intentionally ignored and not committed",
     "preserved": "Initial unrelated stash remains untouched; unknown Codex process/project ownership was not altered.",
-    "intermediate_target_clones": "A and B ordinary clones removed after preserving build/attempt receipts and frozen outputs; successor target admission remains required."
+    "intermediate_target_clones": "All A/B/C ordinary target-build clones removed after preserving exact outputs and receipts; no shared checkout reset or cleanup.",
+    "receipt_faults": "All 40 in-place owned receipt faults restored exact original bytes, baseline and final frozen-reader verification passed, and test scratch logs were removed; bounded fault outcomes and immutable baseline copies are retained.",
+    "services": "All final source and target owners report complete cleanup; no owned product process or admission container remains.",
+    "worktree_at_integration": "clean index/worktree; origin/main equals 0851b635; initial unrelated stash preserved"
   },
   "external": {
-    "normal_pushes": [],
+    "normal_pushes": [
+      {
+        "classification": "fresh passed",
+        "branch": "main",
+        "old_remote": "c0c4975851f34a9a2b3be8cbd3008a1f8bbafc18",
+        "new_remote": "0851b635651e3fa4990a2d8a9cfd3ece4bec7162",
+        "command": "git push --no-follow-tags origin HEAD:refs/heads/main",
+        "log": ".artifacts/campaign/202609100459/push-C.log",
+        "completed_utc": "2026-09-10T01:06:40.878870182Z",
+        "forced": false,
+        "follow_tags": false,
+        "preconditions": "refreshed origin, zero behind/four ahead, ancestor check, clean index/worktree, no branch rules, no active workflow among latest 30, only tag/manual workflow triggers"
+      }
+    ],
     "public_latest": "v0.1.28",
     "public_release_id": 385653688,
     "public_source_commit": "221beca0df7b31dbf10c9b22fe35c6db3af1b903",
@@ -2265,13 +4444,111 @@
     "release_controls_settings_credentials": "unchanged",
     "deployment": "none",
     "live_data_migration": "none",
-    "paid_infrastructure": "none"
+    "paid_infrastructure": "none",
+    "latest_reconfirmed": {
+      "tag": "v0.1.28",
+      "release_id": 385653688,
+      "immutable": true,
+      "draft": false,
+      "prerelease": false,
+      "public_source_commit": "221beca0df7b31dbf10c9b22fe35c6db3af1b903"
+    }
   },
   "limitations": [
     "Generic nominal definitions are nonrecursive in this slice; wholly monomorphic recursion and finite nested applications remain supported.",
     "No generic task/component/interface, resource polymorphism, automatic lexical capture or higher-kinded types.",
     "Capture safety, equality, JSON/data and session retention are distinct; functions remain transient and JSON does not authenticate phantom identity.",
     "Local target evidence proves only the selected x86_64 musl target and pinned userlands; no general portability, isolation or signing claim.",
-    "Public v0.1.28 does not acquire the new source capability."
-  ]
+    "Public v0.1.28 does not acquire the new source capability.",
+    "New diagnostic precedence reports foreign parameter scope before callee capture constraints. Host and target preparation counts are observations for their independently authored exact graph inputs, not universal constants."
+  ],
+  "toolchain": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "musl_gcc": "x86_64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "musl_gcc_dumpmachine": "x86_64-linux-gnu",
+    "installed_musl_packages": [
+      "musl=1.2.4-2:amd64",
+      "musl-dev=1.2.4-2:amd64",
+      "musl-tools=1.2.4-2:amd64"
+    ],
+    "platform": {
+      "operating_system": "linux",
+      "architecture": "x86_64",
+      "family": "unix",
+      "child_process_control": "linux_process_group_sigkill"
+    },
+    "environment_digest": "verification_57be6c5e1313658d2cac5709661e09dc3dfc22e24dc054da322558c3654d7ff1",
+    "environment_names": [
+      "CARGO_HOME",
+      "CARGO_NET_OFFLINE",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "PATH",
+      "RUSTUP_HOME",
+      "RUSTUP_TOOLCHAIN"
+    ],
+    "build_jobs": 2,
+    "target_policy": {
+      "policy": {
+        "archive_name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+        "c_compiler": "musl-gcc",
+        "elf_inspector": "lkjscript-elf64-little-endian-inspector-1",
+        "linker": "musl-gcc",
+        "musl_packages": [
+          {
+            "architecture": "amd64",
+            "file_name": "musl_1.2.4-2_amd64.deb",
+            "name": "musl",
+            "sha256": "9f0883c20b4b746e05e947bafd99cb933f5494ffaaa6fcd360cbe1fbcf264883",
+            "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl_1.2.4-2_amd64.deb",
+            "version": "1.2.4-2"
+          },
+          {
+            "architecture": "amd64",
+            "file_name": "musl-dev_1.2.4-2_amd64.deb",
+            "name": "musl-dev",
+            "sha256": "4b451ecb6a0f8469883058cf22a807f3bd9cc16d115cc08b7efc35fe8eb44db2",
+            "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl-dev_1.2.4-2_amd64.deb",
+            "version": "1.2.4-2"
+          },
+          {
+            "architecture": "amd64",
+            "file_name": "musl-tools_1.2.4-2_amd64.deb",
+            "name": "musl-tools",
+            "sha256": "46c01d212d3eb3a1322693089037f0a5c92383a089d39c392db3c86c19ffb229",
+            "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl-tools_1.2.4-2_amd64.deb",
+            "version": "1.2.4-2"
+          }
+        ],
+        "runtime_linkage": "static-musl",
+        "rust_toolchain": "1.98.0",
+        "schema": {
+          "identity": "lkjscript-release-target-policy",
+          "version": 2
+        },
+        "target_triple": "x86_64-unknown-linux-musl",
+        "userlands": [
+          {
+            "architecture": "amd64",
+            "expected_libc": "musl-1.2",
+            "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+            "operating_system": "linux",
+            "role": "musl"
+          },
+          {
+            "architecture": "amd64",
+            "expected_libc": "glibc-2.31",
+            "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+            "operating_system": "linux",
+            "role": "older-glibc"
+          }
+        ]
+      },
+      "policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "status": "passed"
+    },
+    "resource_context": "One observed Linux x86_64 host with 12 GiB RAM and 4 GiB swap. Full verification and independent target compilation overlapped; these are bounded local observations, not minimum resources or a general performance claim."
+  }
 }

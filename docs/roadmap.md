@@ -94,7 +94,7 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
    constraints are also implemented, with graph-owned list-map and function-constant families.
    Explicit parametric nominal data is implemented in source through the
-   [selected nominal campaign](campaigns/202609100459.md), with final admission tracked there.
+   [completed nominal campaign](campaigns/202609100459.md), with source and local target admission recorded there.
    Richer state/resource composition, automatic lexical capture, component
    composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
    witness, independent semantic/reference behavior, measurements where relevant, and reversal
