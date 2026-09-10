@@ -72,14 +72,18 @@ impl Descendants {
             // their creating task, so visiting only the main task would miss that owned runner.
             let tasks = match fs::read_dir(format!("/proc/{pid}/task")) {
                 Ok(tasks) => tasks,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) if disappeared(&error) => continue,
                 Err(error) => return Err(error.into()),
             };
             for (count, task) in tasks.take(MAXIMUM_PROCESSES + 1).enumerate() {
                 if count == MAXIMUM_PROCESSES {
                     return Err(DevError::infrastructure("owned thread inventory exhausted"));
                 }
-                let task = task?;
+                let task = match task {
+                    Ok(task) => task,
+                    Err(error) if disappeared(&error) => continue,
+                    Err(error) => return Err(error.into()),
+                };
                 let Some(children) = read(&task.path().join("children"), 65536)? else {
                     continue;
                 };
@@ -155,11 +159,26 @@ impl Descendants {
 fn read(path: &Path, maximum: u64) -> Result<Option<Vec<u8>>, DevError> {
     let file = match fs::File::open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if disappeared(&error) => return Ok(None),
         Err(error) => return Err(error.into()),
     };
+    read_contents(file, maximum)
+}
+
+fn disappeared(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::NotFound
+        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error())
+}
+
+fn read_contents(file: impl Read, maximum: u64) -> Result<Option<Vec<u8>>, DevError> {
     let mut bytes = Vec::new();
-    file.take(maximum + 1).read_to_end(&mut bytes)?;
+    // procfs can open successfully and then report ESRCH when the observed task exits.
+    // Discard partial observations; absence grants no authority over a reused PID.
+    match file.take(maximum + 1).read_to_end(&mut bytes) {
+        Ok(_) => (),
+        Err(error) if disappeared(&error) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
     if bytes.len() as u64 > maximum {
         return Err(DevError::corrupt("process inventory input exhausted"));
     }
@@ -214,4 +233,81 @@ fn signal(identity: Identity, signal: Signal) -> Result<(), DevError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{self, Cursor};
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn opened_proc_stat_of_reaped_child_is_absent() {
+        let mut child = Command::new("/bin/sleep")
+            .arg("60")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("owned child");
+        let opened = fs::File::open(format!("/proc/{}/stat", child.id()));
+        child.kill().expect("terminate owned child");
+        child.wait().expect("reap owned child");
+        let file = opened.expect("open proc stat before exit");
+        let mut raw = &file;
+        let error = raw
+            .read_to_end(&mut Vec::new())
+            .expect_err("reaped procfs task");
+        assert_eq!(
+            error.raw_os_error(),
+            Some(rustix::io::Errno::SRCH.raw_os_error())
+        );
+        assert_eq!(read_contents(file, 8192).expect("vanished task"), None);
+    }
+
+    #[test]
+    fn partial_disappearance_discards_bytes_but_other_errors_and_bounds_reject() {
+        struct Ending {
+            prefix: Cursor<Vec<u8>>,
+            error: i32,
+        }
+        impl Read for Ending {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                let count = self.prefix.read(output)?;
+                if count == 0 {
+                    Err(io::Error::from_raw_os_error(self.error))
+                } else {
+                    Ok(count)
+                }
+            }
+        }
+        for error in [rustix::io::Errno::SRCH, rustix::io::Errno::NOENT] {
+            assert_eq!(
+                read_contents(
+                    Ending {
+                        prefix: Cursor::new(b"partial task identity".to_vec()),
+                        error: error.raw_os_error(),
+                    },
+                    8192
+                )
+                .expect("disappearing observation"),
+                None,
+            );
+        }
+        assert!(
+            read_contents(
+                Ending {
+                    prefix: Cursor::new(b"partial task identity".to_vec()),
+                    error: rustix::io::Errno::ACCESS.raw_os_error(),
+                },
+                8192
+            )
+            .is_err()
+        );
+        assert_eq!(
+            read_contents(Cursor::new(b"1234"), 4).expect("exact bound"),
+            Some(b"1234".to_vec())
+        );
+        assert!(read_contents(Cursor::new(b"12345"), 4).is_err());
+    }
 }
