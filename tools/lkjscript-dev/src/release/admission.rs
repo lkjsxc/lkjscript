@@ -1397,6 +1397,10 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
 }
 
 #[cfg(test)]
+#[path = "admission/nominal_tests.rs"]
+mod nominal_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

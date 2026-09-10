@@ -614,3 +614,13 @@ passed through a returned private generic helper after producer removal. Receipt
 cases on both the host and exact local musl candidate. Existing 900-second/1,073,741,824-owned-byte
 pure-tail bounds and sampling policy remain unchanged. Preparation-local constraint proof storage and
 raw type-proof traversal are included in cumulative allocation/work accounting.
+
+Nominal target-receipt falsification uses the completed local admission as its explicit disposable
+fixture. After admission, run the source-bound ignored test with
+`LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE=/absolute/admission/root cargo test --locked -p lkjscript-dev --lib live_nominal_receipt_omissions_reject_at_target_admission -- --ignored --nocapture`.
+It invokes that admission's frozen verifier, removes each independently named behavioral owner,
+empties required nominal observations and preparation counters, and recomputes the enclosing child
+hashes. Every fault must reject; the unchanged baseline and restored receipt must pass. Original
+receipt bytes are restored before assertions, temporary logs are removed, and a bounded
+`nominal-receipt-faults.json` retains the actual outcomes. This mandatory campaign proof is separate
+from ordinary workspace tests; its ignored annotation never establishes a passed disposition.

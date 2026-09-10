@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-parametric-nominal-data-evidence-1",
   "campaign": "202609100459-parametric-nominal-data",
-  "status": "in progress; required final full, exact local target admission and integration not yet run",
+  "status": "in progress; first full candidate failed stale acceptance expectations; successor full, exact target admission, receipt faults and integration pending",
   "capability": "One graph-owned generic record or variant composes across pure functions, retained environments, exact offline packages, typed persistence and concrete structured-session state.",
   "start": {
     "branch": "main",
@@ -2129,10 +2129,40 @@
     ],
     "binding_limit": "Intermediate copied candidate/verifier hashes bind actual bytes and retained requests/results. They were built during worktree iteration and are not relabelled as a final committed-source full/target receipt.",
     "required_full": {
-      "classification": "not run"
+      "classification": "failed",
+      "source_commit": "699e68327609323c135946f064c0ce75139365fe",
+      "source_tree": "e58b28315171f7c7d20b9cdf254c4383493beed1",
+      "receipt": ".artifacts/lkjscript-dev/check/1789000215059390478-489508-0/receipt.json",
+      "sha256": "273926450859ca2d0d0ae1effb844c68dcbade0ba4a4ed208440e83d4887ab61",
+      "owned_digest": "verification_83378e381ed7a4271ea539b838bd6caa5ea2a50a00431e037d7883ccc8b214a2",
+      "selected": 26,
+      "fresh_passed": 6,
+      "failed": [
+        "workspace_tests",
+        "release_command_lifecycle"
+      ],
+      "skipped": 18,
+      "elapsed_nanoseconds": 197887688748
     },
     "required_exact_musl": {
-      "classification": "not run"
+      "classification": "not run",
+      "first_candidate_build": {
+        "classification": "fresh passed",
+        "source_commit": "699e68327609323c135946f064c0ce75139365fe",
+        "bytes": 21256448,
+        "sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+        "receipt": ".artifacts/campaign/202609100459/target-A/build-receipt.json",
+        "elapsed_nanoseconds": 239198965456,
+        "clean_ordinary_clone": true,
+        "prior_target_directory": false,
+        "cargo_build_jobs": 2,
+        "static_elf": {
+          "interpreter_headers": 0,
+          "needed_libraries": 0,
+          "glibc_version_requirements": 0
+        }
+      },
+      "reason": "The first full candidate failed before target admission. Corrections require a successor source and independent new build/admission."
     },
     "normal_integration": {
       "classification": "not run"
@@ -2143,7 +2173,13 @@
     "NOM_4": "pending final source/target receipts",
     "NOM_5": "pending final source/target receipts",
     "NOM_6": "pending fresh full and exact musl admission",
-    "NOM_7": "pending final evidence and normal integration"
+    "NOM_7": "pending final evidence and normal integration",
+    "required_receipt_omissions": {
+      "classification": "not run",
+      "owner": "tools/lkjscript-dev/src/release/admission/nominal_tests.rs",
+      "test": "live_nominal_receipt_omissions_reject_at_target_admission",
+      "requires": "actual fresh target admission; source-bound frozen-reader proof separate from ordinary workspace tests"
+    }
   },
   "attempts": [
     "Initial public fixture proved predecessor rejects adding a type parameter to a record; first invocation used the wrong input option and is retained as failed.",
@@ -2154,7 +2190,8 @@
     "Clippy found and corrected collapsible conditions and fixture formatting/expect_err use; warnings remain denied.",
     "Library-04 debug execution exposed host stack overflow at the existing excessive authored-type depth test. The type-intent encoder now uses bounded lazy iterative frames, retains exact bytes and admits 256/rejects 257 without changing limits.",
     "Library-05: 533 passed, one new session positive control lacked an explicit byte-stream grant, two scale tests intentionally ignored. The fixture was corrected; session-strict-02 passed all four hostile states and its ordinary control.",
-    "The first independent session packer retained unreachable old map pages; exact closure reconstruction removed those pages before fresh hashing. No strict-loader check was weakened."
+    "The first independent session packer retained unreachable old map pages; exact closure reconstruction removed those pages before fresh hashing. No strict-loader check was weakened.",
+    "Full-A at 699e6832: six fresh gates passed, workspace_tests and release_command_lifecycle failed, eighteen dependent gates skipped. The failures were a stale Artifact 16 service assertion and two stale 31-test lifecycle expectations after standard pair added three tests. Corrected to exact Artifact 17 and 34 tests, with Artifact 16 public predecessor rejection added; no gate weakened."
   ],
   "deviations": [
     "Source advanced to untagged 0.1.29 for the implemented semantic/consumer cutover; no release identity is reserved.",
@@ -2162,7 +2199,8 @@
     "A release-only debug_assert containing reference transaction binding insertion was corrected to preserve required execution in optimized builds.",
     "Added explicit public field/case type editing through existing typed mutations and fixed exact local declaration selectors needed by ordinary authoring.",
     "Additional per-member validation work is charged before collecting nominal member types. New preparation metadata is charged against existing defaults.",
-    "Temporary contributor materializer/export access was removed after canonical consumer cutover; only bounded test fixtures remain."
+    "Temporary contributor materializer/export access was removed after canonical consumer cutover; only bounded test fixtures remain.",
+    "The existing transferred live-receipt test requires a separately prepared release rehearsal. Local NOM receipt falsification instead extends the current target admission owner and reads actual completed target receipts through its frozen public verification operation; no release preparation or publication is needed."
   ],
   "cleanup": {
     "predecessor_worktree": "removed after saving read-only exporter patch/source and measurements",

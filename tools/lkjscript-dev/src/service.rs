@@ -930,7 +930,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-16 service bundle",
+        "maintained artifact-17 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -1212,7 +1212,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-16 service bundle",
+            "maintained artifact-17 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1740,7 +1740,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-16 build",
+        "service readiness disagrees with the exact fresh artifact-17 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -2466,7 +2466,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-16 build",
+        "worker readiness disagrees with the exact fresh artifact-17 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -2485,7 +2485,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-16 build",
+        "second worker readiness disagrees with the exact fresh artifact-17 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -2822,7 +2822,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-16 bundle identity",
+        "restored service readiness changed the exact artifact-17 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -3912,7 +3912,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-16 bundle",
+            "maintained deployment descriptor does not bind the current artifact-17 bundle",
         ));
     }
     if let Some(port) = port {
