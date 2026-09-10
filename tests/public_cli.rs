@@ -764,6 +764,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.operation",
             "add.type-parameter",
             "set.type-parameter-constraint",
+            "set.field-type",
+            "set.case-payload",
             "add.parameter",
             "add.requirement",
             "add.port",
@@ -784,7 +786,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 120);
+    assert_eq!(operation_fields.len(), 124);
     assert_eq!(
         operation_fields
             .iter()
@@ -800,6 +802,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("create.target", "port"),
             ("add.case", "payload"),
             ("add.type-parameter", "constraint"),
+            ("set.case-payload", "payload"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
@@ -1511,7 +1514,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("37")
+        Some("40")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -4249,7 +4252,7 @@ fn copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity(
         (
             "foreign-bound",
             "type.argument parent=$site index=0 type=@U\n",
-            "kernel_type_constraint",
+            "kernel_type_parameter_scope",
         ),
         ("missing-type", "", "kernel_type_argument_count"),
         (

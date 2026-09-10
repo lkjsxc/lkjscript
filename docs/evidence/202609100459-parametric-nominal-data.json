@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-parametric-nominal-data-evidence-1",
   "campaign": "202609100459-parametric-nominal-data",
-  "status": "in progress; first full candidate failed stale acceptance expectations; successor full, exact target admission, receipt faults and integration pending",
+  "status": "in progress; remaining acceptance consumers reconciled; successor fresh full, exact target, receipt faults and integration pending",
   "capability": "One graph-owned generic record or variant composes across pure functions, retained environments, exact offline packages, typed persistence and concrete structured-session state.",
   "start": {
     "branch": "main",
@@ -2129,20 +2129,8 @@
     ],
     "binding_limit": "Intermediate copied candidate/verifier hashes bind actual bytes and retained requests/results. They were built during worktree iteration and are not relabelled as a final committed-source full/target receipt.",
     "required_full": {
-      "classification": "failed",
-      "source_commit": "699e68327609323c135946f064c0ce75139365fe",
-      "source_tree": "e58b28315171f7c7d20b9cdf254c4383493beed1",
-      "receipt": ".artifacts/lkjscript-dev/check/1789000215059390478-489508-0/receipt.json",
-      "sha256": "273926450859ca2d0d0ae1effb844c68dcbade0ba4a4ed208440e83d4887ab61",
-      "owned_digest": "verification_83378e381ed7a4271ea539b838bd6caa5ea2a50a00431e037d7883ccc8b214a2",
-      "selected": 26,
-      "fresh_passed": 6,
-      "failed": [
-        "workspace_tests",
-        "release_command_lifecycle"
-      ],
-      "skipped": 18,
-      "elapsed_nanoseconds": 197887688748
+      "classification": "not run",
+      "reason": "Fresh successor source after acceptance-owner corrections required."
     },
     "required_exact_musl": {
       "classification": "not run",
@@ -2179,7 +2167,59 @@
       "owner": "tools/lkjscript-dev/src/release/admission/nominal_tests.rs",
       "test": "live_nominal_receipt_omissions_reject_at_target_admission",
       "requires": "actual fresh target admission; source-bound frozen-reader proof separate from ordinary workspace tests"
-    }
+    },
+    "failed_full_attempts": [
+      {
+        "classification": "failed",
+        "source_commit": "699e68327609323c135946f064c0ce75139365fe",
+        "source_tree": "e58b28315171f7c7d20b9cdf254c4383493beed1",
+        "receipt": ".artifacts/lkjscript-dev/check/1789000215059390478-489508-0/receipt.json",
+        "sha256": "273926450859ca2d0d0ae1effb844c68dcbade0ba4a4ed208440e83d4887ab61",
+        "owned_digest": "verification_83378e381ed7a4271ea539b838bd6caa5ea2a50a00431e037d7883ccc8b214a2",
+        "selected": 26,
+        "fresh_passed": 6,
+        "failed": [
+          "workspace_tests",
+          "release_command_lifecycle"
+        ],
+        "skipped": 18,
+        "elapsed_nanoseconds": 197887688748
+      },
+      {
+        "classification": "failed",
+        "source_commit": "151019302c048512c53cb4bc1b9faf420140c968",
+        "source_tree": "9d9029a04bc6b99c55b4106348c8cbc467903924",
+        "receipt": ".artifacts/lkjscript-dev/check/1789000980759966625-504299-0/receipt.json",
+        "sha256": "1b1052c56ac4f96653781a58002bdea18d2ada5bb3f7ae35d4426622927f13c5",
+        "owned_digest": "verification_d7beccf19b2bc2be0adcded0363b7fcfe391f0cd6c0ec7cae410b04dce29b4aa",
+        "selected": 26,
+        "fresh_passed": 24,
+        "reused_passed": 0,
+        "skipped": 0,
+        "failed": [
+          "workspace_tests",
+          "distributed_http_application"
+        ],
+        "elapsed_nanoseconds": 208050522911,
+        "input_stable": true,
+        "worktree_input_digest": "verification_01e4a180440ff2d776daef317e426b741437a7be1983db38054900ce19145764"
+      }
+    ],
+    "failed_target_attempts": [
+      {
+        "classification": "failed",
+        "source_commit": "151019302c048512c53cb4bc1b9faf420140c968",
+        "candidate_sha256": "2349591418c01f1f5ee3bf1d90b9f8688eb82f00a0f3c04a7d78e0c92adc06b4",
+        "candidate_bytes": 21256448,
+        "verifier_sha256": "53c681bf8a095cf580be0b03d4a6a18be3c8b9886aefc9b897db333921cc9128",
+        "build_receipt": ".artifacts/campaign/202609100459/target-B/build-receipt.json",
+        "build_receipt_sha256": "41ab512048985f865e9503fc119c81e01dab3aedda703881310c94c642f35cad",
+        "admission_log": ".artifacts/campaign/202609100459/target-B/admission.log",
+        "failed_child_receipt": ".artifacts/campaign/202609100459/target-B/admission/distributed-http/receipt.json",
+        "failed_child_receipt_sha256": "0641a353f7ab0f176796331f920db3a4900f0e3ec3780bf42d03e286e1e6b61b",
+        "disposition": "New clean-clone build and both pinned userland command sequences finished. Distributed HTTP stopped at its predecessor function-definition contract expectation. No aggregate admission receipt was produced; later behavioral owners were not run in this attempt."
+      }
+    ]
   },
   "attempts": [
     "Initial public fixture proved predecessor rejects adding a type parameter to a record; first invocation used the wrong input option and is retained as failed.",
@@ -2191,7 +2231,8 @@
     "Library-04 debug execution exposed host stack overflow at the existing excessive authored-type depth test. The type-intent encoder now uses bounded lazy iterative frames, retains exact bytes and admits 256/rejects 257 without changing limits.",
     "Library-05: 533 passed, one new session positive control lacked an explicit byte-stream grant, two scale tests intentionally ignored. The fixture was corrected; session-strict-02 passed all four hostile states and its ordinary control.",
     "The first independent session packer retained unreachable old map pages; exact closure reconstruction removed those pages before fresh hashing. No strict-loader check was weakened.",
-    "Full-A at 699e6832: six fresh gates passed, workspace_tests and release_command_lifecycle failed, eighteen dependent gates skipped. The failures were a stale Artifact 16 service assertion and two stale 31-test lifecycle expectations after standard pair added three tests. Corrected to exact Artifact 17 and 34 tests, with Artifact 16 public predecessor rejection added; no gate weakened."
+    "Full-A at 699e6832: six fresh gates passed, workspace_tests and release_command_lifecycle failed, eighteen dependent gates skipped. The failures were a stale Artifact 16 service assertion and two stale 31-test lifecycle expectations after standard pair added three tests. Corrected to exact Artifact 17 and 34 tests, with Artifact 16 public predecessor rejection added; no gate weakened.",
+    "Full-B at 15101930: 24 fresh gates passed, two failed, none skipped or reused. All maintained regeneration, offline, pure-tail, service and outbound/stateful owners passed. Public CLI exposed the omitted two new mutation names/fields, stale 37-versus-40 maintained test count and changed exact-scope diagnostic precedence; distributed HTTP still expected definition projection 4 and 31 tests. Fixed exact expectations, with all 38 ordinary public CLI tests subsequently passing (one historical scale test ignored)."
   ],
   "deviations": [
     "Source advanced to untagged 0.1.29 for the implemented semantic/consumer cutover; no release identity is reserved.",
@@ -2200,7 +2241,8 @@
     "Added explicit public field/case type editing through existing typed mutations and fixed exact local declaration selectors needed by ordinary authoring.",
     "Additional per-member validation work is charged before collecting nominal member types. New preparation metadata is charged against existing defaults.",
     "Temporary contributor materializer/export access was removed after canonical consumer cutover; only bounded test fixtures remain.",
-    "The existing transferred live-receipt test requires a separately prepared release rehearsal. Local NOM receipt falsification instead extends the current target admission owner and reads actual completed target receipts through its frozen public verification operation; no release preparation or publication is needed."
+    "The existing transferred live-receipt test requires a separately prepared release rehearsal. Local NOM receipt falsification instead extends the current target admission owner and reads actual completed target receipts through its frozen public verification operation; no release preparation or publication is needed.",
+    "Exact parameter-scope validation now rejects a foreign call argument with kernel_type_parameter_scope before checking callee capture constraints. The public fixed expectation and normative diagnostic ordering were reconciled; both call and function-value requests remain rejected with unchanged HEAD."
   ],
   "cleanup": {
     "predecessor_worktree": "removed after saving read-only exporter patch/source and measurements",
@@ -2208,7 +2250,8 @@
     "migration_production_access": "removed",
     "ephemeral_oracle_projects_services": "each passing owner reports cleanup_complete; failed disposable roots are parent-owned and removed",
     "retained_owned_artifacts": ".artifacts/campaign/202609100459 contains raw attempts, frozen intermediate binaries, predecessor outputs and migration backups; intentionally ignored and not committed",
-    "preserved": "Initial unrelated stash remains untouched; unknown Codex process/project ownership was not altered."
+    "preserved": "Initial unrelated stash remains untouched; unknown Codex process/project ownership was not altered.",
+    "intermediate_target_clones": "A and B ordinary clones removed after preserving build/attempt receipts and frozen outputs; successor target admission remains required."
   },
   "external": {
     "normal_pushes": [],

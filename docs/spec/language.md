@@ -376,8 +376,9 @@ specialization, generic extraction, task closure, user-defined trait or higher-r
 Capture safety does not confer equality, serialization, session retention or capability authority.
 Existing lifetime, affine resource, pure evaluation order, tail transfer and data rules still apply.
 
-Static failures identify the callee, exact parameter, supplied type, required constraint and a bounded
-stored-type path or missing scope assumption. The existing validation-work and type-depth budgets
+An out-of-scope parameter fails exact declaration-scope validation before callee constraint checking.
+Well-scoped constraint failures identify the callee, exact parameter, supplied type, required constraint
+and a bounded stored-type path or missing scope assumption. The existing validation-work and type-depth budgets
 bound traversal and temporary proof storage. Compiled signatures retain the exact ordered constraints;
 strict artifact loading compares them to canonical owners, including unused parameters. Production
 preparation derives disposable proofs from compiled inputs and the complete instantiated type closure;

@@ -1208,7 +1208,7 @@ fn run_workflow(
         isolated_root,
     )?;
     let check_records = compact_records("check", &checked.stdout)?;
-    require_field(&check_records, "tests", "passed", "31")?;
+    require_field(&check_records, "tests", "passed", "34")?;
     require_field(&check_records, "tests", "failed", "0")?;
     require_field(&check_records, "tests", "differential", "equal")?;
     let check_compilation = compiler_observation(&check_records)?;
@@ -2573,12 +2573,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-4",
+            "lkjscript-function-definition-projection-5",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "4",
+            "5",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();
