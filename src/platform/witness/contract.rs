@@ -47,7 +47,7 @@ pub struct ValidatorFeatureDescriptor {
 pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 22] = [
     ValidatorFeatureDescriptor {
         name: "parametric_nominal_data",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "capture_safe_type_parameter_constraints",
@@ -127,7 +127,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 22] = [
     },
     ValidatorFeatureDescriptor {
         name: "structured_session_relations",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "exact_http_route_topology",

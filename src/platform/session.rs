@@ -13,6 +13,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::runtime::ShutdownReceipt;
 
+#[path = "session_state.rs"]
+mod state;
+
 pub const STRUCTURED_SESSION_CONTRACT_IDENTITY: &str = "lkjscript-structured-session-1";
 pub const STRUCTURED_SESSION_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_ACTIVE_SESSIONS: usize = 4_096;
@@ -338,6 +341,9 @@ pub(crate) enum SessionNominalShape {
 }
 
 pub(crate) trait SessionShapeRead {
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        Ok(())
+    }
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic>;
     fn nominal_parameters(
         &self,
@@ -559,6 +565,9 @@ impl<B: CanonicalBaseRead + ?Sized> SessionShapeRead for CanonicalSessionRead<'_
 }
 
 impl<R: super::kernel::ExpressionRead> SessionShapeRead for ExpressionSessionRead<'_, R> {
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.read.validation_checkpoint()
+    }
     fn nominal_parameters(
         &self,
         declaration: DeclarationReference,
@@ -975,141 +984,7 @@ fn validate_ordinary_state<R: SessionShapeRead>(
     read: &R,
     root: TypeObjectDigest,
 ) -> Result<(), Diagnostic> {
-    type Bindings = BTreeMap<super::semantic_id::TypeParameterId, TypeObjectDigest>;
-    fn visit<R: SessionShapeRead>(
-        read: &R,
-        ty: TypeObjectDigest,
-        bindings: &Bindings,
-        visiting: &mut BTreeSet<(TypeObjectDigest, Bindings)>,
-        complete: &mut BTreeSet<(TypeObjectDigest, Bindings)>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        if complete.len() >= MAXIMUM_SESSION_STATE_NODES
-            || bindings.len() > super::kernel::contract::MAXIMUM_CHILDREN
-        {
-            return Err(session_semantic(
-                "session_state_limit",
-                "retained state type exceeds its bounded closure",
-            ));
-        }
-        let identity = (ty, bindings.clone());
-        if complete.contains(&identity) {
-            return Ok(());
-        }
-        if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH || !visiting.insert(identity.clone())
-        {
-            return Err(session_semantic(
-                "session_state_cycle",
-                "retained session state type is cyclic or too deep",
-            ));
-        }
-        match read.type_object(ty)?.form {
-            TypeForm::TypeParameter { parameter } => {
-                let actual = bindings.get(&parameter).copied().ok_or_else(|| {
-                    session_semantic(
-                        "session_state_parameter",
-                        "state type parameter is unresolved",
-                    )
-                })?;
-                visit(read, actual, bindings, visiting, complete, depth + 1)?;
-            }
-            TypeForm::Unit | TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text => {}
-            TypeForm::StructuralRecord { fields } => {
-                for field in fields {
-                    visit(read, field.ty, bindings, visiting, complete, depth + 1)?;
-                }
-            }
-            TypeForm::List { item } | TypeForm::Option { item } => {
-                visit(read, item, bindings, visiting, complete, depth + 1)?;
-            }
-            TypeForm::Map { key, value } => {
-                let key = match read.type_object(key)?.form {
-                    TypeForm::TypeParameter { parameter } => {
-                        bindings.get(&parameter).copied().ok_or_else(|| {
-                            session_semantic(
-                                "session_state_parameter",
-                                "map key parameter is unresolved",
-                            )
-                        })?
-                    }
-                    _ => key,
-                };
-                if !matches!(
-                    read.type_object(key)?.form,
-                    TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text
-                ) {
-                    return Err(session_semantic(
-                        "session_state_map_key",
-                        "retained session state map keys must be deterministic primitive values",
-                    ));
-                }
-                visit(read, value, bindings, visiting, complete, depth + 1)?;
-            }
-            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
-                let arguments = match read.type_object(ty)?.form {
-                    TypeForm::Applied { arguments, .. } => arguments,
-                    _ => Vec::new(),
-                };
-                let parameters = read.nominal_parameters(declaration)?;
-                if arguments.len() != parameters.len() {
-                    return Err(session_semantic(
-                        "session_state_arity",
-                        "state nominal application has wrong arity",
-                    ));
-                }
-                let mut applied = bindings.clone();
-                for (parameter, argument) in parameters.into_iter().zip(arguments) {
-                    visit(read, argument, bindings, visiting, complete, depth + 1)?;
-                    let argument = match read.type_object(argument)?.form {
-                        TypeForm::TypeParameter { parameter } => {
-                            bindings.get(&parameter).copied().ok_or_else(|| {
-                                session_semantic(
-                                    "session_state_parameter",
-                                    "application argument is unresolved",
-                                )
-                            })?
-                        }
-                        _ => argument,
-                    };
-                    applied.insert(parameter, argument);
-                }
-                match read.nominal_shape(declaration)? {
-                    SessionNominalShape::Record(fields) => {
-                        for field in fields.into_values() {
-                            visit(read, field, &applied, visiting, complete, depth + 1)?;
-                        }
-                    }
-                    SessionNominalShape::Variant(cases) => {
-                        for payload in cases.into_values().flatten() {
-                            visit(read, payload, &applied, visiting, complete, depth + 1)?;
-                        }
-                    }
-                }
-            }
-            TypeForm::StaticText
-            | TypeForm::Secret
-            | TypeForm::Result { .. }
-            | TypeForm::CapabilityResource { .. }
-            | TypeForm::Stream { .. }
-            | TypeForm::Function { .. } => {
-                return Err(session_semantic(
-                    "session_state_live_type",
-                    "retained session state contains a live, callable, static, secret, or unresolved type",
-                ));
-            }
-        }
-        visiting.remove(&identity);
-        complete.insert(identity);
-        Ok(())
-    }
-    visit(
-        read,
-        root,
-        &Bindings::new(),
-        &mut BTreeSet::new(),
-        &mut BTreeSet::new(),
-        0,
-    )
+    state::validate(read, root)
 }
 
 fn nominal_record_fields<R: SessionShapeRead>(
@@ -1747,5 +1622,67 @@ mod tests {
                 code
             );
         }
+    }
+
+    #[test]
+    fn recursive_session_states_use_complete_substitutions_and_check_forbidden_siblings() {
+        use crate::platform::kernel::PackageId;
+        use crate::platform::semantic_id::TypeParameterId;
+        let seed = b"recursive-session-state-oracle";
+        let declaration = DeclarationReference {
+            package: PackageId::migrate(seed, 0),
+            declaration: DeclarationId::migrate(seed, 0),
+        };
+        let first = TypeParameterId::migrate(seed, 0);
+        let second = TypeParameterId::migrate(seed, 1);
+        let mut types = TypeObjectInterner::default();
+        let text = types.intern(TypeForm::Text).unwrap();
+        let i64_type = types.intern(TypeForm::I64).unwrap();
+        let secret = types.intern(TypeForm::Secret).unwrap();
+        let t = types
+            .intern(TypeForm::TypeParameter { parameter: first })
+            .unwrap();
+        let u = types
+            .intern(TypeForm::TypeParameter { parameter: second })
+            .unwrap();
+        let flipped = types
+            .intern(TypeForm::Applied {
+                declaration,
+                arguments: vec![u, t],
+            })
+            .unwrap();
+        let children = types.intern(TypeForm::List { item: flipped }).unwrap();
+        let concrete = types
+            .intern(TypeForm::Applied {
+                declaration,
+                arguments: vec![text, i64_type],
+            })
+            .unwrap();
+        let mut read = ShapeOracle {
+            objects: types.into_objects(),
+            parameters: BTreeMap::from([(declaration, vec![first, second])]),
+            shapes: BTreeMap::from([(
+                declaration,
+                SessionNominalShape::Variant(cases([
+                    ("empty", None),
+                    ("next", Some(children)),
+                    ("value", Some(t)),
+                ])),
+            )]),
+        };
+        state::validate(&read, concrete).unwrap();
+        let SessionNominalShape::Variant(cases) = read.shapes.get_mut(&declaration).unwrap() else {
+            panic!("variant");
+        };
+        cases.insert(name("forbidden-sibling"), Some(secret));
+        assert_eq!(
+            state::validate(&read, concrete).unwrap_err().code,
+            "session_state_live_type"
+        );
+        let SessionNominalShape::Variant(cases) = read.shapes.get_mut(&declaration).unwrap() else {
+            panic!("variant");
+        };
+        cases.remove(&name("forbidden-sibling"));
+        state::validate(&read, concrete).unwrap();
     }
 }

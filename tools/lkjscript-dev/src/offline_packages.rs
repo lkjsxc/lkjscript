@@ -2,6 +2,13 @@
 
 mod nominal;
 mod nominal_session;
+mod recursive;
+mod recursive_data;
+mod recursive_data_program;
+#[cfg(test)]
+mod recursive_measurements;
+mod recursive_program;
+mod recursive_schemas;
 
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
@@ -40,6 +47,7 @@ pub(crate) struct Receipt {
     pub transport_digests: Vec<String>,
     pub observations: BTreeMap<String, String>,
     pub nominal: nominal::NominalReceipt,
+    pub recursive: recursive::RecursiveReceipt,
     pub files: Vec<evidence::FileProof>,
     pub cleanup_complete: bool,
     pub failure: Option<String>,
@@ -128,7 +136,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-4".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-5".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -144,6 +152,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             transport_digests: Vec::new(),
             observations: BTreeMap::new(),
             nominal: nominal::NominalReceipt::default(),
+            recursive: recursive::RecursiveReceipt::default(),
             files: Vec::new(),
             cleanup_complete: false,
             failure: None,
@@ -196,6 +205,42 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         );
     }
     Ok(if success { 0 } else { 1 })
+}
+
+pub(crate) fn recursive_probe_command(
+    mut arguments: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<u8, DevError> {
+    let project = crate::next_utf8(&mut arguments, "project")?
+        .ok_or_else(|| DevError::usage("recursive-probe requires one owned project"))?;
+    require(
+        arguments.next().is_none(),
+        "recursive-probe takes one project",
+    )?;
+    let observed = lkjscript::platform::contributor::recursive_execution_probe(Path::new(&project))
+        .map_err(|e| DevError::corrupt(e.to_string()))?;
+    println!("{}", serde_json::to_string(&observed)?);
+    Ok(0)
+}
+
+pub(crate) fn recursive_transaction_probe_command(
+    mut arguments: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<u8, DevError> {
+    let descriptor = crate::next_utf8(&mut arguments, "descriptor")?.ok_or_else(|| {
+        DevError::usage("recursive transaction probe requires an owned descriptor")
+    })?;
+    let function = crate::next_utf8(&mut arguments, "function")?
+        .ok_or_else(|| DevError::usage("recursive transaction probe requires its exact helper"))?;
+    require(
+        arguments.next().is_none(),
+        "recursive transaction probe takes two arguments",
+    )?;
+    let value = lkjscript::platform::contributor::recursive_transaction_probe(
+        Path::new(&descriptor),
+        &function,
+    )
+    .map_err(|e| DevError::corrupt(e.to_string()))?;
+    println!("{}", serde_json::to_string(&value)?);
+    Ok(0)
 }
 
 impl Context {
@@ -1359,6 +1404,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&a.path)?;
     standalone_http(context, &d)?;
     nominal::workflow(context, &mut standard)?;
+    recursive::workflow(context, &mut standard)?;
     Ok(())
 }
 
@@ -1665,7 +1711,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-4"
+        receipt.schema == "lkjscript-offline-packages-acceptance-5"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1678,6 +1724,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt does not bind the exact transferred candidate, verifier, and cleanup",
     )?;
     nominal::validate(&receipt.nominal)?;
+    recursive::validate(&receipt.recursive)?;
     for (key, value) in [
         (
             "generic_capture_factory",
@@ -1742,7 +1789,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     require(
-        receipt.runners.len() == 3
+        receipt.runners.len() == 6
             && receipt
                 .runners
                 .iter()
@@ -1828,9 +1875,9 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 14
-            && receipt.transport_digests.len() == 14
-            && receipt.producer_inventories.len() == 14,
+        receipt.inventories.len() == 20
+            && receipt.transport_digests.len() == 20
+            && receipt.producer_inventories.len() == 20,
         "complete producer, replacement, and HTTP source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -1926,6 +1973,9 @@ pub(crate) fn read_transferred_receipt(
     verify_observation_files(&receipt.runners[0], &receipt.files, "standalone")?;
     verify_observation_files(&receipt.runners[1], &receipt.files, "nominal-session")?;
     verify_observation_files(&receipt.runners[2], &receipt.files, "nominal-session-state")?;
+    verify_observation_files(&receipt.runners[3], &receipt.files, "recursive-session")?;
+    verify_observation_files(&receipt.runners[4], &receipt.files, "recursive-transaction")?;
+    verify_observation_files(&receipt.runners[5], &receipt.files, "recursive-resources")?;
     let retained: serde_json::Value = serde_json::from_slice(&process::read_bounded(
         &root.join("nominal-session-state.stdout"),
         MAXIMUM_OUTPUT_BYTES,
@@ -1947,6 +1997,69 @@ pub(crate) fn read_transferred_receipt(
             && observed.close_code == receipt.nominal.session.close_code
             && observed.cleanup_complete == receipt.nominal.session.cleanup_complete,
         "nominal raw session evidence differs from the transferred observation",
+    )?;
+    for revision in [
+        &receipt.recursive.library_revision,
+        &receipt.recursive.changed_library_revision,
+    ] {
+        require(
+            receipt.producer_inventories.iter().any(|inventory| {
+                inventory.package == receipt.recursive.library_package
+                    && &inventory.semantic_revision == revision
+            }),
+            "recursive library observation substituted a foreign source revision",
+        )?;
+    }
+    require(
+        receipt
+            .producer_inventories
+            .iter()
+            .any(|inventory| inventory.package == receipt.recursive.consumer_package),
+        "recursive consumer source is absent from transported inventory",
+    )?;
+    let session: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("recursive-session-messages.json"),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?;
+    require(
+        session == serde_json::to_value(&receipt.recursive.session)?,
+        "recursive wire observations were substituted",
+    )?;
+    let resources: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("recursive-resources.stdout"),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?;
+    require(
+        resources == receipt.recursive.resources,
+        "recursive source-bound resource observations were substituted",
+    )?;
+    let cancellation: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("recursive-transaction.stdout"),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?;
+    require(
+        cancellation == receipt.recursive.transaction_cancellation,
+        "recursive transaction observations were substituted",
+    )?;
+    for (index, label) in ["initial", "restarted", "body-only", "layout-change"]
+        .into_iter()
+        .enumerate()
+    {
+        let value: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+            &root.join(format!("recursive-data-{label}.json")),
+            MAXIMUM_OUTPUT_BYTES,
+        )?)?;
+        require(
+            receipt.recursive.persistence.get(index) == Some(&value),
+            "recursive data/restart observations were substituted",
+        )?;
+    }
+    require(
+        digest_file(
+            &root.join("recursive-data-independent.bin"),
+            MAXIMUM_OUTPUT_BYTES,
+        )? == receipt.recursive.persisted_bytes_sha256,
+        "recursive independent typed byte identity changed",
     )?;
     require(
         process::read_bounded(&root.join("standalone-response.body"), MAXIMUM_OUTPUT_BYTES)?

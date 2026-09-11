@@ -3,7 +3,6 @@
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
-use super::codec::{decode_typed, encode_typed};
 use super::prepare::NormalizedProgram;
 use super::reference_schema::NormalizedReferenceSchema;
 use super::resource::NormalizedResourceScope;
@@ -13,6 +12,7 @@ use super::value::{
 };
 use super::value_schema::NormalizedValueSchema;
 use super::vm::NormalizedRunPolicy;
+use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
@@ -209,6 +209,7 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
             implementation.as_str(),
             type_arguments,
             arguments,
+            control,
         )
     }
 }
@@ -2294,6 +2295,7 @@ fn reference_intrinsic(
     implementation: &str,
     type_arguments: &[TypeObjectDigest],
     arguments: Vec<NormalizedValue>,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, ExecutionError> {
     match implementation {
         "identity_host" => match arguments.as_slice() {
@@ -2516,9 +2518,15 @@ fn reference_intrinsic(
                     ));
                 }
             };
-            encode_typed(program, value, ty, JsonLimits::default())
-                .map(NormalizedValue::bytes)
-                .map_err(reference_json_error)
+            super::codec::encode_typed_with_control(
+                program,
+                value,
+                ty,
+                JsonLimits::default(),
+                control,
+            )
+            .map(NormalizedValue::bytes)
+            .map_err(reference_json_error)
         }
         "core.json.decode-or" => {
             let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
@@ -2542,9 +2550,24 @@ fn reference_intrinsic(
                     ));
                 }
             };
-            let decoded = decode_typed(program, bytes, ty, JsonLimits::default());
+            let decoded = super::codec::decode_typed_with_control(
+                program,
+                bytes,
+                ty,
+                JsonLimits::default(),
+                control,
+            );
+            control.check()?;
             let (valid, value, error) = match decoded {
                 Ok(value) => (true, value, String::new()),
+                Err(error)
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                    ) =>
+                {
+                    return Err(reference_json_error(error));
+                }
                 Err(diagnostic) => (false, fallback.clone(), diagnostic.code),
             };
             reference_structural_record(vec![
@@ -2575,7 +2598,7 @@ fn reference_intrinsic(
                     ));
                 }
             };
-            super::data_codec_reference::encode_typed(program, value, ty)
+            super::data_codec_reference::encode_typed_with_control(program, value, ty, control)
                 .map(NormalizedValue::bytes)
                 .map_err(reference_json_error)
         }
@@ -2601,8 +2624,18 @@ fn reference_intrinsic(
                     ));
                 }
             };
-            match super::data_codec_reference::decode_typed(program, bytes, ty) {
+            match super::data_codec_reference::decode_typed_with_control(
+                program, bytes, ty, control,
+            ) {
                 Ok(value) => Ok(value),
+                Err(error)
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                    ) =>
+                {
+                    Err(reference_json_error(error))
+                }
                 Err(_) => Ok(fallback.clone()),
             }
         }
@@ -3059,6 +3092,7 @@ fn reference_map_intrinsic(
 fn reference_json_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {
     let class = match error.class {
         crate::platform::diagnostic::DiagnosticClass::Resource => ExecutionFailureClass::Resource,
+        crate::platform::diagnostic::DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
         _ => ExecutionFailureClass::Infrastructure,
     };
     ExecutionError::new(class, error.code, "typed JSON operation failed")

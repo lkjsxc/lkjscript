@@ -3705,22 +3705,28 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use the current declaration's parameter identity or a closed concrete argument.",
         ),
         diagnostic(
-            "kernel_type_nominal_recursion",
+            "kernel_type_nominal_expansion",
             DiagnosticClass::Semantic,
-            "A nominal definition cycle passes through a generic declaration, including a signature or wrapper path.",
-            "Break the generic definition cycle; finite explicit nesting and existing wholly monomorphic recursion retain their contracts.",
+            "A nominal parameter-flow component contains an expanding edge, including nested arguments and signatures. The diagnostic binds a cycle to exact owners, slots and member/argument paths.",
+            "Forward or permute parameters without nesting on the witnessed cycle, or reset its recursive arguments to closed types.",
         ),
         diagnostic(
-            "kernel_type_nominal_cycle",
-            DiagnosticClass::Semantic,
-            "Concrete substitution introduces a cycle through a nominal application.",
-            "Supply an argument whose complete substituted member closure is finite.",
+            "kernel_type_nominal_storage",
+            DiagnosticClass::Resource,
+            "Finite-instantiation analysis exceeds its bounded metadata storage.",
+            "Reduce the declaration or concrete argument closure; exhaustion does not prove an expanding schema.",
+        ),
+        diagnostic(
+            "kernel_type_nominal_witness",
+            DiagnosticClass::Resource,
+            "The expanding-cycle certificate exceeds the bounded diagnostic witness.",
+            "Reduce the declaration closure to expose a complete bounded cycle certificate.",
         ),
         diagnostic(
             "kernel_type_nominal_depth",
             DiagnosticClass::Semantic,
-            "Nominal definition or application traversal exceeds the current type-depth limit.",
-            "Reduce nesting in the complete declaration and argument closure.",
+            "A nominal structural type term exceeds the current type-depth limit.",
+            "Reduce structural nesting in the member or application arguments; nominal recurrence alone does not consume structural depth.",
         ),
         diagnostic(
             "kernel_type_nominal_resource",
@@ -3831,10 +3837,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the linked nominal closure before retrying; no partial artifact is admitted.",
         ),
         diagnostic(
-            "kernel_type_bind_capture_depth",
-            DiagnosticClass::Semantic,
-            "Capture-type validation exceeded its bounded structural depth.",
-            "Reduce stored type nesting within the current capture subset.",
+            "kernel_type_work",
+            DiagnosticClass::Resource,
+            "Type validation exhausted its separate finite work admission.",
+            "Reduce the candidate closure or validation work; exhaustion is not an expanding-cycle certificate.",
         ),
         diagnostic(
             "compiler_unit_bind_protocol",
@@ -6271,7 +6277,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "generic-cycles",
-                        "reject-including-signature-and-wrapper-paths".to_owned(),
+                        "admit-iff-no-expanding-edge-in-parameter-slot-scc-including-signatures"
+                            .to_owned(),
                     ),
                     (
                         "closure",

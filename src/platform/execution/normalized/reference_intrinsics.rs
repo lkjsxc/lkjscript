@@ -133,15 +133,30 @@ impl ReferenceState<'_> {
                     }
                 };
                 let decoded = if implementation == "core.json.decode-or" {
-                    decode_typed(self.schema.as_ref(), bytes, ty, JsonLimits::default())
-                } else {
-                    super::super::data_codec_reference::decode_typed(
+                    super::super::codec::decode_typed_with_control(
                         self.schema.as_ref(),
                         bytes,
                         ty,
+                        JsonLimits::default(),
+                        self.control,
+                    )
+                } else {
+                    super::super::data_codec_reference::decode_typed_with_control(
+                        self.schema.as_ref(),
+                        bytes,
+                        ty,
+                        self.control,
                     )
                 };
                 let (value, error) = match decoded {
+                    Err(error)
+                        if matches!(
+                            error.class,
+                            DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                        ) =>
+                    {
+                        return Err(reference_json_error(error));
+                    }
                     Ok(value) => (
                         self.admit_raw(value, ty, &BTreeMap::new(), None, false)?,
                         None,
@@ -173,6 +188,7 @@ impl ReferenceState<'_> {
                     implementation,
                     types,
                     arguments.into_iter().map(CheckedValue::release).collect(),
+                    self.control,
                 )?;
                 let result = CheckedValue::primitive(&self.schema, result)?;
                 self.charge_value(result.raw())?;

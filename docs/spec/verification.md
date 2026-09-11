@@ -4,7 +4,7 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
-Parametric nominal acceptance extends these same owners. Offline receipt 4 requires one independent
+Parametric nominal acceptance extends these same owners. Offline receipt 5 requires one independent
 batch/edit library, complete I64/Text/nested-list/consumer-nominal results after producer removal,
 retained snapshots, heterogeneous and changed-body mapping, and an exact dependency replacement
 changing field, case and bound meaning. It also requires a copied-artifact pair session's raw
@@ -28,7 +28,7 @@ secret or callable state must reject during strict artifact loading and deployme
 before readiness. This complements public request rejection and the copied live session witness.
 
 Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
-source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 4. Transferred
+source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 5. Transferred
 receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
 mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
 removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its
@@ -609,7 +609,7 @@ cancellation during type traversal. The retained-environment N/K fault oracle us
 generic factory. `pure-tail` receipt 6 retains a separately authored `configure<Env: capture-safe, Input,
 Output>`, runtime nominal environments, simultaneous results `[8,11,17]` and `[2,0,-4]`, standard
 `function-constant` over runtime Text and nested lists, and the generic configured HTTP mapping path.
-`offline-packages` receipt 4 retains imported constraints and a consumer-owned nominal environment
+`offline-packages` receipt 5 retains imported constraints and a consumer-owned nominal environment
 passed through a returned private generic helper after producer removal. Receipt readers require these
 cases on both the host and exact local musl candidate. Existing 900-second/1,073,741,824-owned-byte
 pure-tail bounds and sampling policy remain unchanged. Preparation-local constraint proof storage and
@@ -624,3 +624,35 @@ hashes. Every fault must reject; the unchanged baseline and restored receipt mus
 receipt bytes are restored before assertions, temporary logs are removed, and a bounded
 `nominal-receipt-faults.json` retains the actual outcomes. This mandatory campaign proof is separate
 from ordinary workspace tests; its ignored annotation never establishes a passed disposition.
+
+Finite-recursive-nominal acceptance extends offline receipt 5 with a separately authored reusable
+tree library, independent consumers, exact source replacement, finite and expanding schema cases,
+and full small-tree results. Ordered leaves `[1,2,4]`, decimal left fold `124`, mapping `[8,11,17]`,
+retained original shape, empty branches and callback trap order are independent expectations.
+Balanced 4,096-leaf construction executes graph recursion. Complete preorder shape tags and every
+ordered leaf bind its shape and values within the existing finite CLI record/argument bounds; the
+expected sums are 8,390,656 and 25,192,448. No enlarged product output or execution limit is implied.
+
+The same receipt requires public raw WebSocket sessions retaining `tree<Text>`, exact replies and
+independent connection state. Restarted copied HTTP services persist full recursive values; retained
+handwritten layout/payload bytes, trap rollback, cancellation and a subsequent successful write,
+body-only readability and explicit member-layout mismatch rejection bind the isolated store.
+Source-bound cancellation and allocation probes are labelled separately from these public requests.
+Both independently derived instance inventories, preparation work/metadata, small/large execution
+observations, raw admission, optional observation-sink timings and cleanup are required. Fuel and
+allocation accounting remain enabled when observation sinks are disabled.
+
+The kernel's small-term oracle uses weighted transitive closure and direct finite substitution,
+independent of production SCC and prepared-layout helpers. Deliberate expanding-edge, component,
+property-propagation and declaration-only instance faults must fail their discriminating tests,
+with exact restoration and healthy recovery. Neutral rehashed source/artifact packing must expose
+semantic rejection rather than checksum failure. Target and transferred receipt falsification
+includes recursive observation omission/substitution and predecessor receipt rejection.
+
+An explicitly selected cost comparison uses the same copied CLI driver and a freshly authored
+monomorphic recursive program on frozen predecessor and candidate executables:
+`LKJSCRIPT_RECURSIVE_BASELINE=/absolute/predecessor LKJSCRIPT_RECURSIVE_CANDIDATE=/absolute/candidate LKJSCRIPT_RECURSIVE_COMPARISON_ROOT=/absolute/absent/root cargo test --release --locked -p lkjscript-dev --lib recursive_monomorphic_predecessor_cost_comparison -- --ignored --nocapture`.
+It preserves public requests, three complete CLI runs per size/target, independent numeric results,
+candidate/verifier identities and cleanup. These include preparation and materialization costs;
+the separate recursive resource probe measures execution after preparation. A feature milestone
+does not establish a speedup, and an ignored test that has not actually run supplies no evidence.

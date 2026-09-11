@@ -10,6 +10,7 @@ use super::value::{
 };
 use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -22,28 +23,50 @@ const BYTE_LIMIT: usize = 4 * 1_048_576;
 const ITEM_LIMIT: usize = 1_000_000;
 const DEPTH_LIMIT: usize = 128;
 
+#[cfg(test)]
 pub(super) fn encode_typed(
     program: &dyn NormalizedValueSchema,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
 ) -> Result<Vec<u8>, Diagnostic> {
+    encode_typed_with_control(program, value, ty, &ExecutionControl::uncancelled())
+}
+
+pub(super) fn encode_typed_with_control(
+    program: &dyn NormalizedValueSchema,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<Vec<u8>, Diagnostic> {
     let mut encoded = Vec::new();
     encoded.extend_from_slice(MAGIC);
     encoded.extend_from_slice(&VERSION.to_be_bytes());
-    encoded.extend_from_slice(&layout_digest(program, ty)?);
-    let mut budget = ReferenceBudget::default();
+    encoded.extend_from_slice(&layout_digest(program, ty, control)?);
+    let mut budget = ReferenceBudget { items: 0, control };
     write_value(program, ty, value, &mut encoded, &mut budget, 0)?;
     ensure_payload_size(encoded.len())?;
     let checksum = digest(CHECKSUM_DOMAIN, &encoded);
     encoded.extend_from_slice(&checksum);
+    cancelled(control)?;
     Ok(encoded)
 }
 
+#[cfg(test)]
 pub(super) fn decode_typed(
     program: &dyn NormalizedValueSchema,
     encoded: &[u8],
     ty: TypeObjectDigest,
 ) -> Result<NormalizedValue, Diagnostic> {
+    decode_typed_with_control(program, encoded, ty, &ExecutionControl::uncancelled())
+}
+
+pub(super) fn decode_typed_with_control(
+    program: &dyn NormalizedValueSchema,
+    encoded: &[u8],
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<NormalizedValue, Diagnostic> {
+    cancelled(control)?;
     if encoded.len() > BYTE_LIMIT {
         return Err(resource_error(
             "typed data value exceeds the canonical byte limit",
@@ -77,13 +100,13 @@ pub(super) fn decode_typed(
         ));
     }
     let observed_layout = input.read_array("normalized_data_value_layout")?;
-    if observed_layout != layout_digest(program, ty)? {
+    if observed_layout != layout_digest(program, ty, control)? {
         return Err(corrupt_error(
             "normalized_data_value_layout",
             "typed data value belongs to a foreign nominal or runtime layout",
         ));
     }
-    let mut budget = ReferenceBudget::default();
+    let mut budget = ReferenceBudget { items: 0, control };
     let value = read_value(program, ty, &mut input, &mut budget, 0)?;
     if !input.is_finished() {
         return Err(corrupt_error(
@@ -91,15 +114,22 @@ pub(super) fn decode_typed(
             "typed data value contains trailing input",
         ));
     }
+    cancelled(control)?;
     Ok(value)
 }
 
-#[derive(Default)]
-struct ReferenceBudget {
-    items: usize,
+fn cancelled(control: &ExecutionControl) -> Result<(), Diagnostic> {
+    control
+        .check()
+        .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
-impl ReferenceBudget {
+struct ReferenceBudget<'a> {
+    items: usize,
+    control: &'a ExecutionControl,
+}
+
+impl ReferenceBudget<'_> {
     fn visit(&mut self, depth: usize) -> Result<(), Diagnostic> {
         if depth > DEPTH_LIMIT {
             return Err(Diagnostic::new(
@@ -112,6 +142,7 @@ impl ReferenceBudget {
     }
 
     fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
+        cancelled(self.control)?;
         self.items = self.items.checked_add(count).ok_or_else(item_error)?;
         if self.items > ITEM_LIMIT {
             return Err(item_error());
@@ -382,10 +413,11 @@ fn read_nominal(
 fn layout_digest(
     program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
+    control: &ExecutionControl,
 ) -> Result<[u8; 32], Diagnostic> {
     let mut description = Vec::new();
     let mut ancestors = BTreeSet::new();
-    describe_type(program, ty, &mut ancestors, &mut description, 0)?;
+    describe_type(program, ty, &mut ancestors, &mut description, 0, control)?;
     Ok(digest(LAYOUT_DOMAIN, &description))
 }
 
@@ -395,7 +427,9 @@ fn describe_type(
     ancestors: &mut BTreeSet<TypeObjectDigest>,
     description: &mut Vec<u8>,
     depth: usize,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    cancelled(control)?;
     if depth > DEPTH_LIMIT {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
@@ -416,7 +450,14 @@ fn describe_type(
                     write_bytes(description, &[9])?;
                     write_length(description, arguments.len())?;
                     for argument in arguments {
-                        describe_type(program, *argument, ancestors, description, depth + 1)?;
+                        describe_type(
+                            program,
+                            *argument,
+                            ancestors,
+                            description,
+                            depth + 1,
+                            control,
+                        )?;
                     }
                 }
                 _ => write_bytes(description, &[5])?,
@@ -435,7 +476,14 @@ fn describe_type(
                     write_blob(description, field.reference.package.to_string().as_bytes())?;
                     write_blob(description, field.reference.field.to_string().as_bytes())?;
                     write_blob(description, field.name.as_str().as_bytes())?;
-                    describe_type(program, field.ty, ancestors, description, depth + 1)?;
+                    describe_type(
+                        program,
+                        field.ty,
+                        ancestors,
+                        description,
+                        depth + 1,
+                        control,
+                    )?;
                 }
             } else if let Some((_, variant)) = find_variant(program, ty) {
                 write_bytes(description, &[1])?;
@@ -446,7 +494,14 @@ fn describe_type(
                     write_blob(description, case.name.as_str().as_bytes())?;
                     if let Some(payload) = case.payload {
                         write_bytes(description, &[1])?;
-                        describe_type(program, payload, ancestors, description, depth + 1)?;
+                        describe_type(
+                            program,
+                            payload,
+                            ancestors,
+                            description,
+                            depth + 1,
+                            control,
+                        )?;
                     } else {
                         write_bytes(description, &[0])?;
                     }
@@ -461,17 +516,24 @@ fn describe_type(
             write_length(description, fields.len())?;
             for field in fields {
                 write_blob(description, field.name.as_str().as_bytes())?;
-                describe_type(program, field.ty, ancestors, description, depth + 1)?;
+                describe_type(
+                    program,
+                    field.ty,
+                    ancestors,
+                    description,
+                    depth + 1,
+                    control,
+                )?;
             }
         }
         TypeForm::List { item } => {
             write_bytes(description, &[7])?;
-            describe_type(program, *item, ancestors, description, depth + 1)?;
+            describe_type(program, *item, ancestors, description, depth + 1, control)?;
         }
         TypeForm::Map { key, value } => {
             write_bytes(description, &[8])?;
-            describe_type(program, *key, ancestors, description, depth + 1)?;
-            describe_type(program, *value, ancestors, description, depth + 1)?;
+            describe_type(program, *key, ancestors, description, depth + 1, control)?;
+            describe_type(program, *value, ancestors, description, depth + 1, control)?;
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),

@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-8";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 8;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-9";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 9;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-5";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 5;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN08";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v8";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v8";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN09";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v9";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v9";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 

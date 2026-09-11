@@ -4,6 +4,7 @@ use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVarian
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -16,17 +17,27 @@ const MAXIMUM_VALUE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_VALUE_ITEMS: usize = 1_000_000;
 const MAXIMUM_VALUE_DEPTH: usize = 128;
 
+#[cfg(test)]
 pub(crate) fn encode_typed(
     program: &NormalizedProgram,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let layout = layout_identity(program, ty)?;
+    encode_typed_with_control(program, value, ty, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn encode_typed_with_control(
+    program: &NormalizedProgram,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<Vec<u8>, Diagnostic> {
+    let layout = layout_identity(program, ty, control)?;
     let mut output = Vec::new();
     output.extend_from_slice(VALUE_MAGIC);
     output.extend_from_slice(&VALUE_CONTRACT_VERSION.to_be_bytes());
     output.extend_from_slice(&layout);
-    let mut state = CodecState::default();
+    let mut state = CodecState { items: 0, control };
     encode_value(program, value, ty, &mut output, &mut state, 0)?;
     if output.len() > MAXIMUM_VALUE_BYTES.saturating_sub(32) {
         return Err(codec_error(
@@ -37,14 +48,26 @@ pub(crate) fn encode_typed(
     }
     let checksum = digest(VALUE_CHECKSUM_DOMAIN, &output);
     output.extend_from_slice(&checksum);
+    checkpoint(control)?;
     Ok(output)
 }
 
+#[cfg(test)]
 pub(crate) fn decode_typed(
     program: &NormalizedProgram,
     bytes: &[u8],
     ty: TypeObjectDigest,
 ) -> Result<NormalizedValue, Diagnostic> {
+    decode_typed_with_control(program, bytes, ty, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn decode_typed_with_control(
+    program: &NormalizedProgram,
+    bytes: &[u8],
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<NormalizedValue, Diagnostic> {
+    checkpoint(control)?;
     if bytes.len() > MAXIMUM_VALUE_BYTES {
         return Err(codec_error(
             DiagnosticClass::Resource,
@@ -82,7 +105,7 @@ pub(crate) fn decode_typed(
             "typed data value belongs to a foreign format version",
         ));
     }
-    let expected_layout = layout_identity(program, ty)?;
+    let expected_layout = layout_identity(program, ty, control)?;
     if cursor.array_32("normalized_data_value_layout")? != expected_layout {
         return Err(codec_error(
             DiagnosticClass::Corrupt,
@@ -90,19 +113,27 @@ pub(crate) fn decode_typed(
             "typed data value belongs to a foreign nominal or runtime layout",
         ));
     }
-    let mut state = CodecState::default();
+    let mut state = CodecState { items: 0, control };
     let value = decode_value(program, ty, &mut cursor, &mut state, 0)?;
     cursor.finish("normalized_data_value_trailing")?;
+    checkpoint(control)?;
     Ok(value)
 }
 
-#[derive(Default)]
-struct CodecState {
-    items: usize,
+fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
+    control
+        .check()
+        .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
-impl CodecState {
+struct CodecState<'a> {
+    items: usize,
+    control: &'a ExecutionControl,
+}
+
+impl CodecState<'_> {
     fn enter(&mut self, depth: usize) -> Result<(), Diagnostic> {
+        checkpoint(self.control)?;
         if depth > MAXIMUM_VALUE_DEPTH {
             return Err(codec_error(
                 DiagnosticClass::Resource,
@@ -402,10 +433,11 @@ fn decode_named(
 fn layout_identity(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
+    control: &ExecutionControl,
 ) -> Result<[u8; 32], Diagnostic> {
     let mut bytes = Vec::new();
     let mut active = BTreeSet::new();
-    describe_layout(program, ty, &mut active, &mut bytes, 0)?;
+    describe_layout(program, ty, &mut active, &mut bytes, 0, control)?;
     Ok(digest(LAYOUT_IDENTITY_DOMAIN, &bytes))
 }
 
@@ -415,7 +447,9 @@ fn describe_layout(
     active: &mut BTreeSet<TypeObjectDigest>,
     output: &mut Vec<u8>,
     depth: usize,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    checkpoint(control)?;
     if depth > MAXIMUM_VALUE_DEPTH {
         return Err(codec_error(
             DiagnosticClass::Resource,
@@ -435,7 +469,7 @@ fn describe_layout(
                 append_bytes(output, &[9])?;
                 push_count(output, arguments.len())?;
                 for argument in arguments {
-                    describe_layout(program, *argument, active, output, depth + 1)?;
+                    describe_layout(program, *argument, active, output, depth + 1, control)?;
                 }
             } else {
                 append_bytes(output, &[5])?;
@@ -454,7 +488,7 @@ fn describe_layout(
                     push_blob(output, field.reference.package.to_string().as_bytes())?;
                     push_blob(output, field.reference.field.to_string().as_bytes())?;
                     push_blob(output, field.name.as_str().as_bytes())?;
-                    describe_layout(program, field.ty, active, output, depth + 1)?;
+                    describe_layout(program, field.ty, active, output, depth + 1, control)?;
                 }
             } else if let Some((_, layout)) = variant_layout(program, ty) {
                 append_bytes(output, &[1])?;
@@ -466,7 +500,7 @@ fn describe_layout(
                     match case.payload {
                         Some(payload) => {
                             append_bytes(output, &[1])?;
-                            describe_layout(program, payload, active, output, depth + 1)?;
+                            describe_layout(program, payload, active, output, depth + 1, control)?;
                         }
                         None => append_bytes(output, &[0])?,
                     }
@@ -485,17 +519,17 @@ fn describe_layout(
             push_count(output, fields.len())?;
             for field in fields {
                 push_blob(output, field.name.as_str().as_bytes())?;
-                describe_layout(program, field.ty, active, output, depth + 1)?;
+                describe_layout(program, field.ty, active, output, depth + 1, control)?;
             }
         }
         TypeForm::List { item } => {
             append_bytes(output, &[7])?;
-            describe_layout(program, *item, active, output, depth + 1)?;
+            describe_layout(program, *item, active, output, depth + 1, control)?;
         }
         TypeForm::Map { key, value } => {
             append_bytes(output, &[8])?;
-            describe_layout(program, *key, active, output, depth + 1)?;
-            describe_layout(program, *value, active, output, depth + 1)?;
+            describe_layout(program, *key, active, output, depth + 1, control)?;
+            describe_layout(program, *value, active, output, depth + 1, control)?;
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),

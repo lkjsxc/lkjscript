@@ -1,0 +1,210 @@
+{
+  "schema": "lkjscript-finite-recursive-nominal-campaign-evidence-1",
+  "campaign": "202609110659-finite-recursive-nominals",
+  "lifecycle_authority": "docs/campaigns/202609110659.md",
+  "root_guidance": "AGENTS.md",
+  "recorded_at": "2026-09-11T00:38:36Z",
+  "scope": "Supporting observations during implementation; this is not terminal campaign or release acceptance.",
+  "starting_source": {
+    "branch": "main",
+    "commit": "f0d6ed672cdb3beeab8babc166ef6a7c8aea6cb3",
+    "tree": "009bde53ed8694c14b39ed610f8e02a477f4f25c",
+    "archive_commit": "66cb35a5",
+    "remote_integration": "Not yet pushed",
+    "unrelated_stash_preserved": "stash@{0}: preserve incomplete campaign 202608310137 before 202608311331 cutover"
+  },
+  "environment": {
+    "repository": "/home/coder/workspace/lkjscript",
+    "evidence_root": "/home/coder/workspace/lkjscript/.artifacts/frn-202609110659-F0aHDL",
+    "rust_toolchain": "Pinned Rust/Cargo 1.98.0",
+    "host": "x86_64-unknown-linux-gnu",
+    "selected_release_target": "x86_64-unknown-linux-musl",
+    "selected_product_version": "0.1.31",
+    "deployment_performed": false
+  },
+  "implementation": {
+    "git_subtree_inputs": {
+      "src": "530671648f4a4e5d7226ea503429d69c32c1a780",
+      "tools/lkjscript-dev": "32922696daea3155b13ca05e6651a9e5cbf45ee9",
+      "packages/standard": "06faf1564eba78d12136341302ad6de5d7d9c0ab",
+      "applications/lkjournal": "c7d514a2542d7a75676864f07baeda51ad4f89e4",
+      "docs/spec": "be591fc4559f5a7a235bede2210840f5f3c09c68"
+    },
+    "criterion": "No strongly connected parameter-slot component contains an expanding edge; complete canonical application identity keys finite instantiation.",
+    "independent_reference": "Finite first-order Term model, weighted transitive closure certificates and direct substitution/enumeration; independent canonical-owner preparation and property elimination.",
+    "preserved": [
+      "Exact nominal declaration, member and stable parameter identities",
+      "Invariant complete type arguments and existing generic-function recursion rules",
+      "Function-leaf ordinary/capture predicates, separate equality/codec/session predicates",
+      "Finite immutable runtime values, raw admission and preparation provenance",
+      "Atomic GraphRepository publication and exact package revision invalidation",
+      "Graph 13, TypeObject 10/application 1, typed layout/value contract 1 and successful predecessor bytes",
+      "Existing fuel, value/codec limits, affine/task authority and safe Rust"
+    ],
+    "compatibility_changes": {
+      "compiler_unit": 9,
+      "nominal_witness_feature": 2,
+      "session_witness_feature": 2,
+      "semantic_summary_validator_identity": 4,
+      "offline_package_receipt": 5
+    },
+    "codec_correction": "Active cancellation reaches both typed codecs and JSON metadata/value traversal. Operational Resource/Cancelled failures propagate through checked/raw evaluator decoders; invalid source/layout encodings retain fallback behavior. No successful encoding bytes or limits changed.",
+    "maintained_migration": "Canonical rebuild with owner/type/retirement inventories preserved; predecessor reader used only for owned asset regeneration and removed. Old packs and operational data preserved. Standard dependency and compiled assets regenerated through their owners.",
+    "source_recovery_correction": "Current-schema transport validates historical metadata as canonical bound content, then rebuilds every source witness under the current validator before readiness. Repository/cache proof reuse stays strict. Neutral rehashed unknown-policy metadata cannot admit an expanding source schema."
+  },
+  "baseline": {
+    "classification": "Fresh observed rejection",
+    "copied_binary_root": "/tmp/lkjscript-frn-baseline-mgypQU",
+    "public_request": "baseline-tree.lkjc",
+    "diagnostics": ["kernel_type_nominal_recursion", "kernel_type_nominal_cycle"],
+    "head_unchanged": true,
+    "cost_comparison": "Fresh pass D on frozen candidate I; failed A/B/C retained without acceptance"
+  },
+  "copied_public_workflow": {
+    "classification": "Fresh passed, pre-integration host candidate H",
+    "receipt": ".artifacts/frn-202609110659-F0aHDL/offline-recursive-H/receipt.json",
+    "receipt_sha256": "a16c5b0a5ea9c29b73e773c72b2158cee7db35b2f7cd7afdaaa5c564464f8f66",
+    "receipt_digest": "verification_f107bcf4ae50f996b30171094876e4b7f3bcfe05c46b8a586726a4dab9d99191",
+    "candidate_sha256": "047076ad1ed56ac3131b90c24f45c5be8e7b1c1a75faaca905a6fcba8ec4c6df",
+    "verifier_sha256": "a1300cdc88c58a35c48e47b02e399d4c24c571925b742dd9e4f04ca4a230b094",
+    "commands": 345,
+    "transported_inventories": 20,
+    "runner_observations": 6,
+    "elapsed_nanoseconds": 164550617175,
+    "requests_and_outputs": "Complete bounded file/command inventories are byte-bound by the child receipt, including recursive public requests, inspected definitions, wire traces and producer removal.",
+    "small_expectations": {
+      "ordered_leaves": [1, 2, 4],
+      "count": 3,
+      "sum": 7,
+      "decimal_left_fold": 124,
+      "mapped_leaves": [8, 11, 17],
+      "shape": "branch([leaf(1),branch([leaf(2),leaf(4)]),branch([])])",
+      "retained_original": "Complete original value compared after constructing distinct mapped value",
+      "identity_and_composition": "Complete values equal independently computed results",
+      "trap_order": ["normalized_integer_division", "normalized_integer_overflow"],
+      "empty_callback": "Empty branch succeeds under trapping callback",
+      "text_leaves": ["a", "bc"],
+      "nominal_record_leaves": [{"text":"one"},{"text":"two"}]
+    },
+    "scale_expectations": {
+      "leaves": 4096,
+      "ordered_values": "Every integer 1 through 4096, checked individually",
+      "sum": 8390656,
+      "mapped_sum": 25192448,
+      "shape": "Complete preorder arities checked independently before/after mapping",
+      "construction": "Graph-owned balanced recursive constructors from two integer seeds; independent Rust tree retained in evidence"
+    },
+    "finite_families": ["tree", "node", "uninhabited record", "mutual expr/group", "flip permutation", "duplication/selection", "dropped growth with closed reset", "monomorphic wrapper", "signature forwarding"],
+    "expanding_rejections": ["self", "mutual", "signature", "nominal argument", "phantom"],
+    "edits": {
+      "body_replacement_sum": 8,
+      "member_edit": "Atomic kernel_type_match_exhaustive rejection",
+      "bound_edit": "Atomic kernel_type_constraint rejection",
+      "clean_recomputation": "Owned derived caches removed/recovered with semantic HEAD unchanged"
+    },
+    "sessions": {
+      "transport": "Actual copied-product raw WebSocket sessions",
+      "state": "Exact tree<Text> under the existing Option<State>/SessionEvent/SessionDecision relation",
+      "ordered_contents": ["a", "z", "abc", "", "zbc"],
+      "full_states_compared": true,
+      "independent_connections": 2,
+      "normal_close": 1000
+    },
+    "persistence": {
+      "public_service_rounds": ["initial write/trap/read", "restart read/healthy write", "body-only read", "member-layout mismatch"],
+      "independent_typed_bytes_sha256": "6ecc2e71562410dc1cbb567f49a324338ce8f5a94c280a0a5af1d2b03bc5f82a",
+      "schema_mismatch_status": 409,
+      "trap_status": 500,
+      "staged_cancellation": "Source-bound single production execution; unchanged stored bytes and data HEAD, zero live transactions; public restart/write recovery",
+      "live_effects_replayed": false
+    },
+    "cleanup_complete": true
+  },
+  "cost_observations": {
+    "monomorphic_predecessor_comparison": {
+      "classification": "Fresh passed D; three public CLI observations per case and binary",
+      "scope": "Complete CLI preparation, both evaluators and materialization; separate from generic steady-state probes",
+      "baseline_candidate_sha256": "fbf9f6fa9196ba0c4c8e3580832b2e1350cfabe1ebdb004262bdbdf5fd953b1d",
+      "current_candidate_sha256": "c46c01f3396e0993d41e15bc1025a43832c91d0f9dd1bdb95256e2f11104373a",
+      "baseline_receipt_sha256": "bb4f394b4ccc7caae670591501ded569d8fd56493154859edfa43b404b558129",
+      "candidate_receipt_sha256": "930cbd8f34c0f7311b554b16ee8561da85a4b160a1185acfac5630c1da3d7a29",
+      "evidence": ".artifacts/frn-202609110659-F0aHDL/monomorphic-comparison-D",
+      "median_milliseconds_baseline_then_candidate": {
+        "32_sum": [327.731612,327.100445],
+        "32_mapped_sum": [327.612377,328.834657],
+        "4096_sum": [465.480657,470.075712],
+        "4096_mapped_sum": [598.984336,600.279863]
+      },
+      "observed_peak_rss_kib_ranges": {"baseline":[23628,25304],"candidate":[24412,25908]},
+      "conclusion": "Equivalent expected results; no material algorithmic regression observed in these bounded samples; no speedup claim",
+      "predecessor_recovery": "Complete old source closure restaged through copied current CLI after producer removal, old artifact rejected with artifact_manifest_contract, current rebuild/run returned 8390656 while preserving source package/revision identities",
+      "cleanup_complete": true
+    },
+    "bound_input": "Copied-public workflow H exact graph and frozen source-bound verifier",
+    "record_instances": 30,
+    "variant_instances": 38,
+    "types": 275,
+    "nominal_instance_edges": 176,
+    "structural_edges": 285,
+    "production_preparation": {"steps":7994,"metadata_bytes":311202},
+    "canonical_preparation": {"steps":15632,"metadata_bytes":229939},
+    "combined_preparation_nanoseconds": 711381882,
+    "execution_sizes": [32, 4096],
+    "scale_raw_input_visits": 2,
+    "small_recursive_raw_value_visits": 12,
+    "internal_guard_descendant_visits": 0,
+    "detail": ".artifacts/frn-202609110659-F0aHDL/recursive-measurements-H.json",
+    "limits": "Separate deterministic work/storage admission, JSON record/argv bounds, value depth/items/bytes, runtime fuel and optional observation sinks; no limits lifted",
+    "speedup_claim": false
+  },
+  "independent_faults": {
+    "implementation": ["inverted SCC membership", "allow all expanding cycles", "drop expanding edge", "omit forbidden-property propagation", "de-duplicate by declaration"],
+    "classification": "Each deliberate implementation fault failed its discriminating test; exact restoration and healthy recovery passed",
+    "logs": ".artifacts/frn-202609110659-F0aHDL/implementation-faults",
+    "strict_loading": "Fresh targeted passes for neutral rehashed expanding source/artifact input, forged compiled members and recursive wrong/unsafe session-state admission",
+    "receipt_faults": "Extended target/transferred omission/substitution matrices; required live fixture execution not yet run"
+  },
+  "verification": {
+    "focused_C": {
+      "classification": "Fresh passed 6/6",
+      "receipt": ".artifacts/lkjscript-dev/check/1789083864686204141-924061-0/receipt.json",
+      "sha256": "109909914334cadbc08ca14c1a7cdceab1aa7e07c4695b295227b60fc3eb6212",
+      "scope": "Earlier implementation inputs; subsequent codec/probe/document changes need current gates"
+    },
+    "changed_A": {
+      "classification": "Failed; 23 fresh passes, two failures and one skipped dependency",
+      "receipt": ".artifacts/lkjscript-dev/check/1789085496429902764-942767-0/receipt.json",
+      "sha256": "109c6b63cadbfe097e280055ff4081f0901ebb091ad70d69f7f7637f6e3a2fba",
+      "failures": ["Contributor large-error lint", "Stale maintained service bundle SHA"],
+      "disposition": "Inputs corrected; all 26 selected gates passed in B, aggregate B rejected input instability"
+    },
+    "changed_B": {
+      "classification": "Failed aggregate despite 26 fresh gate passes: worktree_changed_during_run",
+      "receipt": ".artifacts/lkjscript-dev/check/1789086163927512558-952086-0/receipt.json",
+      "sha256": "5ced4e7f3e53e457d4da8620d0dd68e056d79de7cd2dcd4f2221ffbe592425cc",
+      "disposition": "Source recovery and reporting inputs changed during the run. No aggregate acceptance claimed; final committed-source fresh full run required."
+    },
+    "maintained_graph_tests_H": {"standard":33,"lkjournal":40,"classification":"Fresh passed; production/reference equal"},
+    "codec_cancellation": "Fresh targeted passes during metadata and nested values; decoder operational failures tested in both evaluators with checked and raw hosts",
+    "full_fresh_committed_source": "Not run",
+    "exact_target_admission": "Not run",
+    "FRN_1_through_5": "Supporting implementation/public evidence present; authoritative closure pending",
+    "FRN_6": "Pending current full and exact-target dependency closure",
+    "FRN_7": "Not run"
+  },
+  "release": {
+    "latest_observed": "Immutable v0.1.30",
+    "selected_unused_version": "v0.1.31",
+    "source_integration": "Pending",
+    "annotated_tag_object": null,
+    "release_source_commit": null,
+    "candidate_target_sha256": null,
+    "hosted_dry_run": "Not run",
+    "external_writes": [],
+    "immutable_publication": "Not run",
+    "anonymous_exact_download": "Not run",
+    "anonymous_latest_download": "Not run",
+    "deployment": "Not performed",
+    "final_containing_commit": "Reported separately after committed evidence; no report self-hash"
+  }
+}

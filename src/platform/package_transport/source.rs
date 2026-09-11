@@ -1072,6 +1072,71 @@ mod tests {
             .expect("full canonical source admission")
     }
 
+    fn replace_validator_metadata(mut container: PackageContainer) -> PackageContainer {
+        let key = ObjectKey::from_digest(
+            ObjectDomain::PackageTransport,
+            container.root.transport.bytes(),
+        );
+        let mut transport = PackageTransport::decode(
+            &container.objects.remove(&key).unwrap(),
+            container.root.transport,
+        )
+        .unwrap();
+        transport.witness.validator_contract =
+            crate::platform::witness::ValidatorContractDigest::from_bytes([0x5a; 32]);
+        // Neutral rehash: neither the current proof encoder nor semantic validation produces
+        // this certificate. The unknown producer policy cannot certify even unchanged source.
+        let core = bincode::encode_to_vec(
+            transport.witness.core(),
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .unwrap();
+        transport.witness.certificate =
+            crate::platform::witness::ValidationCertificateDigest::of(&core);
+        let (digest, bytes) =
+            crate::platform::witness::encode_witness_manifest_content(&transport.witness).unwrap();
+        assert_eq!(
+            crate::platform::witness::decode_witness_manifest(&bytes, digest)
+                .unwrap_err()
+                .code,
+            "witness_validator_contract"
+        );
+        transport.validation_witness = digest;
+        let (digest, bytes) = transport.encode().unwrap();
+        container.root.transport = digest;
+        container.selections = vec![container.root];
+        container.objects.insert(
+            ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes()),
+            bytes,
+        );
+        container
+    }
+
+    #[test]
+    fn historical_transport_metadata_requires_a_fresh_current_source_witness() {
+        let original = standard_source();
+        let container = replace_validator_metadata(original.container.clone());
+        assert_eq!(
+            container.root.package_revision,
+            original.container.root.package_revision
+        );
+        let admitted = container.admit().unwrap();
+        let rebuilt = &admitted.packages[&container.root.package_revision];
+        assert!(rebuilt.witness.manifest.contract_is_current());
+        assert!(!rebuilt.transport.witness.contract_is_current());
+        assert_ne!(
+            rebuilt.witness.manifest_digest,
+            rebuilt.transport.validation_witness
+        );
+        let prior = &original.packages[&container.root.package_revision].snapshot;
+        assert_eq!(rebuilt.snapshot.root, prior.root);
+        assert_eq!(rebuilt.snapshot.owners, prior.owners);
+        assert_eq!(rebuilt.snapshot.types, prior.types);
+        assert!(crate::platform::package_transport::oracle::reconstruct(&container).is_ok());
+    }
+
     fn assert_not_ready(bytes: &[u8], transport: PackageTransportDigest) {
         let temporary = tempfile::tempdir().unwrap();
         let target = GraphRepository::create(
@@ -1673,6 +1738,75 @@ mod tests {
             assert_not_ready(&bytes, hostile.root.transport);
             println!("nominal-transport-negative {fault} {expected}");
         }
+    }
+
+    #[test]
+    fn coherently_rehashed_expanding_nominal_source_rejects_with_cycle_certificate() {
+        let original = standard_source();
+        let package = &original.packages[&original.container.root.package_revision];
+        let OwnerRecord::Declaration(pair)=package.snapshot.owners.values().find(|owner|matches!(owner,OwnerRecord::Declaration(record) if record.name.as_str()=="pair")).unwrap() else {panic!("pair")};
+        let DeclarationPayload::Record {
+            type_parameters,
+            fields,
+        } = &pair.payload
+        else {
+            panic!("record")
+        };
+        let OwnerKey::Declaration(declaration) = pair.header.owner else {
+            panic!("declaration")
+        };
+        let mut additions = Vec::new();
+        let mut intern = |form| {
+            let object = crate::platform::kernel::TypeObject::new(form).unwrap();
+            let (digest, bytes) = crate::platform::kernel::encode_type_object(&object).unwrap();
+            additions.push((
+                ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
+                bytes,
+            ));
+            digest
+        };
+        let a = intern(crate::platform::kernel::TypeForm::TypeParameter {
+            parameter: type_parameters[0],
+        });
+        let b = intern(crate::platform::kernel::TypeForm::TypeParameter {
+            parameter: type_parameters[1],
+        });
+        let list = intern(crate::platform::kernel::TypeForm::List { item: a });
+        let grow = intern(crate::platform::kernel::TypeForm::Applied {
+            declaration: crate::platform::kernel::DeclarationReference {
+                package: package.snapshot.root.package_id,
+                declaration,
+            },
+            arguments: vec![list, b],
+        });
+        let mut replacement = package.snapshot.owners[&OwnerKey::Field(fields[0])].clone();
+        let OwnerRecord::Field(field) = &mut replacement else {
+            panic!("field")
+        };
+        field.ty = grow;
+        let mut hostile = rehash_owner(&original, replacement);
+        hostile.objects.extend(additions);
+        let bytes = hostile.encode().unwrap();
+        let decoded = PackageContainer::decode(&bytes, hostile.root.transport).unwrap();
+        let failure = decoded.admit().unwrap_err();
+        assert_eq!(failure.code, "kernel_type_nominal_expansion", "{failure}");
+        assert!(
+            failure.message.contains("expanding")
+                && failure.message.contains("slot")
+                && failure.message.contains("member")
+        );
+        assert!(crate::platform::package_transport::oracle::reconstruct(&decoded).is_err());
+        assert_not_ready(&bytes, hostile.root.transport);
+        println!(
+            "recursive-source-hostile {} complete-neutral-rehash",
+            failure.code
+        );
+        let obsolete = replace_validator_metadata(hostile);
+        assert_eq!(
+            obsolete.admit().unwrap_err().code,
+            "kernel_type_nominal_expansion"
+        );
+        assert_not_ready(&obsolete.encode().unwrap(), obsolete.root.transport);
     }
 
     #[test]

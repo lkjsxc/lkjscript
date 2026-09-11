@@ -210,7 +210,7 @@ model. The first-party data root is local trusted-host authority, not encrypted 
 database service.
 
 Rank-one package interfaces include every type parameter's exact closed constraint set, including
-unused parameters. Graph 13 owner encoding, compiled-unit 8 signatures and package-interface-owner 9
+unused parameters. Graph 13 owner encoding, compiled-unit 9 signatures and package-interface-owner 9
 replace their predecessors explicitly. An imported `capture-safe` constraint must be discharged in
 the consumer's scope using its exact closure and nominal layouts. A returned callable can target a
 private generic graph helper retained in transported code; private helpers remain unavailable to
@@ -222,3 +222,17 @@ owners, including private closure objects. Fully rehashed incompatible or incomp
 Unchanged TypeObject 10 and monomorphic typed-data bytes, operational stores, queues and backups
 require no data migration. Applications have a separate typed-data layout discriminator that includes
 all arguments before the substituted members, so phantom changes cannot reuse a layout.
+The finite-instantiation rule follows the exact package closure, including private members,
+phantom arguments and function signatures. A package cannot hide structural parameter growth
+behind an unused case or a private wrapper. Compilation prepares one complete instance per
+canonical application and validates all references before exposing it. The nominal/session
+feature-proof versions are 2 and semantic validator identity is 4; predecessor proofs and
+compiled units cannot certify the revised acceptance rule. These proof identities do not change
+canonical TypeObject or typed-value encoding generations.
+For a source container with the current graph and witness schemas, historical validator metadata
+is checked for canonical encoding, certificate and exact source binding, then discarded as proof.
+Admission rebuilds every witness from the complete canonical source under the current validator
+before publishing readiness. This permits exporting an unchanged predecessor source package,
+restaging its exact dependency closure, and rebuilding it without changing logical identities.
+Repository witness reuse and compiled-artifact loading still require their current contracts;
+unknown producer proof metadata cannot exempt malformed or expanding source from validation.

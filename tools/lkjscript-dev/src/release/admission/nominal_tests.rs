@@ -104,6 +104,23 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/nominal/replacement_library_revision",
                 "/nominal/replacement_result",
                 "/nominal/replacement_keep_result",
+                "/recursive/results/small-leaves",
+                "/recursive/results/retained",
+                "/recursive/results/flip-next",
+                "/recursive/scale_leaves",
+                "/recursive/scale_leaves/1",
+                "/recursive/scale_shape",
+                "/recursive/scale_sum",
+                "/recursive/mapped_scale_sum",
+                "/recursive/changed_sum",
+                "/recursive/library_revision",
+                "/recursive/changed_library_revision",
+                "/recursive/session/messages",
+                "/recursive/schemas",
+                "/recursive/persistence",
+                "/recursive/persisted_bytes_sha256",
+                "/recursive/resources",
+                "/recursive/transaction_cancellation",
                 "/observations/artifact-nominal-changed-body-exact",
                 "/observations/artifact-nominal-reordered-arguments-exact",
                 "/observations/artifact-nominal-replaced-template-case-bound-exact",
@@ -187,7 +204,11 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         process::read_bounded(&path, MAXIMUM_RECEIPT_BYTES).expect("restored aggregate"),
         original
     );
-    assert_eq!(results.len(), 40, "complete nominal target fault inventory");
+    assert_eq!(
+        results.len(),
+        57,
+        "complete nominal and recursive target fault inventory"
+    );
     scratch.close().expect("owned log cleanup");
     archive::write_new(&root.join("nominal-receipt-faults.json"), &evidence::encode_json(&serde_json::json!({
         "schema":"lkjscript-nominal-target-receipt-faults-1",

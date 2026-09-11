@@ -20,6 +20,13 @@ use crate::platform::semantic_id::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "nominal_flow.rs"]
+mod nominal_flow;
+
+#[cfg(test)]
+#[path = "nominal_flow_tests.rs"]
+mod nominal_flow_tests;
+
 #[derive(Clone, Debug)]
 struct ExecutionContext {
     declaration: Option<DeclarationId>,
@@ -62,6 +69,11 @@ pub(crate) trait ExpressionRead {
     ) -> Result<Option<PackageInterfaceRecord>, Diagnostic>;
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic>;
+
+    /// Owning operations may interrupt long in-memory analysis even when every read is cached.
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        Ok(())
+    }
 }
 
 /// Request-local deterministic admissions owned by expression validation.
@@ -180,6 +192,8 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
         limits,
         exhaustion: None,
         ephemeral_types: BTreeMap::new(),
+        admitted_nominals: BTreeSet::new(),
+        type_metadata_bytes: 0,
     };
     validator.validate_roots(roots);
     validator.exhaustion.map_or(Ok(()), Err)
@@ -212,6 +226,8 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
         },
         exhaustion: None,
         ephemeral_types: BTreeMap::new(),
+        admitted_nominals: BTreeSet::new(),
+        type_metadata_bytes: 0,
     };
     validator.infer(
         expression,
@@ -232,6 +248,8 @@ struct ExpressionValidator<'a, 'b, R> {
     limits: ExpressionValidationLimits,
     exhaustion: Option<ExpressionValidationExhaustion>,
     ephemeral_types: BTreeMap<TypeObjectDigest, TypeObject>,
+    admitted_nominals: BTreeSet<DeclarationReference>,
+    type_metadata_bytes: usize,
 }
 
 impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
@@ -317,12 +335,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 self.push_diagnostic(expected);
                             }
                             (Ok(ty), Ok(_)) => {
-                                if let Err(error) = self.validate_application_equality(
-                                    ty,
-                                    false,
-                                    &mut BTreeSet::new(),
-                                    0,
-                                ) {
+                                if let Err(error) = self.validate_application_equality(ty) {
                                     self.push_diagnostic(error);
                                 }
                             }
@@ -679,7 +692,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 for parameter in parameters.iter().take(arguments.len()) {
-                    self.require_capture_safe(*parameter, context, &mut BTreeSet::new(), 0)?;
+                    self.require_capture_safe(*parameter, context)?;
                 }
                 self.validate_arguments(
                     &arguments,
@@ -1254,173 +1267,168 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         ty: TypeObjectDigest,
         context: &ExecutionContext,
-        visited: &mut BTreeSet<TypeObjectDigest>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_bind_capture_depth",
-                "capture type exceeds the type-depth bound",
-            ));
-        }
-        if !visited.insert(ty) {
-            return Ok(());
-        }
-        let children = match self.type_object(ty)?.form {
-            TypeForm::Unit
-            | TypeForm::Bool
-            | TypeForm::I64
-            | TypeForm::Bytes
-            | TypeForm::Text
-            | TypeForm::StaticText
-            | TypeForm::Function { .. } => Vec::new(),
-            TypeForm::Secret | TypeForm::Stream { .. } | TypeForm::CapabilityResource { .. } => {
-                return Err(type_error(
-                    "kernel_type_bind_capture",
-                    "bound values require capture-safe stored types; remove secrets, streams, resources, and unconstrained stored type parameters",
-                ));
+        let mut visited = BTreeSet::new();
+        let mut pending = vec![ty];
+        while let Some(ty) = pending.pop() {
+            self.consume_work()?;
+            if !visited.insert(ty) {
+                continue;
             }
-            TypeForm::TypeParameter { parameter } => {
-                self.consume_work()?;
-                let proof = match self.read.owner(OwnerKey::TypeParameter(parameter))? {
-                    Some(OwnerRecord::TypeParameter(record))
-                        if Some(record.declaration) == context.declaration
-                            && record.constraints
-                                == super::TypeParameterConstraints::CaptureSafe =>
-                    {
-                        match self.read.owner(OwnerKey::Declaration(record.declaration))? {
-                            Some(OwnerRecord::Declaration(declaration)) => {
-                                match declaration.payload {
-                                    DeclarationPayload::Function(function) => {
-                                        if function.effect != FunctionEffect::Pure {
-                                            return Err(type_error(
-                                                "kernel_type_bind_capture",
-                                                "capture assumptions require a pure graph declaration",
-                                            ));
-                                        }
-                                        let mut present = false;
-                                        for declared in function.type_parameters {
-                                            self.consume_work()?;
-                                            present |= declared == parameter;
-                                        }
-                                        present
-                                    }
-                                    DeclarationPayload::Record {
-                                        type_parameters, ..
-                                    }
-                                    | DeclarationPayload::Variant {
-                                        type_parameters, ..
-                                    } => {
-                                        let mut present = false;
-                                        for declared in type_parameters {
-                                            self.consume_work()?;
-                                            present |= declared == parameter;
-                                        }
-                                        present
-                                    }
-                                    _ => false,
-                                }
-                            }
-                            _ => false,
-                        }
-                    }
-                    _ => false,
-                };
-                if !proof {
+            let children = match self.type_object(ty)?.form {
+                TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Function { .. } => Vec::new(),
+                TypeForm::Secret
+                | TypeForm::Stream { .. }
+                | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
-                        format!(
-                            "stored type parameter {parameter} lacks an exact in-scope capture-safe assumption; declare its constraint or remove the capture"
-                        ),
+                        "bound values require capture-safe stored types; remove secrets, streams, resources, and unconstrained stored type parameters",
                     ));
                 }
-                Vec::new()
-            }
-            TypeForm::List { item } | TypeForm::Option { item } => {
-                self.consume_work()?;
-                vec![item]
-            }
-            TypeForm::Map { key, value }
-            | TypeForm::Result {
-                ok: key,
-                error: value,
-            } => {
-                self.consume_work()?;
-                self.consume_work()?;
-                vec![key, value]
-            }
-            TypeForm::StructuralRecord { fields } => {
-                let mut children = Vec::new();
-                for field in fields {
+                TypeForm::TypeParameter { parameter } => {
                     self.consume_work()?;
-                    children.push(field.ty);
-                }
-                children
-            }
-            TypeForm::Applied {
-                declaration,
-                arguments,
-            } => self.nominal_children(declaration, &arguments)?,
-            TypeForm::Named { declaration } => {
-                let payload = if declaration.package == self.read.package_id() {
-                    match self
-                        .read
-                        .owner(OwnerKey::Declaration(declaration.declaration))?
-                    {
-                        Some(OwnerRecord::Declaration(record)) => match record.payload {
-                            DeclarationPayload::Record { fields, .. } => Some((fields, Vec::new())),
-                            DeclarationPayload::Variant { cases, .. } => Some((Vec::new(), cases)),
-                            _ => None,
-                        },
-                        _ => None,
-                    }
-                } else {
-                    match self.dependency_owner(
-                        declaration.package,
-                        OwnerKey::Declaration(declaration.declaration),
-                        "captured nominal type",
-                    )? {
-                        PackageInterfaceRecord::Declaration(record) => match record.payload {
-                            PackageInterfaceDeclarationPayload::Record { fields, .. } => {
-                                Some((fields, Vec::new()))
+                    let proof = match self.read.owner(OwnerKey::TypeParameter(parameter))? {
+                        Some(OwnerRecord::TypeParameter(record))
+                            if Some(record.declaration) == context.declaration
+                                && record.constraints
+                                    == super::TypeParameterConstraints::CaptureSafe =>
+                        {
+                            match self.read.owner(OwnerKey::Declaration(record.declaration))? {
+                                Some(OwnerRecord::Declaration(declaration)) => {
+                                    match declaration.payload {
+                                        DeclarationPayload::Function(function) => {
+                                            if function.effect != FunctionEffect::Pure {
+                                                return Err(type_error(
+                                                    "kernel_type_bind_capture",
+                                                    "capture assumptions require a pure graph declaration",
+                                                ));
+                                            }
+                                            let mut present = false;
+                                            for declared in function.type_parameters {
+                                                self.consume_work()?;
+                                                present |= declared == parameter;
+                                            }
+                                            present
+                                        }
+                                        DeclarationPayload::Record {
+                                            type_parameters, ..
+                                        }
+                                        | DeclarationPayload::Variant {
+                                            type_parameters, ..
+                                        } => {
+                                            let mut present = false;
+                                            for declared in type_parameters {
+                                                self.consume_work()?;
+                                                present |= declared == parameter;
+                                            }
+                                            present
+                                        }
+                                        _ => false,
+                                    }
+                                }
+                                _ => false,
                             }
-                            PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
-                                Some((Vec::new(), cases))
-                            }
+                        }
+                        _ => false,
+                    };
+                    if !proof {
+                        return Err(type_error(
+                            "kernel_type_bind_capture",
+                            format!(
+                                "stored type parameter {parameter} lacks an exact in-scope capture-safe assumption; declare its constraint or remove the capture"
+                            ),
+                        ));
+                    }
+                    Vec::new()
+                }
+                TypeForm::List { item } | TypeForm::Option { item } => {
+                    self.consume_work()?;
+                    vec![item]
+                }
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => {
+                    self.consume_work()?;
+                    self.consume_work()?;
+                    vec![key, value]
+                }
+                TypeForm::StructuralRecord { fields } => {
+                    let mut children = Vec::new();
+                    for field in fields {
+                        self.consume_work()?;
+                        children.push(field.ty);
+                    }
+                    children
+                }
+                TypeForm::Applied {
+                    declaration,
+                    arguments,
+                } => self.nominal_children(declaration, &arguments)?,
+                TypeForm::Named { declaration } => {
+                    let payload = if declaration.package == self.read.package_id() {
+                        match self
+                            .read
+                            .owner(OwnerKey::Declaration(declaration.declaration))?
+                        {
+                            Some(OwnerRecord::Declaration(record)) => match record.payload {
+                                DeclarationPayload::Record { fields, .. } => {
+                                    Some((fields, Vec::new()))
+                                }
+                                DeclarationPayload::Variant { cases, .. } => {
+                                    Some((Vec::new(), cases))
+                                }
+                                _ => None,
+                            },
                             _ => None,
-                        },
-                        _ => None,
+                        }
+                    } else {
+                        match self.dependency_owner(
+                            declaration.package,
+                            OwnerKey::Declaration(declaration.declaration),
+                            "captured nominal type",
+                        )? {
+                            PackageInterfaceRecord::Declaration(record) => match record.payload {
+                                PackageInterfaceDeclarationPayload::Record { fields, .. } => {
+                                    Some((fields, Vec::new()))
+                                }
+                                PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
+                                    Some((Vec::new(), cases))
+                                }
+                                _ => None,
+                            },
+                            _ => None,
+                        }
+                    };
+                    let (fields, cases) = payload.ok_or_else(|| {
+                        type_error(
+                            "kernel_type_bind_capture",
+                            "capture type must name an exact record or variant",
+                        )
+                    })?;
+                    let mut children = Vec::new();
+                    for field in fields {
+                        self.consume_work()?;
+                        children.push(self.field_record(declaration.package, field)?.ty);
                     }
-                };
-                let (fields, cases) = payload.ok_or_else(|| {
-                    type_error(
-                        "kernel_type_bind_capture",
-                        "capture type must name an exact record or variant",
-                    )
-                })?;
-                let mut children = Vec::new();
-                for field in fields {
-                    self.consume_work()?;
-                    children.push(self.field_record(declaration.package, field)?.ty);
+                    for case in cases {
+                        self.consume_work()?;
+                        if let Some(payload) = self.case_record(declaration.package, case)?.payload
+                        {
+                            children.push(payload);
+                        }
+                    }
+                    children
                 }
-                for case in cases {
-                    self.consume_work()?;
-                    if let Some(payload) = self.case_record(declaration.package, case)?.payload {
-                        children.push(payload);
-                    }
-                }
-                children
-            }
-        };
-        for child in children {
-            self.require_capture_safe(child, context, visited, depth + 1)
-                .map_err(|mut error| {
-                    if depth < 8 {
-                        error.message = format!("stored type {ty} -> {child}: {}", error.message);
-                    }
-                    error
-                })?;
+            };
+            pending.extend(children);
         }
         Ok(())
     }
@@ -1660,7 +1668,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     )
                 })?;
             if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
-                self.require_capture_safe(*supplied, context, &mut BTreeSet::new(), 0).map_err(|error| {
+                self.require_capture_safe(*supplied, context).map_err(|error| {
                     if error.code != "kernel_type_bind_capture" { return error; }
                     type_error("kernel_type_constraint", format!("callee {}/{} parameter {} ({}) requires capture-safe; supplied {}: {}", reference.package, reference.declaration, parameter, owner.name, supplied, error.message))
                 })?;
@@ -1894,53 +1902,44 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
     }
 
-    fn validate_application_equality(
-        &mut self,
-        ty: TypeObjectDigest,
-        applied: bool,
-        visited: &mut BTreeSet<(TypeObjectDigest, bool)>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_nominal_depth",
-                "equality type exceeds the existing depth bound",
-            ));
-        }
-        if !visited.insert((ty, applied)) {
-            return Ok(());
-        }
-        let object = self.type_object(ty)?;
-        let children = match &object.form {
-            TypeForm::Applied {
-                declaration,
-                arguments,
-            } => {
-                for child in self.nominal_children(*declaration, arguments)? {
-                    self.validate_application_equality(child, true, visited, depth + 1)?;
+    fn validate_application_equality(&mut self, ty: TypeObjectDigest) -> Result<(), Diagnostic> {
+        let mut visited = BTreeSet::new();
+        let mut pending = vec![(ty, false)];
+        while let Some((ty, applied)) = pending.pop() {
+            self.consume_work()?;
+            if !visited.insert((ty, applied)) {
+                continue;
+            }
+            let object = self.type_object(ty)?;
+            let children = match &object.form {
+                TypeForm::Applied {
+                    declaration,
+                    arguments,
+                } => {
+                    for child in self.nominal_children(*declaration, arguments)? {
+                        pending.push((child, true));
+                    }
+                    continue;
                 }
-                return Ok(());
+                TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
+                TypeForm::Function { .. }
+                | TypeForm::Secret
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::Stream { .. }
+                | TypeForm::TypeParameter { .. } => {
+                    if applied {
+                        return Err(type_error(
+                            "kernel_type_nominal_equality",
+                            "applied data contains a noncomparable argument or member",
+                        ));
+                    }
+                    continue;
+                }
+                _ => object.child_types(),
+            };
+            for child in children {
+                pending.push((child, applied));
             }
-            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
-            TypeForm::Function { .. }
-            | TypeForm::Secret
-            | TypeForm::CapabilityResource { .. }
-            | TypeForm::Stream { .. }
-            | TypeForm::TypeParameter { .. } => {
-                return if applied {
-                    Err(type_error(
-                        "kernel_type_nominal_equality",
-                        "applied data contains a noncomparable argument or member",
-                    ))
-                } else {
-                    Ok(())
-                };
-            }
-            _ => object.child_types(),
-        };
-        for child in children {
-            self.validate_application_equality(child, applied, visited, depth + 1)?;
         }
         Ok(())
     }
@@ -2082,72 +2081,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     })?,
                 };
                 roots.extend(self.nominal_member_types(reference)?);
-                self.validate_nominal_cycles(reference, &mut Vec::new(), 0)?;
+                self.validate_nominal_schema(reference)?;
             }
         }
         for ty in roots {
             self.validate_nominal_type(ty, &context, 0)?;
         }
-        Ok(())
-    }
-
-    fn validate_nominal_cycles(
-        &mut self,
-        declaration: DeclarationReference,
-        active: &mut Vec<(DeclarationReference, bool)>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_nominal_depth",
-                "nominal definition closure exceeds its type-depth limit",
-            ));
-        }
-        if let Some(index) = active
-            .iter()
-            .position(|(reference, _)| *reference == declaration)
-        {
-            return if active[index..].iter().any(|(_, generic)| *generic) {
-                Err(type_error(
-                    "kernel_type_nominal_recursion",
-                    "recursive generic nominal definitions are unsupported",
-                ))
-            } else {
-                Ok(())
-            };
-        }
-        active.push((
-            declaration,
-            !self.nominal_parameters(declaration)?.is_empty(),
-        ));
-        let mut pending = self
-            .nominal_member_types(declaration)?
-            .into_iter()
-            .map(|ty| (ty, depth))
-            .collect::<Vec<_>>();
-        let mut visited = BTreeSet::new();
-        while let Some((ty, type_depth)) = pending.pop() {
-            self.consume_work()?;
-            if type_depth > MAXIMUM_TYPE_DEPTH {
-                return Err(type_error(
-                    "kernel_type_nominal_depth",
-                    "nominal member traversal exceeds its type-depth limit",
-                ));
-            }
-            if !visited.insert(ty) {
-                continue;
-            }
-            let object = self.type_object(ty)?;
-            if let Some((reference, _)) = nominal_parts(&object.form) {
-                self.validate_nominal_cycles(reference, active, type_depth + 1)?;
-            }
-            for child in object.child_types() {
-                self.consume_work()?;
-                pending.push((child, type_depth + 1));
-            }
-        }
-        active.pop();
         Ok(())
     }
 
@@ -2219,7 +2158,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
         }
+        // Admit every syntactic argument before following substituted members. A closed or
+        // phantom outer declaration can carry an expanding schema in one of its arguments.
+        for child in object.child_types() {
+            self.validate_nominal_type(child, context, depth + 1)?;
+        }
         if let Some((declaration, arguments)) = nominal_parts(&object.form) {
+            self.validate_nominal_schema(declaration)?;
             let parameters = self.nominal_parameters(declaration)?;
             if parameters.len() != arguments.len() {
                 return Err(type_error(
@@ -2252,7 +2197,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     )
                 })?;
                 if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
-                    self.require_capture_safe(*argument, context, &mut BTreeSet::new(), depth + 1)
+                    self.require_capture_safe(*argument, context)
                         .map_err(|error| {
                             if error.code == "kernel_type_bind_capture" {
                                 type_error("kernel_type_constraint", error.message)
@@ -2263,115 +2208,43 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 }
             }
             if !arguments.is_empty() {
-                self.validate_application_cycles(ty, &mut BTreeSet::new(), &mut Vec::new(), depth)?;
-                self.require_ordinary_application(
-                    ty,
-                    &mut BTreeSet::new(),
-                    &mut Vec::new(),
-                    depth,
-                )?;
+                self.require_ordinary_application(ty)?;
             }
-        }
-        for child in object.child_types() {
-            self.validate_nominal_type(child, context, depth + 1)?;
         }
         Ok(())
     }
 
-    fn require_ordinary_application(
-        &mut self,
-        ty: TypeObjectDigest,
-        visited: &mut BTreeSet<TypeObjectDigest>,
-        active: &mut Vec<(TypeObjectDigest, bool)>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_nominal_depth",
-                "nominal member closure exceeds the existing type-depth limit",
-            ));
-        }
-        if let Some(index) = active.iter().position(|(candidate, _)| *candidate == ty) {
-            return if active[index..].iter().any(|(_, applied)| *applied) {
-                Err(type_error(
-                    "kernel_type_nominal_cycle",
-                    "concrete application introduces a recursive nominal layout",
-                ))
-            } else {
-                Ok(())
-            };
-        }
-        if visited.contains(&ty) {
-            return Ok(());
-        }
-        let object = self.type_object(ty)?;
-        active.push((ty, matches!(object.form, TypeForm::Applied { .. })));
-        let children = match &object.form {
-            TypeForm::CapabilityResource { .. } | TypeForm::Stream { .. } => {
-                return Err(type_error(
-                    "kernel_type_nominal_resource",
-                    "applied nominal data cannot contain live resources, including phantom arguments and absent cases",
-                ));
+    fn require_ordinary_application(&mut self, ty: TypeObjectDigest) -> Result<(), Diagnostic> {
+        let mut pending = vec![ty];
+        let mut visited = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            self.consume_work()?;
+            if !visited.insert(ty) {
+                continue;
             }
-            TypeForm::Function { .. } => Vec::new(),
-            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
-            TypeForm::Applied {
-                declaration,
-                arguments,
-            } => self.nominal_children(*declaration, arguments)?,
-            _ => object.child_types(),
-        };
-        for child in children {
-            self.require_ordinary_application(child, visited, active, depth + 1)?;
-        }
-        active.pop();
-        visited.insert(ty);
-        Ok(())
-    }
-
-    fn validate_application_cycles(
-        &mut self,
-        ty: TypeObjectDigest,
-        visited: &mut BTreeSet<TypeObjectDigest>,
-        active: &mut Vec<(TypeObjectDigest, bool)>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_nominal_depth",
-                "concrete nominal closure exceeds the existing type-depth limit",
-            ));
-        }
-        if let Some(index) = active.iter().position(|(candidate, _)| *candidate == ty) {
-            return if active[index..].iter().any(|(_, applied)| *applied) {
-                Err(type_error(
-                    "kernel_type_nominal_cycle",
-                    "concrete application introduces a recursive nominal layout",
-                ))
-            } else {
-                Ok(())
+            let object = self.type_object(ty)?;
+            let children = match &object.form {
+                TypeForm::CapabilityResource { .. } | TypeForm::Stream { .. } => {
+                    return Err(type_error(
+                        "kernel_type_nominal_resource",
+                        "applied nominal data cannot contain live resources, including phantom arguments and absent cases",
+                    ));
+                }
+                TypeForm::Function { .. } => Vec::new(),
+                TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
+                TypeForm::Applied {
+                    declaration,
+                    arguments,
+                } => self.nominal_children(*declaration, arguments)?,
+                _ => object.child_types(),
             };
+            for child in children {
+                self.consume_work()?;
+                if !visited.contains(&child) {
+                    pending.push(child);
+                }
+            }
         }
-        if visited.contains(&ty) {
-            return Ok(());
-        }
-        let object = self.type_object(ty)?;
-        active.push((ty, matches!(object.form, TypeForm::Applied { .. })));
-        let children = match &object.form {
-            TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
-            TypeForm::Applied {
-                declaration,
-                arguments,
-            } => self.nominal_children(*declaration, arguments)?,
-            _ => object.child_types(),
-        };
-        for child in children {
-            self.validate_application_cycles(child, visited, active, depth + 1)?;
-        }
-        active.pop();
-        visited.insert(ty);
         Ok(())
     }
 
@@ -2454,8 +2327,34 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
 
     fn canonical_type(&mut self, form: TypeForm) -> Result<TypeObjectDigest, Diagnostic> {
         let object = TypeObject::new(form)?;
-        let (digest, _) = super::codec::encode_type_object(&object)?;
-        self.ephemeral_types.entry(digest).or_insert(object);
+        let (digest, bytes) = super::codec::encode_type_object(&object)?;
+        if !self.ephemeral_types.contains_key(&digest) {
+            let children = match &object.form {
+                TypeForm::StructuralRecord { fields } => fields.len(),
+                TypeForm::Applied { arguments, .. } => arguments.len(),
+                TypeForm::Function { parameters, .. } => parameters.len(),
+                _ => 0,
+            };
+            self.type_metadata_bytes = children
+                .checked_mul(std::mem::size_of::<StructuralTypeField>())
+                .and_then(|size| size.checked_add(bytes.len()))
+                .and_then(|size| {
+                    size.checked_add(
+                        std::mem::size_of::<(TypeObjectDigest, TypeObject)>()
+                            + 4 * std::mem::size_of::<usize>(),
+                    )
+                })
+                .and_then(|size| self.type_metadata_bytes.checked_add(size))
+                .filter(|bytes| *bytes <= 64 * 1_048_576)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        DiagnosticClass::Resource,
+                        "kernel_type_nominal_storage",
+                        "substituted type metadata exceeds its storage admission",
+                    )
+                })?;
+            self.ephemeral_types.insert(digest, object);
+        }
         Ok(digest)
     }
 
@@ -2546,6 +2445,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     }
 
     fn consume_work(&mut self) -> Result<(), Diagnostic> {
+        self.read.validation_checkpoint()?;
         if self.exhaustion.is_some() {
             return Err(type_error(
                 "kernel_type_work",
@@ -2608,7 +2508,15 @@ fn require_same(
 }
 
 fn type_error(code: &str, message: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(DiagnosticClass::Semantic, code, message)
+    Diagnostic::new(
+        if code == "kernel_type_work" {
+            DiagnosticClass::Resource
+        } else {
+            DiagnosticClass::Semantic
+        },
+        code,
+        message,
+    )
 }
 
 #[cfg(test)]

@@ -10761,7 +10761,6 @@ create.target as=$target name={label} component=$component port=$port runner=com
     }
     let renamed = apply(&format!("rename.owner owner={batch} name=renamed-batch\n"));
     assert!(renamed.iter().any(|record| record.operation == "revision"));
-    let current = std::fs::read(project.join("HEAD")).unwrap();
     for (index,definition) in [
         "create.record as=$R module=MODULE name=Cycle visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@T\nadd.field as=$field record=$R name=next type=@Cycle\n",
         "create.record as=$R module=MODULE name=Growing visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.list as=@Ts item=@T\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@Ts\nadd.field as=$field record=$R name=next type=@Cycle\n",
@@ -10771,14 +10770,25 @@ create.target as=$target name={label} component=$component port=$port runner=com
         "create.record as=$R module=MODULE name=Indirect visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ncreate.variant as=$S module=MODULE name=IndirectSum visibility=private\nadd.type-parameter as=$U declaration=$S name=U\ntype.parameter as=@U parameter=$U\ntype.application as=@Next declaration=$S\ntype.argument parent=@Next index=0 type=@T\nadd.field as=$field record=$R name=next type=@Next\ntype.application as=@Back declaration=$R\ntype.argument parent=@Back index=0 type=@U\nadd.case as=$case variant=$S name=back payload=@Back\n",
         "create.record as=$R module=MODULE name=Wrapped visibility=private\nadd.type-parameter as=$T declaration=$R name=T\ntype.parameter as=@T parameter=$T\ntype.function as=@Callback result=@T\nadd.field as=$callback record=$R name=callback type=@Callback\ncreate.record as=$W module=MODULE name=Wrapper visibility=private\ntype.named as=@W declaration=$W\ntype.application as=@Cycle declaration=$R\ntype.argument parent=@Cycle index=0 type=@W\nadd.field as=$field record=$W name=value type=@Cycle\n",
     ].into_iter().enumerate() {
+        if [0, 2, 5, 6].contains(&index) {
+            apply(&definition.replace("MODULE", &module));
+            continue;
+        }
+        let current = std::fs::read(project.join("HEAD")).unwrap();
         let base = current_revision_at(&copied, temporary.path(), &project);
         let request = format!("request base={base}\n{}",definition.replace("MODULE",&module));
         let rejected = compact_failure_output(command_at(&copied,temporary.path(), &["--project",path(&project),"change","plan","--input",&request]));
         assert_eq!(compact_field(compact_record(&rejected,"diagnostic"),"class"),Some("semantic"));
-        let expected = ["kernel_type_nominal_recursion","kernel_type_nominal_recursion","kernel_type_nominal_recursion","kernel_type_constraint","kernel_type_parameter_scope","kernel_type_nominal_recursion","kernel_type_nominal_cycle"][index];
+        let expected = match index {
+            1 => "kernel_type_nominal_expansion",
+            3 => "kernel_type_constraint",
+            4 => "kernel_type_parameter_scope",
+            _ => unreachable!(),
+        };
         assert!(rejected.iter().any(|record|record.operation == "diagnostic" && compact_field(record,"code") == Some(expected)),"{index}: {rejected:?}");
         assert_eq!(std::fs::read(project.join("HEAD")).unwrap(),current);
     }
+    let current = std::fs::read(project.join("HEAD")).unwrap();
     let duo = format!(
         r#"create.record as=$Duo module={module} name=Duo visibility=private
 add.type-parameter as=$First declaration=$Duo name=First

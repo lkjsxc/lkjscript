@@ -7,7 +7,7 @@ use super::prepare::{
 };
 use super::reference::{
     CoreNormalizedReferenceHost, NormalizedReferenceHost, NormalizedReferenceInterpreter,
-    ReferenceSignature,
+    NormalizedReferenceRead, ReferenceSignature,
 };
 use super::value::NormalizedValue;
 use super::value_schema::NormalizedValueSchema;
@@ -110,6 +110,97 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
     worker
         .join()
         .map_err(|_| failure("bounded-stack evaluator thread failed"))?
+}
+
+/// One source-bound production effect execution, with cancellation after a staged recursive
+/// write. No reference evaluator replays these effects. The public owner checks unchanged data.
+pub(crate) fn observe_recursive_transaction(
+    path: &Path,
+    function: &str,
+) -> Result<Value, Diagnostic> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .map_err(|e| failure(&e.to_string()))?;
+    let deployment =
+        crate::platform::deployment::PreparedDeployment::load(path, runtime.handle().clone())?;
+    let resident = deployment.resident()?;
+    let declaration = crate::platform::semantic_id::DeclarationId::parse(function)?;
+    let index = resident
+        .program()
+        .functions
+        .iter()
+        .position(|f| {
+            f.declaration.package == resident.program().root_package
+                && f.declaration.declaration == declaration
+        })
+        .ok_or_else(|| failure("recursive write helper absent"))?;
+    let ty = resident.program().functions[index]
+        .parameters
+        .first()
+        .ok_or_else(|| failure("recursive write parameter absent"))?
+        .ty;
+    let input = json!({"case":"branch","value":[{"case":"leaf","value":8},{"case":"branch","value":[{"case":"leaf","value":11},{"case":"leaf","value":17}]},{"case":"branch","value":[]}]});
+    let value = super::codec::decode_value(resident.program(), &input, ty, Default::default())?;
+    std::thread::Builder::new().name("recursive-transaction".into()).stack_size(STACK_BYTES).spawn(move || {
+        let sink=Mutex::new(None);
+        let control=ExecutionControl::cancel_after_checks(20_000);
+        let result=NormalizedVm::new(resident.program(),NormalizedRunPolicy::default()).observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(u32::try_from(index).map_err(|_|failure("function index overflow"))?,resident.program().value_origin)),vec![value,NormalizedValue::text("cancel")],Some(resident.deployment().capabilities()),&control);
+        let error=result.err().ok_or_else(||failure("recursive cancelled transaction committed"))?;
+        let observation=sink.into_inner().map_err(|_|failure("recursive transaction observation poisoned"))?.ok_or_else(||failure("recursive transaction observation absent"))?;
+        require(error.code=="execution_cancelled" && observation.capability_calls==3 && observation.tail_transfers>0 && observation.maximum_live_transactions==1 && observation.live_transactions_after==0 && observation.live_call_frames_after==0 && observation.live_operands_after==0 && observation.live_locals_after==0 && observation.live_type_bindings_after==0,"recursive cancellation skipped staged work or retained live execution state")?;
+        Ok(json!({"source_bound":true,"effects_replayed":false,"cancellation_checks":20000,"failure":error,"observation":observation,"cleanup_complete":true}))
+    }).map_err(|e|failure(&e.to_string()))?.join().map_err(|_|failure("recursive transaction observation stack failed"))?
+}
+
+pub(crate) fn observe_recursive(project: &Path) -> Result<Value, Diagnostic> {
+    let started = std::time::Instant::now();
+    let prepared = prepare_repository(GraphRepository::open(project)?)?;
+    let preparation_nanoseconds = started.elapsed().as_nanos();
+    std::thread::Builder::new().name("recursive-observations".into()).stack_size(STACK_BYTES).spawn(move || {
+        let counts=(prepared.program.record_instances.len(),prepared.program.variant_instances.len(),prepared.program.types.len());
+        let canonical=prepared.reference.schema().map_err(|error|failure(&format!("recursive canonical preparation: {}", error.code)))?;
+        require(prepared.program.record_instances.keys().eq(canonical.record_instances.keys()) && prepared.program.variant_instances.keys().eq(canonical.variant_instances.keys()),"independent recursive instance inventories differ")?;
+        let instance_edges=prepared.program.record_instances.values().map(|index| { let layout=&prepared.program.records[index.0 as usize]; layout.arguments.len()+layout.fields.len() }).sum::<usize>()
+            +prepared.program.variant_instances.values().map(|index| { let layout=&prepared.program.variants[index.0 as usize]; layout.arguments.len()+layout.cases.iter().filter(|case|case.payload.is_some()).count() }).sum::<usize>();
+        let structural_edges=prepared.program.types.values().map(|object|object.child_types().len()).sum::<usize>();
+        let mut observations=Vec::new();
+        for count in [32_i64,4096] {
+            let sum=count*(count+1)/2;
+            for reference in [false,true] {
+                for (target,expected) in [("scale-sum",sum),("scale-mapped-sum",3*sum+5*count)] {
+                    let started=std::time::Instant::now();
+                    let (result,mut observation)=invocation(&prepared,reference,target,vec![NormalizedValue::I64(1),NormalizedValue::I64(count)],NormalizedRunPolicy::default(),u64::MAX)?;
+                    require(result.is_ok_and(|value|value==NormalizedValue::I64(expected)),"recursive expected scale result differs")?;
+                    observation["steady_nanoseconds"]=json!(started.elapsed().as_nanos());
+                    observation["leaves"]=json!(count);
+                    observation["expected"]=json!(expected);
+                    // Optional observation sinks are disabled in this second pure execution.
+                    // Required fuel/allocation accounting remains enabled in both measurements.
+                    let started=std::time::Instant::now();
+                    let name=Name::new(target)?;
+                    let arguments=vec![NormalizedValue::I64(1),NormalizedValue::I64(count)];
+                    let unobserved=if reference {
+                        NormalizedReferenceInterpreter::from_reader(&prepared.reference,&prepared.program,NormalizedRunPolicy::default()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
+                    } else {
+                        NormalizedVm::new(&prepared.program,NormalizedRunPolicy::default()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
+                    }.map_err(|error|failure(&format!("recursive observation-disabled execution: {}", error.code)))?;
+                    require(unobserved==NormalizedValue::I64(expected),"recursive observation-disabled result differs")?;
+                    observation["observation_sink_disabled_nanoseconds"]=json!(started.elapsed().as_nanos());
+                    observations.push(observation);
+                }
+                let (result,mut cancelled)=invocation_control(&prepared,reference,"scale-mapped-sum",vec![NormalizedValue::I64(1),NormalizedValue::I64(count)],NormalizedRunPolicy::default(),u64::MAX,&ExecutionControl::cancel_after_checks(100))?;
+                let error=result.err().ok_or_else(||failure("bounded recursive cancellation completed"))?;
+                require(error.code=="execution_cancelled","recursive cancellation was misclassified")?;
+                cancelled["leaves"]=json!(count);
+                cancelled["failure"]=json!(error);
+                observations.push(cancelled);
+            }
+        }
+        require(counts==(prepared.program.record_instances.len(),prepared.program.variant_instances.len(),prepared.program.types.len()),"payload growth changed the type instance table")?;
+        Ok(json!({"source_bound":true,"effects_replayed":false,"preparation_nanoseconds":preparation_nanoseconds,"record_instances":counts.0,"variant_instances":counts.1,"types":counts.2,"instance_edges":instance_edges,"structural_edges":structural_edges,"preparation":{"type_derivation_steps":prepared.program.work.type_derivation_steps,"type_metadata_bytes":prepared.program.work.type_metadata_bytes},"canonical_preparation":{"type_derivation_steps":canonical.type_derivation_steps,"type_metadata_bytes":canonical.type_metadata_bytes,"record_instances":canonical.record_instances.len(),"variant_instances":canonical.variant_instances.len(),"types":canonical.types.len()},"observations":observations,"cleanup_complete":true}))
+    }).map_err(|e|failure(&e.to_string()))?.join().map_err(|_|failure("recursive observation stack failed"))?
 }
 
 struct ProgressHost {
@@ -223,11 +314,12 @@ fn invocation_control(
             &prepared.program,
             policy,
         );
-        let evaluator = if target == "map" && cancel_after == u64::MAX {
-            evaluator.observing_checked(&sink)
-        } else {
-            evaluator.observing(&sink, &host)
-        };
+        let evaluator =
+            if (target == "map" || target.starts_with("scale-")) && cancel_after == u64::MAX {
+                evaluator.observing_checked(&sink)
+            } else {
+                evaluator.observing(&sink, &host)
+            };
         let result = evaluator.invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()
@@ -246,11 +338,12 @@ fn invocation_control(
     } else {
         let sink = Mutex::new(None);
         let evaluator = NormalizedVm::new(&prepared.program, policy);
-        let evaluator = if target == "map" && cancel_after == u64::MAX {
-            evaluator.observing_checked(&sink)
-        } else {
-            evaluator.observing(&sink, &host)
-        };
+        let evaluator =
+            if (target == "map" || target.starts_with("scale-")) && cancel_after == u64::MAX {
+                evaluator.observing_checked(&sink)
+            } else {
+                evaluator.observing(&sink, &host)
+            };
         let result = evaluator.invoke_root_target(&name, arguments, None, control);
         let observed = sink
             .into_inner()

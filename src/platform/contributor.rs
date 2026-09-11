@@ -26,6 +26,12 @@ use std::path::Path;
 
 const OWNER_DIGEST_DOMAIN: &str = "lkjscript.contributor.owner-identities.v1";
 
+/// Read-only strict loader observation for independently retained predecessor/hostile bytes.
+/// Successful local construction supplies no admission shortcut.
+pub fn strict_artifact_admission_probe(bytes: &[u8]) -> Result<(), Diagnostic> {
+    super::compiler::load_artifact(bytes).map(|_| ())
+}
+
 #[cfg(test)]
 mod nominal_cutover_tests;
 
@@ -60,6 +66,21 @@ const EXTRACTION_MOVED_DIGEST_DOMAIN: &str = "lkjscript.function-extraction.move
 /// isolated contributor subprocess so a native-stack regression cannot abort its parent oracle.
 pub fn pure_tail_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
     super::execution::normalized::pure_tail_probe::observe(project)
+}
+
+/// Source/verifier-bound resource observations of the separately authored recursive fixture.
+pub fn recursive_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::pure_tail_probe::observe_recursive(project)
+}
+
+/// One isolated production transaction cancellation after staging recursive typed data.
+pub fn recursive_transaction_probe(
+    deployment: &Path,
+    function: &str,
+) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::pure_tail_probe::observe_recursive_transaction(
+        deployment, function,
+    )
 }
 
 /// Bounded cancellation observation over an exact publicly authored standalone bundle.

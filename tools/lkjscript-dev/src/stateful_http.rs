@@ -2646,6 +2646,38 @@ struct ActiveRunner {
     stderr_path: PathBuf,
 }
 
+/// Reuse the maintained HTTP supervision and shutdown checks for another graph-authored
+/// fixture. The offline-package owner retains its requests, exact expectations and receipt.
+pub(crate) fn recursive_round(
+    binary: &Path,
+    standalone: &Path,
+    evidence_root: &Path,
+    label: &str,
+    exercise: impl FnOnce(SocketAddr) -> Result<Value, DevError>,
+) -> Result<Value, DevError> {
+    let mut context = Context {
+        binary: binary.to_path_buf(),
+        evidence: evidence_root.to_path_buf(),
+        observation_root: evidence_root.to_path_buf(),
+        ordinal: 0,
+        commands: Vec::new(),
+    };
+    let (mut runner, address) = ActiveRunner::start(
+        &mut context,
+        label,
+        &standalone.join("service.deployment.json"),
+        standalone,
+        BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
+    )?;
+    let result = exercise(address);
+    let stopped = runner.stop();
+    let result = result?;
+    let stopped = stopped?;
+    let value = json!({"observations":result,"cleanup_complete":true,"runtime":stopped.runtime,"matcher_nodes":stopped.matcher_nodes});
+    evidence::publish_json(&evidence_root.join(format!("{label}.json")), &value)?;
+    Ok(value)
+}
+
 impl ActiveRunner {
     fn start(
         context: &mut Context,

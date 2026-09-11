@@ -339,12 +339,31 @@ impl Machine<'_> {
                     })
                     .ok_or_else(|| type_error("decoder fallback has no exact type"))?;
                 let decoded = if implementation == "core.json.decode-or" {
-                    decode_typed(self.program, bytes, ty, JsonLimits::default())
+                    super::super::codec::decode_typed_with_control(
+                        self.program,
+                        bytes,
+                        ty,
+                        JsonLimits::default(),
+                        self.control,
+                    )
                 } else {
-                    super::super::data_codec::decode_typed(self.program, bytes, ty)
+                    super::super::data_codec::decode_typed_with_control(
+                        self.program,
+                        bytes,
+                        ty,
+                        self.control,
+                    )
                 };
                 let (valid, value, error) = match decoded {
                     Ok(raw) => (true, self.admit(raw, ty, None, false)?, String::new()),
+                    Err(error)
+                        if matches!(
+                            error.class,
+                            DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                        ) =>
+                    {
+                        return Err(normalized_json_error(error));
+                    }
                     Err(error) => (false, fallback, error.code),
                 };
                 if implementation == "core.data.decode-or" {
@@ -372,6 +391,7 @@ impl Machine<'_> {
                     implementation,
                     types,
                     arguments.into_iter().map(CheckedValue::into_raw).collect(),
+                    self.control,
                 )?;
                 let value = CheckedValue::scalar(self.program, raw)?;
                 self.charge_external_value(value.raw())?;

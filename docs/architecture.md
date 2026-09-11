@@ -565,6 +565,21 @@ Strict artifact loading cross-checks nominal parameter order, bounds, members an
 inventory against canonical owners. Canonical data and session shape readers apply their own whole-type
 eligibility rules. No application identity or host adapter implements pair, batch or edit policy.
 
+Finite recursive nominal schemas use a syntactic graph of stable declaration/parameter slots.
+An occurrence nested inside an application's argument adds an expanding edge; a forwarded
+parameter adds a plain edge. An iterative SCC analysis rejects an expanding edge within its own
+component and reports its owner/member/argument path and cycle. Function signatures participate
+in this syntax relation even though functions remain leaves for ordinary containment and capture
+safety. Growth on an acyclic path and reset to closed arguments remain finite.
+
+Private preparation worklists use complete applications, including finite parameter permutations.
+Production property analysis propagates disqualifying leaves backwards through exact dependencies;
+the canonical reference independently eliminates unsafe candidates. Session state substitution
+uses fresh declaration bindings and the same exact-instance distinction. Neither a type back-edge
+nor a preparation cache substitutes for admission of separate raw values. The existing recursive
+typed-layout marker and value bytes remain current. Nominal/session feature proof 2, semantic
+validator identity 4 and compiler-unit contract 9 retire stale admission certificates.
+
 Pure graph tail calls replace the current activation in both execution tiers. Preparation derives
 terminal-only continuations once by an iterative linear traversal of strictly loaded Return/Jump
 edges, then combines them with exact canonical pure-function signatures. Only process-local

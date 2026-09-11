@@ -29,7 +29,7 @@ use std::fmt;
 
 pub const SEMANTIC_SUMMARY_CONTRACT_VERSION: u16 = 3;
 pub const SEMANTIC_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-semantic-summary-3";
-pub const SEMANTIC_VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-3";
+pub const SEMANTIC_VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-4";
 
 // This is a hostile-decoder and single-object implementation bound, not a semantic project limit.
 const MAXIMUM_MODULE_SUMMARY_PAYLOAD_BYTES: usize = 16 * 1_048_576;

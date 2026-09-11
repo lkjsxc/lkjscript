@@ -4,7 +4,10 @@ use crate::platform::package::RunnerKind;
 
 // This bounded test packer deliberately skips encode_artifact's self-admission. Only neutral
 // immutable-pack bytes and the documented envelope are shared with the strict loader.
-fn hostile_bundle(manifest: &ArtifactManifest, objects: &BTreeMap<ObjectKey, Vec<u8>>) -> Vec<u8> {
+pub(super) fn hostile_bundle(
+    manifest: &ArtifactManifest,
+    objects: &BTreeMap<ObjectKey, Vec<u8>>,
+) -> Vec<u8> {
     assert!(objects.len() < 10_000);
     let (digest, manifest_bytes) = manifest.encode().unwrap();
     let mut builder = PackBuilder::default();
@@ -32,6 +35,124 @@ fn hostile_bundle(manifest: &ArtifactManifest, objects: &BTreeMap<ObjectKey, Vec
     bytes.extend_from_slice(hash.finalize().as_bytes());
     bytes.extend_from_slice(&ARTIFACT_BUNDLE_END_MAGIC);
     bytes
+}
+
+#[test]
+fn rehashed_compiled_and_canonical_expanding_cycle_rejects_independently() {
+    let loaded = load_artifact(include_bytes!(
+        "../../../packages/standard/generated/standard.lkja"
+    ))
+    .unwrap();
+    let (old_key,mut unit)=loaded.objects.iter().filter(|(key,_)|key.domain==ObjectDomain::CompilerUnit)
+        .map(|(key,bytes)|(*key,CompilationUnit::decode(bytes,*key).unwrap()))
+        .find(|(_,unit)|matches!(&unit.payload,CompilationPayload::Record {type_parameters,..} if type_parameters.len()==2)).unwrap();
+    let mut objects = loaded.objects.clone();
+    let mut intern = |form| {
+        let (digest, bytes) = encode_type_object(&TypeObject::new(form).unwrap()).unwrap();
+        objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
+            bytes,
+        );
+        digest
+    };
+    let CompilationPayload::Record {
+        type_parameters,
+        fields,
+        ..
+    } = &mut unit.payload
+    else {
+        panic!("record")
+    };
+    let a = intern(TypeForm::TypeParameter {
+        parameter: type_parameters[0],
+    });
+    let b = intern(TypeForm::TypeParameter {
+        parameter: type_parameters[1],
+    });
+    let list = intern(TypeForm::List { item: a });
+    let OwnerKey::Declaration(declaration) = unit.source.owner else {
+        panic!("declaration")
+    };
+    let grow = intern(TypeForm::Applied {
+        declaration: crate::platform::kernel::DeclarationReference {
+            package: unit.source.package,
+            declaration,
+        },
+        arguments: vec![list, b],
+    });
+    let field = unit.tables.fields[fields[0].field as usize];
+    unit.tables.types[fields[0].ty as usize] = grow;
+    let mut manifest = loaded.manifest.clone();
+    let package = manifest
+        .packages
+        .iter_mut()
+        .find(|package| package.package == unit.source.package)
+        .unwrap();
+    let binding = package
+        .runtime_owners
+        .iter_mut()
+        .find(|binding| binding.owner == OwnerKey::Field(field.field))
+        .unwrap();
+    let mut record = decode_owner(
+        &objects[&ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes())],
+        binding.owner,
+        binding.kind,
+        binding.object,
+    )
+    .unwrap();
+    let OwnerRecord::Field(record_field) = &mut record else {
+        panic!("field")
+    };
+    record_field.ty = grow;
+    let (digest, bytes) = encode_owner(&record).unwrap();
+    binding.object = digest;
+    objects.insert(
+        ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+        bytes,
+    );
+    let bytes = crate::platform::packed::encode(
+        COMPILER_UNIT_MAGIC,
+        COMPILER_UNIT_ENVELOPE_DOMAIN,
+        &unit,
+        super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+    )
+    .unwrap();
+    let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
+    objects.remove(&old_key);
+    objects.insert(key, bytes);
+    let old_compilation = package.compilation;
+    let mut compilation =
+        CompilationManifest::decode(&objects[&old_compilation.object_key()], old_compilation)
+            .unwrap();
+    let mut entries = artifact_map_entries(&loaded, compilation.units);
+    for (owner, value) in &mut entries {
+        let owner = crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap();
+        let mut binding = CompilationBinding::decode(value, owner).unwrap();
+        if binding.object.object_key() == old_key {
+            binding.object = CompilerUnitObjectDigest::from_bytes(key.digest.bytes());
+            *value = binding.encode(owner).unwrap();
+        }
+    }
+    compilation.units = replace_artifact_map(&mut objects, entries);
+    let (digest, bytes) = compilation.encode().unwrap();
+    objects.remove(&old_compilation.object_key());
+    objects.insert(digest.object_key(), bytes);
+    package.compilation = digest;
+    let (closure, count, bytes) = super::super::artifact::closure_facts(&objects).unwrap();
+    manifest.closure = closure;
+    manifest.object_count = count;
+    manifest.object_bytes = bytes;
+    let bytes = hostile_bundle(&manifest, &objects);
+    let failure = load_artifact(&bytes).unwrap_err();
+    assert_eq!(failure.code, "artifact_nominal_meaning", "{failure}");
+    assert!(
+        failure.message.contains("kernel_type_nominal_expansion"),
+        "{failure}"
+    );
+    println!(
+        "recursive-artifact-hostile {} complete-neutral-rehash",
+        failure.message
+    );
 }
 
 fn interactive_artifact(loaded: &LoadedArtifact) -> Vec<u8> {
@@ -140,76 +261,85 @@ fn strict_artifact_and_deployment_reject_applied_session_state_before_readiness(
         deployment::PreparedDeployment,
         project_creation::{ProjectTemplate, create_project},
     };
-    for (argument, repeated, expected) in [
-        ("i64", "i64", None),
-        ("i64", "text", Some("session_port_state_identity")),
-        ("secret", "secret", Some("session_state_live_type")),
-        ("@Callable", "@Callable", Some("session_state_live_type")),
-        ("@Nested", "@Nested", Some("session_state_live_type")),
-    ] {
-        let temporary = tempfile::tempdir().unwrap();
-        let project = temporary.path().join("source");
-        let created =
-            create_project(&project, "session-boundary", ProjectTemplate::Command).unwrap();
-        let repository = GraphRepository::open(&project).unwrap();
-        let request = format!(
-            "request base={}\n{}",
-            created.revision,
-            include_str!("../../../tests/fixtures/nominal-session-command.lkchg")
-                .replace("ARGUMENT", argument)
-                .replace("REPEATED", repeated)
-        );
-        let decoded =
-            crate::platform::control::decode_compact_change("session-boundary", request.as_bytes())
-                .unwrap();
-        let prepared = repository
-            .prepare_authored_change(&decoded.semantic, decoded.options)
+    for recursive in [false, true] {
+        for (argument, repeated, expected) in [
+            ("i64", "i64", None),
+            ("i64", "text", Some("session_port_state_identity")),
+            ("secret", "secret", Some("session_state_live_type")),
+            ("@Callable", "@Callable", Some("session_state_live_type")),
+            ("@Nested", "@Nested", Some("session_state_live_type")),
+        ] {
+            let temporary = tempfile::tempdir().unwrap();
+            let project = temporary.path().join("source");
+            let created =
+                create_project(&project, "session-boundary", ProjectTemplate::Command).unwrap();
+            let repository = GraphRepository::open(&project).unwrap();
+            let request = format!(
+                "request base={}\n{}{}",
+                created.revision,
+                include_str!("../../../tests/fixtures/nominal-session-command.lkchg")
+                    .replace("ARGUMENT", argument)
+                    .replace("REPEATED", repeated),
+                if recursive {
+                    "type.parameter as=@T parameter=$T\ntype.application as=@Recursive declaration=$Marker\ntype.argument parent=@Recursive index=0 type=@T\ntype.list as=@Children item=@Recursive\nadd.case as=$branch variant=$Marker name=branch payload=@Children\n"
+                } else {
+                    ""
+                }
+            );
+            let decoded = crate::platform::control::decode_compact_change(
+                "session-boundary",
+                request.as_bytes(),
+            )
             .unwrap();
-        assert!(matches!(
-            repository.publish(&prepared.publication).unwrap(),
-            PublicationOutcome::Accepted { .. }
-        ));
-        let head = std::fs::read(project.join("HEAD")).unwrap();
-        let application =
-            crate::platform::normalized_lifecycle::prepare_repository(repository).unwrap();
-        let loaded = load_artifact(&application.artifact_bytes).unwrap();
-        let bytes = interactive_artifact(&loaded);
-        let path = temporary.path().join("session.lkja");
-        std::fs::write(path, &bytes).unwrap();
-        let descriptor = serde_json::json!({
-            "artifact":"session.lkja", "target":"boundary", "listen":"127.0.0.1:0",
-            "runtime":crate::platform::runtime::ResidentLimits::default(),
-            "execution":crate::platform::execution::RunPolicy::default(),
-            "http":null, "session":crate::platform::session::SessionLimits::default(),
-            "worker":null, "streams":crate::platform::stream::StreamLimits::default(),
-            "configuration":{}, "secrets":[],
-            "grants":[{"requirement":"streams", "sharing_domain":"isolated-session",
-                "authority_revision":"11".repeat(32), "adapter":{"kind":"byte_stream"}}]
-        });
-        let descriptor_path = temporary.path().join("session.deployment.json");
-        std::fs::write(&descriptor_path, serde_json::to_vec(&descriptor).unwrap()).unwrap();
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        if let Some(expected) = expected {
-            let failure = load_artifact(&bytes).unwrap_err();
-            assert_eq!(
-                failure.code, "artifact_session_relation",
-                "{argument}/{repeated}: {failure}"
-            );
-            assert!(failure.message.contains(expected));
-            let failure = PreparedDeployment::load(&descriptor_path, runtime.handle().clone())
-                .expect_err("deployment rejected");
-            assert_eq!(failure.code, "artifact_session_relation");
-            assert!(failure.message.contains(expected));
-            println!(
-                "nominal-session-strict-negative {argument}/{repeated} {expected} before-readiness"
-            );
-        } else {
-            load_artifact(&bytes).unwrap();
-            let deployment =
-                PreparedDeployment::load(&descriptor_path, runtime.handle().clone()).unwrap();
-            let session = deployment.session_application().unwrap();
-            assert_eq!(runtime.block_on(session.shutdown()).remaining_tasks, 0);
+            let prepared = repository
+                .prepare_authored_change(&decoded.semantic, decoded.options)
+                .unwrap();
+            assert!(matches!(
+                repository.publish(&prepared.publication).unwrap(),
+                PublicationOutcome::Accepted { .. }
+            ));
+            let head = std::fs::read(project.join("HEAD")).unwrap();
+            let application =
+                crate::platform::normalized_lifecycle::prepare_repository(repository).unwrap();
+            let loaded = load_artifact(&application.artifact_bytes).unwrap();
+            let bytes = interactive_artifact(&loaded);
+            let path = temporary.path().join("session.lkja");
+            std::fs::write(path, &bytes).unwrap();
+            let descriptor = serde_json::json!({
+                "artifact":"session.lkja", "target":"boundary", "listen":"127.0.0.1:0",
+                "runtime":crate::platform::runtime::ResidentLimits::default(),
+                "execution":crate::platform::execution::RunPolicy::default(),
+                "http":null, "session":crate::platform::session::SessionLimits::default(),
+                "worker":null, "streams":crate::platform::stream::StreamLimits::default(),
+                "configuration":{}, "secrets":[],
+                "grants":[{"requirement":"streams", "sharing_domain":"isolated-session",
+                    "authority_revision":"11".repeat(32), "adapter":{"kind":"byte_stream"}}]
+            });
+            let descriptor_path = temporary.path().join("session.deployment.json");
+            std::fs::write(&descriptor_path, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            if let Some(expected) = expected {
+                let failure = load_artifact(&bytes).unwrap_err();
+                assert_eq!(
+                    failure.code, "artifact_session_relation",
+                    "{argument}/{repeated}: {failure}"
+                );
+                assert!(failure.message.contains(expected));
+                let failure = PreparedDeployment::load(&descriptor_path, runtime.handle().clone())
+                    .expect_err("deployment rejected");
+                assert_eq!(failure.code, "artifact_session_relation");
+                assert!(failure.message.contains(expected));
+                println!(
+                    "nominal-session-strict-negative recursive={recursive} {argument}/{repeated} {expected} before-readiness"
+                );
+            } else {
+                load_artifact(&bytes).unwrap();
+                let deployment =
+                    PreparedDeployment::load(&descriptor_path, runtime.handle().clone()).unwrap();
+                let session = deployment.session_application().unwrap();
+                assert_eq!(runtime.block_on(session.shutdown()).remaining_tasks, 0);
+            }
+            assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), head);
         }
-        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), head);
     }
 }

@@ -68,7 +68,30 @@ pub(crate) fn probe(
     standalone: &Path,
     evidence: &Path,
 ) -> Result<(Observation, process::ProcessObservation), DevError> {
-    let stdout = evidence.join("nominal-session.stdout");
+    let result = probe_script(
+        binary,
+        standalone,
+        evidence,
+        "nominal-session",
+        1,
+        &[
+            (0, "a", json!({"first":1,"second":"a"})),
+            (0, "b", json!({"first":2,"second":"ab"})),
+        ],
+    )?;
+    validate(&result.0)?;
+    Ok(result)
+}
+
+pub(crate) fn probe_script(
+    binary: &Path,
+    standalone: &Path,
+    evidence: &Path,
+    label: &str,
+    session_count: usize,
+    steps: &[(usize, &str, Value)],
+) -> Result<(Observation, process::ProcessObservation), DevError> {
+    let stdout = evidence.join(format!("{label}.stdout"));
     let spec = process::ProcessSpec {
         command: vec![
             binary.display().to_string(),
@@ -85,7 +108,7 @@ pub(crate) fn probe(
         maximum_stdout_bytes: 4 * 1024 * 1024,
         maximum_stderr_bytes: 4 * 1024 * 1024,
         stdout_path: stdout.clone(),
-        stderr_path: evidence.join("nominal-session.stderr"),
+        stderr_path: evidence.join(format!("{label}.stderr")),
         unavailable_exit_code: None,
     };
     let control = process::ProcessControl::default();
@@ -117,29 +140,54 @@ pub(crate) fn probe(
             .parse()
             .map_err(|_| DevError::corrupt("nominal listener invalid"))?;
         let map = |error| DevError::corrupt(format!("nominal raw WebSocket: {error:?}"));
-        let (mut client, handshake) =
-            RawWebSocket::connect(address, "/", &[], Duration::from_secs(10)).map_err(map)?;
         let mut result = Observation {
-            accept_matches: handshake.accept_matches,
+            accept_matches: true,
             ..Default::default()
         };
-        for input in ["a", "b"] {
+        let mut clients = Vec::new();
+        for _ in 0..session_count {
+            let (client, handshake) =
+                RawWebSocket::connect(address, "/", &[], Duration::from_secs(10)).map_err(map)?;
+            result.accept_matches &= handshake.accept_matches;
+            clients.push(client);
+        }
+        let mut trace = Vec::new();
+        for (session, input, expected) in steps {
+            let client = clients
+                .get_mut(*session)
+                .ok_or_else(|| DevError::corrupt("session script index invalid"))?;
             client.send_text(input).map_err(map)?;
             let RawMessage::Text(message) = client.read_message().map_err(map)? else {
                 return Err(DevError::corrupt(
                     "nominal session returned a non-text message",
                 ));
             };
-            result.messages.push(serde_json::from_str(&message)?);
+            let actual: Value = serde_json::from_str(&message)?;
+            trace.push(json!({"session":session,"sent":input,"received":actual}));
+            fs::write(
+                evidence.join(format!("{label}-wire.json")),
+                crate::evidence::encode_json(&trace)?,
+            )?;
+            if &actual != expected {
+                return Err(DevError::corrupt(
+                    "session reply differs from independent full-state and traversal expectation",
+                ));
+            }
+            result.messages.push(actual);
         }
-        client.send_close(1000, "done").map_err(map)?;
-        let RawMessage::Close { code, .. } = client.read_message().map_err(map)? else {
-            return Err(DevError::corrupt(
-                "nominal session omitted close acknowledgement",
-            ));
-        };
-        result.close_code = code.unwrap_or(0);
-        client.disconnect().map_err(map)?;
+        for mut client in clients {
+            client.send_close(1000, "done").map_err(map)?;
+            let RawMessage::Close { code, .. } = client.read_message().map_err(map)? else {
+                return Err(DevError::corrupt(
+                    "nominal session omitted close acknowledgement",
+                ));
+            };
+            result.close_code = code.unwrap_or(0);
+            if result.close_code != 1000 {
+                return Err(DevError::corrupt("session close acknowledgement changed"));
+            }
+            client.disconnect().map_err(map)?;
+        }
         Ok(result)
     })();
     control.interrupt();
@@ -148,9 +196,13 @@ pub(crate) fn probe(
         .map_err(|_| DevError::infrastructure("nominal session observer panicked"))?;
     let mut observed = observed?;
     observed.cleanup_complete = terminal.status == process::ProcessStatus::Passed;
-    validate(&observed)?;
+    if !observed.accept_matches || !observed.cleanup_complete {
+        return Err(DevError::corrupt(
+            "session handshake or process cleanup incomplete",
+        ));
+    }
     fs::write(
-        evidence.join("nominal-session-messages.json"),
+        evidence.join(format!("{label}-messages.json")),
         crate::evidence::encode_json(&observed)?,
     )?;
     Ok((observed, terminal))

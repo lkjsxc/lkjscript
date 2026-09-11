@@ -2799,7 +2799,8 @@ fn artifact_rejects_nominal_parameter_bound_member_and_application_forgery() {
         manifest.closure = closure;
         manifest.object_count = count;
         manifest.object_bytes = bytes;
-        let failure = super::artifact::encode_artifact(manifest, &objects).unwrap_err();
+        let failure =
+            load_artifact(&nominal_session_tests::hostile_bundle(&manifest, &objects)).unwrap_err();
         assert_eq!(
             failure.class,
             crate::platform::DiagnosticClass::Corrupt,

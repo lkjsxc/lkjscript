@@ -6,6 +6,7 @@ use super::value::{
 };
 use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
 use crate::platform::json::{JsonLimits, decode_strict};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use base64::Engine;
@@ -13,14 +14,26 @@ use serde_json::{Map, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+#[cfg(test)]
 pub fn decode_typed(
     program: &dyn NormalizedValueSchema,
     bytes: &[u8],
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<NormalizedValue, Diagnostic> {
+    decode_typed_with_control(program, bytes, ty, limits, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn decode_typed_with_control(
+    program: &dyn NormalizedValueSchema,
+    bytes: &[u8],
+    ty: TypeObjectDigest,
+    limits: JsonLimits,
+    control: &ExecutionControl,
+) -> Result<NormalizedValue, Diagnostic> {
+    checkpoint(control)?;
     let value = decode_strict(bytes, limits)?;
-    decode_value(program, &value, ty, limits)
+    decode_value_with_control(program, &value, ty, limits, control)
 }
 
 pub fn decode_value(
@@ -29,8 +42,18 @@ pub fn decode_value(
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<NormalizedValue, Diagnostic> {
-    require_application_encoding(program, ty, true, limits)?;
-    from_json(program, value, ty, limits, "$", 0)
+    decode_value_with_control(program, value, ty, limits, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn decode_value_with_control(
+    program: &dyn NormalizedValueSchema,
+    value: &JsonValue,
+    ty: TypeObjectDigest,
+    limits: JsonLimits,
+    control: &ExecutionControl,
+) -> Result<NormalizedValue, Diagnostic> {
+    require_application_encoding(program, ty, true, limits, control)?;
+    from_json(program, value, ty, limits, "$", 0, control)
 }
 
 pub fn encode_typed(
@@ -39,7 +62,17 @@ pub fn encode_typed(
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let value = encode_value(program, value, ty, limits)?;
+    encode_typed_with_control(program, value, ty, limits, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn encode_typed_with_control(
+    program: &dyn NormalizedValueSchema,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+    limits: JsonLimits,
+    control: &ExecutionControl,
+) -> Result<Vec<u8>, Diagnostic> {
+    let value = encode_value_with_control(program, value, ty, limits, control)?;
     let bytes = serde_json::to_vec(&value).map_err(|error| {
         json_error(
             DiagnosticClass::Infrastructure,
@@ -58,6 +91,7 @@ pub fn encode_typed(
             ),
         ));
     }
+    checkpoint(control)?;
     Ok(bytes)
 }
 
@@ -67,9 +101,29 @@ pub fn encode_value(
     ty: TypeObjectDigest,
     limits: JsonLimits,
 ) -> Result<JsonValue, Diagnostic> {
-    require_application_encoding(program, ty, false, limits)?;
-    let mut state = EncodeState { limits, items: 0 };
+    encode_value_with_control(program, value, ty, limits, &ExecutionControl::uncancelled())
+}
+
+pub(crate) fn encode_value_with_control(
+    program: &dyn NormalizedValueSchema,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+    limits: JsonLimits,
+    control: &ExecutionControl,
+) -> Result<JsonValue, Diagnostic> {
+    require_application_encoding(program, ty, false, limits, control)?;
+    let mut state = EncodeState {
+        limits,
+        items: 0,
+        control,
+    };
     to_json(program, value, ty, &mut state, "$", 0)
+}
+
+fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
+    control
+        .check()
+        .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
 // Properties of an applied container cover its complete type, even when the value is empty.
@@ -79,7 +133,9 @@ fn require_application_encoding(
     root: TypeObjectDigest,
     decoding: bool,
     limits: JsonLimits,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    checkpoint(control)?;
     if program.application_free(root) {
         return Ok(());
     }
@@ -113,6 +169,7 @@ fn require_application_encoding(
     let mut work = 0usize;
     let mut bytes = std::mem::size_of::<(TypeObjectDigest, bool, usize)>();
     while let Some((ty, strict, depth)) = pending.pop() {
+        checkpoint(control)?;
         work = work
             .checked_add(1)
             .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
@@ -216,7 +273,9 @@ fn from_json(
     limits: JsonLimits,
     path: &str,
     depth: usize,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
+    checkpoint(control)?;
     require_depth(limits, path, depth)?;
     let form = type_form(program, ty)?;
     match form {
@@ -240,7 +299,7 @@ fn from_json(
             "static text must originate in accepted meaning and cannot be decoded from JSON",
         )),
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            decode_named(program, value, ty, limits, path, depth)
+            decode_named(program, value, ty, limits, path, depth, control)
         }
         TypeForm::StructuralRecord { fields } => {
             let object = value
@@ -260,7 +319,15 @@ fn from_json(
                 })?;
                 values.push((
                     field.name.clone(),
-                    from_json(program, value, field.ty, limits, &field_path, depth + 1)?,
+                    from_json(
+                        program,
+                        value,
+                        field.ty,
+                        limits,
+                        &field_path,
+                        depth + 1,
+                        control,
+                    )?,
                 ));
             }
             Ok(NormalizedValue::Record(NormalizedRecord::Structural {
@@ -282,6 +349,7 @@ fn from_json(
                         limits,
                         &format!("{path}[{index}]"),
                         depth + 1,
+                        control,
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -310,6 +378,7 @@ fn from_json(
                     limits,
                     &format!("{path}[{index}][0]"),
                     depth + 1,
+                    control,
                 )?;
                 let key = NormalizedMapKey::from_value(key_value)
                     .ok_or_else(|| type_error(path, "map key type is not orderable"))?;
@@ -320,6 +389,7 @@ fn from_json(
                     limits,
                     &format!("{path}[{index}][1]"),
                     depth + 1,
+                    control,
                 )?;
                 if output.insert(key, item).is_some() {
                     return Err(type_error(path, "map contains a duplicate key"));
@@ -349,6 +419,7 @@ fn decode_named(
     limits: JsonLimits,
     path: &str,
     depth: usize,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((index, layout)) = record_layout(program, ty) {
         let object = value
@@ -373,6 +444,7 @@ fn decode_named(
                 limits,
                 &field_path,
                 depth + 1,
+                control,
             )?);
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -412,6 +484,7 @@ fn decode_named(
                     limits,
                     &format!("{path}.value"),
                     depth + 1,
+                    control,
                 )?))
             }
             None => {
@@ -752,13 +825,15 @@ fn map_key_value(key: &NormalizedMapKey) -> NormalizedValue {
 }
 
 #[derive(Clone, Copy)]
-struct EncodeState {
+struct EncodeState<'a> {
     limits: JsonLimits,
     items: usize,
+    control: &'a ExecutionControl,
 }
 
-impl EncodeState {
+impl EncodeState<'_> {
     fn require_depth(&self, path: &str, depth: usize) -> Result<(), Diagnostic> {
+        checkpoint(self.control)?;
         require_depth(self.limits, path, depth)
     }
 

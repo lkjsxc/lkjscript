@@ -56,6 +56,16 @@ pub fn encode_witness_manifest(
     manifest: &ValidationWitnessManifest,
 ) -> Result<(ValidationWitnessDigest, Vec<u8>), Diagnostic> {
     validate_manifest(manifest)?;
+    encode_witness_manifest_content(manifest)
+}
+
+/// Canonical historical metadata, never a reusable validation proof. Source-package admission
+/// rebuilds a current witness from every canonical owner before publishing readiness. Keep the
+/// repository/cache codec above strict even when unchanged source has older validator metadata.
+pub(crate) fn encode_witness_manifest_content(
+    manifest: &ValidationWitnessManifest,
+) -> Result<(ValidationWitnessDigest, Vec<u8>), Diagnostic> {
+    validate_manifest_content(manifest)?;
     let bytes = packed::encode(
         WITNESS_MAGIC,
         WITNESS_ENVELOPE_DOMAIN,
@@ -154,16 +164,28 @@ fn validate_summary(summary: &OwnerSummary) -> Result<(), Diagnostic> {
 }
 
 fn validate_manifest(manifest: &ValidationWitnessManifest) -> Result<(), Diagnostic> {
+    validate_manifest_content(manifest)?;
+    if !manifest.contract_is_current() {
+        return Err(codec_error(
+            "witness_validator_contract",
+            "validation witness is not reusable under the current graph and validator contracts",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_manifest_content(manifest: &ValidationWitnessManifest) -> Result<(), Diagnostic> {
     if manifest.contract_version != WITNESS_CONTRACT_VERSION {
         return Err(codec_error(
             "witness_manifest_contract",
             "validation witness uses a foreign witness contract",
         ));
     }
-    if !manifest.contract_is_current() {
+    if manifest.graph_contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    {
         return Err(codec_error(
             "witness_validator_contract",
-            "validation witness is not reusable under the current graph and validator contracts",
+            "validation witness uses a predecessor or foreign graph contract",
         ));
     }
     let certificate = certificate_digest(&manifest.core())?;

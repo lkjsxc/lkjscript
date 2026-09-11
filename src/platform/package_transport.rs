@@ -19,7 +19,7 @@ use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
 use crate::platform::witness::{
-    ValidationWitnessDigest, ValidationWitnessManifest, encode_witness_manifest,
+    ValidationWitnessDigest, ValidationWitnessManifest, encode_witness_manifest_content,
 };
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
@@ -230,7 +230,9 @@ impl PackageTransport {
                 "package transport uses a predecessor or foreign contract",
             ));
         }
-        let (witness_digest, _) = encode_witness_manifest(&self.witness)?;
+        // Transport binds historical content. Only full source admission can turn canonical
+        // owners into a current proof; an embedded producer witness never supplies admission.
+        let (witness_digest, _) = encode_witness_manifest_content(&self.witness)?;
         if witness_digest != self.validation_witness {
             return Err(package_error(
                 DiagnosticClass::Corrupt,

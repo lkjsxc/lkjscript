@@ -502,8 +502,8 @@ fn complete_nominal_layouts(
     Ok(())
 }
 
-// Preparation-local proof from compiled layouts and the completed type closure. Every root
-// is reconstructed; nominal cycles use a bounded per-root visited set, never a persistent cache.
+// Preparation-local greatest fixed point. Disqualifying leaves propagate through reverse
+// dependencies, including every argument/member of a cyclic component. No persistent cache.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Property {
     Capture,
@@ -518,108 +518,109 @@ fn property_types(
     property: Property,
 ) -> Result<BTreeSet<TypeObjectDigest>, Diagnostic> {
     let mut safe = BTreeSet::new();
-    for root in program.types.keys() {
+    let mut reverse: BTreeMap<TypeObjectDigest, Vec<TypeObjectDigest>> = BTreeMap::new();
+    let mut rejected = Vec::new();
+    for (root, object) in &program.types {
         step(work)?;
-        work.reserve::<(TypeObjectDigest, usize)>(1)?;
-        let mut pending = vec![(*root, 0usize)];
-        let mut visited = BTreeSet::new();
+        work.node::<TypeObjectDigest>()?;
+        safe.insert(*root);
         let mut admitted = true;
-        while let Some((ty, depth)) = pending.pop() {
+        let mut child = |ty| -> Result<(), Diagnostic> {
             step(work)?;
-            if depth > 256 {
+            if !program.types.contains_key(&ty) {
+                return Err(missing());
+            }
+            if !reverse.contains_key(&ty) {
+                work.node::<(TypeObjectDigest, Vec<TypeObjectDigest>)>()?;
+            }
+            work.reserve::<TypeObjectDigest>(1)?;
+            reverse.entry(ty).or_default().push(*root);
+            Ok(())
+        };
+        match &object.form {
+            TypeForm::Applied { .. } if property == Property::NoApplication => {
                 admitted = false;
-                break;
             }
-            if visited.contains(&ty) {
-                continue;
+            TypeForm::Secret
+            | TypeForm::Stream { .. }
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::TypeParameter { .. }
+                if property == Property::NoApplication => {}
+            TypeForm::Unit
+            | TypeForm::Bool
+            | TypeForm::I64
+            | TypeForm::Bytes
+            | TypeForm::Text
+            | TypeForm::StaticText => {}
+            TypeForm::Function { .. } if property != Property::Equality => {}
+            TypeForm::Secret if property == Property::Ordinary => {}
+            TypeForm::Function { .. }
+            | TypeForm::Secret
+            | TypeForm::Stream { .. }
+            | TypeForm::CapabilityResource { .. }
+            | TypeForm::TypeParameter { .. } => {
+                admitted = false;
             }
-            step(work)?;
-            work.node::<TypeObjectDigest>()?;
-            visited.insert(ty);
-            let mut child = |ty| -> Result<(), Diagnostic> {
-                step(work)?;
-                work.reserve::<(TypeObjectDigest, usize)>(1)?;
-                pending.push((ty, depth + 1));
-                Ok(())
-            };
-            match &program.types.get(&ty).ok_or_else(missing)?.form {
-                TypeForm::Applied { .. } if property == Property::NoApplication => {
-                    admitted = false;
-                    break;
+            TypeForm::List { item } | TypeForm::Option { item } => child(*item)?,
+            TypeForm::Map { key, value }
+            | TypeForm::Result {
+                ok: key,
+                error: value,
+            } => {
+                child(*key)?;
+                child(*value)?;
+            }
+            TypeForm::StructuralRecord { fields } => {
+                for field in fields {
+                    child(field.ty)?;
                 }
-                TypeForm::Secret
-                | TypeForm::Stream { .. }
-                | TypeForm::CapabilityResource { .. }
-                | TypeForm::TypeParameter { .. }
-                    if property == Property::NoApplication => {}
-                TypeForm::Unit
-                | TypeForm::Bool
-                | TypeForm::I64
-                | TypeForm::Bytes
-                | TypeForm::Text
-                | TypeForm::StaticText => {}
-                TypeForm::Function { .. } if property != Property::Equality => {}
-                TypeForm::Secret if property == Property::Ordinary => {}
-                TypeForm::Function { .. }
-                | TypeForm::Secret
-                | TypeForm::Stream { .. }
-                | TypeForm::CapabilityResource { .. }
-                | TypeForm::TypeParameter { .. } => {
-                    admitted = false;
-                    break;
-                }
-                TypeForm::List { item } | TypeForm::Option { item } => child(*item)?,
-                TypeForm::Map { key, value }
-                | TypeForm::Result {
-                    ok: key,
-                    error: value,
-                } => {
-                    child(*key)?;
-                    child(*value)?;
-                }
-                TypeForm::StructuralRecord { fields } => {
-                    for field in fields {
+            }
+            TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                if let Some(index) = program
+                    .record_instances
+                    .get(root)
+                    .map(|index| index.0 as usize)
+                {
+                    for argument in program.records[index].arguments.iter() {
+                        child(*argument)?;
+                    }
+                    for field in program.records[index].fields.iter() {
                         child(field.ty)?;
                     }
-                }
-                TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-                    if let Some(index) = program
-                        .record_instances
-                        .get(&ty)
-                        .map(|index| index.0 as usize)
-                    {
-                        for argument in program.records[index].arguments.iter() {
-                            child(*argument)?;
-                        }
-                        for field in program.records[index].fields.iter() {
-                            child(field.ty)?;
-                        }
-                    } else if let Some(index) = program
-                        .variant_instances
-                        .get(&ty)
-                        .map(|index| index.0 as usize)
-                    {
-                        for argument in program.variants[index].arguments.iter() {
-                            child(*argument)?;
-                        }
-                        for case in program.variants[index].cases.iter() {
-                            step(work)?;
-                            if let Some(payload) = case.payload {
-                                step(work)?;
-                                work.reserve::<(TypeObjectDigest, usize)>(1)?;
-                                pending.push((payload, depth + 1));
-                            }
-                        }
-                    } else {
-                        return Err(missing());
+                } else if let Some(index) = program
+                    .variant_instances
+                    .get(root)
+                    .map(|index| index.0 as usize)
+                {
+                    for argument in program.variants[index].arguments.iter() {
+                        child(*argument)?;
                     }
+                    for case in program.variants[index].cases.iter() {
+                        if let Some(payload) = case.payload {
+                            child(payload)?;
+                        }
+                    }
+                } else {
+                    return Err(missing());
                 }
             }
         }
-        if admitted {
-            step(work)?;
-            work.node::<TypeObjectDigest>()?;
-            safe.insert(*root);
+        if !admitted {
+            work.reserve::<TypeObjectDigest>(1)?;
+            safe.remove(root);
+            rejected.push(*root);
+        }
+    }
+    while let Some(ty) = rejected.pop() {
+        step(work)?;
+        if let Some(dependents) = reverse.get(&ty) {
+            for dependent in dependents {
+                step(work)?;
+                if safe.remove(dependent) {
+                    work.reserve::<TypeObjectDigest>(1)?;
+                    rejected.push(*dependent);
+                }
+            }
         }
     }
     Ok(safe)

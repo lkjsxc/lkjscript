@@ -1,5 +1,8 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
+#[path = "recursive_tests.rs"]
+mod recursive_tests;
+
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
     NormalizedCapabilityAdapter, NormalizedCapabilityGrant, NormalizedCapabilityGrantDescriptor,

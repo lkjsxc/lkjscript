@@ -404,11 +404,30 @@ phantom parameters. Definition edits validate the complete candidate, including 
 adding parameters to a monomorphic declaration requires updating its dependent references atomically.
 Names may change without changing these identities.
 
-Every generic declaration cycle rejects, including indirect, type-growing, function-signature and
-monomorphic-wrapper paths. Substituting a concrete argument must not introduce a cycle through an
-application. Finite nesting such as `batch<batch<I64>>` is admitted; existing wholly monomorphic
-recursive declarations keep their established behavior. These are bounded closure rules, not a
-termination analysis of executable functions.
+Recursive nominal definitions are admitted by non-expansive parameter flow. A slot is the exact
+declaration reference and its ordered stable type-parameter identity. For every application of B
+in a member type of A, each occurrence of A.i in argument j contributes an edge A.i to B.j. It is
+plain when the whole argument is exactly A.i, and expanding when a structural constructor (including
+a nominal application) surrounds the occurrence. Nested applications contribute their own edges.
+An enclosing field/list/case does not grow an application's argument: `List<tree<T>>` forwards T
+plainly. All members, signatures, inactive cases and phantom arguments participate. A closed
+argument contributes no source-parameter edge; its nominal references still join the exact closure.
+
+Admission requires that no strongly connected slot component contain an expanding edge. Direct
+and mutual recursion, finite permutation/duplication/selection, growth on acyclic slot paths, and
+replacement by closed arguments are admitted. Thus `tree<T> = leaf(T) or branch(List<tree<T>>)` is
+admitted while `grow<T> = stop or next(grow<List<T>>)` rejects even if only stop is constructed.
+A zero-arity wrapper returning to a fixed generic instance is not rejected merely for its
+declaration cycle. Existing wholly monomorphic recursion keeps its meaning, and an uninhabited
+recursive record need not be rejected.
+
+An expanding edge on a slot cycle can grow an occurrence on every lap. Without one, growth lies
+only on the finite acyclic condensation graph; plain cycles select among finitely many forwarded
+terms. Finite roots therefore generate finitely many complete canonical applications. Duplication,
+permutation and many roots can still exhaust distinct work/storage limits. Preparation visits each
+exact instance once and retains recurrence edges. Structural TypeObjects and immutable runtime
+values remain finite; this does not add heap cycles, infinite values, structural recursive equality,
+polymorphically recursive generic calls, or change execution fuel and resource policy.
 
 An instance layout and its preparation provenance bind the complete canonical application, including
 phantom arguments. Same-template instances with identical fields but different arguments are distinct.

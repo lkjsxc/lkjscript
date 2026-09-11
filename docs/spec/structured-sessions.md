@@ -22,8 +22,9 @@ An interactive target has exactly one port whose function type is structurally e
 All occurrences of `State` bind one exact concrete type object. The type must be closed and
 ordinary: unit, boolean, integer, bytes, text, finite records or variants, lists, maps, and options
 may be composed recursively. Static text, secrets, results, streams, capability resources,
-functions, unresolved parameters, and types containing any of them reject. Cycles, missing type
-objects, and foreign standard declarations reject. Authoring validation, accepted full validation,
+functions, unresolved parameters, and types containing any of them reject. Finite-instantiation
+nominal type cycles are permitted; missing type objects and foreign standard declarations reject.
+Authoring validation, accepted full validation,
 compiler lowering, strict artifact loading, and deployment preparation each reconstruct this
 relation rather than trusting a stored assertion.
 
@@ -31,6 +32,11 @@ Closed parametric records and variants may be State. All repeated positions must
 complete application, including phantom arguments. State eligibility checks every argument and
 substituted member, including absent cases and empty containers; a forbidden nested or phantom
 argument rejects before readiness. Runtime state layout also binds the preparation origin.
+Eligibility follows the exact substituted instance graph with fresh declaration-local bindings.
+A repeated instance closes a type edge, while every distinct retained value still requires full
+bounded raw admission. Parameter permutation never aliases different concrete State arguments.
+This permits finite immutable recursive state without adding heap cycles, session persistence,
+or authority between connections.
 
 The standard package owns `SessionEvent`, its payload records, `SessionMessageKind`,
 `SessionDecisionKind`, `SessionOutbound`, `SessionReject`, and `SessionClose`. The parameterized

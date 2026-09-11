@@ -1,7 +1,7 @@
 //! Repository-bound command and graph-owned test runners for normalized Graph 10 artifacts.
 
 use super::capability::NormalizedCapabilities;
-use super::codec::{decode_value, encode_typed};
+use super::codec::{decode_value_with_control, encode_typed_with_control};
 use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
@@ -126,7 +126,8 @@ pub fn run_pure_command(
 ) -> Result<NormalizedCommandReceipt, Diagnostic> {
     let authority_binding = authority.binding().map_err(execution_diagnostic)?;
     validate_authority_binding(program, authority_binding)?;
-    let invocation = prepare_command_invocation(program, target_name, arguments_json, policy.json)?;
+    let invocation =
+        prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
     let component = program
         .components
         .get(invocation.target.component.0 as usize)
@@ -159,7 +160,13 @@ pub fn run_pure_command(
             "production and reference execution disagree for the selected pure target",
         ));
     }
-    let result_json = encode_typed(program, &production.0, invocation.result_type, policy.json)?;
+    let result_json = encode_typed_with_control(
+        program,
+        &production.0,
+        invocation.result_type,
+        policy.json,
+        control,
+    )?;
     Ok(NormalizedCommandReceipt {
         target: target_name.clone(),
         revision: authority_binding.revision,
@@ -186,7 +193,8 @@ pub fn run_effectful_command(
 ) -> Result<NormalizedEffectfulCommandReceipt, Diagnostic> {
     let authority_binding = authority.binding().map_err(execution_diagnostic)?;
     validate_authority_binding(program, authority_binding)?;
-    let invocation = prepare_command_invocation(program, target_name, arguments_json, policy.json)?;
+    let invocation =
+        prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
     let component = program
         .components
         .get(invocation.target.component.0 as usize)
@@ -220,7 +228,13 @@ pub fn run_effectful_command(
             control,
         )
         .map_err(execution_diagnostic)?;
-    let result_json = encode_typed(program, &production.0, invocation.result_type, policy.json)?;
+    let result_json = encode_typed_with_control(
+        program,
+        &production.0,
+        invocation.result_type,
+        policy.json,
+        control,
+    )?;
     Ok(NormalizedEffectfulCommandReceipt {
         target: target_name.clone(),
         revision: authority_binding.revision,
@@ -325,6 +339,7 @@ fn prepare_command_invocation<'a>(
     target_name: &Name,
     arguments_json: &[u8],
     json_limits: JsonLimits,
+    control: &ExecutionControl,
 ) -> Result<PreparedCommandInvocation<'a>, Diagnostic> {
     let target = program.root_target(target_name).ok_or_else(|| {
         runner_error(
@@ -387,7 +402,7 @@ fn prepare_command_invocation<'a>(
     let arguments = arguments
         .iter()
         .zip(parameter_types)
-        .map(|(value, ty)| decode_value(program, value, ty, json_limits))
+        .map(|(value, ty)| decode_value_with_control(program, value, ty, json_limits, control))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(PreparedCommandInvocation {
         target,

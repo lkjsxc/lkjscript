@@ -412,6 +412,23 @@ fn live_receipt_fault_matrix() {
                 "/nominal/results/pair-reordered-arguments",
                 "/nominal/replacement_keep_result",
                 "/nominal/results/i64-retention",
+                "/recursive/results/small-leaves",
+                "/recursive/results/retained",
+                "/recursive/results/flip-next",
+                "/recursive/scale_leaves",
+                "/recursive/scale_leaves/1",
+                "/recursive/scale_shape",
+                "/recursive/scale_sum",
+                "/recursive/mapped_scale_sum",
+                "/recursive/changed_sum",
+                "/recursive/library_revision",
+                "/recursive/changed_library_revision",
+                "/recursive/session/messages",
+                "/recursive/schemas",
+                "/recursive/persistence",
+                "/recursive/persisted_bytes_sha256",
+                "/recursive/resources",
+                "/recursive/transaction_cancellation",
                 "/nominal/results/heterogeneous",
             ],
         ),
@@ -507,7 +524,7 @@ fn live_receipt_fault_matrix() {
             predecessor["schema"] = serde_json::json!(if role == Oracle::PureTail {
                 "lkjscript-pure-tail-acceptance-4"
             } else {
-                "lkjscript-offline-packages-acceptance-2"
+                "lkjscript-offline-packages-acceptance-4"
             });
             omissions.push((
                 "obsolete-language-receipt".to_owned(),

@@ -47,8 +47,10 @@ space name plus one key selects a record.
 Pure `data-encode<T>` and `data-decode-or<T>` use canonical typed-value contract 1. The envelope
 binds the complete nominal/runtime layout identity and checksum. Decoding rejects a foreign type or
 layout, malformed or noncanonical values, invalid UTF-8, duplicate/out-of-order map keys, trailing
-bytes, and item/depth/byte exhaustion. `decode-or` returns its exact typed fallback on any rejected
-encoding. JSON, SQL rows, Rust layout, serde shape, and host filesystem representation are not data
+bytes, and item/depth/byte exhaustion. `decode-or` returns its exact typed fallback on rejected
+encoding or layout meaning. Operational resource exhaustion and cancellation propagate as execution
+failures; they do not select the fallback. Layout traversal and each separate nested value check the
+owning cancellation control in both codecs. JSON, SQL rows, Rust layout, serde shape, and host filesystem representation are not data
 authority. Production and canonical-reference codecs are separate implementations and must agree.
 
 Applied nominal records and variants use layout tag 9, followed by every ordered argument's complete
@@ -59,6 +61,15 @@ every stored member must be durable, including inactive cases and empty containe
 secrets, resources, streams and unresolved parameters cannot become durable through a wrapper.
 This does not add Option/Result encoding support. JSON uses the existing field/case shapes and
 substituted member types; it authenticates no phantom identity absent from its untyped input.
+
+An admitted finite-instantiation recursive nominal layout uses the existing active-reference
+markers keyed by the complete application. All ordered arguments precede its nominal marker;
+all substituted members are checked, including forbidden siblings following a back-reference.
+Recursive runtime values remain finite and obey the existing depth, item and byte limits. No
+encoding generation changes merely because the nominal type graph contains a cycle. Body-only
+dependency edits retain readability when the full layout is unchanged. A member name or type
+change may change that layout identity; incompatible bytes reject and are never coerced or
+overwritten by decoding. Operational store migration remains an explicit application operation.
 
 `schema-read` returns missing or one exact schema identity/digest. Transaction-only `schema-set`
 requires missing or an exact prior schema. An equal exact retry is a no-op; a mismatch marks the

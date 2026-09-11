@@ -54,6 +54,10 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("offline-packages") => offline_packages::command(arguments),
         Some("pure-tail") => pure_tail::command(arguments),
         Some("pure-tail-probe") => pure_tail::probe_command(arguments),
+        Some("recursive-probe") => offline_packages::recursive_probe_command(arguments),
+        Some("recursive-transaction-probe") => {
+            offline_packages::recursive_transaction_probe_command(arguments)
+        }
         Some("pure-tail-transaction-probe") => pure_tail::transaction_probe_command(arguments),
         Some("nominal-session-state-probe") => service::nominal::state_probe_command(arguments),
         Some("release") => release::command(arguments),

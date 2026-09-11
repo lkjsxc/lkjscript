@@ -270,6 +270,13 @@ fn invalid_state_program(
 }
 
 fn program(standard: &BTreeMap<String, String>) -> String {
+    session_program(standard, None)
+}
+
+pub(super) fn session_program(
+    standard: &BTreeMap<String, String>,
+    recursive: Option<&BTreeMap<String, String>>,
+) -> String {
     let mut r = Request::default();
     r.text.push_str("create.module as=$module name=session\ncreate.component as=$component module=$module name=Live visibility=private\n");
     for (ty, name) in [
@@ -285,7 +292,12 @@ fn program(standard: &BTreeMap<String, String>) -> String {
             standard[name]
         ));
     }
-    r.text.push_str(&format!("type.application as=@State declaration={}\ntype.argument parent=@State index=0 type=i64\ntype.argument parent=@State index=1 type=text\nadd.requirement as=$streams component=$component name=streams interface={}\nrequirement.operation parent=$streams index=0 operation={}\nrequirement.limit parent=$streams index=0 name=maximum_calls maximum=64 unit=calls\n",standard["pair"],standard["ByteStream"],standard["ByteStream.read-all"]));
+    if let Some(library) = recursive {
+        r.text.push_str(&format!("type.application as=@State declaration={}\ntype.argument parent=@State index=0 type=text\n",library["tree"]));
+    } else {
+        r.text.push_str(&format!("type.application as=@State declaration={}\ntype.argument parent=@State index=0 type=i64\ntype.argument parent=@State index=1 type=text\n",standard["pair"]));
+    }
+    r.text.push_str(&format!("add.requirement as=$streams component=$component name=streams interface={}\nrequirement.operation parent=$streams index=0 operation={}\nrequirement.limit parent=$streams index=0 name=maximum_calls maximum=64 unit=calls\n",standard["ByteStream"],standard["ByteStream.read-all"]));
     r.text.push_str(
         r#"type.option as=@StateOption item=@State
 type.list as=@messages item=@outbound
@@ -315,15 +327,40 @@ type.field parent=@Peer index=0 name=code type=@Code
 type.field parent=@Peer index=1 name=reason type=text
 "#,
     );
-    let state = r.local("$state-step_state");
-    let first = r.call(&standard["pair-first"], &["i64", "text"], &[state]);
-    let one = r.integer(1);
-    let first = r.call(&standard["add"], &[], &[first, one]);
-    let state = r.local("$state-step_state");
-    let second = r.call(&standard["pair-second"], &["i64", "text"], &[state]);
-    let input = r.local("$state-step_input");
-    let second = r.call(&standard["text-concat"], &[], &[second, input]);
-    let next = r.call(&standard["pair-new"], &["i64", "text"], &[first, second]);
+    let next = if let Some(library) = recursive {
+        let state = r.local("$state-step_state");
+        let input = r.local("$state-step_input");
+        let leaf = r.expression(
+            "variant",
+            &format!("case={} payload={input}", library["leaf"]),
+        );
+        r.types(&leaf, &["text"]);
+        let children = r.expression("list", "item=@State");
+        r.arguments(&children, &[state, leaf]);
+        let next = r.expression(
+            "variant",
+            &format!("case={} payload={children}", library["branch"]),
+        );
+        r.types(&next, &["text"]);
+        let input = r.local("$state-step_input");
+        let empty = r.expression("text", "value=\"\"");
+        let reset = r.call(&standard["text-equal"], &[], &[input, empty]);
+        let initial = r.call("$initial", &[], &[]);
+        r.expression(
+            "if",
+            &format!("condition={reset} when-true={initial} when-false={next}"),
+        )
+    } else {
+        let state = r.local("$state-step_state");
+        let first = r.call(&standard["pair-first"], &["i64", "text"], &[state]);
+        let one = r.integer(1);
+        let first = r.call(&standard["add"], &[], &[first, one]);
+        let state = r.local("$state-step_state");
+        let second = r.call(&standard["pair-second"], &["i64", "text"], &[state]);
+        let input = r.local("$state-step_input");
+        let second = r.call(&standard["text-concat"], &[], &[second, input]);
+        r.call(&standard["pair-new"], &["i64", "text"], &[first, second])
+    };
     r.function(
         "state-step",
         "@State",
@@ -361,9 +398,19 @@ type.field parent=@Peer index=1 name=reason type=text
             ("state", "@StateOption"),
         ],
     );
-    let zero = r.integer(0);
-    let empty = r.expression("text", "value=\"\"");
-    let initial = r.call(&standard["pair-new"], &["i64", "text"], &[zero, empty]);
+    let initial = if let Some(library) = recursive {
+        let empty = r.expression("list", "item=@State");
+        let result = r.expression(
+            "variant",
+            &format!("case={} payload={empty}", library["branch"]),
+        );
+        r.types(&result, &["text"]);
+        result
+    } else {
+        let zero = r.integer(0);
+        let empty = r.expression("text", "value=\"\"");
+        r.call(&standard["pair-new"], &["i64", "text"], &[zero, empty])
+    };
     r.function("initial", "@State", &initial, &[]);
     let initial = r.call("$initial", &[], &[]);
     let option_initial = r.call(&standard["option-some"], &["@State"], &[initial]);
@@ -398,7 +445,22 @@ type.field parent=@Peer index=1 name=reason type=text
     let current = r.call(&standard["option-get-or"], &["@State"], &[state, initial]);
     let next = r.call("$state-step", &[], &[current, text]);
     let next_value = r.local("$next");
-    let encoded = r.call(&standard["json-encode"], &["@State"], &[next_value]);
+    let encoded = if let Some(library) = recursive {
+        r.text.push_str("type.structural-record as=@Reply\ntype.field parent=@Reply index=0 name=contents type=text\ntype.field parent=@Reply index=1 name=state type=@State\n");
+        let callback = r.function_value(&standard["text-concat"]);
+        let empty = r.expression("text", "value=\"\"");
+        let contents = r.call(
+            &library["tree-fold"],
+            &["text", "text"],
+            &[next_value, callback, empty],
+        );
+        let state = r.local("$next");
+        let reply = r.expression("record", "");
+        r.text.push_str(&format!("expression.record-field parent={reply} index=0 name=contents value={contents}\nexpression.record-field parent={reply} index=1 name=state value={state}\n"));
+        r.call(&standard["json-encode"], &["@Reply"], &[reply])
+    } else {
+        r.call(&standard["json-encode"], &["@State"], &[next_value])
+    };
     let encoded = r.call(&standard["bytes-to-text"], &[], &[encoded]);
     let output = r.expression(
         "variant",

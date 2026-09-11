@@ -24,8 +24,9 @@ authenticated multi-subscription push with an implementation-disjoint raw client
 rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Current product source and
-supported immutable public distribution are `0.1.30` for `x86_64-unknown-linux-musl`. Exact and
+PostgreSQL 16.15 is retained only as contributor differential evidence. The recursive-data candidate
+source is `0.1.31`; supported immutable public distribution remains `0.1.30` for
+`x86_64-unknown-linux-musl`. Exact and
 latest downloads independently passed static inspection and five behavioral owners covering
 distributed HTTP, outbound HTTPS/TLS/DNS, offline package closures, pure-tail execution, and stateful
 HTTP. Parameterized records/variants, capture-safe generic factories, retained runtime configuration,
@@ -94,6 +95,10 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
    recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
    constraints are also implemented, with graph-owned list-map and function-constant families.
+   Finite-instantiation recursive nominal data is the active
+   [explicit campaign](campaigns/202609110659.md), with complete public library, persistence,
+   session, target and immutable-delivery proof required before completion. Expanding schemes
+   and polymorphic function recursion remain outside this milestone.
    Explicit parametric nominal data is implemented in source through the
    [completed nominal campaign](campaigns/202609100459.md), with source and local target admission recorded there.
    Richer state/resource composition, automatic lexical capture, component

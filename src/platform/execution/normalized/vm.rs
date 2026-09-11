@@ -3,7 +3,6 @@
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
-use super::codec::{decode_typed, encode_typed};
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction, NormalizedProgram, NormalizedTarget,
@@ -12,6 +11,7 @@ use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
 };
+use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
@@ -123,6 +123,7 @@ impl NormalizedHost for CoreNormalizedHost {
             implementation.as_str(),
             type_arguments,
             arguments,
+            control,
         )
     }
 }
@@ -1875,6 +1876,7 @@ fn call_core_intrinsic(
     implementation: &str,
     type_arguments: &[TypeObjectDigest],
     arguments: Vec<NormalizedValue>,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, ExecutionError> {
     match implementation {
         "identity_host" => match arguments.as_slice() {
@@ -2069,9 +2071,15 @@ fn call_core_intrinsic(
                     ));
                 }
             };
-            encode_typed(program, value, ty, JsonLimits::default())
-                .map(NormalizedValue::bytes)
-                .map_err(normalized_json_error)
+            super::codec::encode_typed_with_control(
+                program,
+                value,
+                ty,
+                JsonLimits::default(),
+                control,
+            )
+            .map(NormalizedValue::bytes)
+            .map_err(normalized_json_error)
         }
         "core.json.decode-or" => {
             let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
@@ -2092,9 +2100,24 @@ fn call_core_intrinsic(
                     ));
                 }
             };
-            let decoded = decode_typed(program, bytes, ty, JsonLimits::default());
+            let decoded = super::codec::decode_typed_with_control(
+                program,
+                bytes,
+                ty,
+                JsonLimits::default(),
+                control,
+            );
+            control.check()?;
             let (valid, value, error) = match decoded {
                 Ok(value) => (true, value, String::new()),
+                Err(error)
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                    ) =>
+                {
+                    return Err(normalized_json_error(error));
+                }
                 Err(error) => (false, fallback.clone(), error.code),
             };
             normalized_structural_record([
@@ -2122,7 +2145,7 @@ fn call_core_intrinsic(
                     ));
                 }
             };
-            super::data_codec::encode_typed(program, value, ty)
+            super::data_codec::encode_typed_with_control(program, value, ty, control)
                 .map(NormalizedValue::bytes)
                 .map_err(normalized_json_error)
         }
@@ -2145,8 +2168,16 @@ fn call_core_intrinsic(
                     ));
                 }
             };
-            match super::data_codec::decode_typed(program, bytes, ty) {
+            match super::data_codec::decode_typed_with_control(program, bytes, ty, control) {
                 Ok(value) => Ok(value),
+                Err(error)
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Cancelled | DiagnosticClass::Resource
+                    ) =>
+                {
+                    Err(normalized_json_error(error))
+                }
                 Err(_) => Ok(fallback.clone()),
             }
         }
@@ -2483,10 +2514,10 @@ fn normalized_map_intrinsic(
 
 fn normalized_json_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {
     ExecutionError::new(
-        if error.class == crate::platform::diagnostic::DiagnosticClass::Resource {
-            ExecutionFailureClass::Resource
-        } else {
-            ExecutionFailureClass::Infrastructure
+        match error.class {
+            DiagnosticClass::Resource => ExecutionFailureClass::Resource,
+            DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
+            _ => ExecutionFailureClass::Infrastructure,
         },
         error.code,
         "typed JSON operation failed",
