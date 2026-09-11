@@ -44,22 +44,369 @@
     "raw_evidence": ".artifacts/pair-202609111452"
   },
   "acceptance": {
-    "engineering": "Pending stabilized source/full/target/rehearsal/live-fault proof",
-    "tested_source_commit": null,
-    "full": null,
-    "target": null,
-    "pair": null,
-    "live_faults": null,
-    "diagnostic_baseline": null,
-    "integrated": false,
+    "engineering": "Accepted for tested source 0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03: P1–P5 local engineering proof, real consumer cutover, fresh full/target/pair and live fault controls passed",
+    "tested_source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+    "full": {
+      "contract_version": 5,
+      "status": "passed",
+      "profile": "full",
+      "passed": 26,
+      "fresh": 26,
+      "reused": 0,
+      "selected": 26,
+      "elapsed_nanoseconds": 253350167512,
+      "receipt": ".artifacts/lkjscript-dev/check/1789113388618646876-1142952-0/receipt.json",
+      "receipt_bytes": 61380,
+      "receipt_digest": "verification_8299d64a8751b2897ac286e74e5c38665c81a2131881aa2f5281fdbb2f04df90",
+      "failure": null
+    },
+    "target": {
+      "candidate_sha256": "2cc580b97603133a918fd8668cf97e1104653a509615e3f91e29e6fcdf60605a",
+      "cleanup_complete": true,
+      "oracles": 6,
+      "receipt": "/home/coder/workspace/lkjscript/.artifacts/pair-202609111452/target-A/acceptance/receipt.json",
+      "receipt_bytes": 74366,
+      "receipt_digest": "verification_fb0b028b897521e9ca6b3c496e6f2d7ec6629b829e5ca6e2f099ae84ff1fd03e",
+      "receipt_sha256": "1a7717366979f84733d69ca930bf57b4c2c90bb61f747158bbc54a04cd8e73d7",
+      "runtime_linkage": "static-musl",
+      "schema": {
+        "identity": "lkjscript-target-admission-receipt",
+        "version": 4
+      },
+      "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+      "status": "passed",
+      "target_policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "target_triple": "x86_64-unknown-linux-musl",
+      "userlands": 2
+    },
+    "pair": {
+      "cleanup_complete": true,
+      "elapsed_nanoseconds": 569070678508,
+      "failure": null,
+      "receipt": {
+        "digest": "verification_7f6ac6da59774db862ccdfb4432ec2c28463475528d8a0f4b9cd8d949827ecd9",
+        "file": {
+          "byte_length": 46210,
+          "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair/receipt.json",
+          "sha256": "128f58561f99c0dc784c6164106c6883f6e1d966d333600be2bf58789e2aa42a"
+        }
+      },
+      "scope": "local-pair-rehearsal",
+      "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+      "status": "passed",
+      "suite": {
+        "completed_unix_nanoseconds": 1789115293653134926,
+        "equality_digest": "verification_a4869d797707e00ec9f872dc3024fbbab7d107ef100a45b53c5cfdd5223afbc6",
+        "exact": "fresh-execution",
+        "expensive_executions": 5,
+        "hosted_context": {
+          "github_actions": null,
+          "job": null,
+          "repository": null,
+          "run_attempt": null,
+          "run_id": null,
+          "run_url": null,
+          "runner_architecture": null,
+          "runner_image_os": null,
+          "runner_image_version": null,
+          "runner_os": null,
+          "workflow": null
+        },
+        "latest": "bound-within-same-pair",
+        "pair_root": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair",
+        "scope": "local-pair-rehearsal",
+        "source_aggregate": {
+          "digest": "verification_42568bbe3002f78d6de8bfcbe144a354579d7cde526280355d72ef3a4820ee43",
+          "file": {
+            "byte_length": 13344,
+            "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair/full-suite/receipt.json",
+            "sha256": "49dfd9e1ca0d1445ee85cb5ddc748533b6d04b310d1bed905fc699f30ad20128"
+          }
+        },
+        "started_unix_nanoseconds": 1789114731293999973
+      },
+      "tag": "v0.1.31"
+    },
+    "live_faults": {
+      "pair": {
+        "faults": 50,
+        "status": "passed",
+        "timing": {
+          "stage": "live-pair-faults",
+          "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+          "started_unix_nanoseconds": 1789116465371326624,
+          "completed_unix_nanoseconds": 1789116474728863865,
+          "elapsed_seconds": 9.35753728,
+          "exit_code": 0
+        },
+        "record": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair/live-pair-fault-results.json"
+      },
+      "transferred": {
+        "faults": 250,
+        "status": "passed",
+        "timing": {
+          "stage": "live-transferred-faults",
+          "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+          "started_unix_nanoseconds": 1789116474730621213,
+          "completed_unix_nanoseconds": 1789116535501271159,
+          "elapsed_seconds": 60.770650112,
+          "exit_code": 0
+        },
+        "record": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair/transferred-fault-results.json"
+      },
+      "restored_control": "Final production pair-verify passed after both matrices; original pair and aggregate SHA-256 values unchanged"
+    },
+    "diagnostic_baseline": {
+      "boundary": "pre-publication",
+      "candidate_sha256": "2cc580b97603133a918fd8668cf97e1104653a509615e3f91e29e6fcdf60605a",
+      "children": [
+        {
+          "cleanup_complete": true,
+          "receipt": {
+            "digest": "verification_806f1a32843d026c048865d7d93a4b21d052a134c098eb7d9f9a5d7e4a10ed3f",
+            "file": {
+              "byte_length": 88382,
+              "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/distributed-http/receipt.json",
+              "sha256": "945dc779d2f767c8217e104d144a8aae387339514ceaaeaaa0324018335a7fac"
+            }
+          },
+          "role": "distributed-http",
+          "status": "fresh_passed"
+        },
+        {
+          "cleanup_complete": true,
+          "receipt": {
+            "digest": "verification_19de25e5096a6c4a157dddb40c8dcdf96680b5a916d91a82a8e724e3e7548a16",
+            "file": {
+              "byte_length": 63574,
+              "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/outbound-http/receipt.json",
+              "sha256": "ed13c0636ba70fd3d30947a344335d0a4df852396891d8ad129d57966a24268d"
+            }
+          },
+          "role": "outbound-http",
+          "status": "fresh_passed"
+        },
+        {
+          "cleanup_complete": true,
+          "receipt": {
+            "digest": "verification_6c33614c54a6b617abc19b031adb288fec2277ad33a2a88cdbf7117053728836",
+            "file": {
+              "byte_length": 6179923,
+              "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/offline-packages/receipt.json",
+              "sha256": "1d6dbea5a0f8b13b05566c9f7e614d9c7b72d4e60d4c8476f995af299cf83af4"
+            }
+          },
+          "role": "offline-packages",
+          "status": "fresh_passed"
+        },
+        {
+          "cleanup_complete": true,
+          "receipt": {
+            "digest": "verification_56c0a75bd9e2543bb85c4dedd6fed2f9ae94ed32a1b0de7886684cc984e8c883",
+            "file": {
+              "byte_length": 11041214,
+              "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/pure-tail/receipt.json",
+              "sha256": "0590a5ea46657127e7198f79c7d9d99b13985b649c62cb365787a814b03a8249"
+            }
+          },
+          "role": "pure-tail",
+          "status": "fresh_passed"
+        },
+        {
+          "cleanup_complete": true,
+          "receipt": {
+            "digest": "verification_aceb2ebacc5c993a8ba4fc0722ab8afbade54c4f5d88d286b27a0db62418e02e",
+            "file": {
+              "byte_length": 362837,
+              "path": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/stateful-http/receipt.json",
+              "sha256": "1a9135203ae2e3c47790f6fbb0691079efcc02e8b62252b1a71f6ebbe36e8700"
+            }
+          },
+          "role": "stateful-http",
+          "status": "fresh_passed"
+        }
+      ],
+      "cleanup_complete": true,
+      "failure": null,
+      "receipt": "/tmp/lkjscript-pair-rehearsal-I0niPt/diagnostic-latest/receipt.json",
+      "receipt_bytes": 13383,
+      "receipt_digest": "verification_0c40edf2fad58df698e81cf917b88b6bc0537c34a5a5cfe3f9ff481c9274b386",
+      "receipt_sha256": "d27b4f9b2dc36c5796ba21f40ed7c979faf7936a3d8d4ec6de08c4ba2ac6b429",
+      "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+      "status": "passed",
+      "tag": "v0.1.31",
+      "verifier_sha256": "a2866e0d1afd93b8ca677010c7d5f153c4dab968dfacedf37c9428e03e616292"
+    },
+    "integrated": true,
     "hosted_public_pair_observation": "Unrun; required at the next selected user-visible publication milestone",
     "publication": "Deferred; no new version, tag, release dispatch or release-control variable write selected",
-    "deployment": "Not performed"
+    "deployment": "Not performed",
+    "preparation": {
+      "status": "passed",
+      "publication_mode": "dry-run",
+      "tag": "v0.1.31",
+      "commit_sha": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+      "output": "/home/coder/workspace/lkjscript/.artifacts/pair-202609111452/prepared-A",
+      "archive": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+      "archive_bytes": 9684314,
+      "archive_sha256": "e83ab0b62508c2626dd2c1813438f21e294628a795a548848defed88dac95e99",
+      "checksums": "SHA256SUMS",
+      "receipt": "release-receipt.json",
+      "receipt_sha256": "d5de4b0d38333f193c0040dc233a206d209b97d5386cc8043d1398f6c560adb2"
+    },
+    "interruptions": {
+      "cases": 12,
+      "status": "passed",
+      "elapsed_seconds": 248.68,
+      "record": "/tmp/lkjscript-pair-rehearsal-I0niPt/pair-interruption-results.json"
+    },
+    "command_negatives": {
+      "cases": 16,
+      "status": "all rejected before lifecycle or suite",
+      "record": ".artifacts/pair-202609111452/negative-cli-A.results.json"
+    },
+    "reader_mutations": [
+      {
+        "mutant": "latest-fresh",
+        "detected_by": "invent-latest-fresh-full",
+        "exit_code": 101,
+        "source_restored": true
+      },
+      {
+        "mutant": "foreign-reference",
+        "detected_by": "foreign-source-reference",
+        "exit_code": 101,
+        "source_restored": true
+      },
+      {
+        "mutant": "skipped-child-reader",
+        "detected_by": "generic_capture_factory",
+        "exit_code": 101,
+        "source_restored": true
+      }
+    ],
+    "integration": {
+      "source_commit": "0f348f2ae0f54f4792ac5ff0ecfbf88fbc1d3a03",
+      "branch": "main",
+      "remote_ref_verified": true,
+      "permissions": "push allowed; main unprotected; no branch rules; no required hosted checks",
+      "source_push_record": ".artifacts/pair-202609111452/integration-source-push.log",
+      "containing_commit": "A later evidence-only commit carries this record; see Git history and the final delivery handoff"
+    },
+    "final_reporting_checks": {
+      "profile": "changed",
+      "selected": [
+        "diff_check",
+        "rust_only_tooling"
+      ],
+      "record": ".artifacts/pair-202609111452/changed-final.stdout.log",
+      "scope": "Final report content checked before committing; not an exact-source full or release receipt for the later containing commit"
+    }
   },
   "limits": [
     "Local copies prove neither anonymous acquisition nor GitHub authenticity",
     "One trusted isolated environment with drift detection; no hostile-host sandbox claim",
     "Ten versus five expensive executions is deterministic; wall time and provider billing are separate",
     "Earlier failed v0.1.29 and additive v0.1.30 history are preserved"
+  ],
+  "measurements": {
+    "exact_aggregate_invocation_seconds": 562.35913472,
+    "additional_latest_invocation_seconds": 561.27129472,
+    "pair_invocation_seconds": 570.368699904,
+    "diagnostic_suite_schedule_seconds": 1123.6304294400002,
+    "expensive_execution_counts": {
+      "diagnostic_legacy": 10,
+      "pair": 5
+    },
+    "scope": "Diagnostic composition reuses the pairs fresh exact aggregate plus one separately executed latest aggregate; not a fresh entire sequential baseline. Pair total includes two admissions/lifecycles and all pair overhead; diagnostic total excludes legacy admission and comparison.",
+    "details": {
+      "binding_checks": {
+        "candidate_bytes_equal": true,
+        "verifier_equal": true,
+        "source_equal": true,
+        "target_policy_equal": true,
+        "publication_boundary_equal": true,
+        "workload_inventory_equal": true,
+        "hosted_context_equal": true
+      },
+      "environment": {
+        "policy": "static-pair-cleared-environment-private-state-1",
+        "candidate_environment": {
+          "LANG": "C",
+          "PATH": "/usr/bin:/bin"
+        },
+        "scratch_policy": "create-new-private-cwd-and-TMPDIR-per-lifecycle-and-child;no-inherited-home-source-credentials-or-sidecars",
+        "architecture": "x86_64",
+        "kernel": "7.2.3-arch1-2\n"
+      },
+      "admissions": [
+        {
+          "route": "exact",
+          "seconds": 0.178585876
+        },
+        {
+          "route": "latest",
+          "seconds": 0.179089532
+        }
+      ],
+      "lifecycles": [
+        {
+          "route": "exact",
+          "seconds": 2.29956672,
+          "cleanup_seconds_included": 0.000559863
+        },
+        {
+          "route": "latest",
+          "seconds": 2.316346633,
+          "cleanup_seconds_included": 0.000561967
+        }
+      ],
+      "initial_equality_seconds": 0.035013806,
+      "children": [
+        {
+          "role": "distributed-http",
+          "exact_process_seconds": 6.901483772,
+          "latest_process_seconds": 6.73817041
+        },
+        {
+          "role": "outbound-http",
+          "exact_process_seconds": 15.819721166,
+          "latest_process_seconds": 15.541301716
+        },
+        {
+          "role": "offline-packages",
+          "exact_process_seconds": 273.56554912,
+          "latest_process_seconds": 274.394064772
+        },
+        {
+          "role": "pure-tail",
+          "exact_process_seconds": 209.41273982,
+          "latest_process_seconds": 209.661013422
+        },
+        {
+          "role": "stateful-http",
+          "exact_process_seconds": 52.97690482,
+          "latest_process_seconds": 52.938464761
+        }
+      ],
+      "all_pair_non_child_process_seconds": 11.692301206000025,
+      "repeated_binding_equality_and_readers": "Included in aggregate and residual timing, not separately instrumented",
+      "cpu_rss_io": "Raw process samples are retained; no aggregate CPU/RSS/I/O or billing claim",
+      "monitoring": "Local bounded reads/waits; monitoring time was not separately instrumented. No hosted queue or workflow dispatch for this campaign.",
+      "receipt_validation_before_terminal_write_seconds": 0.678928721
+    }
+  },
+  "retained_rehearsal": {
+    "original_root": "/tmp/lkjscript-pair-rehearsal-I0niPt",
+    "archive": ".artifacts/pair-202609111452/rehearsal-evidence.tar.gz",
+    "bytes": 651685938,
+    "sha256": "b09a1dc71ce7cf878dbdb9211aef4cbb7e85bbe70fcf9d301cd1fd7e5e9647c5",
+    "includes": "Original path-bound success/failure receipts, bounded outputs, input copies and verifier; no receipt paths or hashes rewritten"
+  },
+  "not_run": [
+    "No new hosted public pair observation or release dispatch; first later selected publication must exercise the new job",
+    "No separate focused profile because fresh full covered its dependency closure",
+    "No extra complete pre-publication suite solely for rehearsal; pair B supplied the fresh five-owner aggregate",
+    "Older ignored standalone cancellation/recovery and target live-fault tests were not repeated; existing default process regressions, new pair interruption/recovery and exact target admission passed"
   ]
 }
