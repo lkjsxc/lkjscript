@@ -2,66 +2,164 @@
 
 ## Mission and authority
 
-Build lkjscript as a powerful general-purpose, agent-first language. Prefer reusable language and library mechanisms over application-specific host behavior. The typed semantic graph is the canonical editable program representation. Requests, textual views, indexes, compiler products, caches, and distributed artifacts derive from accepted meaning; none is a competing authority. Operational data, deployment configuration, credentials, and live resources have separate owners. Ordinary application development should work with the distributed executable, without this source checkout.
+Build lkjscript as a powerful general-purpose, agent-first language.
+Prefer orthogonal language/library mechanisms over application-specific host behavior.
+The accepted typed semantic graph is the canonical editable program representation.
+Requests, views, indexes, compiler products, caches and artifacts derive from that meaning.
+Operational data, credentials, deployment configuration and live resources have separate owners.
+Ordinary application development should work with the distributed executable, without this checkout.
+Prefer simple, statically linked distribution where appropriate; do not invent platform guarantees.
 
-Follow the applicable instruction hierarchy and current explicit user direction. Inspect ancestor, scoped, and override guidance before work. A replacement file does not reload the running session's instructions. Historical prompts and engineering decisions are evidence, not permanent user policy. An explicit campaign may revise engineering rules with a reason, preserved guarantees, affected owners, and complete transition; it cannot override higher-priority instructions or conceal a failed gate.
+Follow current user direction and applicable global, ancestor, root, scoped and override guidance.
+A replacement guidance file does not reload or override the running session's governing instructions.
+Historical mandates and decisions are evidence, not permanent user policy.
+An explicit mandate may revise engineering rules with reasons, preserved guarantees and transition.
+It may not override higher-priority instructions, expand external authority or conceal failed proof.
 
-Use the explicitly supplied mandate and appended lifecycle records to identify active work. Never choose the lexicographically newest campaign filename. Distinguish implementation, specifications, observations, and hypotheses, and investigate contradictions.
+Use the explicitly supplied assignment and reconciled lifecycle records to identify active work.
+Never select a campaign merely because its filename is newest.
+Separate observed implementation, normative promises, reported evidence and unverified assumptions.
+Resolve material contradictions, including stale status prose versus actual source or hosted results.
 
-## Start safely
+## Safe startup and changes
 
-Inspect actual branch/revision, worktree/index, relevant untracked work, stashes, remotes/divergence, available toolchain/resources, and active local or hosted actions. A previously inspected commit is not permission to rewind. Incorporate legitimate progress; verify an already completed outcome rather than reimplement it. Reconcile terminal and resumption records before reopening old work.
+Inspect actual HEAD/branch, index, worktree, relevant untracked work, stashes, remotes and divergence.
+Read relevant guidance, lifecycle records, specifications, callers, tests and contributor owners.
+Check toolchain/resources, active local processes and relevant hosted actions before duplicating work.
+An architect's inspected revision is a starting observation, never permission to rewind the checkout.
+Reconcile intervening progress; verify completed work rather than implementing it again.
+Continue, close, explicitly supersede or retain a precise blocker for inherited obligations.
 
-Preserve unrelated changes, stashes, secrets, and operational data. Stage and review explicit paths. Do not use broad staging, reset, clean, or broad restore to manufacture a clean checkout. Do not rewrite history or replace published identities. Run destructive tests only on explicitly owned disposable resources; clean up their processes and state without touching unrelated services. Keep large logs, binaries, temporary repositories, and `.artifacts/` outputs out of tracked narrative.
+Preserve unrelated work, stashes, secrets and operational data.
+Stage and review explicit intended paths; never use broad staging to capture unrelated changes.
+Do not reset, clean, broadly restore, rewrite history or overwrite published identities for compliance.
+Run destructive tests only against explicitly owned disposable resources.
+Clean up owned processes/state without touching unrelated services or files.
+Keep large logs, binaries, temporary checkouts and `.artifacts/` outputs out of tracked narrative.
 
 ## Navigation and ownership
 
-* `src/bin/lkjscript.rs` and `src/platform/` own the executable and platform. Start public workflows at `cli.rs`, `control/`, `change/`, and `normalized_query.rs`.
-* `kernel/` owns canonical typed records and validation. `publication/` and `GraphRepository` own accepted repository transitions; storage and derived witnesses retain their distinct authority.
-* `package_interface.rs`, `package_transport/`, and `compiler/` own exact package meaning, transport, compilation, and strict artifact loading. `execution/normalized/` contains production and independent canonical-reference execution, prepared types, values, codecs, and runtime boundaries.
-* `packages/standard/` and `applications/lkjournal/` are maintained consumers. `tests/` covers public and integration behavior. `tools/lkjscript-dev/` owns contributor checks, independent oracles, scale evidence, target admission, and release tooling.
-* `docs/spec/` is normative. Architecture, status, roadmap, decisions, performance, evidence, and release documents have separate purposes. `docs/generated/` is regenerated by its owner. `docs/campaigns/` retains initial mandates and appended lifecycle records.
+`src/bin/lkjscript.rs` and `src/platform/` own the executable and platform.
+Start public workflows at `cli.rs`, `control/`, `change/` and `normalized_query.rs`.
+`kernel/` owns canonical typed records and validation.
+`publication/` and `GraphRepository` own accepted transitions, distinct from storage and witnesses.
+`package_interface.rs`, `package_transport/` and `compiler/` own exact package/build boundaries.
+`execution/normalized/` owns execution, prepared values/types, codecs and independent reference logic.
+`packages/standard/` and `applications/lkjournal/` are maintained consumers; `tests/` covers public use.
+`tools/lkjscript-dev/` owns contributor checks, independent oracles, target admission and release tools.
+`docs/spec/` is normative; status, roadmap, decisions, performance, evidence and release have distinct uses.
+`docs/generated/` is regenerated by its owner, not hand-edited into a competing authority.
+`docs/campaigns/` retains initial mandates and appended execution/reconciliation/resumption records.
 
-Follow actual callers and ownership rather than editing every named directory. Keep root guidance operational; volatile identifiers, acceptance matrices, temporary subsets, and release choices belong in their established owners.
+Follow actual callers/contracts; directory names are navigation aids, not architectural proof.
+Keep volatile identifiers, campaign-local acceptance matrices and temporary subsets in their owners.
 
-## Semantic and resource guarantees
+## Meaning, resources and evolution
 
-Authored plan/apply must converge on the same normalization, identity allocation, complete-candidate validation, tests, and logical review. Recheck the base under the owning publication lock; persist canonical content before atomic exposure. Invalid input, cancellation, exhaustion, or failure cannot partially publish meaning. Failure of a derived operation after acceptance is not retroactively a failed semantic write.
+Plan/apply must converge on normalization, identity allocation, complete validation and logical review.
+Recheck the accepted base under the owning publication lock and persist content before atomic exposure.
+Invalid input, cancellation, exhaustion and failure cannot partially publish canonical meaning.
+A derived operation failing after acceptance does not retroactively undo a successful semantic write.
 
-Preserve exact types, substitutions, effects, capability requirements, provenance, lifetimes, evaluation order, and cleanup through compilation and optimization. Raw host, decoder, artifact, and retained-value boundaries need actual admission; declared types alone are not certificates. Internally checked immutable values can share valid proof. Keep ordinary containment, capture safety, equality, serialization, session retention, and affine authority distinct. A visited type edge is not permission to omit unsafe members or skip validation of separate values.
+Preserve exact types, substitutions, effects, capabilities, provenance, evaluation order and cleanup.
+Raw host, decoder, artifact and retained-value boundaries require actual admission, not declared types alone.
+Valid immutable internal values may share checked proof without repeating unrelated validation work.
+Keep containment, capture safety, equality, serialization, session retention and affine authority distinct.
+A visited type edge never licenses skipping unsafe members or admission of distinct values.
 
-Use checked arithmetic and bounded work/storage before growth. Keep deterministic canonical encoding independent of physical layout, pointers, hash iteration, paths, or wall time. Derived proofs and caches bind exact revisions, dependencies, contracts, options, target, and relevant policy. Clean recomputation remains an oracle; a cache never repairs canonical corruption. Strict transported loading must not trust a local producer's success.
+Use checked arithmetic and admit bounded work/storage before growth at resource-sensitive boundaries.
+Keep canonical encoding independent of physical layout, pointers, hash order, paths and wall time.
+Bind derived caches/proofs to actual revisions, dependencies, contracts, options, target and policy.
+Clean recomputation remains an oracle; a cache cannot repair or excuse canonical corruption.
+Strict transported loading must not trust a local producer's success.
 
-Profiling, cancellation, operational quotas, defensive limits, and execution fuel serve different purposes. Ordinary trusted execution should not permanently require users to choose fuel, but changing current policy needs an explicit contract and proof. Do not incidentally remove limits or make implementation instruction counts universal language semantics. When relevant, measure disabled instrumentation cost. Do not infer hostile-code sandboxing from validation or resource accounting.
+Profiling, cancellation, operational quotas, defensive limits, sandboxing and execution fuel are distinct.
+Ordinary trusted execution should not permanently require users to select fuel just to run programs.
+Changing current defaults requires an explicit implementation contract and proof, not incidental limit removal.
+Measure disabled instrumentation cost when relevant; instruction counts are not universal language semantics.
+Do not infer hostile-code isolation from validation, accounting or static linkage.
 
-Compatibility is not an overriding veto on improvement. Separate logical identity, semantic revision, encoded schema, artifact compatibility, and runtime representation. Change the owner that actually needs to change, with regeneration, migration or explicit rejection, recovery, and predecessor retirement. Never silently lose live data. Prefer one maintained production path after cutover; temporary bridges need removal conditions. Independent reference implementations are proof tools, not competing authorities.
+Separate logical identity, semantic revision, encoding, artifact compatibility and runtime representation.
+Change the owner that needs to change; do not couple every improvement to a global version increment.
+A necessary incompatibility needs mapping/migration or clear rejection, recovery and obsolete-path retirement.
+Never silently discard live data or rewrite released identities to make a transition appear seamless.
+Prefer one maintained production path after cutover; temporary bridges need removal conditions.
+Keep independent reference implementations as proof tools, not competing program authorities.
+Do not turn a finite test, provisional subset or last campaign's limit into permanent language semantics.
 
-## Build, checks, and public proof
+## Contributor entry points and proof
 
-Use pinned `rust-toolchain.toml`, manifests, and lockfiles. Preserve safe Rust and production lint guarantees; keep test-only allowances narrow. First-party contributor semantics belong in Rust tooling, not a parallel Python or shell implementation. Honor the existing no-Python and product-surface gates unless an explicit mandate coherently revises their mechanism without hiding failures.
+Use the pinned toolchain, manifests and lockfiles; preserve safe Rust and production lint guarantees.
+First-party contributor semantics belong in existing Rust tooling, not parallel Python/shell implementations.
+Preserve no-Python and product-surface gates unless an explicit mandate justifies an equivalent mechanism.
 
-Verified contributor entry points:
+Source-verified contributor entry points:
 
 ```sh
+cargo build --release --locked -p lkjscript-dev
 cargo run --release --locked -p lkjscript-dev -- check focused --machine
 cargo run --release --locked -p lkjscript-dev -- check changed --machine
 cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
-cargo build --release --locked -p lkjscript-dev
 target/release/lkjscript-dev release target
 ```
 
-Use focused checks while iterating and the owning dependency-closed integration/acceptance gates after relevant inputs stabilize. Consult `docs/spec/verification.md`, the check registry, and `docs/release.md`; do not invent flags or duplicate their orchestration. Regenerate semantic assets and discovery documents through canonical owners, then verify equality. Do not hand-edit generated meaning or add incidental host dependencies to ordinary product workflows.
+Consult `docs/spec/verification.md`, the check registry and `docs/release.md` for applicable requirements.
+Use focused feedback during iteration, then dependency-closed acceptance after meaningful inputs stabilize.
+Widen verification when impact is uncertain; never silently replace a required gate with a cheaper check.
+Regenerate semantic assets/discovery documents through their canonical owners and verify equality.
+Reuse compiled outputs safely; a build cache is not a correctness certificate.
+Do not dispatch full release machinery merely for routine development confidence.
 
-New language/product claims require freshly authored behavior using a copied candidate outside the source checkout, across the relevant discovery/edit/check/build/transport/execution/recovery boundaries. Internal fixtures alone are insufficient. Give public projections finite, revision-bound traversal and explicit completion/pagination rather than silent truncation.
+New product meaning needs freshly authored behavior through the actual executable outside the checkout.
+Exercise relevant discovery/edit/check/build/transport/execution/recovery boundaries, not every unrelated one.
+Privileged fixtures, raw storage edits and hidden host escapes cannot substitute for a public language feature.
+Public projections need explicit, revision-bound completion/pagination rather than silent truncation.
 
-Use independently expected values, disjoint references, malformed inputs, and fault sensitivity where appropriate. Agreement through shared machinery is not independence. Never replay live effects to compare evaluators. Performance claims need equivalent semantics and meaningful baselines, including preparation, steady-state work, allocation and instrumentation where material.
+Use independent expected results, disjoint reference logic, negative inputs and fault sensitivity as needed.
+Agreement through shared production machinery alone is not independent correctness evidence.
+Never replay live effects merely to compare evaluators.
+Performance claims require equivalent semantics, baseline/workload identity and relevant environment details.
+Separate preparation, steady-state work, allocation, cleanup and instrumentation when they affect the claim.
+Retain unfavorable observations and failures; wall time alone is not a complexity guarantee.
 
-Distinguish fresh passes, valid reused passes, failures, skipped, unavailable, and unrun checks. Required missing proof blocks its claim. Bind retained evidence to actual inputs, candidate, verifier, environment, and workload. Avoid self-referential report hashes and endless report/retest cycles; report final containing identities separately. Never label a future check passed.
+Distinguish fresh execution, valid bound/reused evidence, failed, cancelled, skipped, unavailable and unrun work.
+Reuse requires the owning contract to bind all relevant candidate/verifier/input/environment/workload facts.
+Shared evidence must name its source and scope; never fabricate a fresh child receipt for work not executed.
+Independently required acquisition, integrity, admission, execution and cleanup are distinct proof boundaries.
+An optimization may revise their mechanism explicitly, not erase an obligation through renamed statuses.
 
-## Completion and external actions
+Run expensive acceptance after meaningful inputs stabilize and rerun affected proof after changes.
+Keep tested identities distinct from later report-only containing commits; never invent exact-source coverage.
+Avoid self-referential report hashes and endless report/retest loops without weakening required input binding.
+Use current concise evidence owners, not parallel ledgers, and state missing proof precisely.
+Do not equate elapsed CI time with provider quota charges or money without applicable measurements.
 
-Continue through implementation, affected-consumer migration, obsolete-path removal, documentation, required proof, and the supplied mandate's integration/release disposition. Preserve its initial body and append lifecycle records using the existing convention. Report precise blockers and resumption conditions without discarding useful safe work or substituting a different objective.
+## Remote work and delivery
 
-External authority comes from the current task, not tool access or this file. Before an authorized push, inspect automatic effects and actual permissions. Routine repository integration is distinct from tag-triggered publication. Deployment, live-data mutation, spending, credential changes, broad administrator changes, force pushes, and replacement of published tags/assets require separate explicit authority.
+Before dispatching/rerunning, inspect matching runs and exact inputs; do not duplicate healthy work.
+No idle polling, indefinite watch commands, sleep/status loops or repeated unchanged log reads.
+Normally use one initial status read and one later read at a natural work boundary.
+Additional reads need changed state, a concrete diagnostic question or explicit user direction.
+Operational bounded network retries are distinct from agent monitoring; neither permits indefinite waiting.
+While required hosted work runs, finish independent work that does not invalidate its inputs.
+When only external waiting remains, end with commit, run/attempt, observed state and exact resumption action.
+Do not promise background monitoring or merge around pending branch protection.
 
-Use the established release owner when publication is selected. Exact-source preparation, target admission, immutable publication, and independently accepted public downloads are distinct boundaries. A local archive, upload, tag, or dispatched workflow is not verified delivery. Preserve immutable identities and use additive recovery. Report actual commits, evidence, external actions, unrelated-work preservation, cleanup, and source/integration/publication/download/deployment states separately.
+Complete the mandate's implementation, consumer cutover, documentation, obsolete-path removal and proof.
+Preserve its initial archive and append lifecycle records through the existing convention.
+A pending release need not block independent engineering; immutable candidate obligations remain visible.
+Report precise blockers without erasing safe progress or substituting an unrelated objective.
+
+External authority comes from the current task, not this file or tool access.
+Inspect automatic effects and current permissions before an authorized push or integration.
+Repository integration, tag-triggered publication and production deployment are separate actions.
+Deployment, destructive live-data changes, spending, credential changes and broad administration need explicit authority.
+Never use permission changes or replacement of tags/assets as an unapproved release workaround.
+
+Publish at selected meaningful milestones, not automatically after every campaign and not indefinitely later.
+Use the established release owner when publication is selected and prerequisites are satisfied.
+Keep exact-source preparation, target admission, immutable publication and public-download acceptance distinct.
+A build, upload, tag, green subjob or dispatched workflow is not verified public delivery.
+Preserve publication trust boundaries and additive recovery; do not blindly cancel publishing runs.
+Report engineering, integration, publication, public acceptance and deployment separately.
+Include actual commits, evidence scope, external actions, unresolved limits, preserved work and owned cleanup.
