@@ -142,7 +142,9 @@ impl Machine<'_> {
     ) -> Result<Vec<CheckedValue>, ExecutionError> {
         let raw = super::super::value::RawArguments::new(raw);
         let parameters = match self.program.types.get(&ty).map(|ty| &ty.form) {
-            Some(TypeForm::Function { parameters, .. }) => parameters.clone(),
+            Some(
+                TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. },
+            ) => parameters.clone(),
             _ => {
                 return Err(type_error(
                     "expression-backed port has no exact callable type",

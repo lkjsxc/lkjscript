@@ -213,6 +213,7 @@ fn live_receipt_fault_matrix() {
                 "/result/topology/route_set",
                 "/result/topology/context_owners",
                 "/result/topology/context_relations",
+                "/result/topology/streams_requirement",
                 "/result/topology/predecessor_port_absent",
                 "/result/topology/context_complete",
                 "/result/definition_projection/function",

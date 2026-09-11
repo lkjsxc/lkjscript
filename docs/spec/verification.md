@@ -357,6 +357,11 @@ observes that response. Stale continuation/base/plan, mutated token, and project
 must reject without advancing authority, and the temporary project, service root, request files,
 artifacts, and copied candidate must be removed.
 
+Distributed HTTP receipt 5 includes the starter task port's exact streams requirement and context
+edge. Service receipt 11 compares each maintained task port's complete requirement context with
+its inspected closed handler contract, including empty rows. Predecessor context counts cannot
+certify the explicit task-callable port cutover.
+
 The copied executable must also discover the sole `extract.function` operation, normalize its
 record and direct forms identically, export and strictly decode the complete logical review, and
 apply it once at an exact base. Pure fixtures execute equally before and after in production and

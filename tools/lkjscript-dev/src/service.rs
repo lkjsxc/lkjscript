@@ -29,7 +29,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 10;
+const SERVICE_CONTRACT_VERSION: u32 = 11;
 const HTTP_MAXIMUM_CONCURRENT_TASKS: u64 = 16;
 const HTTP_MAXIMUM_QUEUED_TASKS: u64 = 64;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
@@ -49,7 +49,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "ffcfc444233bb158cb883481b891a6caa0b52b206cc26c66d5cd2f48c4ba9f5f";
+    "025a1c732ede663d9127185ee719a7e28b73e6f8a5b0732bbedfcdecd932cecb";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -930,7 +930,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &repository,
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
-        "maintained artifact-17 service bundle",
+        "maintained artifact-18 service bundle",
         SERVICE_ARTIFACT_SHA256,
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
@@ -1212,7 +1212,7 @@ fn execute(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained artifact-17 service bundle",
+            "maintained artifact-18 service bundle",
             SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
@@ -1740,7 +1740,7 @@ fn run_acceptance(
             && ready.target == "serve"
             && ready.runner == "http",
         "service_artifact_identity",
-        "service readiness disagrees with the exact fresh artifact-17 build",
+        "service readiness disagrees with the exact fresh artifact-18 build",
     )?;
     require(
         ready.secret_names == ["bootstrap-token"],
@@ -2466,7 +2466,7 @@ fn run_acceptance(
             && worker_a_ready.target == "work"
             && worker_a_ready.runner == "worker",
         "worker_artifact_identity",
-        "worker readiness disagrees with the exact fresh artifact-17 build",
+        "worker readiness disagrees with the exact fresh artifact-18 build",
     )?;
     let worker_b_index = context.start_runner(
         "worker-b",
@@ -2485,7 +2485,7 @@ fn run_acceptance(
             && worker_b_ready.target == "work"
             && worker_b_ready.runner == "worker",
         "second_worker_artifact_identity",
-        "second worker readiness disagrees with the exact fresh artifact-17 build",
+        "second worker readiness disagrees with the exact fresh artifact-18 build",
     )?;
     thread::sleep(WORKER_READY_TIMEOUT.min(Duration::from_secs(2)));
     let worker_a_stopped = context.stop_runner(worker_a_index)?;
@@ -2822,7 +2822,7 @@ fn run_acceptance(
     require(
         restored_ready.artifact_digest == artifact_identity.artifact_bundle,
         "restored_artifact_identity",
-        "restored service readiness changed the exact artifact-17 bundle identity",
+        "restored service readiness changed the exact artifact-18 bundle identity",
     )?;
     let restored = context.request(
         "restored-read",
@@ -2844,7 +2844,7 @@ fn run_acceptance(
     require(
         authority_after == authority_before,
         "graph_authority_changed",
-        "service acceptance changed the maintained Graph 13 authority inventory",
+        "service acceptance changed the maintained Graph 14 authority inventory",
     )?;
 
     Ok(ServiceResult {
@@ -3912,7 +3912,7 @@ fn write_descriptor(
     if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the current artifact-17 bundle",
+            "maintained deployment descriptor does not bind the current artifact-18 bundle",
         ));
     }
     if let Some(port) = port {
@@ -4381,15 +4381,6 @@ fn verify_http_route_topology(
                 service_compact_records("HTTP route bounded context", &context_output)?;
             service_require_field(&context_output, "result", "status", "success")?;
             let context_summary = service_required_record(&context_output, "summary")?;
-            let context_complete = service_required_field(context_summary, "truncated")? == "false"
-                && service_required_field(context_summary, "total-owners")? == "5"
-                && service_required_field(context_summary, "total-relations")? == "5";
-            contexts_complete &= context_complete;
-            require(
-                context_complete,
-                "route_context_bound",
-                "HTTP route dependency context was truncated or changed shape",
-            )?;
             let context_owners = context_output
                 .iter()
                 .filter(|record| record.operation == "owner")
@@ -4423,13 +4414,45 @@ fn verify_http_route_topology(
                     format!("HTTP route bounded context omitted {kind} {source} -> {destination}"),
                 )?;
             }
-            let (parameters, result, effect) = inspect_http_route_handler_contract(
+            let contract = inspect_http_route_handler_contract(
                 context,
                 &copied_binary,
                 &copied_application,
                 index,
                 &function,
             )?;
+            let expected_context_count = 5 + contract.requirements.len() as u64;
+            let context_complete = service_required_field(context_summary, "truncated")? == "false"
+                && service_parse_u64(
+                    service_required_field(context_summary, "total-owners")?,
+                    "route context owners",
+                )? == expected_context_count
+                && service_parse_u64(
+                    service_required_field(context_summary, "total-relations")?,
+                    "route context relations",
+                )? == expected_context_count;
+            contexts_complete &= context_complete;
+            require(
+                context_complete,
+                "route_context_bound",
+                "HTTP route dependency context omitted its complete task requirement row",
+            )?;
+            for requirement in &contract.requirements {
+                require(
+                    context_owners.iter().any(|record| {
+                        service_required_field(record, "id").ok() == Some(requirement.as_str())
+                            && service_required_field(record, "kind").ok() == Some("requirement")
+                            && service_required_field(record, "depth").ok() == Some("2")
+                    }) && context_relation_exists(
+                        &context_output,
+                        "function_requirement",
+                        context_port,
+                        requirement,
+                    )?,
+                    "route_context_requirement",
+                    "HTTP task port context omitted an exact declared requirement or relation",
+                )?;
+            }
             routes.push(HttpRouteObservation {
                 id: route_id.clone(),
                 method,
@@ -4443,9 +4466,9 @@ fn verify_http_route_topology(
                 function,
                 function_name: service_required_field(function_owner, "name")?.to_owned(),
                 signature,
-                parameters,
-                result,
-                effect,
+                parameters: contract.parameters,
+                result: contract.result,
+                effect: contract.effect,
             });
         }
         routes.sort_by(|left, right| {
@@ -4494,7 +4517,7 @@ fn verify_http_route_topology(
         require(
             authority_unchanged,
             "route_authority_changed",
-            "HTTP route inspection changed the isolated Graph 13 application copy",
+            "HTTP route inspection changed the isolated Graph 14 application copy",
         )?;
         Ok(HttpRouteTopologyObservation {
             target,
@@ -4641,13 +4664,20 @@ fn split_capture_names(value: &str) -> Result<Vec<String>, ServiceFailure> {
     Ok(captures)
 }
 
+struct HttpRouteHandlerContract {
+    parameters: Vec<HttpRouteParameterObservation>,
+    result: String,
+    effect: String,
+    requirements: Vec<String>,
+}
+
 fn inspect_http_route_handler_contract(
     context: &mut ServiceContext,
     binary: &Path,
     application: &Path,
     index: usize,
     function: &str,
-) -> Result<(Vec<HttpRouteParameterObservation>, String, String), ServiceFailure> {
+) -> Result<HttpRouteHandlerContract, ServiceFailure> {
     let output = context.invoke(CommandRequest::standard(
         &format!("route-handler-definition-{index:02}"),
         vec![
@@ -4730,11 +4760,36 @@ fn inspect_http_route_handler_contract(
         "route_handler_parameters",
         "HTTP route handler definition omitted, duplicated, or reordered parameters",
     )?;
-    Ok((
+    let requirement_count = service_parse_u64(
+        service_required_field(function_record, "requirements")?,
+        "HTTP route handler requirement count",
+    )?;
+    let mut requirements = BTreeSet::new();
+    for record in records
+        .iter()
+        .filter(|record| record.operation == "definition.requirement")
+    {
+        require(
+            service_required_field(record, "parent")? == function
+                && requirements.insert(service_required_field(record, "id")?.to_owned()),
+            "route_handler_requirements",
+            "HTTP route handler definition contains foreign or duplicate requirements",
+        )?;
+    }
+    require(
+        requirements.len() as u64 == requirement_count
+            && service_required_field(function_record, "type-parameters")? == "0"
+            && service_required_field(function_record, "effect-parameters")? == "0"
+            && service_required_field(function_record, "effect-row-parameters")? == "0",
+        "route_handler_requirements",
+        "maintained HTTP task handler did not expose its complete closed effect contract",
+    )?;
+    Ok(HttpRouteHandlerContract {
         parameters,
-        service_required_field(function_record, "result")?.to_owned(),
-        service_required_field(function_record, "effect")?.to_owned(),
-    ))
+        result: service_required_field(function_record, "result")?.to_owned(),
+        effect: service_required_field(function_record, "effect")?.to_owned(),
+        requirements: requirements.into_iter().collect(),
+    })
 }
 
 fn independently_validate_http_routes(
@@ -6751,7 +6806,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 10);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 11);
     }
 
     #[test]

@@ -20,7 +20,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
-pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 4;
+pub(crate) const ACCEPTANCE_SCHEMA_VERSION: u32 = 5;
 const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
@@ -236,6 +236,7 @@ struct HttpTopologyObservation {
     route_set: String,
     context_owners: u64,
     context_relations: u64,
+    streams_requirement: String,
     predecessor_port_absent: bool,
     context_complete: bool,
 }
@@ -1585,21 +1586,28 @@ fn inspect_http_topology(
         "route context relations",
     )?;
     let context_complete = required_field(context_summary, "truncated")? == "false"
-        && context_owners == 5
-        && context_relations == 5;
+        && context_owners == 6
+        && context_relations == 6;
     let port_owner = unique_owner_at(&route_context, "port", "1")?;
     let target_owner = unique_owner_at(&route_context, "target", "1")?;
     let component_owner = unique_owner_at(&route_context, "component", "2")?;
     let function_owner = unique_owner_at(&route_context, "task_function", "2")?;
+    let requirement_owner = unique_owner_at(&route_context, "requirement", "2")?;
     let context_port = required_field(port_owner, "id")?;
     let context_component = required_field(component_owner, "id")?;
     let function = required_field(function_owner, "id")?.to_owned();
+    let streams_requirement = required_field(requirement_owner, "id")?.to_owned();
     let relations_complete = [
         ("http_route_target", route.as_str(), target.as_str()),
         ("http_route_port", route.as_str(), context_port),
         ("target_component", target.as_str(), context_component),
         ("member_declaration", context_port, context_component),
         ("function_value", context_port, function.as_str()),
+        (
+            "function_requirement",
+            context_port,
+            streams_requirement.as_str(),
+        ),
     ]
     .into_iter()
     .all(|(kind, source, target)| relation_exists(&route_context, kind, source, target));
@@ -1610,10 +1618,11 @@ fn inspect_http_topology(
         || !component.ends_with(context_component)
         || required_field(port_owner, "name")? != "http"
         || required_field(function_owner, "name")? != "handle"
+        || required_field(requirement_owner, "name")? != "streams"
     {
         return Err(AcceptanceFailure::acceptance(
             "http_route_context",
-            "bounded HTTP route context omitted its exact target, port, component, or function",
+            "bounded HTTP route context omitted its exact target, task port, component, function, or requirement",
         ));
     }
     Ok(HttpTopologyObservation {
@@ -1628,6 +1637,7 @@ fn inspect_http_topology(
         route_set,
         context_owners,
         context_relations,
+        streams_requirement,
         predecessor_port_absent,
         context_complete,
     })
@@ -1678,8 +1688,9 @@ fn http_topology_is_current(topology: &HttpTopologyObservation) -> bool {
         && topology.route_count == 1
         && evidence::hex_identity(&topology.route_set, "http_routes_", 64)
         && topology.route_set.len() == 76
-        && topology.context_owners == 5
-        && topology.context_relations == 5
+        && topology.context_owners == 6
+        && topology.context_relations == 6
+        && evidence::hex_identity(&topology.streams_requirement, "req_", 32)
         && topology.predecessor_port_absent
         && topology.context_complete
 }
@@ -2573,12 +2584,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-5",
+            "lkjscript-function-definition-projection-6",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "5",
+            "6",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();
@@ -3596,7 +3607,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode acceptance schema"),
-            r#"{"identity":"lkjscript-distributed-http-acceptance","version":4}"#
+            r#"{"identity":"lkjscript-distributed-http-acceptance","version":5}"#
         );
         assert_eq!(ACCEPTANCE_WORKFLOW, "distributed-http-application");
     }

@@ -721,7 +721,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         field(&discovery, "execution.binding", "expression")? == "bind"
             && field(&discovery, "execution.binding", "environment")? == "immutable-flat-prefix"
             && field(&discovery, "execution.binding", "task-targets")?
-                == "rejected-including-port-preparation"
+                == "authority-free-descriptors-preserving-exact-row"
             && field(
                 &discovery,
                 "execution.binding",

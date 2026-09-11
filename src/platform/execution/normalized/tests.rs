@@ -1098,16 +1098,27 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot
 }
 
-fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
+fn normalized_worker_snapshot(
+    task: bool,
+    expression_port: bool,
+) -> crate::platform::kernel::KernelSnapshot {
     const SEED: &[u8] = b"normalized-worker-runner";
 
     let mut snapshot = pure_command_snapshot();
     let bool_type = admit_snapshot_type(&mut snapshot, TypeForm::Bool);
     let port_type = admit_snapshot_type(
         &mut snapshot,
-        TypeForm::Function {
-            parameters: Vec::new(),
-            result: bool_type,
+        if task {
+            TypeForm::TaskFunction {
+                parameters: Vec::new(),
+                result: bool_type,
+                effect: Default::default(),
+            }
+        } else {
+            TypeForm::Function {
+                parameters: Vec::new(),
+                result: bool_type,
+            }
         },
     );
     let implementation = declaration_named(&snapshot, "with_binding");
@@ -1154,7 +1165,11 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
                 OwnerRecord::Declaration(DeclarationRecord {
                     header: OwnerHeader::new(
                         OwnerKey::Declaration(function),
-                        OwnerKind::PureFunction,
+                        if task {
+                            OwnerKind::TaskFunction
+                        } else {
+                            OwnerKind::PureFunction
+                        },
                     ),
                     module,
                     name: Name::new("worker_iteration").unwrap(),
@@ -1164,13 +1179,44 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
                         result: bool_type,
-                        effect: FunctionEffect::Pure,
+                        effect: if task {
+                            FunctionEffect::Task {
+                                requirements: Vec::new(),
+                                effect_parameters: Vec::new(),
+                            }
+                        } else {
+                            FunctionEffect::Pure
+                        },
                         body,
                     }),
                 }),
             )
             .is_none()
     );
+    let reference = DeclarationReference {
+        package,
+        declaration: function,
+    };
+    let implementation = if expression_port {
+        let value = ExpressionId::migrate(SEED, 1);
+        snapshot.owners.insert(
+            OwnerKey::Expression(value),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    value,
+                    ExpressionOperation::FunctionValue {
+                        function: reference,
+                        type_arguments: Vec::new(),
+                        effect_arguments: Vec::new(),
+                    },
+                )
+                .expect("worker callable descriptor"),
+            ),
+        );
+        PortImplementation::Expression(value)
+    } else {
+        PortImplementation::Function(reference)
+    };
     let OwnerRecord::Port(port_record) = snapshot
         .owners
         .get_mut(&OwnerKey::Port(port))
@@ -1180,10 +1226,7 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
     };
     let previous_port_type = port_record.function_type;
     port_record.function_type = port_type;
-    port_record.implementation = PortImplementation::Function(DeclarationReference {
-        package,
-        declaration: function,
-    });
+    port_record.implementation = implementation;
     if !snapshot
         .owners
         .values()
@@ -3038,53 +3081,65 @@ async fn normalized_deployment_cleans_owned_adapters_exactly_once() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn normalized_worker_uses_shared_structured_topology() {
-    let snapshot = normalized_worker_snapshot();
-    let (_temporary, _repository, program) = prepare_repository(&snapshot);
-    let program = Arc::new(program);
-    let deployment = NormalizedPreparedDeployment::prepare(
-        &program,
-        Name::new("work").unwrap(),
-        Vec::new(),
-        NormalizedDeploymentResourcePolicy::default(),
-        &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
-    )
-    .expect("pure normalized worker deployment");
-    let resident = NormalizedResidentDeployment::prepare(
-        Arc::clone(&program),
-        deployment,
-        ResidentLimits::default(),
-        NormalizedRunPolicy::default(),
-    )
-    .expect("normalized worker resident");
-    let application = NormalizedWorkerApplication::new(
-        resident,
-        WorkerLimits {
-            maximum_workers: 1,
-            idle_wait_milliseconds: 1,
-            ..WorkerLimits::default()
-        },
-    )
-    .expect("normalized worker application");
-    let observer = application.resident().clone();
-    let shutdown = async move {
-        loop {
-            if observer.observe().completed >= 2 {
-                break;
+    for (task, expression_port) in [(false, false), (false, true), (true, false), (true, true)] {
+        let snapshot = normalized_worker_snapshot(task, expression_port);
+        let (_temporary, _repository, program) = prepare_repository(&snapshot);
+        let reference =
+            NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                .invoke_root_target(
+                    &Name::new("work").unwrap(),
+                    Vec::new(),
+                    None,
+                    &ExecutionControl::uncancelled(),
+                )
+                .expect("independent worker callable entry");
+        assert_eq!(reference.0, NormalizedValue::Bool(false));
+        let program = Arc::new(program);
+        let deployment = NormalizedPreparedDeployment::prepare(
+            &program,
+            Name::new("work").unwrap(),
+            Vec::new(),
+            NormalizedDeploymentResourcePolicy::default(),
+            &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
+        )
+        .expect("exact normalized worker deployment");
+        let resident = NormalizedResidentDeployment::prepare(
+            Arc::clone(&program),
+            deployment,
+            ResidentLimits::default(),
+            NormalizedRunPolicy::default(),
+        )
+        .expect("normalized worker resident");
+        let application = NormalizedWorkerApplication::new(
+            resident,
+            WorkerLimits {
+                maximum_workers: 1,
+                idle_wait_milliseconds: 1,
+                ..WorkerLimits::default()
+            },
+        )
+        .expect("normalized worker application");
+        let observer = application.resident().clone();
+        let shutdown = async move {
+            loop {
+                if observer.observe().completed >= 2 {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
-            tokio::task::yield_now().await;
-        }
-    };
+        };
 
-    let receipt =
-        tokio::time::timeout(std::time::Duration::from_secs(2), application.run(shutdown))
-            .await
-            .expect("bounded normalized worker run")
-            .expect("normalized worker topology");
-    assert!(receipt.iterations >= 1);
-    assert_eq!(receipt.productive_iterations, 0);
-    assert_eq!(receipt.idle_iterations, receipt.iterations);
-    assert!(receipt.shutdown.admission_stopped);
-    assert_eq!(receipt.shutdown.remaining_tasks, 0);
+        let receipt =
+            tokio::time::timeout(std::time::Duration::from_secs(2), application.run(shutdown))
+                .await
+                .expect("bounded normalized worker run")
+                .expect("normalized worker topology");
+        assert!(receipt.iterations >= 1);
+        assert_eq!(receipt.productive_iterations, 0);
+        assert_eq!(receipt.idle_iterations, receipt.iterations);
+        assert!(receipt.shutdown.admission_stopped);
+        assert_eq!(receipt.shutdown.remaining_tasks, 0);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
