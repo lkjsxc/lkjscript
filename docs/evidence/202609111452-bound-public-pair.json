@@ -1,0 +1,56 @@
+{
+  "schema": "lkjscript-campaign-evidence-1",
+  "campaign": "docs/campaigns/202609111452.md",
+  "base_commit": "7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e",
+  "guidance_archive_commit": "9d134f7b",
+  "scope": "Contributor release verification; no new product release or deployment",
+  "decision": "Independent admission and small command lifecycle on both routes; exact executes the complete five-owner suite freshly, latest binds that actual observation within the same pair",
+  "predecessor": {
+    "release": "v0.1.31",
+    "release_id": 386791231,
+    "source_commit": "7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e",
+    "tag_object": "4dc769dd28f443584571d325fb47ec2ec46d8694",
+    "run": "34557393945/1",
+    "dry_run": "34549698169/1",
+    "artifact_zip_digests": {
+      "10183759950": "1c4c1d6b49cddcbcd218d0371565c9e78e432db647fe4a2499165ba5bc50a718",
+      "10184479253": "59090f16a1dda2eccbe8d14777f6434f8f3ea524976f9f60848bd8d214df9109",
+      "10185104547": "a11f2f62318e0a1aa4e14536df16a33119c57b8d742b7ca0447978fa36cae7a5",
+      "10186270408": "0c6c1781b1cb195416e6ad2fab6fbafa85cf18c3b03110470af82378a5535fff",
+      "10184532311": "dfc155535c56c2841eae118a64f2d3daab83f186cd5b3bab1e36f06730ffb447",
+      "10184531758": "06bcc65da174cadef6a0b987de6c37845c37f70cd3bc31cc8a8cec28310efabf"
+    },
+    "reconciliation": "FRN-1 through FRN-7 mapped in the predecessor campaign terminal entry. Retained full body: 26 fresh gates; original typed target reader: six owners; original typed transferred readers: five owners each on pre-publication, exact and latest. Receipt rereading is not fresh execution.",
+    "raw_evidence": ".artifacts/pair-202609111452/predecessor"
+  },
+  "development": {
+    "interface_test": "Failed first against the old command dispatch; now passes",
+    "release_tests_E": "34 passed, 5 ignored, 0 failed",
+    "process_tests_A": "10 passed, 0 failed",
+    "route_smoke_A": "Failed: procfs has zero stat length; original failure retained with runtime cleanup complete",
+    "route_smoke_B": "Both real small lifecycles and readers passed in 7.02 seconds against the unchanged published candidate; development feedback, not new-source pair acceptance",
+    "clippy_E": "Passed",
+    "interruption_preflight_A": "12 retained failures rejected, 248.35 seconds, original released inputs; development scope only",
+    "equality_mutation": "Disabling the production streaming comparison made the byte-mutation regression fail; exact source restored",
+    "raw_evidence": ".artifacts/pair-202609111452"
+  },
+  "acceptance": {
+    "engineering": "Pending stabilized source/full/target/rehearsal/live-fault proof",
+    "tested_source_commit": null,
+    "full": null,
+    "target": null,
+    "pair": null,
+    "live_faults": null,
+    "diagnostic_baseline": null,
+    "integrated": false,
+    "hosted_public_pair_observation": "Unrun; required at the next selected user-visible publication milestone",
+    "publication": "Deferred; no new version, tag, release dispatch or release-control variable write selected",
+    "deployment": "Not performed"
+  },
+  "limits": [
+    "Local copies prove neither anonymous acquisition nor GitHub authenticity",
+    "One trusted isolated environment with drift detection; no hostile-host sandbox claim",
+    "Ten versus five expensive executions is deterministic; wall time and provider billing are separate",
+    "Earlier failed v0.1.29 and additive v0.1.30 history are preserved"
+  ]
+}

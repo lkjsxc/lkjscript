@@ -1084,7 +1084,7 @@ jobs:
           verify_asset_attestation \
             "$LATEST/$RELEASE_CHECKSUMS" "$RUNNER_TEMP/latest-checksum-attestation.json"
 
-      - name: Independently verify and exercise exact and latest application binaries
+      - name: Admit both public routes and bind one fresh application suite
         id: acceptance
         shell: bash
         env:
@@ -1101,49 +1101,18 @@ jobs:
           test ! -e "$root"
           mkdir -m 0700 "$root"
 
-          verify_public_application() {
-            local label=$1
-            local asset_root=$2
-            local extraction="$root/$label-extracted"
-            local release_summary="$root/$label-release-summary.json"
-            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release verify \
-              --archive "$asset_root/$RELEASE_ARCHIVE" \
-              --checksums "$asset_root/$RELEASE_CHECKSUMS" \
-              --extract-to "$extraction" \
-              --expected-tag "$TAG" \
-              --expected-publication release | tee "$release_summary"
-            test "$(wc -l < "$release_summary")" -eq 1
-            local manifest="$extraction/RELEASE-MANIFEST.json"
-            local candidate="$extraction/lkjscript"
-            test -f "$manifest"
-            test -x "$candidate"
-            local candidate_sha
-            local candidate_bytes
-            candidate_sha=$(sha256sum "$candidate" | cut -d' ' -f1)
-            candidate_bytes=$(stat -c '%s' "$candidate")
-            jq -e \
-              --arg tag "$TAG" \
-              --arg commit "$COMMIT_SHA" \
-              --arg extraction "$extraction" \
-              --arg sha "$candidate_sha" \
-              --argjson bytes "$candidate_bytes" \
-              '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == "release" and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
-              "$release_summary" > /dev/null
-            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release transferred run \
-              --candidate "$candidate" --manifest "$manifest" \
-              --tag "$TAG" --commit "$COMMIT_SHA" --publication release \
-              --boundary "$label-download" --evidence-root "$root/$label-transferred" \
-              --verifier-identity "$RUNNER_TEMP/verifier-handoff/$VERIFIER_IDENTITY" \
-              --expected-verifier-sha256 "$VERIFIER_FILE_SHA256" \
-              --expected-verifier-bytes "$VERIFIER_FILE_BYTES" | tee "$root/$label-transferred-summary.json"
-          }
-
-          verify_public_application exact "$EXACT"
-          verify_public_application latest "$LATEST"
-          cmp "$root/exact-extracted/lkjscript" "$root/latest-extracted/lkjscript"
-          cmp "$root/exact-extracted/RELEASE-MANIFEST.json" "$root/latest-extracted/RELEASE-MANIFEST.json"
-          cmp "$EXACT/$RELEASE_ARCHIVE" "$LATEST/$RELEASE_ARCHIVE"
-          cmp "$EXACT/$RELEASE_CHECKSUMS" "$LATEST/$RELEASE_CHECKSUMS"
+          env -i LANG=C PATH=/usr/bin:/bin \
+            GITHUB_ACTIONS=true GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_WORKFLOW="$GITHUB_WORKFLOW" GITHUB_JOB="$GITHUB_JOB" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            GITHUB_SERVER_URL="$GITHUB_SERVER_URL" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+            "$VERIFIER" release transferred pair-run \
+            --exact-assets "$EXACT" --latest-assets "$LATEST" \
+            --tag "$TAG" --commit "$COMMIT_SHA" --publication release \
+            --evidence-root "$root/pair" \
+            --verifier-identity "$RUNNER_TEMP/verifier-handoff/$VERIFIER_IDENTITY" \
+            --expected-verifier-sha256 "$VERIFIER_FILE_SHA256" \
+            --expected-verifier-bytes "$VERIFIER_FILE_BYTES" | tee "$root/pair-summary.json"
 
       - name: Retain bounded exact and latest public application evidence
         id: evidence-upload
@@ -1152,16 +1121,20 @@ jobs:
         with:
           name: public-application-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/public-verification/*-release-summary.json
-            ${{ runner.temp }}/public-verification/*-transferred-summary.json
-            ${{ runner.temp }}/public-verification/*-extracted/RELEASE-MANIFEST.json
-            ${{ runner.temp }}/public-verification/*-transferred/receipt.json
-            ${{ runner.temp }}/public-verification/*-transferred/*.log
-            ${{ runner.temp }}/public-verification/*-transferred/distributed-http/*
-            ${{ runner.temp }}/public-verification/*-transferred/outbound-http/*
-            ${{ runner.temp }}/public-verification/*-transferred/offline-packages/*
-            ${{ runner.temp }}/public-verification/*-transferred/pure-tail/*
-            ${{ runner.temp }}/public-verification/*-transferred/stateful-http/*
+            ${{ runner.temp }}/public-verification/pair-summary.json
+            ${{ runner.temp }}/public-verification/pair/receipt.json
+            ${{ runner.temp }}/public-verification/pair/exact/lifecycle.json
+            ${{ runner.temp }}/public-verification/pair/latest/lifecycle.json
+            ${{ runner.temp }}/public-verification/pair/*/*.log
+            ${{ runner.temp }}/public-verification/pair/*/artifact.lkja
+            ${{ runner.temp }}/public-verification/pair/*/extracted/RELEASE-MANIFEST.json
+            ${{ runner.temp }}/public-verification/pair/full-suite/receipt.json
+            ${{ runner.temp }}/public-verification/pair/full-suite/*.log
+            ${{ runner.temp }}/public-verification/pair/full-suite/distributed-http/*
+            ${{ runner.temp }}/public-verification/pair/full-suite/outbound-http/*
+            ${{ runner.temp }}/public-verification/pair/full-suite/offline-packages/*
+            ${{ runner.temp }}/public-verification/pair/full-suite/pure-tail/*
+            ${{ runner.temp }}/public-verification/pair/full-suite/stateful-http/*
             ${{ runner.temp }}/published-release.json
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json
             ${{ runner.temp }}/verifier-verify-summary.json

@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.30 executable provides offline command, signature-indexed inbound HTTP, structured
+The supported v0.1.31 executable provides offline command, signature-indexed inbound HTTP, structured
 interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
 lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
 accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
@@ -14,14 +14,14 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Immutable `v0.1.30` publicly delivers explicit parametric records and variants, the graph-owned pair
-family, and independently authored batch/edit libraries composing with retained functions, offline
-packages, typed persistence and concrete session state. Independent exact-version and latest downloads
-passed all five behavioral owners. The [public nominal evidence](docs/evidence/202609101130-parametric-nominal-public-milestone.json)
+Immutable `v0.1.31` adds finite recursive nominal data to explicit parametric records and variants.
+Freshly authored recursive trees compose with offline packages, retained functions, typed persistence
+and concrete session state. Independent exact-version and latest downloads each passed all five
+behavioral owners. The [recursive delivery reconciliation](docs/campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
 binds the source, target, immutable publication and both download boundaries.
 
 The supported release selects exact source commit
-`35269961fc66fc308785913190a10843ee175aaa`. The release includes public exact
+`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -132,10 +132,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.30` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.30) owns the immutable
+[`v0.1.31` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.31) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.30/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.30/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.31/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.31/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -176,7 +176,7 @@ for an empty dependency-free package.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.30 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.31 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -215,7 +215,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.30 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.31 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -244,7 +244,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.30 download exposes the complete first-party boundary and topology authoring
+The immutable v0.1.31 download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -256,7 +256,7 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.30`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.31`.
 
 Public compact change records can add an exact staged built-in dependency,
 components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
@@ -374,7 +374,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.30 executable can obtain one complete admitted local neighborhood
+The public v0.1.31 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -389,7 +389,7 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-The public v0.1.30 executable can project one complete accepted local function definition through
+The public v0.1.31 executable can project one complete accepted local function definition through
 stateless pages:
 
 ```sh

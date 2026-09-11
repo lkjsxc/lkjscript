@@ -64,7 +64,8 @@ const EXPECTED_MEMBERS: [ExpectedMember; 5] = [
     },
 ];
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct ObservedMember {
     pub(super) name: String,
     pub(super) mode: u32,
@@ -72,7 +73,8 @@ pub(super) struct ObservedMember {
     pub(super) sha256: Option<Sha256Digest>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct VerifiedArchive {
     pub(super) manifest: ReleaseManifest,
     pub(super) manifest_sha256: Sha256Digest,
@@ -208,13 +210,30 @@ pub(super) fn verify_archive(
     working_directory: &Path,
     candidate: Option<&Path>,
 ) -> Result<VerifiedArchive, DevError> {
+    verify_archive_controlled(archive, working_directory, candidate, None)
+}
+
+pub(super) fn verify_archive_controlled(
+    archive: &Path,
+    working_directory: &Path,
+    candidate: Option<&Path>,
+    control: Option<&process::ProcessControl>,
+) -> Result<VerifiedArchive, DevError> {
     let extraction = tempfile::Builder::new()
         .prefix("lkjscript-release-extract-")
         .tempdir_in(working_directory)
         .map_err(|error| {
             DevError::infrastructure(format!("create verification extraction: {error}"))
         })?;
-    verify_archive_into(archive, working_directory, candidate, extraction.path())
+    let observed = verify_archive_into(
+        archive,
+        working_directory,
+        candidate,
+        extraction.path(),
+        control,
+    );
+    extraction.close()?;
+    observed
 }
 
 fn verify_archive_into(
@@ -222,6 +241,7 @@ fn verify_archive_into(
     working_directory: &Path,
     candidate: Option<&Path>,
     extraction: &Path,
+    control: Option<&process::ProcessControl>,
 ) -> Result<VerifiedArchive, DevError> {
     let archive_metadata = ensure_regular(archive, "release archive")?;
     if archive_metadata.len() > MAXIMUM_COMPRESSED_BYTES {
@@ -233,25 +253,26 @@ fn verify_archive_into(
     let archive_sha256 = sha256_file(archive)?.0;
     let tar_path = working_directory.join("verified.tar");
     let stderr_path = working_directory.join("gzip.stderr");
-    let observation = process::run(
-        &ProcessSpec {
-            command: vec![
-                "gzip".to_owned(),
-                "--decompress".to_owned(),
-                "--stdout".to_owned(),
-                archive.to_string_lossy().into_owned(),
-            ],
-            cwd: working_directory.to_path_buf(),
-            environment: process::environment(),
-            timeout: Duration::from_secs(120),
-            maximum_stdout_bytes: MAXIMUM_UNCOMPRESSED_BYTES,
-            maximum_stderr_bytes: 64 * 1024,
-            stdout_path: tar_path.clone(),
-            stderr_path,
-            unavailable_exit_code: None,
-        },
-        working_directory,
-    );
+    let spec = &ProcessSpec {
+        command: vec![
+            "gzip".to_owned(),
+            "--decompress".to_owned(),
+            "--stdout".to_owned(),
+            archive.to_string_lossy().into_owned(),
+        ],
+        cwd: working_directory.to_path_buf(),
+        environment: process::environment(),
+        timeout: Duration::from_secs(120),
+        maximum_stdout_bytes: MAXIMUM_UNCOMPRESSED_BYTES,
+        maximum_stderr_bytes: 64 * 1024,
+        stdout_path: tar_path.clone(),
+        stderr_path,
+        unavailable_exit_code: None,
+    };
+    let observation = match control {
+        Some(control) => process::run_supervised(spec, working_directory, Some(control)),
+        None => process::run(spec, working_directory),
+    };
     if observation.status != ProcessStatus::Passed {
         return Err(DevError::corrupt(format!(
             "gzip decompression failed with {:?}: {}",
@@ -341,7 +362,7 @@ pub(super) fn extract_verified_archive(
         .map_err(|error| {
             DevError::infrastructure(format!("create verified extraction stage: {error}"))
         })?;
-    let observed = verify_archive_into(archive, work.path(), None, stage.path())?;
+    let observed = verify_archive_into(archive, work.path(), None, stage.path(), None)?;
     super::validate_manifest(&observed.manifest)?;
     if &observed != expected {
         return Err(DevError::corrupt(
@@ -353,6 +374,46 @@ pub(super) fn extract_verified_archive(
     synchronize_directory(&source)?;
     publish_directory_no_replace(&source, output)?;
     synchronize_directory(output_parent)
+}
+
+// A create-new pair admission uses the exact same parser, manifest and static-linkage checks.
+// Temporary decompression/extraction state is explicitly closed on success and failure.
+pub(super) fn admit_archive(
+    archive: &Path,
+    checksums: &Path,
+    working_directory: &Path,
+    output: &Path,
+    control: &process::ProcessControl,
+) -> Result<VerifiedArchive, DevError> {
+    super::require_absolute_extraction_output(output)?;
+    let work = tempfile::Builder::new()
+        .prefix(".admission-")
+        .tempdir_in(working_directory)?;
+    let stage = tempfile::Builder::new()
+        .prefix(".extraction-")
+        .tempdir_in(working_directory)?;
+    let result = (|| {
+        let verified =
+            verify_archive_into(archive, work.path(), None, stage.path(), Some(control))?;
+        super::validate_manifest(&verified.manifest)?;
+        super::verify_checksum_bytes(
+            &process::read_bounded(checksums, 1024)?,
+            &verified.archive_sha256,
+        )?;
+        if control.cancelled() {
+            return Err(DevError::corrupt("pair admission cancelled"));
+        }
+        let source = stage.path().join(TOP_DIRECTORY.trim_end_matches('/'));
+        synchronize_directory(&source)?;
+        publish_directory_no_replace(&source, output)?;
+        synchronize_directory(working_directory)?;
+        Ok(verified)
+    })();
+    let stage_closed = stage.close();
+    let work_closed = work.close();
+    stage_closed?;
+    work_closed?;
+    result
 }
 
 struct ParsedTar {
@@ -941,19 +1002,19 @@ fn run_quiet(program: &str, arguments: &[String], cwd: &Path) -> Result<(), DevE
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
 
     #[derive(Clone)]
-    struct TestMember {
-        name: String,
-        mode: u32,
-        kind: u8,
-        bytes: Vec<u8>,
+    pub(in crate::release) struct TestMember {
+        pub(in crate::release) name: String,
+        pub(in crate::release) mode: u32,
+        pub(in crate::release) kind: u8,
+        pub(in crate::release) bytes: Vec<u8>,
     }
 
-    fn test_members() -> Vec<TestMember> {
+    pub(in crate::release) fn test_members() -> Vec<TestMember> {
         vec![
             TestMember {
                 name: TOP_DIRECTORY.to_owned(),
@@ -1016,7 +1077,7 @@ mod tests {
         header
     }
 
-    fn test_tar(members: &[TestMember]) -> Vec<u8> {
+    pub(in crate::release) fn test_tar(members: &[TestMember]) -> Vec<u8> {
         let mut bytes = Vec::new();
         for member in members {
             bytes.extend_from_slice(&header(member));

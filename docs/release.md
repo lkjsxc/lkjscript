@@ -5,7 +5,15 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.30`, release `386193815`, is the current supported release. Annotated tag
+Immutable `v0.1.31`, release `386791231`, is the current supported release, from source
+`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. Dry run `34549698169/1` and tag run
+`34557393945/1` passed. The latter's retained full receipt records 26 fresh gates, and its
+six-owner target, pre-publication, exact-download and latest-download receipts have been reread
+with the original verifier at their original isolated paths. Both public routes freshly executed
+all five owners under the previous policy. This distributes finite recursive nominal data;
+see the [predecessor reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11).
+
+The previous immutable `v0.1.30`, release `386193815`, remains preserved. Annotated tag
 `b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects source
 `35269961fc66fc308785913190a10843ee175aaa`. Dry run `34454845131` and tag run `34461031325`
 passed on attempt 1. Each ran 26 fresh source gates, static inspection, both pinned userlands,
@@ -211,7 +219,7 @@ Dispatch a dry run against the final source commit:
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
   -f publish=false -f tag="$release_tag"
-gh run watch --repo lkjsxc/lkjscript RUN_ID --exit-status
+gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,attempt,jobs
 gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name release-handoff-RUN_ID-RUN_ATTEMPT \
   --dir /absolute/absent/path/hosted-handoff
@@ -219,6 +227,13 @@ gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name pre-publication-application-evidence-RUN_ID-RUN_ATTEMPT \
   --dir /absolute/absent/path/hosted-application-evidence
 ```
+
+Inspect matching runs before a selected dispatch. Observe once initially and once at a meaningful
+work boundary; another read needs a changed state or a specific diagnostic question. Complete
+independent work while the run executes. If only external waiting remains, hand off the exact
+commit, run/attempt, observed state, remaining required checks and the next `gh run view` action.
+Do not watch indefinitely, poll, fetch unchanged logs repeatedly or merge around pending protection.
+Download artifacts only after completion, and retain the explicit failing artifact-ID/digest checks.
 
 The dry run must freshly pass build, full, all six named target oracles, package, and the
 five-owner transferred operation. Its publish and post-release jobs must be
@@ -290,15 +305,57 @@ manually create a parallel release.
 ## Anonymous public acceptance
 
 The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum
-pairs. For each pair independently it verifies checksums, release and asset attestations, strict
-extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs
-all five owners through `release transferred run`, with boundary `exact-download` or `latest-download`,
-against separate create-new roots and fresh isolated application, data, and local relay state.
-Exact/latest archive, checksum, candidate, and manifest byte equality is checked after, and never
-substitutes for either complete five-owner behavioral run. Each stateful run requires its own clean and
-incremental artifacts to agree; artifacts from independently allocated fresh applications are not
-cross-compared. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation
-results.
+pairs and independently accepts their release/asset authenticity and asset identities. It then invokes
+one `release transferred pair-run` in mandatory release mode. Rust independently admits each strict
+archive and static executable into a create-new extraction, compares complete archive/checksum/
+manifest/executable bytes and admitted modes, and runs the documented capabilities/new/status/check/
+build/run lifecycle through each extraction with independently expected typed text `"hello"`.
+A final status confirms the accepted revision remains healthy. Each route has a private project and
+supervised cleanup. The pair then freshly executes the existing five-owner suite once against exact,
+with boundary `exact-download`. Latest binds that actual aggregate within this invocation; it does
+not receive a fabricated fresh five-child receipt. Its small lifecycle is separately fresh.
+
+```sh
+/absolute/verifier/lkjscript-dev release transferred pair-run \
+  --exact-assets /absolute/exact-assets --latest-assets /absolute/latest-assets \
+  --tag "$release_tag" --commit "$release_source" --publication release \
+  --evidence-root /absolute/absent/pair \
+  --verifier-identity /absolute/verifier/verifier-identity.json \
+  --expected-verifier-sha256 "$verifier_sha256" --expected-verifier-bytes "$verifier_bytes"
+```
+
+`pair-verify` accepts the same arguments and strictly rereads the pair, both admissions, lifecycles
+and every actual child receipt without executing applications. Input directories must be separate
+canonical absolute directories containing exactly the target-owned archive and `SHA256SUMS`;
+symlinks, aliases, hard-linked inputs and pre-existing output roots reject. Both routes, the verifier
+and its handoff are reobserved around each expensive child and before terminal acceptance. Failed,
+cancelled, unavailable, output-exhausted, changed or unclean attempts remain non-passing; retries
+use new roots. Evidence retains route receipts/logs and the small built artifacts required by their
+reader, plus the one actual aggregate and all child records. Generated projects are removed.
+
+`--publication dry-run` is explicitly a **local pair rehearsal**. Prepare from a clean source commit
+using fresh full and exact target-admission receipts, the unchanged product-version tag string and
+the pinned notice tool; create a matching verifier handoff and two independent local input copies.
+The pair's real child aggregate uses `pre-publication` for dry-run manifests. This requires no new
+tag or release and proves no anonymous acquisition or GitHub authenticity. Release and rehearsal
+evidence cannot substitute for each other. Source-full, six-owner target and independent fresh
+pre-publication acceptance remain mandatory for a selected publication. The contributor command
+owns admission/execution/equality/cleanup; the hosted workflow owns public acquisition/authenticity
+and successful overall completion. The [decision](decisions/20260911-bound-public-pair.md) records
+the policy change and its trusted-runner limits.
+
+For owner development, run the release/process Cargo filters and list exact ignored test names.
+With genuinely prepared inputs under `LKJSCRIPT_PAIR_REHEARSAL_ROOT` (`verifier`, `exact-assets`,
+`latest-assets` and the actual preparation `release-receipt.json`), explicitly run
+`release::transferred::pair::tests::live_pair_interruptions_preserve_failures_before_fresh_recovery`
+with `--ignored --exact`, then perform the genuine `pair-run` into `pair`. Explicitly run
+`release::transferred::pair::tests::live_pair_receipt_fault_matrix` with
+`LKJSCRIPT_PAIR_FIXTURE_ROOT` naming that completed pair and
+`release::transferred::fault_tests::live_receipt_fault_matrix` with
+`LKJSCRIPT_TRANSFERRED_FIXTURE_ROOT` naming its `full-suite`. These source-bound fault tests restore
+original evidence; they are not fresh product behavioral observations or default full rehearsals.
+The next selected user-visible release milestone must exercise this public workflow. No new
+publication or deployment is selected merely to integrate this tooling change.
 
 An independent token-free transport check may repeat:
 

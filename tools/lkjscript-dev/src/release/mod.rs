@@ -964,6 +964,11 @@ fn inspect_capabilities(
         .to_str()
         .ok_or_else(|| DevError::usage("candidate path must be portable UTF-8"))?;
     let output = command_text(candidate, &["capabilities"], repository, 1024 * 1024)?;
+    let version_output = command_text(candidate, &["--version"], repository, 1024)?;
+    parse_capabilities(&output, &version_output)
+}
+
+fn parse_capabilities(output: &str, version_output: &str) -> Result<CapabilitiesFacts, DevError> {
     let product_line = output
         .lines()
         .find(|line| line.starts_with("product "))
@@ -982,7 +987,6 @@ fn inspect_capabilities(
         .get("version")
         .ok_or_else(|| DevError::corrupt("candidate capabilities omitted product version"))?
         .to_string();
-    let version_output = command_text(candidate, &["--version"], repository, 1024)?;
     if version_output != format!("lkjscript {product_version}") {
         return Err(DevError::corrupt(
             "candidate version query disagrees with its public product record",
@@ -2025,17 +2029,35 @@ mod tests {
         assert!(!post_release.contains("attestations: write"));
         assert!(!post_release.contains("actions/checkout"));
         assert!(!post_release.contains("cargo "));
-        assert!(post_release.contains("--manifest"));
+        assert!(post_release.contains("--exact-assets \"$EXACT\" --latest-assets \"$LATEST\""));
         assert!(!post_release.contains(".executable.cli_contract"));
         assert!(!post_release.contains(".executable.executable_registry_digest"));
-        assert!(post_release.contains("verify_public_application exact"));
-        assert!(post_release.contains("verify_public_application latest"));
-        assert!(post_release.contains("release verify"));
+        assert!(!post_release.contains("verify_public_application"));
+        assert!(!post_release.contains("release transferred run"));
+        assert_eq!(
+            post_release.matches("release transferred pair-run").count(),
+            1
+        );
+        assert!(!post_release.contains("          cmp "));
+        assert!(post_release.contains("--publication release"));
+        assert!(!post_release.contains("--publication dry-run"));
         assert!(post_release.contains("release verifier verify"));
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("outbound-http"));
         assert!(post_release.contains("stateful-http"));
-        assert!(post_release.contains("release transferred run"));
+        assert!(post_release.contains(
+            "GITHUB_RUN_ID=\"$GITHUB_RUN_ID\" GITHUB_RUN_ATTEMPT=\"$GITHUB_RUN_ATTEMPT\""
+        ));
+        for retained in [
+            "pair/receipt.json",
+            "pair/exact/lifecycle.json",
+            "pair/latest/lifecycle.json",
+            "pair/full-suite/receipt.json",
+            "pair/*/extracted/RELEASE-MANIFEST.json",
+        ] {
+            assert!(post_release.contains(retained), "missing {retained}");
+        }
+        assert!(post_release.contains("if: always()"));
         for role in [
             "distributed-http",
             "outbound-http",
@@ -2094,13 +2116,23 @@ mod tests {
         assert!(publish.contains("needs.pre-publication-applications.result == 'success'"));
         assert!(post_release.contains("latest-archive-attestation.json"));
         assert!(post_release.contains("latest-checksum-attestation.json"));
-        let latest_run = post_release
-            .find("verify_public_application latest")
-            .expect("latest run");
-        let first_compare = post_release
-            .find("          cmp ")
-            .expect("post acceptance equality");
-        assert!(latest_run < first_compare);
+        let pair_run = post_release
+            .find("release transferred pair-run")
+            .expect("pair consumer");
+        for authentication in [
+            "latest-archive-attestation.json",
+            "latest-checksum-attestation.json",
+            "release verifier verify",
+            "\"$EXACT/$RELEASE_ARCHIVE\"",
+            "\"$EXACT/$RELEASE_CHECKSUMS\"",
+        ] {
+            assert!(
+                post_release
+                    .find(authentication)
+                    .expect("mandatory authentication")
+                    < pair_run
+            );
+        }
         assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));

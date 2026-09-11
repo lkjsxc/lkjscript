@@ -511,17 +511,30 @@ The publication job depends on both receipts, has the only release-write permiss
 checkout, and executes no repository binary or script.
 
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
-verified independently. Each path requires checksum, GitHub asset digest, release/asset attestation,
-strict extraction, source/manifest/candidate equality, static inspection, transferred distributed
-HTTP, transferred stateful HTTP against a fresh isolated first-party data root, transferred
-outbound HTTP against fresh local HTTP/TLS fixtures, offline packages, pure tail, and cleanup.
-`release transferred run` independently owns the `exact-download` and `latest-download` boundaries.
-Exact/latest release-asset, manifest, and candidate byte equality is checked only after both
-behavioral runs and cannot replace either
-behavioral run. Clean/incremental artifact equality is required within each independently created
-application; artifacts from the two fresh applications have independently allocated semantic
-identities and are not required to have the same digest. A required stale, reused, skipped,
-unavailable, failed, cancelled, or unrun observation is not public acceptance.
+authenticated independently by the hosted workflow (A for each route). `release transferred
+pair-run` independently strictly admits each archive/checksum into a separate extraction (V), then
+executes capabilities/new/status/check/build/run through each extraction in a fresh owned project
+(S), including the independently expected typed text `"hello"` and cleanup. It compares the complete
+archive, checksum, canonical manifest and executable bytes by bounded streaming, and binds all
+admitted member modes, payloads and execution policy (E). Identical malformed inputs never reach E.
+It freshly executes and fully rereads the existing five-owner aggregate against exact in the same
+invocation (B). Latest's complete-suite disposition is **bound within the same pair**, naming that
+actual aggregate and its equality evidence; latest's small lifecycle is independently fresh.
+Public acceptance requires A(exact), A(latest), V(exact), V(latest), S(exact), S(latest), E, B and clean
+completion of the public job. A local pair receipt proves no HTTP acquisition or GitHub authenticity.
+
+Sharing is confined to this invocation's fixed candidate, verifier, target policy, environment and
+workload inventory. Both routes and the verifier are reobserved before and after every expensive
+child and at completion. The reader revalidates the actual source aggregate through every existing
+child reader; changed obligations remain failures even after outer hashes are recomputed. Missing,
+foreign, incomplete, changed, failed, cancelled or unclean evidence cannot pass. `pair-verify` only
+rereads evidence; it runs no applications. Schema-1 single-boundary receipts retain their old meaning.
+Release pairs require release manifests and an `exact-download` child boundary. Dry-run pairs are
+explicit local rehearsals with a `pre-publication` child boundary and cannot authorize publication.
+Source-full, six-owner target admission and fresh pre-publication acceptance remain independent.
+Clean/incremental artifact equality remains required within each freshly created application.
+This trusted isolated-runner contract detects drift; it promises neither hostile-host isolation nor
+the intermittent-fault detection probability of a second full behavioral sample.
 
 Version 4 of the private verifier handoff admits exactly release-verify, distributed-http, outbound-http,
 offline-packages, pure-tail, and stateful-http, in that order. Schema 3 and omitted, duplicate,

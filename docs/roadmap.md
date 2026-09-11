@@ -24,8 +24,8 @@ authenticated multi-subscription push with an implementation-disjoint raw client
 rebuildable incremental object-location catalog now keeps
 healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
 and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. The recursive-data candidate
-source is `0.1.31`; supported immutable public distribution remains `0.1.30` for
+PostgreSQL 16.15 is retained only as contributor differential evidence. Finite recursive nominal
+data is implemented and publicly accepted in immutable `0.1.31` for
 `x86_64-unknown-linux-musl`. Exact and
 latest downloads independently passed static inspection and five behavioral owners covering
 distributed HTTP, outbound HTTPS/TLS/DNS, offline package closures, pure-tail execution, and stateful
@@ -33,8 +33,12 @@ HTTP. Parameterized records/variants, capture-safe generic factories, retained r
 typed persistence, concrete sessions and ordered persistent-list mapping compose through the public
 copied binary. Target admission additionally proved the
 maintained service/worker and both pinned userlands. The
-[public nominal evidence](evidence/202609101130-parametric-nominal-public-milestone.json) binds their
+[recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11) binds their
 exact source, candidate, publication, and independent download boundaries.
+The bound-public-pair tooling change revises future public acceptance to two independent small
+route lifecycles plus one within-pair full suite. It selects no new release; the next accepted
+user-visible language milestone must supply the first hosted public-pair observation. Further
+infrastructure work needs a newly measured bottleneck.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

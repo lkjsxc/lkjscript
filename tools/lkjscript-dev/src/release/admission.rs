@@ -1171,7 +1171,7 @@ fn require_machine_passed(label: &str, bytes: &[u8]) -> Result<Value, DevError> 
     Ok(value)
 }
 
-fn compact(label: &str, bytes: &[u8]) -> Result<Vec<CompactRecord>, DevError> {
+pub(super) fn compact(label: &str, bytes: &[u8]) -> Result<Vec<CompactRecord>, DevError> {
     parse_records(label, bytes).map_err(|diagnostics| {
         DevError::corrupt(format!(
             "{label} did not emit canonical compact records: {}",

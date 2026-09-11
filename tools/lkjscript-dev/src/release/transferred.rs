@@ -1,4 +1,5 @@
 //! Finite transferred acceptance. Behavioral meaning and receipt validation stay with each owner.
+mod pair;
 use super::{archive, model::*, target, verifier};
 use crate::{
     distributed_http, error::DevError, evidence, offline_packages, outbound_http, process,
@@ -241,8 +242,13 @@ struct Receipt {
 }
 
 pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
-    let operation = crate::next_utf8(&mut arguments, "transferred operation")?
-        .ok_or_else(|| DevError::usage("release transferred requires run or verify"))?;
+    let operation =
+        crate::next_utf8(&mut arguments, "transferred operation")?.ok_or_else(|| {
+            DevError::usage("release transferred requires run, verify, pair-run or pair-verify")
+        })?;
+    if matches!(operation.as_str(), "pair-run" | "pair-verify") {
+        return pair::command(&operation, arguments);
+    }
     let options = parse_options(&operation, arguments)?;
     let verifier_path = std::env::current_exe()?.canonicalize()?;
     verifier::validate_handoff(
@@ -259,6 +265,31 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         print_summary(&options.evidence_root.join("receipt.json"), &receipt)?;
         return Ok(0);
     }
+    let cancellation = Cancellation::new()?;
+    let receipt = execute(
+        &options,
+        &verifier_path,
+        &manifest,
+        &cancellation.control,
+        &mut || Ok(()),
+    )?;
+    print_summary(&options.evidence_root.join("receipt.json"), &receipt)?;
+    Ok(if receipt.status == Status::FreshPassed {
+        0
+    } else {
+        1
+    })
+}
+
+// Pair execution uses this same aggregate and inventory, under its one cancellation lifetime.
+// The guard binds both admitted routes around every expensive invocation.
+fn execute(
+    options: &Options,
+    verifier_path: &Path,
+    manifest: &ReleaseManifest,
+    control: &process::ProcessControl,
+    guard: &mut dyn FnMut() -> Result<(), DevError>,
+) -> Result<Receipt, DevError> {
     super::require_absolute_extraction_output(&options.evidence_root)?;
     fs::create_dir(&options.evidence_root)?;
     fs::set_permissions(&options.evidence_root, fs::Permissions::from_mode(0o700))?;
@@ -284,7 +315,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         hosted_context: super::hosted_context(),
         manifest: external(&options.manifest)?,
         candidate: target::observe_candidate(&options.candidate)?,
-        verifier: external(&verifier_path)?,
+        verifier: external(verifier_path)?,
         verifier_mode: 0o755,
         children: ORACLES
             .into_iter()
@@ -322,16 +353,15 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let path = options.evidence_root.join("receipt.json");
     // Persist incomplete state before any candidate/child execution. An interrupted attempt never looks passed.
     evidence::publish_json(&path, &receipt)?;
-    let result = Cancellation::new().and_then(|cancellation| {
-        run_children(
-            &options,
-            &verifier_path,
-            &manifest,
-            &mut receipt,
-            &path,
-            &cancellation.control,
-        )
-    });
+    let result = run_children(
+        options,
+        verifier_path,
+        manifest,
+        &mut receipt,
+        &path,
+        control,
+        guard,
+    );
     receipt.completed_unix_nanoseconds = Some(super::unix_nanoseconds()?);
     receipt.elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos())
         .map_err(|_| DevError::corrupt("transfer elapsed overflow"))?;
@@ -344,18 +374,16 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         }
     }
     if receipt.status == Status::FreshPassed
-        && let Err(error) = validate_receipt(&receipt, &options, &verifier_path, &manifest)
+        && let Err(error) = validate_receipt(&receipt, options, verifier_path, manifest)
     {
         receipt.status = Status::Failed;
         receipt.failure = Some(error.to_string());
     }
     evidence::publish_json(&path, &receipt)?;
-    print_summary(&path, &receipt)?;
-    Ok(if receipt.status == Status::FreshPassed {
-        0
-    } else {
-        1
-    })
+    if receipt.status == Status::FreshPassed {
+        read_receipt(options, verifier_path, manifest)?;
+    }
+    Ok(receipt)
 }
 
 fn run_children(
@@ -365,8 +393,10 @@ fn run_children(
     receipt: &mut Receipt,
     path: &Path,
     control: &process::ProcessControl,
+    guard: &mut dyn FnMut() -> Result<(), DevError>,
 ) -> Result<(), DevError> {
-    let capabilities = super::inspect_capabilities(&options.candidate, &options.evidence_root)?;
+    guard()?;
+    let capabilities = inspect_candidate(options, control)?;
     require(
         capabilities.product_version == manifest.product.version
             && capabilities.capabilities_digest == manifest.executable.capabilities_digest,
@@ -375,6 +405,7 @@ fn run_children(
     for index in 0..receipt.children.len() {
         require(!control.cancelled(), "transferred acceptance cancelled")?;
         check_inputs(options, verifier, receipt)?;
+        guard()?;
         // Child temporary projects/services live in an owned root; receipt/log roots remain separate.
         let scratch = tempfile::Builder::new()
             .prefix(".child-state-")
@@ -403,6 +434,8 @@ fn run_children(
                 .join(format!("{}.stderr.log", child.role.name())),
             unavailable_exit_code: Some(2),
         };
+        #[cfg(test)]
+        let spec = pair::tests::process_hook(child.role.name(), spec, control);
         let observation = process::run_supervised(&spec, &options.evidence_root, Some(control));
         let successful = observation.status == process::ProcessStatus::Passed;
         if observation.status == process::ProcessStatus::Unavailable {
@@ -415,12 +448,13 @@ fn run_children(
         }
         let result = child.role.read(&child_path, &options.candidate, verifier);
         let scratch_closed = scratch.close();
-        match result {
+        let accepted = match result {
             Ok(facts) if successful && scratch_closed.is_ok() => {
                 child.cleanup_complete = facts.cleanup_complete;
                 child.facts = Some(facts);
                 child.status = Status::FreshPassed;
                 child.failure = None;
+                Ok(())
             }
             result => {
                 let reason = match result {
@@ -428,13 +462,60 @@ fn run_children(
                     Ok(_) => "child process failed or temporary cleanup failed".to_owned(),
                 };
                 child.failure = Some(reason.clone());
-                return Err(DevError::corrupt(reason));
+                Err(DevError::corrupt(reason))
             }
-        }
+        };
         check_inputs(options, verifier, receipt)?;
+        guard()?;
+        accepted?;
         evidence::publish_json(path, receipt)?;
     }
-    Ok(())
+    require(!control.cancelled(), "transferred acceptance cancelled")?;
+    guard()
+}
+
+fn inspect_candidate(
+    options: &Options,
+    control: &process::ProcessControl,
+) -> Result<super::CapabilitiesFacts, DevError> {
+    let scratch = tempfile::Builder::new()
+        .prefix(".child-state-")
+        .tempdir_in(&options.evidence_root)?;
+    let result = (|| {
+        let mut outputs = Vec::new();
+        for (name, argument) in [
+            ("candidate-capabilities", "capabilities"),
+            ("candidate-version", "--version"),
+        ] {
+            let spec = process::ProcessSpec {
+                command: vec![options.candidate.display().to_string(), argument.to_owned()],
+                cwd: scratch.path().to_path_buf(),
+                environment: BTreeMap::from([
+                    ("LANG".to_owned(), "C".to_owned()),
+                    ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+                    ("TMPDIR".to_owned(), scratch.path().display().to_string()),
+                ]),
+                timeout: Duration::from_secs(120),
+                maximum_stdout_bytes: 1024 * 1024,
+                maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
+                stdout_path: options.evidence_root.join(format!("{name}.stdout.log")),
+                stderr_path: options.evidence_root.join(format!("{name}.stderr.log")),
+                unavailable_exit_code: None,
+            };
+            let observation = process::run_supervised(&spec, &options.evidence_root, Some(control));
+            require(
+                observation.status == process::ProcessStatus::Passed,
+                "candidate capability process failed or cancelled",
+            )?;
+            outputs.push(
+                String::from_utf8(process::read_bounded(&spec.stdout_path, 1024 * 1024)?)
+                    .map_err(|_| DevError::corrupt("capabilities are not UTF-8"))?,
+            );
+        }
+        super::parse_capabilities(&outputs[0], outputs[1].trim())
+    })();
+    scratch.close()?;
+    result
 }
 
 // The command owns this signal lifetime and joins it before returning. No signal handler runs
@@ -772,6 +853,14 @@ fn parse_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pair_interface_requires_independent_asset_inputs() {
+        for operation in ["pair-run", "pair-verify"] {
+            let error =
+                command([OsString::from(operation)].into_iter()).expect_err("missing inputs");
+            assert!(error.to_string().contains("--exact-assets"), "{error}");
+        }
+    }
     #[test]
     fn transferred_inventory_is_independently_specified() {
         assert_eq!(

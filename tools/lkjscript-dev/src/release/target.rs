@@ -721,10 +721,10 @@ fn duration_nanoseconds(duration: Duration) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
 
-    fn elf_fixture(dynamic_tags: &[(i64, u64)]) -> Vec<u8> {
+    pub(in crate::release) fn elf_fixture(dynamic_tags: &[(i64, u64)]) -> Vec<u8> {
         let program_offset = 64_usize;
         let dynamic_offset = program_offset + 2 * 56;
         let dynamic_bytes = dynamic_tags.len() * 16;

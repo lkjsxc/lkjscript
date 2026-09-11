@@ -66,6 +66,9 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
+                "usage: lkjscript-dev release transferred <pair-run|pair-verify> --exact-assets ABSOLUTE_DIRECTORY --latest-assets ABSOLUTE_DIRECTORY --tag TAG --commit SOURCE_COMMIT --publication release|dry-run --evidence-root ABSOLUTE_DIRECTORY --verifier-identity ABSOLUTE_FILE --expected-verifier-sha256 SHA256 --expected-verifier-bytes BYTES (pair-run requires an absent evidence root; pair-verify executes no applications; dry-run is local rehearsal)"
+            );
+            println!(
                 "usage: lkjscript-dev pure-tail --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH [--machine] | lkjscript-dev pure-tail-probe PROJECT (bounded resource evidence subprocess)"
             );
             println!(

@@ -47,14 +47,15 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Parametric nominal data
 
-The [finite-recursive-nominal campaign](campaigns/202609110659.md) is executing. Its working source
+The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.
 The independent term, raw-value, recursive session and rehashed expanding-input checks have
 targeted passes. Frozen copied-product runs pass the complete recursive package, retained-state,
-persistence and 4,096-leaf workload. Fresh full source, exact target and distribution acceptance
-remain pending. The publicly accepted executable remains v0.1.30 until a successor completes delivery.
+persistence and 4,096-leaf workload. Retained source-full, exact six-owner target and pre-publication/
+public five-owner evidence now establish delivery at `7ea9c99a`; the original target and transferred
+readers passed during isolated receipt reconciliation. These rereads are not fresh execution.
 
-The source and public v0.1.30 executable provide ordinary parametric records and variants with ordered
+The source and public v0.1.31 executable provide ordinary parametric records and variants with ordered
 stable parameters,
 explicit applications and capture-safe bounds. Canonical authoring, exact package interfaces,
 compiler/runtime layouts, independent reference derivation, JSON/data and concrete session state
@@ -90,7 +91,22 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
-[`v0.1.30`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.30) is the current supported,
+[`v0.1.31`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.31) is the current supported immutable
+release, ID `386791231`, published at 2026-09-11T04:45:24Z. Annotated tag
+`4dc769dd28f443584571d325fb47ec2ec46d8694` selects source
+`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. The static-musl executable has 21,408,000 bytes and SHA-256
+`4e1a46024b2e309458fb0ccfbdc72b5ca87623abcc6b5504a57568c5be05e97d`.
+The archive has 9,677,348 bytes and SHA-256
+`f6c23f224aa67486d795532d2ebf1864b18642e6acee9d19da16b87025548dd7`; its 109-byte checksum file has
+SHA-256 `c10c731a11141c18b63dc823c97a9b3267fc295d3acee585a1bd9b8c2df6dd82`.
+Dry run `34549698169/1` and tag run `34557393945/1` passed. Retained full verification records
+26 fresh gates; the original reader reread all six target owners, all five pre-publication owners
+and all five owners independently on both public routes, including recursive packages, sessions
+and storage. The [campaign reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
+records the exact receipt identities and remaining historical scope limits.
+
+The following retained account describes the preceding
+[`v0.1.30`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.30) recovery release, an
 immutable public release, ID `386193815`, observed latest/non-draft/non-prerelease. Annotated tag
 `b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects release source
 `35269961fc66fc308785913190a10843ee175aaa`, tree `556a93a594a3b6fa727f9bf46d6db8217d27a837`.
@@ -162,8 +178,7 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-The recursive-data candidate source is `0.1.31`; required full, target and public-release acceptance
-remain pending. The supported immutable public release is `0.1.30`, from the exact release-input
+The recursive-data source and supported immutable public release are `0.1.31`, from the exact release-input
 source commit named above. The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
@@ -180,8 +195,14 @@ current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, str
 HTTP-client adapter 1 retain their independent owners.
 The recursive-data validator contract advances its nominal and session feature identities to 2,
 and the semantic-summary validator identity to 4. Graph, TypeObject and typed-data bytes retain
-their existing domains. Offline-package acceptance is receipt 5. These working-source changes
-do not change the identity or accepted capabilities of the already published `0.1.30` executable.
+their existing domains. Offline-package acceptance is receipt 5. These changes are distributed in
+v0.1.31 and do not rewrite the preceding v0.1.30 identity.
+
+The contributor pair owner independently admits and runs a small command lifecycle on both routes,
+then binds one freshly executed five-owner aggregate within that same invocation. Pair receipt 1
+distinguishes exact fresh execution from latest's bound full-suite observation. It retains old
+single-boundary receipt compatibility. This tooling campaign selects no publication or deployment;
+its first hosted public-pair observation belongs to the next selected user-visible milestone.
 
 Pure-function binding provides immutable runtime prefixes and graph-owned standard composition.
 BND-1–BND-6 pass at the implementation boundary, including copied-public returned reducers,
