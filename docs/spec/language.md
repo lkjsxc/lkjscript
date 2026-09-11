@@ -204,7 +204,7 @@ primitive, dynamic evaluation, type-class/trait constraint, or implicit generic 
 
 ## Explicit rank-1 generics
 
-Pure graph functions and closed external functions may declare an ordered list of type parameters.
+Pure and task graph functions and closed external functions may declare an ordered list of type parameters.
 Each parameter has a stable `typeparam_` identity and a mutable declaration-local name. Parameters
 may occur recursively in parameter types, result types, structural record/list/map/option/result/
 stream/function types, bodies, direct calls, and named function values.
@@ -219,16 +219,33 @@ Generic application is explicit and order-independent:
 - omitted or excess arguments, an out-of-scope type parameter, duplicate parameter name, or missing
   substitution rejects.
 
-Generic task functions reject. Recursive generic cycles may pass their own type parameters in the
+Recursive generic cycles may pass their own type parameters in the
 same order; a cycle that changes ordered type arguments rejects as polymorphic recursion. There is
 no constraint dictionary, higher-rank quantification, implicit generic application, specialization in
 accepted meaning, or order-dependent inference. Compiler/runtime erasure or specialization is
 derived and cannot change graph meaning or artifact determinism.
 
-## Pure function values, binding, and invocation
+Pure and task graph functions may also own ordered rank-one effect parameters. Each has a stable
+`effectparam_` identity, an exact function owner and position, and a mutable local name. Type and
+effect scopes are separate. An effect row is a sorted unique set of exact requirement references
+and in-scope effect-parameter references. Authored unions normalize; noncanonical encoded rows
+reject. Direct calls and named function values supply exactly one ordered row argument per effect
+parameter, including unused parameters and unreachable applications. There is no inferred row,
+wildcard, subtraction, or grant lookup by parameter name.
+
+Effect substitution traverses parameter/result types and nested callable, aggregate and nominal
+applications. Unknown rows can be forwarded but do not identify concrete operations. Symbolic
+containment requires the same exact parameter identity. Closed requirement unions are finite and
+idempotent, so recursive effect forwarding, permutation and union need no additional application
+shape restriction. Preparation admits distinct closed applications under checked work/storage
+bounds; the ordinary-type recursive-call restriction above remains in force.
+
+## Function values, binding, and invocation
 
 The public `function-value` expression identifies one named function and supplies all required type
-arguments.
+arguments and effect arguments. Pure `Function(P0,...,Pn)->R` and
+`TaskFunction(P0,...,Pn)->R ! E` are distinct exact types, with no implicit coercion or effect
+subtyping. An explicitly task callable remains task when its row is empty.
 `bind` evaluates its callee first and then an ordered prefix of runtime arguments exactly once,
 left-to-right. For `Function(P0,...,Pn-1)->R`, binding k exactly typed arguments, with
 `0 <= k <= n`, produces `Function(Pk,...,Pn-1)->R`. It never executes the target. Empty binding
@@ -238,17 +255,18 @@ arguments in that same order, then calls the exact named target with prefix and 
 
 The accepted `Bind { callee, arguments }` owns ordinary expression children and contains no body or
 runtime data. At execution, a callable carries exact prepared-program provenance, fully resolved
-rank-1 type arguments, and one flat immutable prefix. It retains values, never the creator's frame,
+rank-1 type/effect arguments, and one flat immutable prefix. It retains values, never grants,
+adapters, credentials, resources, a task scope, transactions, the creator's frame,
 locals, or substitution map, and can escape, be shared, and be invoked repeatedly. An eligible pure
 tail invocation transfers directly to the ultimate target with the complete argument list.
 
 Capture-safe stored types are scalars including `StaticText`, records, variants, lists, maps,
 options, and results with recursively safe members, and checked pure callables with safe
-environments. Every nominal field and case is inspected, including absent affine cases. A function
+environments, including task callables. Every nominal field and case is inspected, including absent affine cases. A function
 signature is a leaf for capture safety: its future parameters and result are not stored captures.
 Secrets, streams, capability resources, other live resources, and aggregates containing them reject.
 A stored type parameter requires an explicit capture-safe constraint from its exact in-scope
-pure declaration; unconstrained parameters reject at declaration validation. A generic helper may capture a function whose signature contains type
+function declaration; unconstrained parameters reject at declaration validation. A generic helper may capture a function whose signature contains type
 parameters, or a concrete safe prefix, but cannot capture a bare unconstrained `T`.
 
 Binding has precisely the effects of evaluating its callee and captures. A failed capture stops
@@ -266,27 +284,31 @@ session state reject function values, including functions nested in aggregates. 
 may return private helpers as callables while ordinary package lookup still enforces visibility;
 transported code closure includes those helpers.
 
-Ordinary pure expression contexts reject task function values. Component port preparation may bind
-an explicitly selected task function under component capability rules; this does not make task
-functions freely passable values. `bind` always requires a pure callee, even with an empty prefix
-inside port preparation. Task code may capture ordinary capability results into a pure callable.
+Pure contexts may create, bind, return, copy and compose task descriptors without executing them.
+Binding preserves task kind and the entire effect row. Task invocation requires a task calling
+context, containment in that activation's declared substituted allowance, and actual checked
+component bindings. A globally available grant cannot widen the activation's allowance. Resources
+may be acquired and consumed lexically within the callback, but resource-taking functions cannot
+be indirect callbacks and retained prefixes cannot contain live resources. Pure ports remain pure;
+task ports use explicit closed task-callable contracts. The selected component entry remains an
+authority boundary, with no task-as-pure representation or purity exception.
 Lexical lambdas, anonymous bodies, automatic free-variable capture, mutable environments, argument
-holes/reordering, task closures, and durable captured environments are outside this language slice.
+holes/reordering, and durable captured environments are outside this language slice.
 
 ## Expressions and bindings
 
 The complete graph expression kinds are unit/bool/i64/text/static-text literals, variable,
-conditional, lexical let, sequencing, direct call with explicit type arguments, function
-reference with explicit type arguments, prefix binding, invocation, record construction and projection, variant
+conditional, lexical let, sequencing, direct call with explicit type/effect arguments, function
+reference with explicit type/effect arguments, prefix binding, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
 Compact change records expose unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
 construction and field projection; variants and exhaustive matches; typed lists; exact requirement
 capability calls; lexical transactions; named `function-value` expressions with ordered explicit
-type arguments; and `bind` and `invoke` with ordered expression arguments. `add.type-parameter` adds an
-ordered stable parameter to a pure function created or selected through the current function
-surface. Generic task functions, map expressions, and arbitrary topology creation remain outside
+type/effect arguments; and `bind` and `invoke` with ordered expression arguments. `add.type-parameter`
+and `add.effect-parameter` add ordered stable parameters to graph functions through the current
+function surface. Map expressions and arbitrary topology creation remain outside
 this compact slice. The generated [change grammar](../generated/change-grammar.md) is the
 exhaustive public inventory; this specification does not duplicate its fields and edges.
 

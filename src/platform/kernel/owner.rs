@@ -15,8 +15,8 @@ use super::reference::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
-    CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId,
-    RequirementId, TargetId, TypeParameterId,
+    CaseId, DeclarationId, EffectParameterId, ExpressionId, FieldId, ModuleId, OperationId,
+    ParameterId, PortId, RequirementId, TargetId, TypeParameterId,
 };
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -31,6 +31,7 @@ pub enum OwnerRecord {
     Module(ModuleRecord),
     Declaration(DeclarationRecord),
     TypeParameter(TypeParameterRecord),
+    EffectParameter(EffectParameterRecord),
     Field(FieldRecord),
     Case(CaseRecord),
     Operation(OperationRecord),
@@ -51,6 +52,7 @@ impl OwnerRecord {
             Self::Module(record) => record.header,
             Self::Declaration(record) => record.header,
             Self::TypeParameter(record) => record.header,
+            Self::EffectParameter(record) => record.header,
             Self::Field(record) => record.header,
             Self::Case(record) => record.header,
             Self::Operation(record) => record.header,
@@ -81,6 +83,7 @@ impl OwnerRecord {
             Self::Module(value) => Some(&value.name),
             Self::Declaration(value) => Some(&value.name),
             Self::TypeParameter(value) => Some(&value.name),
+            Self::EffectParameter(value) => Some(&value.name),
             Self::Field(value) => Some(&value.name),
             Self::Case(value) => Some(&value.name),
             Self::Operation(value) => Some(&value.name),
@@ -99,6 +102,7 @@ impl OwnerRecord {
             Self::Module(value) => Some(&mut value.name),
             Self::Declaration(value) => Some(&mut value.name),
             Self::TypeParameter(value) => Some(&mut value.name),
+            Self::EffectParameter(value) => Some(&mut value.name),
             Self::Field(value) => Some(&mut value.name),
             Self::Case(value) => Some(&mut value.name),
             Self::Operation(value) => Some(&mut value.name),
@@ -119,6 +123,10 @@ impl OwnerRecord {
                 validate_names([&record.name])
             }
             Self::Declaration(record) => record.validate_local(),
+            Self::EffectParameter(record) => {
+                validate_header_domain(record.header, OwnerKind::EffectParameter)?;
+                validate_names([&record.name])
+            }
             Self::TypeParameter(record) => {
                 validate_header_domain(record.header, OwnerKind::TypeParameter)?;
                 validate_names([&record.name])
@@ -165,6 +173,7 @@ impl OwnerRecord {
             Self::Expression(record) => record.type_roots(),
             Self::Module(_)
             | Self::TypeParameter(_)
+            | Self::EffectParameter(_)
             | Self::Requirement(_)
             | Self::Target(_)
             | Self::HttpRoute(_)
@@ -191,6 +200,7 @@ impl OwnerRecord {
             Self::Module(_)
             | Self::Declaration(_)
             | Self::TypeParameter(_)
+            | Self::EffectParameter(_)
             | Self::Field(_)
             | Self::Case(_)
             | Self::Operation(_)
@@ -395,6 +405,7 @@ impl ExternalDeclaration {
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionDeclaration {
+    pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
     pub result: TypeObjectDigest,
@@ -406,15 +417,8 @@ impl FunctionDeclaration {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_ordered_unique("function type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("function parameters", &self.parameters, true)?;
-        if let FunctionEffect::Task { requirements } = &self.effect {
-            if !self.type_parameters.is_empty() {
-                return Err(owner_error(
-                    "kernel_owner_generic_task",
-                    "task functions cannot declare type parameters",
-                ));
-            }
-            validate_sorted_ids("task requirements", requirements, true)?;
-        }
+        validate_ordered_unique("function effect parameters", &self.effect_parameters, true)?;
+        self.effect.row().validate()?;
         Ok(())
     }
 }
@@ -425,7 +429,31 @@ pub enum FunctionEffect {
     Pure,
     Task {
         requirements: Vec<RequirementReference>,
+        effect_parameters: Vec<super::EffectParameterReference>,
     },
+}
+
+impl FunctionEffect {
+    pub fn row(&self) -> super::EffectRow {
+        match self {
+            Self::Pure => super::EffectRow::default(),
+            Self::Task {
+                requirements,
+                effect_parameters,
+            } => super::EffectRow {
+                requirements: requirements.clone(),
+                parameters: effect_parameters.clone(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectParameterRecord {
+    pub header: OwnerHeader,
+    pub declaration: DeclarationId,
+    pub name: Name,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -1708,6 +1736,7 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
             | (OwnerKey::Declaration(_), OwnerKind::Component)
             | (OwnerKey::Declaration(_), OwnerKind::Test)
             | (OwnerKey::TypeParameter(_), OwnerKind::TypeParameter)
+            | (OwnerKey::EffectParameter(_), OwnerKind::EffectParameter)
             | (OwnerKey::Field(_), OwnerKind::Field)
             | (OwnerKey::Case(_), OwnerKind::Case)
             | (OwnerKey::Operation(_), OwnerKind::Operation)

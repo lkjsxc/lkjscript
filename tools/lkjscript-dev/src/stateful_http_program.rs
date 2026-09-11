@@ -747,17 +747,6 @@ fn add_types_and_domain(builder: &mut Builder<'_>) -> Result<(), DevError> {
             ("query_parameters", "@query_parameters"),
         ],
     )?;
-    builder.type_function("@http_function", &["@request"], "@response")?;
-    builder.type_function(
-        "@http_function_one_capture",
-        &["@request", "text"],
-        "@response",
-    )?;
-    builder.type_function(
-        "@http_function_two_captures",
-        &["@request", "text", "text"],
-        "@response",
-    )?;
     Ok(())
 }
 
@@ -2015,16 +2004,42 @@ fn add_http_handler(
         body,
         &parameters,
     )?;
-    let function_type = match captures.len() {
-        0 => "@http_function",
-        1 => "@http_function_one_capture",
-        2 => "@http_function_two_captures",
-        _ => {
-            return Err(DevError::corrupt(
-                "stateful HTTP proof requested more than two capture parameters",
-            ));
+    let function_type = format!("@http_function_{}", names.port);
+    let parameter_types = parameters.iter().map(|(_, _, ty)| *ty).collect::<Vec<_>>();
+    if requirements.is_empty() {
+        builder.type_function(&function_type, &parameter_types, "@response")?;
+    } else {
+        let row = format!("@http_effects_{}", names.port);
+        builder.record("effect.row", vec![("as", row.clone())])?;
+        for (index, requirement) in requirements.iter().enumerate() {
+            builder.record(
+                "effect.requirement",
+                vec![
+                    ("parent", row.clone()),
+                    ("index", index.to_string()),
+                    ("requirement", (*requirement).to_owned()),
+                ],
+            )?;
         }
-    };
+        builder.record(
+            "type.task-function",
+            vec![
+                ("as", function_type.clone()),
+                ("result", "@response".to_owned()),
+                ("effect", row),
+            ],
+        )?;
+        for (index, ty) in parameter_types.iter().enumerate() {
+            builder.record(
+                "type.argument",
+                vec![
+                    ("parent", function_type.clone()),
+                    ("index", index.to_string()),
+                    ("type", (*ty).to_owned()),
+                ],
+            )?;
+        }
+    }
     builder.record(
         "add.port",
         vec![

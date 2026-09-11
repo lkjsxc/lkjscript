@@ -3,7 +3,8 @@
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
     AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
-    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredExpression,
+    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
+    AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExpression,
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
     AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
     AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter,
@@ -21,17 +22,17 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId,
-    PortId, RequirementId, RevisionId,
+    BindingId, CaseId, DeclarationId, EffectParameterId, ExpressionId, FieldId, ModuleId,
+    OperationId, ParameterId, PortId, RequirementId, RevisionId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-17";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 17;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-14";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 14;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-18";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 18;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-15";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 15;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -59,6 +60,7 @@ pub(crate) const COMPACT_NAMESPACE_CLASSES: &[(&str, NamespaceClass)] = &[
     ("parameter", NamespaceClass::Parameter),
     ("requirement", NamespaceClass::Requirement),
     ("port", NamespaceClass::Port),
+    ("effect-parameter", NamespaceClass::EffectParameter),
     ("target", NamespaceClass::Target),
 ];
 
@@ -78,6 +80,7 @@ pub(crate) enum CompactChangeOperation {
     AddCase,
     AddOperation,
     AddTypeParameter,
+    AddEffectParameter,
     SetTypeParameterConstraint,
     SetFieldType,
     SetCasePayload,
@@ -95,10 +98,11 @@ pub(crate) enum CompactChangeOperation {
     MoveDeclaration,
     ReplaceBody,
     ExtractFunction,
+    SetPortContract,
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 31] = [
+    pub(crate) const ALL: [Self; 33] = [
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -113,6 +117,7 @@ impl CompactChangeOperation {
         Self::AddCase,
         Self::AddOperation,
         Self::AddTypeParameter,
+        Self::AddEffectParameter,
         Self::SetTypeParameterConstraint,
         Self::SetFieldType,
         Self::SetCasePayload,
@@ -130,6 +135,7 @@ impl CompactChangeOperation {
         Self::MoveDeclaration,
         Self::ReplaceBody,
         Self::ExtractFunction,
+        Self::SetPortContract,
     ];
 }
 
@@ -702,6 +708,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddEffectParameter,
+        name: "add.effect-parameter",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "declaration",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::AddTypeParameter,
         name: "add.type-parameter",
         fields: &[
@@ -957,6 +985,23 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "package-revision",
                 required: true,
                 form: FieldForm::ExactPackageRevision,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetPortContract,
+        name: "set.port-contract",
+        fields: &[
+            CompactChangeOperationField {
+                name: "port",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
             },
         ],
         direct: None,
@@ -1278,7 +1323,15 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "result",
     "stream",
     "function",
+    "task-function",
 ];
+pub(crate) const COMPACT_EFFECT_FORMS: &[&str] = &["row"];
+pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactFormField {
+    form: "row",
+    name: "as",
+    required: true,
+    syntax: "@NAME",
+}];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "unit",
     "bool",
@@ -1313,6 +1366,24 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "task-function",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "task-function",
+        name: "result",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "task-function",
+        name: "effect",
+        required: true,
+        syntax: "@NAME",
+    },
     CompactFormField {
         form: "unit",
         name: "as",
@@ -1820,6 +1891,56 @@ pub(crate) struct CompactEdgeDescriptor {
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     CompactEdgeDescriptor {
+        name: "effect.argument",
+        parent: "call-or-function-value",
+        child: "effect-row",
+        fields: &[
+            CompactFormField {
+                form: "effect.argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "effect.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "effect.argument",
+                name: "effect",
+                required: true,
+                syntax: "@NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "effect.parameter",
+        parent: "effect-row-or-task-function-or-contract-fragment",
+        child: "effect-parameter-reference",
+        fields: &[
+            CompactFormField {
+                form: "effect.parameter",
+                name: "parent",
+                required: true,
+                syntax: "@NAME|$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "effect.parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "effect.parameter",
+                name: "parameter",
+                required: true,
+                syntax: "$NAME|pkg_HEX/effectparam_HEX",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.argument",
         parent: "expression",
         child: "expression",
@@ -1902,14 +2023,14 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "effect.requirement",
-        parent: "task-function-or-contract-fragment",
+        parent: "effect-row-or-task-function-or-contract-fragment",
         child: "requirement-reference",
         fields: &[
             CompactFormField {
                 form: "effect.requirement",
                 name: "parent",
                 required: true,
-                syntax: "$NAME|%NAME",
+                syntax: "@NAME|$NAME|%NAME",
             },
             CompactFormField {
                 form: "effect.requirement",
@@ -2204,6 +2325,7 @@ struct IndexedRecord {
 struct Decoder {
     records: Vec<CompactRecord>,
     types: BTreeMap<String, CompactRecord>,
+    effect_rows: BTreeMap<String, CompactRecord>,
     expressions: BTreeMap<String, CompactRecord>,
     arguments: BTreeMap<String, Vec<IndexedValue>>,
     type_parameters: BTreeMap<String, Vec<IndexedValue>>,
@@ -2224,6 +2346,7 @@ impl Decoder {
         Self {
             records,
             types: BTreeMap::new(),
+            effect_rows: BTreeMap::new(),
             expressions: BTreeMap::new(),
             arguments: BTreeMap::new(),
             type_parameters: BTreeMap::new(),
@@ -2258,6 +2381,28 @@ impl Decoder {
                 "type.argument" => self.insert_indexed_edge(&record, "type", true)?,
                 "type.field" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "name", "type"])?
+                }
+                "effect.row" => {
+                    check_fields(&record, &["as"])?;
+                    let label = required(&record, "as")?.to_owned();
+                    validate_local_label(&record, "as", &label, '@')?;
+                    if self
+                        .effect_rows
+                        .insert(label.clone(), record.clone())
+                        .is_some()
+                    {
+                        return Err(record_error(
+                            &record,
+                            "change_effect_row_duplicate",
+                            format!("effect row {label} is defined twice"),
+                        ));
+                    }
+                }
+                "effect.argument" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "effect"])?
+                }
+                "effect.parameter" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "parameter"])?
                 }
                 "effect.requirement" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "requirement"])?
@@ -2699,6 +2844,13 @@ impl Decoder {
                     external_visibility: parse_external_visibility(record, "external-visibility")?,
                 },
             }),
+            CompactChangeOperation::AddEffectParameter => Ok(AuthoredChange::AddEffectParameter {
+                declaration: parse_declaration_selector(record, "declaration")?,
+                parameter: AuthoredEffectParameter {
+                    symbol: required(record, "as")?.to_owned(),
+                    name: parse_name(record, "name")?,
+                },
+            }),
             CompactChangeOperation::AddTypeParameter => Ok(AuthoredChange::AddTypeParameter {
                 declaration: parse_declaration_selector(record, "declaration")?,
                 parameter: AuthoredTypeParameter {
@@ -2832,6 +2984,10 @@ impl Decoder {
                     )?,
                 })
             }
+            CompactChangeOperation::SetPortContract => Ok(AuthoredChange::SetPortContract {
+                port: parse_owner_selector(record, "port")?,
+                function_type: self.decode_type(required(record, "type")?)?,
+            }),
             CompactChangeOperation::SetRequirementContract => {
                 let fragment = fragment(record, "as")?;
                 let operations = self
@@ -2924,7 +3080,14 @@ impl Decoder {
                     .iter()
                     .map(|edge| parse_requirement_reference(&edge.record, "requirement"))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(AuthoredFunctionEffect::Task { requirements })
+                Ok(AuthoredFunctionEffect::Task {
+                    requirements,
+                    effect_parameters: self
+                        .ordered_record_edges("effect.parameter", parent)?
+                        .iter()
+                        .map(|edge| parse_effect_parameter_reference(&edge.record, "parameter"))
+                        .collect::<Result<_, _>>()?,
+                })
             }
             _ => Err(field_error(
                 record,
@@ -2933,6 +3096,40 @@ impl Decoder {
                 format!("function effect must be pure or task; observed '{effect}'"),
             )),
         }
+    }
+
+    fn decode_effect_row(&mut self, reference: &str) -> Result<AuthoredEffectRow, Diagnostic> {
+        if !self.effect_rows.contains_key(reference) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Source,
+                "change_effect_row_missing",
+                format!("effect row {reference} is not defined"),
+            ));
+        }
+        let requirements = self
+            .ordered_record_edges("effect.requirement", reference)?
+            .iter()
+            .map(|edge| parse_requirement_reference(&edge.record, "requirement"))
+            .collect::<Result<_, _>>()?;
+        let parameters = self
+            .ordered_record_edges("effect.parameter", reference)?
+            .iter()
+            .map(|edge| parse_effect_parameter_reference(&edge.record, "parameter"))
+            .collect::<Result<_, _>>()?;
+        Ok(AuthoredEffectRow {
+            requirements,
+            parameters,
+        })
+    }
+
+    fn decode_effect_arguments(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredEffectRow>, Diagnostic> {
+        self.ordered_record_edges("effect.argument", parent)?
+            .iter()
+            .map(|edge| self.decode_effect_row(required(&edge.record, "effect")?))
+            .collect()
     }
 
     fn decode_type(&mut self, reference: &str) -> Result<AuthoredType, Diagnostic> {
@@ -3054,6 +3251,19 @@ impl Decoder {
                     parameter: parse_type_parameter_reference(&record, "parameter")?,
                 }
             }
+            "type.task-function" => {
+                check_fields(&record, &["as", "result", "effect"])?;
+                let parameters = self
+                    .ordered_edges(reference, true)?
+                    .iter()
+                    .map(|edge| self.decode_type(&edge.value))
+                    .collect::<Result<_, _>>()?;
+                AuthoredType::TaskFunction {
+                    parameters,
+                    result: Box::new(self.decode_type(required(&record, "result")?)?),
+                    effect: self.decode_effect_row(required(&record, "effect")?)?,
+                }
+            }
             "type.function" => {
                 check_fields(&record, &["as", "result"])?;
                 let parameters = self
@@ -3167,6 +3377,7 @@ impl Decoder {
             "expression.call" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
+                    effect_arguments: self.decode_effect_arguments(symbol)?,
                     function: parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
@@ -3179,6 +3390,7 @@ impl Decoder {
             "expression.function-value" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::FunctionValue {
+                    effect_arguments: self.decode_effect_arguments(symbol)?,
                     function: parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
@@ -4167,6 +4379,40 @@ fn parse_requirement_reference(
     })
 }
 
+fn parse_effect_parameter_reference(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredEffectParameterReference, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value.starts_with('$') {
+        validate_local_label(record, field_name, value, '$')?;
+        return Ok(AuthoredEffectParameterReference::Symbol {
+            symbol: value.to_owned(),
+        });
+    }
+    let (package, parameter) = value.split_once('/').ok_or_else(|| {
+        field_error(
+            record,
+            field_name,
+            "change_parameter_reference",
+            "parameter reference requires $symbol or pkg_ID/effectparam_ID",
+        )
+    })?;
+    Ok(AuthoredEffectParameterReference::Exact {
+        package: package.parse().map_err(|error: Diagnostic| {
+            field_error(record, field_name, error.code, error.message)
+        })?,
+        parameter: parameter.parse::<EffectParameterId>().map_err(|error| {
+            field_error(
+                record,
+                field_name,
+                "change_parameter_reference",
+                error.to_string(),
+            )
+        })?,
+    })
+}
+
 fn parse_field_selector(record: &CompactRecord) -> Result<AuthoredFieldSelector, Diagnostic> {
     match (optional(record, "name"), optional(record, "field")) {
         (Some(_), None) => Ok(AuthoredFieldSelector::Structural {
@@ -4673,7 +4919,7 @@ mod tests {
         };
         assert!(matches!(
             effect,
-            AuthoredFunctionEffect::Task { requirements } if requirements.len() == 1
+            AuthoredFunctionEffect::Task { effect_parameters: _, requirements } if requirements.len() == 1
         ));
         assert!(matches!(
             body.operation,
@@ -4687,7 +4933,7 @@ mod tests {
         assert!(matches!(result, AuthoredType::StructuralRecord { fields } if fields.len() == 2));
         assert!(matches!(
             effect,
-            AuthoredFunctionEffect::Task { requirements } if requirements.len() == 1
+            AuthoredFunctionEffect::Task { effect_parameters: _, requirements } if requirements.len() == 1
         ));
     }
 

@@ -291,23 +291,39 @@ cross-package, recursive, indirect, resource-result, and caller-reuse forms reje
 publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered
-stable parameter to a pure function; `expression.function-value` names one exact pure function and
-receives all ordered `type.argument` children; and `expression.invoke` receives one function-valued
+stable parameter to a pure or task function; `expression.function-value` names one exact function and
+receives all ordered `type.argument` and `effect.argument` children; and `expression.invoke` receives one function-valued
 expression plus ordered `expression.argument` children. `expression.bind as=$bound callee=$callee`
 uses the same ordered argument children to bind an exact parameter prefix. A function value is
 monomorphic after complete explicit substitution; its immutable runtime prefix contains only
-capture-safe values and checked pure callables. Callee and capture expressions run once in order;
+capture-safe values and checked pure or task callables. Callee and capture expressions run once in order;
 binding never executes the target. Empty binding preserves the callable and complete binding
 returns a zero-argument callable. Bare stored type parameters, secrets, streams, capability resources,
 and aggregates containing them reject. Function signatures are callable leaves for capture safety.
 Definition, relation, context, reviewed-change, and eligible extraction projections include binding
 children. Runtime environments are absent from all semantic and external encodings.
-Missing, excess, duplicate, foreign, task,
+Missing, excess, duplicate, foreign, undeclared task invocation,
 nonfunction, arity, and argument-type cases reject before publication. `function-ref`, `lambda`,
 `closure`, and `apply` are not aliases. The dependency-closed data cutover also adds exact
 `create.interface`, `create.external`, interface `add.operation`, operation parameters,
 `set.requirement-contract`, and `replace.dependency`; these remain reviewed typed graph changes and
 do not form a private builder.
+
+`add.effect-parameter as=$E declaration=FUNCTION name=E` adds a function-owned ordered effect
+parameter. `effect.row as=@E` declares a row fragment, with ordered `effect.requirement` and
+`effect.parameter` children naming exact requirements or effect parameters. Authored duplicate atoms
+normalize to one canonical set member. A task declaration or `set.function-contract` accepts these
+same row children. `type.task-function as=@Callback result=TYPE effect=@E` takes ordered
+`type.argument` parameter children. A call or named function value receives ordered
+`effect.argument parent=EXPRESSION index=INDEX effect=@E` records, exactly matching the callee's
+effect arity. An empty row still describes a task callable. These fragments are ordinary authored
+meaning, with complete definition/interface pagination and exact relation/impact participation.
+
+`set.port-contract port=PORT type=TYPE` replaces a port's exact callable contract in the same reviewed
+candidate as its implementation and dependent edits. Effect/signature changes require complete
+candidate validation; body-only local certification does not authorize them. Omitted effect arguments
+preserve previous request meaning only for zero effect arity. Pure `run` remains pure-only; live task
+execution uses the existing checked component targets.
 
 The public exact-dependency and topology slice is:
 
@@ -536,7 +552,7 @@ malformed constraints, cancellation and exhausted validation cannot partially ad
 Owner queries, full function definitions and built-in/staged interfaces expose `constraint=none` or
 `constraint=capture-safe`; definition continuations remain revision-pinned and reject after edits.
 
-The declaration selector accepts pure functions, records and variants. Nominal applications use
+The declaration selector accepts pure and task functions, records and variants. Nominal applications use
 `type.application as=@Applied declaration=DECLARATION` followed by ordered
 `type.argument parent=@Applied index=INDEX type=TYPE` records. Positive arity is mandatory; use
 `type.named` for zero-arity declarations. Record and variant constructors accept the same ordered

@@ -2675,6 +2675,7 @@ fn validate_parent_identity_class(
             matches!(parent, OwnerKey::Declaration(_) | OwnerKey::Operation(_))
         }
         NamespaceClass::TypeParameter
+        | NamespaceClass::EffectParameter
         | NamespaceClass::Field
         | NamespaceClass::Case
         | NamespaceClass::Operation

@@ -1,4 +1,4 @@
-//! Independent exact-ID expression type and effect oracle for Graph 13.
+//! Independent exact-ID expression type and effect oracle for Graph 14.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
 use super::digest::TypeObjectDigest;
@@ -32,15 +32,17 @@ struct ExecutionContext {
     declaration: Option<DeclarationId>,
     pure: bool,
     requirements: BTreeSet<RequirementReference>,
-    allow_task_function_value: bool,
+    effect_parameters: BTreeSet<super::EffectParameterReference>,
 }
 
 #[derive(Clone, Debug)]
 struct FunctionSignature {
+    target: Option<DeclarationReference>,
     parameters: Vec<TypeObjectDigest>,
     result: TypeObjectDigest,
     requirements: BTreeSet<RequirementReference>,
     task: bool,
+    effect_parameters: BTreeSet<super::EffectParameterReference>,
 }
 
 fn nominal_parts(form: &TypeForm) -> Option<(DeclarationReference, &[TypeObjectDigest])> {
@@ -211,9 +213,10 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
 ) -> Result<TypeObjectDigest, Diagnostic> {
     let (pure, requirements) = match effect {
         FunctionEffect::Pure => (true, BTreeSet::new()),
-        FunctionEffect::Task { requirements } => {
-            (false, requirements.iter().copied().collect::<BTreeSet<_>>())
-        }
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => (false, requirements.iter().copied().collect::<BTreeSet<_>>()),
     };
     let mut diagnostics = Vec::new();
     let mut validator = ExpressionValidator {
@@ -235,7 +238,7 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
             declaration: Some(declaration),
             pure,
             requirements,
-            allow_task_function_value: false,
+            effect_parameters: effect.row().parameters.into_iter().collect(),
         },
         0,
     )
@@ -279,9 +282,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             match owner {
                 OwnerRecord::Declaration(declaration) => match declaration.payload {
                     DeclarationPayload::Function(function) => {
+                        let symbolic = function.effect.row().parameters.into_iter().collect();
                         let (pure, requirements) = match function.effect {
                             FunctionEffect::Pure => (true, BTreeSet::new()),
-                            FunctionEffect::Task { requirements } => {
+                            FunctionEffect::Task {
+                                effect_parameters: _,
+                                requirements,
+                            } => {
                                 for requirement in &requirements {
                                     if let Err(diagnostic) = self.requirement_record(*requirement) {
                                         self.push_diagnostic(diagnostic);
@@ -300,7 +307,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             },
                             pure,
                             requirements,
-                            allow_task_function_value: false,
+                            effect_parameters: symbolic,
                         };
                         self.compare_root_type(
                             function.body,
@@ -351,11 +358,37 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             continue;
                         }
                     };
-                    let context = ExecutionContext {
+                    let component_context = ExecutionContext {
                         declaration: None,
                         pure: false,
                         requirements,
-                        allow_task_function_value: true,
+                        effect_parameters: BTreeSet::new(),
+                    };
+                    let signature = match self.callable_signature(port.function_type) {
+                        Ok(signature) => signature,
+                        Err(diagnostic) => {
+                            self.push_diagnostic(diagnostic);
+                            continue;
+                        }
+                    };
+                    if !signature.effect_parameters.is_empty() {
+                        self.error(
+                            "kernel_type_port_effect_scope",
+                            "port task effects must be closed exact requirements",
+                        );
+                        continue;
+                    }
+                    if let Err(diagnostic) =
+                        self.validate_call_effect(&signature, &component_context)
+                    {
+                        self.push_diagnostic(diagnostic);
+                        continue;
+                    }
+                    let context = ExecutionContext {
+                        declaration: None,
+                        pure: !signature.task,
+                        requirements: signature.requirements,
+                        effect_parameters: BTreeSet::new(),
                     };
                     match port.implementation {
                         PortImplementation::Expression(expression) => self.compare_root_type(
@@ -365,7 +398,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "port expression",
                         ),
                         PortImplementation::Function(function) => {
-                            match self.function_signature(function, &[], &context) {
+                            match self.function_signature(function, &[], &[], &context) {
                                 Ok(signature) => {
                                     if let Err(diagnostic) =
                                         self.validate_call_effect(&signature, &context)
@@ -470,19 +503,20 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             continue;
                         }
                     };
-                    let mut types = TypeObjectInterner::default();
-                    let capture_count = route.selector.capture_count();
-                    let http_type = match crate::platform::http::semantic_http_route_function_type(
-                        &mut types,
-                        capture_count,
-                    ) {
-                        Ok(function_type) => function_type,
-                        Err(diagnostic) => {
-                            self.push_diagnostic(diagnostic);
+                    let matches = self.type_object(port.function_type).and_then(|ty| {
+                        crate::platform::http::has_semantic_http_route_shape(
+                            &ty.form,
+                            route.selector.capture_count(),
+                        )
+                    });
+                    let matches = match matches {
+                        Ok(matches) => matches,
+                        Err(error) => {
+                            self.push_diagnostic(error);
                             continue;
                         }
                     };
-                    if port.function_type != http_type {
+                    if !matches {
                         self.error(
                             "kernel_type_http_route_port",
                             "HTTP route requires the exact semantic HTTP function-backed port shape",
@@ -506,7 +540,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         );
                         continue;
                     }
-                    let text_type = match crate::platform::http::semantic_http_types(&mut types) {
+                    let text_type = match crate::platform::http::semantic_http_types(
+                        &mut TypeObjectInterner::default(),
+                    ) {
                         Ok(types) => types.text_type,
                         Err(diagnostic) => {
                             self.push_diagnostic(diagnostic);
@@ -542,9 +578,36 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             Ok(actual) if actual == expected => {}
             Ok(actual) => self.error(
                 "kernel_type_root",
-                format!("{label} expects type {expected} but its root has type {actual}"),
+                format!(
+                    "{label} {} expects {} but its root has {}",
+                    context
+                        .declaration
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| "expression scope".into()),
+                    self.describe_type(expected),
+                    self.describe_type(actual)
+                ),
             ),
             Err(diagnostic) => self.push_diagnostic(diagnostic),
+        }
+    }
+
+    fn describe_type(&self, ty: TypeObjectDigest) -> String {
+        match self.type_object(ty).map(|object| object.form) {
+            Ok(TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            }) => format!(
+                "{ty} task-function with {} parameters -> {result} ! {}",
+                parameters.len(),
+                effect.diagnostic()
+            ),
+            Ok(TypeForm::Function { parameters, result }) => format!(
+                "{ty} pure-function with {} parameters -> {result}",
+                parameters.len()
+            ),
+            _ => ty.to_string(),
         }
     }
 
@@ -645,79 +708,53 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 })
             }
             ExpressionOperation::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
-                let signature = self.function_signature(function, &type_arguments, context)?;
+                let signature =
+                    self.function_signature(function, &type_arguments, &effect_arguments, context)?;
                 self.validate_call_effect(&signature, context)?;
-                let mut argument_context = context.clone();
-                argument_context.allow_task_function_value = false;
-                self.validate_arguments(
-                    &arguments,
-                    &signature.parameters,
-                    &argument_context,
-                    next,
-                )?;
+                self.validate_arguments(&arguments, &signature.parameters, context, next)?;
                 Ok(signature.result)
             }
             ExpressionOperation::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => {
-                let signature = self.function_signature(function, &type_arguments, context)?;
-                if signature.task && !context.allow_task_function_value {
-                    return Err(type_error(
-                        "kernel_type_task_function_value",
-                        "task function value is unavailable in this expression context",
-                    ));
-                }
+                let signature =
+                    self.function_signature(function, &type_arguments, &effect_arguments, context)?;
                 self.function_type(&signature)
             }
             ExpressionOperation::Bind { callee, arguments } => {
-                let mut pure_callable_context = context.clone();
-                pure_callable_context.allow_task_function_value = false;
-                let callee_type = self.infer(callee, &pure_callable_context, next)?;
-                let TypeForm::Function { parameters, result } = self.type_object(callee_type)?.form
-                else {
-                    return Err(type_error(
-                        "kernel_type_bind",
-                        "bind callee must be a pure function value",
-                    ));
-                };
-                if arguments.len() > parameters.len() {
+                let ty = self.infer(callee, context, next)?;
+                let mut signature = self.callable_signature(ty)?;
+                if arguments.len() > signature.parameters.len() {
                     return Err(type_error(
                         "kernel_type_bind_arity",
-                        "bound prefix exceeds the callee's remaining parameter count",
+                        "bound prefix exceeds the remaining callable parameter count",
                     ));
                 }
-                for parameter in parameters.iter().take(arguments.len()) {
+                for parameter in signature.parameters.iter().take(arguments.len()) {
                     self.require_capture_safe(*parameter, context)?;
                 }
                 self.validate_arguments(
                     &arguments,
-                    &parameters[..arguments.len()],
-                    &pure_callable_context,
+                    &signature.parameters[..arguments.len()],
+                    context,
                     next,
                 )?;
-                self.canonical_type(TypeForm::Function {
-                    parameters: parameters[arguments.len()..].to_vec(),
-                    result,
-                })
+                signature.parameters.drain(..arguments.len());
+                self.function_type(&signature)
             }
             ExpressionOperation::Invoke { callee, arguments } => {
-                let mut callable_context = context.clone();
-                callable_context.allow_task_function_value = false;
-                let callee_type = self.infer(callee, &callable_context, next)?;
-                let object = self.type_object(callee_type)?;
-                let TypeForm::Function { parameters, result } = object.form else {
-                    return Err(type_error(
-                        "kernel_type_invoke",
-                        "invoke callee is not a function value",
-                    ));
-                };
-                self.validate_arguments(&arguments, &parameters, &callable_context, next)?;
-                Ok(result)
+                let ty = self.infer(callee, context, next)?;
+                let signature = self.callable_signature(ty)?;
+                self.validate_call_effect(&signature, context)?;
+                self.validate_arguments(&arguments, &signature.parameters, context, next)?;
+                Ok(signature.result)
             }
             ExpressionOperation::Record {
                 nominal_type,
@@ -911,18 +948,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         ));
                     }
                 };
-                // A port's separately authorized task value can sit behind an annotated local.
-                // Pure binding must inspect that source under its own context as well as its type.
-                if !context.allow_task_function_value
-                    && context.declaration.is_none()
-                    && let Some(value) = record.value
-                {
-                    let actual = self.infer(value, context, depth)?;
-                    if let Some(expected) = record.declared_type {
-                        require_same(expected, actual, "kernel_type_binding", "binding value")?;
-                    }
-                    return Ok(actual);
-                }
                 if let Some(ty) = record.declared_type {
                     return Ok(ty);
                 }
@@ -1282,7 +1307,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText
-                | TypeForm::Function { .. } => Vec::new(),
+                | TypeForm::Function { .. }
+                | TypeForm::TaskFunction { .. } => Vec::new(),
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. } => {
@@ -1303,12 +1329,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 Some(OwnerRecord::Declaration(declaration)) => {
                                     match declaration.payload {
                                         DeclarationPayload::Function(function) => {
-                                            if function.effect != FunctionEffect::Pure {
-                                                return Err(type_error(
-                                                    "kernel_type_bind_capture",
-                                                    "capture assumptions require a pure graph declaration",
-                                                ));
-                                            }
                                             let mut present = false;
                                             for declared in function.type_parameters {
                                                 self.consume_work()?;
@@ -1539,28 +1559,97 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
+        effect_arguments: &[super::EffectRow],
         context: &ExecutionContext,
     ) -> Result<FunctionSignature, Diagnostic> {
         let foreign = reference.package != self.read.package_id();
-        let (type_parameters, parameters, result, requirements, task) = if foreign {
-            let record = self.dependency_owner(
-                reference.package,
-                OwnerKey::Declaration(reference.declaration),
-                "function",
-            )?;
-            match record {
-                PackageInterfaceRecord::Declaration(record) => match record.payload {
-                    PackageInterfaceDeclarationPayload::External(function) => (
+        let (type_parameters, effect_parameters, parameters, result, requirements, task, symbolic) =
+            if foreign {
+                let record = self.dependency_owner(
+                    reference.package,
+                    OwnerKey::Declaration(reference.declaration),
+                    "function",
+                )?;
+                match record {
+                    PackageInterfaceRecord::Declaration(record) => match record.payload {
+                        PackageInterfaceDeclarationPayload::External(function) => (
+                            function.type_parameters,
+                            Vec::new(),
+                            function.parameters,
+                            function.result,
+                            BTreeSet::new(),
+                            false,
+                            Vec::new(),
+                        ),
+                        PackageInterfaceDeclarationPayload::Function(function) => {
+                            let symbolic = function.effect.row().parameters;
+                            let (requirements, task) = match function.effect {
+                                FunctionEffect::Pure => (BTreeSet::new(), false),
+                                FunctionEffect::Task {
+                                    effect_parameters: _,
+                                    requirements,
+                                } => {
+                                    for requirement in &requirements {
+                                        self.requirement_record(*requirement)?;
+                                    }
+                                    (requirements.into_iter().collect(), true)
+                                }
+                            };
+                            (
+                                function.type_parameters,
+                                function.effect_parameters,
+                                function.parameters,
+                                function.result,
+                                requirements,
+                                task,
+                                symbolic,
+                            )
+                        }
+                        _ => {
+                            return Err(type_error(
+                                "kernel_type_function_kind",
+                                "function reference names another declaration kind",
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_function_kind",
+                            "function reference names another owner kind",
+                        ));
+                    }
+                }
+            } else {
+                let record = match self
+                    .read
+                    .owner(OwnerKey::Declaration(reference.declaration))?
+                {
+                    Some(OwnerRecord::Declaration(record)) => record,
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_function_missing",
+                            "function declaration is missing",
+                        ));
+                    }
+                };
+                match record.payload {
+                    DeclarationPayload::External(function) => (
                         function.type_parameters,
+                        Vec::new(),
                         function.parameters,
                         function.result,
                         BTreeSet::new(),
                         false,
+                        Vec::new(),
                     ),
-                    PackageInterfaceDeclarationPayload::Function(function) => {
+                    DeclarationPayload::Function(function) => {
+                        let symbolic = function.effect.row().parameters;
                         let (requirements, task) = match function.effect {
                             FunctionEffect::Pure => (BTreeSet::new(), false),
-                            FunctionEffect::Task { requirements } => {
+                            FunctionEffect::Task {
+                                effect_parameters: _,
+                                requirements,
+                            } => {
                                 for requirement in &requirements {
                                     self.requirement_record(*requirement)?;
                                 }
@@ -1569,10 +1658,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         };
                         (
                             function.type_parameters,
+                            function.effect_parameters,
                             function.parameters,
                             function.result,
                             requirements,
                             task,
+                            symbolic,
                         )
                     }
                     _ => {
@@ -1581,61 +1672,46 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "function reference names another declaration kind",
                         ));
                     }
-                },
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_function_kind",
-                        "function reference names another owner kind",
-                    ));
-                }
-            }
-        } else {
-            let record = match self
-                .read
-                .owner(OwnerKey::Declaration(reference.declaration))?
-            {
-                Some(OwnerRecord::Declaration(record)) => record,
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_function_missing",
-                        "function declaration is missing",
-                    ));
                 }
             };
-            match record.payload {
-                DeclarationPayload::External(function) => (
-                    function.type_parameters,
-                    function.parameters,
-                    function.result,
-                    BTreeSet::new(),
-                    false,
+        if effect_parameters.len() != effect_arguments.len() {
+            return Err(type_error(
+                "kernel_effect_argument_count",
+                format!(
+                    "function {}/{} expects {} effect arguments; supplied {}",
+                    reference.package,
+                    reference.declaration,
+                    effect_parameters.len(),
+                    effect_arguments.len()
                 ),
-                DeclarationPayload::Function(function) => {
-                    let (requirements, task) = match function.effect {
-                        FunctionEffect::Pure => (BTreeSet::new(), false),
-                        FunctionEffect::Task { requirements } => {
-                            for requirement in &requirements {
-                                self.requirement_record(*requirement)?;
-                            }
-                            (requirements.into_iter().collect(), true)
-                        }
-                    };
-                    (
-                        function.type_parameters,
-                        function.parameters,
-                        function.result,
-                        requirements,
-                        task,
-                    )
-                }
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_function_kind",
-                        "function reference names another declaration kind",
-                    ));
-                }
+            ));
+        }
+        for row in effect_arguments {
+            self.validate_effect_scope(row, context)?;
+        }
+        let effects = effect_parameters
+            .iter()
+            .zip(effect_arguments)
+            .map(|(parameter, row)| {
+                (
+                    super::EffectParameterReference {
+                        package: reference.package,
+                        parameter: *parameter,
+                    },
+                    row.clone(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let row = super::EffectRow {
+            requirements: requirements.into_iter().collect(),
+            parameters: symbolic,
+        }
+        .substitute(&effects, |n| {
+            for _ in 0..n {
+                self.consume_work()?;
             }
-        };
+            Ok(())
+        })?;
         if type_parameters.len() != type_arguments.len() {
             return Err(type_error(
                 "kernel_type_argument_count",
@@ -1680,13 +1756,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             .collect::<BTreeMap<_, _>>();
         let mut parameter_types = self.parameter_types(reference.package, &parameters)?;
         for parameter in &mut parameter_types {
+            *parameter = self.substitute_effects(*parameter, &effects, 0)?;
             *parameter = self.substitute(*parameter, &substitutions, 0)?;
         }
+        let result = self.substitute_effects(result, &effects, 0)?;
         let result = self.substitute(result, &substitutions, 0)?;
         Ok(FunctionSignature {
+            target: Some(reference),
             parameters: parameter_types,
             result,
-            requirements,
+            requirements: row.requirements.into_iter().collect(),
+            effect_parameters: row.parameters.into_iter().collect(),
             task,
         })
     }
@@ -1838,46 +1918,128 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         if signature.task && context.pure {
             return Err(type_error(
                 "kernel_type_pure_task_call",
-                "pure expression calls a task function",
+                format!(
+                    "pure expression in {} calls task {}; task kind requires a task context even for an empty row",
+                    context
+                        .declaration
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| "expression scope".into()),
+                    signature
+                        .target
+                        .map(|target| format!("{}/{}", target.package, target.declaration))
+                        .unwrap_or_else(|| "indirect callable".into())
+                ),
             ));
         }
-        for required in &signature.requirements {
-            if context.requirements.contains(required) {
-                continue;
-            }
-            let required_record = self.requirement_record(*required)?;
-            let mut covered = false;
-            for available in &context.requirements {
-                let available_record = self.requirement_record(*available)?;
-                if available_record.name == required_record.name
-                    && available_record.interface == required_record.interface
-                    && required_record
-                        .operations
-                        .iter()
-                        .all(|operation| available_record.operations.contains(operation))
-                {
-                    covered = true;
-                    break;
-                }
-            }
-            if !covered {
-                return Err(type_error(
-                    "kernel_type_task_requirement",
-                    "task call requires an unavailable capability alias, interface, or operation",
-                ));
-            }
+        let required = super::EffectRow {
+            requirements: signature.requirements.iter().copied().collect(),
+            parameters: signature.effect_parameters.iter().copied().collect(),
+        };
+        let available = super::EffectRow {
+            requirements: context.requirements.iter().copied().collect(),
+            parameters: context.effect_parameters.iter().copied().collect(),
+        };
+        if !required.is_contained_by(&available, |required, available| {
+            Ok(super::requirement_is_covered_by(
+                required.package,
+                &self.requirement_record(required)?,
+                available.package,
+                &self.requirement_record(available)?,
+            ))
+        })? {
+            return Err(type_error(
+                "kernel_type_task_requirement",
+                format!(
+                    "task {} requires {}; activation {} allows {}: package, operation, limit, or symbolic scope coverage is missing",
+                    signature
+                        .target
+                        .map(|target| format!("{}/{}", target.package, target.declaration))
+                        .unwrap_or_else(|| "indirect callable".into()),
+                    required.diagnostic(),
+                    context
+                        .declaration
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| "expression scope".into()),
+                    available.diagnostic()
+                ),
+            ));
         }
         Ok(())
+    }
+
+    fn callable_signature(&self, ty: TypeObjectDigest) -> Result<FunctionSignature, Diagnostic> {
+        let (parameters, result, task, row) = match self.type_object(ty)?.form {
+            TypeForm::Function { parameters, result } => {
+                (parameters, result, false, super::EffectRow::default())
+            }
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => (parameters, result, true, effect),
+            _ => {
+                return Err(type_error(
+                    "kernel_type_invoke",
+                    "callee is not a pure or task callable value",
+                ));
+            }
+        };
+        Ok(FunctionSignature {
+            target: None,
+            parameters,
+            result,
+            task,
+            requirements: row.requirements.into_iter().collect(),
+            effect_parameters: row.parameters.into_iter().collect(),
+        })
     }
 
     fn function_type(
         &mut self,
         signature: &FunctionSignature,
     ) -> Result<TypeObjectDigest, Diagnostic> {
-        self.canonical_type(TypeForm::Function {
-            parameters: signature.parameters.clone(),
-            result: signature.result,
+        let parameters = signature.parameters.clone();
+        let result = signature.result;
+        self.canonical_type(if signature.task {
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect: super::EffectRow {
+                    requirements: signature.requirements.iter().copied().collect(),
+                    parameters: signature.effect_parameters.iter().copied().collect(),
+                },
+            }
+        } else {
+            TypeForm::Function { parameters, result }
         })
+    }
+
+    fn validate_effect_scope(
+        &mut self,
+        row: &super::EffectRow,
+        context: &ExecutionContext,
+    ) -> Result<(), Diagnostic> {
+        row.validate()?;
+        for requirement in &row.requirements {
+            self.consume_work()?;
+            self.requirement_record(*requirement)?;
+        }
+        for parameter in &row.parameters {
+            self.consume_work()?;
+            if parameter.package != self.read.package_id()
+                || !matches!(self.read.owner(OwnerKey::EffectParameter(parameter.parameter))?,
+                Some(OwnerRecord::EffectParameter(record)) if Some(record.declaration) == context.declaration)
+            {
+                return Err(type_error(
+                    "kernel_effect_parameter_scope",
+                    format!(
+                        "effect parameter {}/{} is outside the caller's exact function scope",
+                        parameter.package, parameter.parameter
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn named_type(
@@ -1923,6 +2085,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 }
                 TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
                 TypeForm::Function { .. }
+                | TypeForm::TaskFunction { .. }
                 | TypeForm::Secret
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. }
@@ -2230,7 +2393,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "applied nominal data cannot contain live resources, including phantom arguments and absent cases",
                     ));
                 }
-                TypeForm::Function { .. } => Vec::new(),
+                TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => Vec::new(),
                 TypeForm::Named { declaration } => self.nominal_children(*declaration, &[])?,
                 TypeForm::Applied {
                     declaration,
@@ -2313,6 +2476,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             TypeForm::Stream { item } => TypeForm::Stream {
                 item: self.substitute(item, substitutions, next)?,
             },
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => TypeForm::TaskFunction {
+                parameters: parameters
+                    .into_iter()
+                    .map(|ty| self.substitute(ty, substitutions, next))
+                    .collect::<Result<_, _>>()?,
+                result: self.substitute(result, substitutions, next)?,
+                effect,
+            },
             TypeForm::Function { parameters, result } => TypeForm::Function {
                 parameters: parameters
                     .into_iter()
@@ -2325,6 +2500,71 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         self.canonical_type(form)
     }
 
+    fn substitute_effects(
+        &mut self,
+        digest: TypeObjectDigest,
+        bindings: &BTreeMap<super::EffectParameterReference, super::EffectRow>,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        if bindings.is_empty() {
+            return Ok(digest);
+        }
+        self.consume_work()?;
+        if depth > MAXIMUM_TYPE_DEPTH {
+            return Err(type_error(
+                "kernel_type_substitution_depth",
+                "effect substitution exceeded its structural depth bound",
+            ));
+        }
+        let mut object = self.type_object(digest)?;
+        if let TypeForm::TaskFunction { effect, .. } = &mut object.form {
+            *effect = effect.substitute(bindings, |n| {
+                for _ in 0..n {
+                    self.consume_work()?;
+                }
+                Ok(())
+            })?;
+        }
+        let mut replace = |ty: &mut TypeObjectDigest| -> Result<(), Diagnostic> {
+            *ty = self.substitute_effects(*ty, bindings, depth + 1)?;
+            Ok(())
+        };
+        match &mut object.form {
+            TypeForm::StructuralRecord { fields } => {
+                for field in fields {
+                    replace(&mut field.ty)?;
+                }
+            }
+            TypeForm::Applied { arguments, .. } => {
+                for ty in arguments {
+                    replace(ty)?;
+                }
+            }
+            TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+                replace(item)?
+            }
+            TypeForm::Map { key, value }
+            | TypeForm::Result {
+                ok: key,
+                error: value,
+            } => {
+                replace(key)?;
+                replace(value)?;
+            }
+            TypeForm::Function { parameters, result }
+            | TypeForm::TaskFunction {
+                parameters, result, ..
+            } => {
+                for ty in parameters {
+                    replace(ty)?;
+                }
+                replace(result)?;
+            }
+            _ => {}
+        }
+        self.canonical_type(object.form)
+    }
+
     fn canonical_type(&mut self, form: TypeForm) -> Result<TypeObjectDigest, Diagnostic> {
         let object = TypeObject::new(form)?;
         let (digest, bytes) = super::codec::encode_type_object(&object)?;
@@ -2333,6 +2573,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 TypeForm::StructuralRecord { fields } => fields.len(),
                 TypeForm::Applied { arguments, .. } => arguments.len(),
                 TypeForm::Function { parameters, .. } => parameters.len(),
+                TypeForm::TaskFunction {
+                    parameters, effect, ..
+                } => parameters
+                    .len()
+                    .saturating_add(effect.requirements.len())
+                    .saturating_add(effect.parameters.len()),
                 _ => 0,
             };
             self.type_metadata_bytes = children
@@ -2488,7 +2734,7 @@ fn pure_context(declaration: Option<DeclarationId>) -> ExecutionContext {
         declaration,
         pure: true,
         requirements: BTreeSet::new(),
-        allow_task_function_value: false,
+        effect_parameters: BTreeSet::new(),
     }
 }
 

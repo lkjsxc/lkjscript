@@ -4,7 +4,7 @@ use super::resident::NormalizedResidentDeployment;
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
-use crate::platform::kernel::{TypeForm, TypeObjectInterner};
+use crate::platform::kernel::TypeForm;
 use crate::platform::package::RunnerKind;
 use crate::platform::runtime::ShutdownReceipt;
 use crate::platform::worker::{
@@ -49,7 +49,36 @@ impl NormalizedWorkerApplication {
                     "selected worker target port escaped the exact runtime table",
                 )
             })?;
-        if port.function_type != worker_function_type()? {
+        let shape = resident
+            .program()
+            .types
+            .get(&port.function_type)
+            .map(|ty| &ty.form);
+        let valid = match shape {
+            Some(TypeForm::Function { parameters, result }) => {
+                parameters.is_empty()
+                    && resident
+                        .program()
+                        .types
+                        .get(result)
+                        .is_some_and(|ty| matches!(ty.form, TypeForm::Bool))
+            }
+            Some(TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            }) => {
+                effect.is_closed()
+                    && parameters.is_empty()
+                    && resident
+                        .program()
+                        .types
+                        .get(result)
+                        .is_some_and(|ty| matches!(ty.form, TypeForm::Bool))
+            }
+            _ => false,
+        };
+        if !valid {
             return Err(worker_diagnostic(
                 DiagnosticClass::Semantic,
                 "normalized_worker_port_signature",
@@ -83,15 +112,6 @@ impl ResidentWorker for NormalizedResidentDeployment {
     async fn shutdown_worker(&self) -> ShutdownReceipt {
         self.shutdown().await
     }
-}
-
-fn worker_function_type() -> Result<crate::platform::kernel::TypeObjectDigest, Diagnostic> {
-    let mut types = TypeObjectInterner::default();
-    let result = types.intern(TypeForm::Bool)?;
-    types.intern(TypeForm::Function {
-        parameters: Vec::new(),
-        result,
-    })
 }
 
 fn worker_diagnostic(

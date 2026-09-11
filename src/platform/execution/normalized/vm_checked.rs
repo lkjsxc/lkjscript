@@ -18,7 +18,6 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Class {
     Free,
-    Port,
     Binding(usize),
     Retained(usize),
     Direct,
@@ -61,8 +60,7 @@ impl Value {
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if !matches!(
             (self.class, use_mode),
-            (Class::Free | Class::Port, ParameterUse::Unrestricted)
-                | (Class::Direct, ParameterUse::Borrow)
+            (Class::Free, ParameterUse::Unrestricted) | (Class::Direct, ParameterUse::Borrow)
         ) {
             return Err(runtime_error(
                 "normalized_local_resource_use",
@@ -130,19 +128,32 @@ impl Value {
                 "function constructor requires capture-safe type arguments",
             ));
         }
-        let pure = target.pure_graph
-            || matches!(
-                target.body,
-                super::super::prepare::NormalizedFunctionBody::External(_)
-            );
+        if !target.effect_parameters.is_empty()
+            || !target.effect.row().is_closed()
+            || (matches!(target.effect, crate::platform::kernel::FunctionEffect::Pure)
+                && !target.pure_graph
+                && !matches!(
+                    target.body,
+                    super::super::prepare::NormalizedFunctionBody::External(_)
+                ))
+            || target
+                .parameters
+                .iter()
+                .any(|p| p.resource_requirement.is_some())
+        {
+            return Err(admission_error(
+                "callable target has unresolved effects or a resource-bearing signature",
+            ));
+        }
         Ok(Self {
             raw: NormalizedValue::Function {
                 function,
                 type_arguments,
+                effect_arguments: Arc::clone(&target.effect_arguments),
                 bound_arguments: None,
             },
             origin: program.value_origin,
-            class: if pure { Class::Free } else { Class::Port },
+            class: Class::Free,
         })
     }
 
@@ -150,16 +161,16 @@ impl Value {
     pub(super) fn invocation(
         &self,
         program: &NormalizedProgram,
-        allow_port: bool,
     ) -> Result<Invocation, ExecutionError> {
-        if self.origin != program.value_origin || (!allow_port && self.class != Class::Free) {
+        if self.origin != program.value_origin || self.class != Class::Free {
             return Err(admission_error(
-                "invoke requires a checked pure callable from this preparation",
+                "invoke requires a checked callable from this preparation",
             ));
         }
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments: _,
             bound_arguments,
         } = &self.raw
         else {
@@ -502,12 +513,13 @@ impl Admission<'_> {
         self.control.check()?;
         if callee.class(self.program, self.work)? != Class::Free {
             return Err(admission_error(
-                "bind requires a pure callable; task-port values cannot become environments",
+                "bind requires an admitted immutable callable",
             ));
         }
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -519,19 +531,16 @@ impl Admission<'_> {
             .get(function.0 as usize)
             .filter(|_| function.1 == self.program.value_origin)
             .ok_or_else(|| admission_error("bind target belongs to another prepared program"))?;
-        if !(target.pure_graph
-            || matches!(
-                target.body,
-                super::super::prepare::NormalizedFunctionBody::External(_)
-            ))
-            || !target.task_requirements.is_empty()
+        if !target.effect_parameters.is_empty()
             || target
                 .parameters
                 .iter()
                 .any(|parameter| parameter.resource_requirement.is_some())
             || type_arguments.len() != target.type_parameters.len()
         {
-            return Err(admission_error("bind target is not an exact pure callable"));
+            return Err(admission_error(
+                "bind target has unresolved effects or a resource-bearing signature",
+            ));
         }
         let existing = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
         let count = existing
@@ -572,6 +581,7 @@ impl Admission<'_> {
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -631,6 +641,7 @@ impl Admission<'_> {
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -650,6 +661,7 @@ impl Admission<'_> {
             raw: NormalizedValue::Function {
                 function: *function,
                 type_arguments: Arc::clone(type_arguments),
+                effect_arguments: Arc::clone(effect_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             origin: self.program.value_origin,
@@ -703,7 +715,8 @@ impl Admission<'_> {
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText
-                | TypeForm::Function { .. } => {}
+                | TypeForm::Function { .. }
+                | TypeForm::TaskFunction { .. } => {}
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }
@@ -1014,17 +1027,38 @@ impl Admission<'_> {
                     NormalizedValue::Function {
                         function,
                         type_arguments,
+                        effect_arguments,
                         bound_arguments,
                     },
-                    TypeForm::Function { parameters, result },
+                    expected_callable @ (TypeForm::Function { parameters, result }
+                    | TypeForm::TaskFunction {
+                        parameters, result, ..
+                    }),
                 ) => {
                     let callable = self.program.functions.get(function.0 as usize).filter(|_| function.1 == self.program.value_origin).ok_or_else(|| admission_error("raw function belongs to another prepared program; select its exact callable"))?;
-                    if !(callable.pure_graph
-                        || matches!(
-                            callable.body,
-                            super::super::prepare::NormalizedFunctionBody::External(_)
-                        ))
-                        || !callable.task_requirements.is_empty()
+                    let effect_matches = match expected_callable {
+                        TypeForm::Function { .. } => {
+                            matches!(
+                                callable.effect,
+                                crate::platform::kernel::FunctionEffect::Pure
+                            ) && (callable.pure_graph
+                                || matches!(
+                                    callable.body,
+                                    super::super::prepare::NormalizedFunctionBody::External(_)
+                                ))
+                        }
+                        TypeForm::TaskFunction { effect, .. } => {
+                            matches!(
+                                callable.effect,
+                                crate::platform::kernel::FunctionEffect::Task { .. }
+                            ) && effect.is_closed()
+                                && callable.effect.row() == *effect
+                        }
+                        _ => false,
+                    };
+                    if !effect_matches
+                        || !callable.effect_parameters.is_empty()
+                        || effect_arguments.as_ref() != callable.effect_arguments.as_ref()
                         || callable
                             .parameters
                             .iter()
@@ -1042,7 +1076,7 @@ impl Admission<'_> {
                             != Some(parameters.len())
                     {
                         return Err(admission_error(
-                            "raw callback has a foreign signature or effect; pass the exact pure callable",
+                            "raw callback has a foreign signature or effect; pass the exact callable kind and effect row",
                         ));
                     }
                     if type_arguments.iter().any(|ty| {
@@ -1227,6 +1261,24 @@ impl Admission<'_> {
                 ok: descend(*ok)?,
                 error: descend(*error)?,
             },
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => {
+                if !effect.is_closed() {
+                    return None;
+                }
+                TypeForm::TaskFunction {
+                    parameters: parameters
+                        .iter()
+                        .copied()
+                        .map(descend)
+                        .collect::<Option<_>>()?,
+                    result: descend(*result)?,
+                    effect: effect.clone(),
+                }
+            }
             TypeForm::Function { parameters, result } => TypeForm::Function {
                 parameters: parameters
                     .iter()

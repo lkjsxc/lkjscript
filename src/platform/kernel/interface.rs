@@ -6,14 +6,14 @@
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN};
 use super::{
-    CaseRecord, DeclarationPayload, DeclarationVisibility, FieldRecord, FunctionEffect, Name,
-    OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterRecord,
-    RequirementRecord, TypeObjectDigest, TypeParameterRecord,
+    CaseRecord, DeclarationPayload, DeclarationVisibility, EffectParameterRecord, FieldRecord,
+    FunctionEffect, Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
+    ParameterRecord, RequirementRecord, TypeObjectDigest, TypeParameterRecord,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{
-    CaseId, DeclarationId, FieldId, OperationId, ParameterId, PortId, RequirementId,
-    TypeParameterId,
+    CaseId, DeclarationId, EffectParameterId, FieldId, OperationId, ParameterId, PortId,
+    RequirementId, TypeParameterId,
 };
 use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
@@ -22,6 +22,7 @@ use std::collections::BTreeSet;
 pub enum PackageInterfaceRecord {
     Declaration(PackageInterfaceDeclaration),
     TypeParameter(TypeParameterRecord),
+    EffectParameter(EffectParameterRecord),
     Field(FieldRecord),
     Case(CaseRecord),
     Operation(OperationRecord),
@@ -37,6 +38,7 @@ impl PackageInterfaceRecord {
                 Self::Declaration(PackageInterfaceDeclaration::project(record)?)
             }
             OwnerRecord::TypeParameter(record) => Self::TypeParameter(record.clone()),
+            OwnerRecord::EffectParameter(record) => Self::EffectParameter(record.clone()),
             OwnerRecord::Field(record) => Self::Field(record.clone()),
             OwnerRecord::Case(record) => Self::Case(record.clone()),
             OwnerRecord::Operation(record) => Self::Operation(record.clone()),
@@ -62,6 +64,7 @@ impl PackageInterfaceRecord {
         match self {
             Self::Declaration(record) => record.header,
             Self::TypeParameter(record) => record.header,
+            Self::EffectParameter(record) => record.header,
             Self::Field(record) => record.header,
             Self::Case(record) => record.header,
             Self::Operation(record) => record.header,
@@ -79,13 +82,16 @@ impl PackageInterfaceRecord {
             Self::Operation(record) => vec![record.result],
             Self::Parameter(record) => vec![record.ty],
             Self::Port(record) => vec![record.function_type],
-            Self::TypeParameter(_) | Self::Requirement(_) => Vec::new(),
+            Self::TypeParameter(_) | Self::EffectParameter(_) | Self::Requirement(_) => Vec::new(),
         }
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
         match self {
             Self::Declaration(record) => record.validate_local(),
+            Self::EffectParameter(record) => {
+                OwnerRecord::EffectParameter(record.clone()).validate_local()
+            }
             Self::TypeParameter(record) => {
                 OwnerRecord::TypeParameter(record.clone()).validate_local()
             }
@@ -144,6 +150,7 @@ impl PackageInterfaceDeclaration {
             }
             DeclarationPayload::Function(function) => {
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
                     result: function.result,
@@ -216,9 +223,15 @@ impl PackageInterfaceDeclaration {
                 OwnerKind::External
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                validate_ordered("function effect parameters", &signature.effect_parameters)?;
+                signature.effect.row().validate()?;
                 validate_ordered("function type parameters", &signature.type_parameters)?;
                 validate_ordered("function parameters", &signature.parameters)?;
-                if let FunctionEffect::Task { requirements } = &signature.effect {
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = &signature.effect
+                {
                     validate_sorted("task requirements", requirements, true)?;
                     OwnerKind::TaskFunction
                 } else {
@@ -279,6 +292,7 @@ pub struct PackageExternalSignature {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct PackageFunctionSignature {
+    pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
     pub result: TypeObjectDigest,

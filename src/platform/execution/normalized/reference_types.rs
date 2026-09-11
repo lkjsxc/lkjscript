@@ -11,7 +11,12 @@ use crate::platform::semantic_id::{ExpressionId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 type Bindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
-type Calls = VecDeque<(DeclarationReference, Vec<TypeObjectDigest>)>;
+type Application = (
+    DeclarationReference,
+    Vec<TypeObjectDigest>,
+    Vec<crate::platform::kernel::EffectRow>,
+);
+type Calls = VecDeque<Application>;
 
 struct Closure<'a> {
     snapshots: BTreeMap<PackageId, &'a KernelSnapshot>,
@@ -19,6 +24,7 @@ struct Closure<'a> {
     visits: usize,
     allocated: usize,
     control: &'a crate::platform::execution::ExecutionControl,
+    effects: super::reference_effects::Bindings,
 }
 
 fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError> {
@@ -116,6 +122,27 @@ impl Closure<'_> {
                     .collect::<Result<_, _>>()?,
                 result: self.identity(result, bindings, depth + 1)?,
             },
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => {
+                let effect = super::reference_effects::close(&effect, &self.effects, |n| {
+                    allocate::<(crate::platform::kernel::RequirementReference, usize)>(
+                        &mut self.allocated,
+                        n,
+                    )?;
+                    self.control.check()
+                })?;
+                TypeForm::TaskFunction {
+                    parameters: parameters
+                        .into_iter()
+                        .map(|ty| self.identity(ty, bindings, depth + 1))
+                        .collect::<Result<_, _>>()?,
+                    result: self.identity(result, bindings, depth + 1)?,
+                    effect,
+                }
+            }
             TypeForm::StructuralRecord { mut fields } => {
                 for field in &mut fields {
                     field.ty = self.identity(field.ty, bindings, depth + 1)?;
@@ -218,9 +245,11 @@ impl Closure<'_> {
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
+                    effect_arguments,
                     ..
                 }
                 | ExpressionOperation::FunctionValue {
+                    effect_arguments,
                     function,
                     type_arguments,
                 } => {
@@ -234,7 +263,21 @@ impl Closure<'_> {
                         &mut self.allocated,
                         1,
                     )?;
-                    calls.push_back((function, concrete));
+                    allocate::<crate::platform::kernel::EffectRow>(
+                        &mut self.allocated,
+                        effect_arguments.len(),
+                    )?;
+                    let mut effects = Vec::with_capacity(effect_arguments.len());
+                    for row in effect_arguments {
+                        self.tick()?;
+                        effects.push(super::reference_effects::close(&row, &self.effects, |n| {
+                            allocate::<(crate::platform::kernel::RequirementReference, usize)>(
+                                &mut self.allocated,
+                                n,
+                            )
+                        })?);
+                    }
+                    calls.push_back((function, concrete, effects));
                 }
                 _ => {}
             }
@@ -261,6 +304,19 @@ impl Closure<'_> {
             }
             TypeForm::Applied { arguments, .. } => {
                 allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?
+            }
+            TypeForm::TaskFunction {
+                parameters, effect, ..
+            } => {
+                allocate::<TypeObjectDigest>(&mut self.allocated, parameters.len())?;
+                allocate::<crate::platform::kernel::RequirementReference>(
+                    &mut self.allocated,
+                    effect.requirements.len(),
+                )?;
+                allocate::<crate::platform::kernel::EffectParameterReference>(
+                    &mut self.allocated,
+                    effect.parameters.len(),
+                )?;
             }
             TypeForm::Function { parameters, .. } => {
                 allocate::<TypeObjectDigest>(&mut self.allocated, parameters.len())?
@@ -293,6 +349,7 @@ pub(super) fn complete(
         visits: 0,
         allocated: 0,
         control,
+        effects: BTreeMap::new(),
     };
     let mut calls = VecDeque::new();
     let empty = Bindings::new();
@@ -304,9 +361,10 @@ pub(super) fn complete(
                 (key, record)
             {
                 let generic = match &declaration.payload {
-                    DeclarationPayload::Function(function) => {
-                        Some(!function.type_parameters.is_empty())
-                    }
+                    DeclarationPayload::Function(function) => Some(
+                        !function.type_parameters.is_empty()
+                            || !function.effect_parameters.is_empty(),
+                    ),
                     DeclarationPayload::External(function) => {
                         Some(!function.type_parameters.is_empty())
                     }
@@ -324,6 +382,7 @@ pub(super) fn complete(
                                 declaration: *id,
                             },
                             Vec::new(),
+                            Vec::new(),
                         ));
                     }
                     continue;
@@ -338,11 +397,18 @@ pub(super) fn complete(
         }
     }
     let mut completed = BTreeSet::new();
-    while let Some((function, arguments)) = calls.pop_front() {
+    while let Some((function, arguments, effects)) = calls.pop_front() {
         closure.tick()?;
         index_node::<(DeclarationReference, Vec<TypeObjectDigest>)>(&mut closure.allocated)?;
         allocate::<TypeObjectDigest>(&mut closure.allocated, arguments.len())?;
-        if !completed.insert((function, arguments.clone())) {
+        allocate::<crate::platform::kernel::EffectRow>(&mut closure.allocated, effects.len())?;
+        for row in &effects {
+            allocate::<crate::platform::kernel::RequirementReference>(
+                &mut closure.allocated,
+                row.requirements.len(),
+            )?;
+        }
+        if !completed.insert((function, arguments.clone(), effects.clone())) {
             continue;
         }
         let OwnerRecord::Declaration(declaration) = closure
@@ -354,22 +420,24 @@ pub(super) fn complete(
         else {
             return Err(failure());
         };
-        let (parameters, types, result, body) = match declaration.payload {
+        let (parameters, types, effect_parameters, result, body) = match declaration.payload {
             DeclarationPayload::Function(function) => (
                 function.parameters,
                 function.type_parameters,
+                function.effect_parameters,
                 function.result,
                 Some(function.body),
             ),
             DeclarationPayload::External(function) => (
                 function.parameters,
                 function.type_parameters,
+                Vec::new(),
                 function.result,
                 None,
             ),
             _ => return Err(failure()),
         };
-        if types.len() != arguments.len() {
+        if types.len() != arguments.len() || effect_parameters.len() != effects.len() {
             return Err(failure());
         }
         for _ in &types {
@@ -377,6 +445,23 @@ pub(super) fn complete(
             index_node::<(TypeParameterId, TypeObjectDigest)>(&mut closure.allocated)?;
         }
         let bindings = types.into_iter().zip(arguments).collect();
+        allocate::<(
+            crate::platform::kernel::EffectParameterReference,
+            crate::platform::kernel::EffectRow,
+        )>(&mut closure.allocated, effects.len())?;
+        closure.effects = effect_parameters
+            .into_iter()
+            .zip(effects)
+            .map(|(parameter, row)| {
+                (
+                    crate::platform::kernel::EffectParameterReference {
+                        package: function.package,
+                        parameter,
+                    },
+                    row,
+                )
+            })
+            .collect();
         closure.identity(result, &bindings, 0)?;
         for parameter in parameters {
             let OwnerRecord::Parameter(parameter) = closure
@@ -391,6 +476,7 @@ pub(super) fn complete(
             closure.body(function.package, body, &bindings, &mut calls)?;
         }
     }
+    closure.effects.clear();
     closure.nominals(
         &mut schema.records,
         &mut schema.variants,
@@ -430,6 +516,32 @@ pub(super) fn complete(
 }
 
 impl Closure<'_> {
+    fn has_unresolved_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        memo: &mut BTreeMap<TypeObjectDigest, bool>,
+        depth: usize,
+    ) -> Result<bool, ExecutionError> {
+        self.tick()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(failure());
+        }
+        if let Some(answer) = memo.get(&ty) {
+            return Ok(*answer);
+        }
+        self.clone_type(ty)?;
+        let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
+        let mut unresolved = matches!(object.form, TypeForm::TypeParameter { .. })
+            || matches!(&object.form, TypeForm::TaskFunction { effect, .. } if !effect.parameters.is_empty());
+        allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+        for child in object.child_types() {
+            unresolved |= self.has_unresolved_type(child, memo, depth + 1)?;
+        }
+        index_node::<(TypeObjectDigest, bool)>(&mut self.allocated)?;
+        memo.insert(ty, unresolved);
+        Ok(unresolved)
+    }
+
     // This derivation reads canonical declaration and member owners directly. It neither copies
     // production instance tables nor uses compiled parameter, member, or constraint layouts.
     fn nominals(
@@ -480,6 +592,7 @@ impl Closure<'_> {
             .map(|ty| (*ty, 0usize))
             .collect::<VecDeque<_>>();
         let mut inspected = BTreeSet::new();
+        let mut unresolved = BTreeMap::new();
         let mut additions_record = BTreeMap::new();
         let mut additions_variant = BTreeMap::new();
         while let Some((ty, depth)) = queue.pop_front() {
@@ -492,6 +605,9 @@ impl Closure<'_> {
             }
             index_node::<TypeObjectDigest>(&mut self.allocated)?;
             inspected.insert(ty);
+            if self.has_unresolved_type(ty, &mut unresolved, 0)? {
+                continue;
+            }
             self.clone_type(ty)?;
             let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
             for child in object.child_types() {
@@ -692,7 +808,11 @@ fn property_types(
                     | TypeForm::CapabilityResource { .. }
                     | TypeForm::TypeParameter { .. }
             ) && (secrets || !matches!(object.form, TypeForm::Secret))
-                && (callables || !matches!(object.form, TypeForm::Function { .. }))
+                && (callables
+                    || !matches!(
+                        object.form,
+                        TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+                    ))
         {
             tick(visits)?;
             index_node::<TypeObjectDigest>(allocated)?;
@@ -760,6 +880,8 @@ fn property_types(
                                 accepted &= safe.contains(&payload);
                             }
                         }
+                    } else if matches!(object.form, TypeForm::Applied { .. }) {
+                        accepted = false;
                     } else {
                         return Err(failure());
                     }
@@ -771,7 +893,7 @@ fn property_types(
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText => true,
-                TypeForm::Function { .. } => callables,
+                TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => callables,
                 TypeForm::Secret => secrets,
                 _ => false,
             };

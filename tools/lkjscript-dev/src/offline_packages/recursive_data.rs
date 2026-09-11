@@ -197,6 +197,12 @@ pub(super) fn start(
         true,
     )?;
     let component = field(&component, "owner", "id")?;
+    let port = context.cli(
+        Some(&package.path),
+        &["query", "find", "port", "http", "--parent", &component],
+        true,
+    )?;
+    let port = field(&port, "owner", "id")?;
     let definition = context.cli(
         Some(&package.path),
         &[
@@ -221,6 +227,11 @@ pub(super) fn start(
         })
         .ok_or_else(|| DevError::corrupt("HTTP stream requirement absent"))?;
     let bindings = BTreeMap::from([
+        ("port".into(), port),
+        (
+            "request-type".into(),
+            field(&definition, "definition.parameter", "type")?,
+        ),
         ("module".into(), module),
         ("function".into(), function),
         ("component".into(), component),

@@ -762,6 +762,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.field",
             "add.case",
             "add.operation",
+            "add.effect-parameter",
             "add.type-parameter",
             "set.type-parameter-constraint",
             "set.field-type",
@@ -772,6 +773,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.http-route",
             "add.dependency",
             "replace.dependency",
+            "set.port-contract",
             "set.function-contract",
             "set.requirement-contract",
             "set.http-route",
@@ -786,7 +788,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 124);
+    assert_eq!(operation_fields.len(), 129);
     assert_eq!(
         operation_fields
             .iter()
@@ -908,21 +910,21 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        23
+        24
     );
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.namespace-class")
             .count(),
-        10
+        11
     );
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        30
+        31
     );
     assert_eq!(
         query
@@ -3002,29 +3004,32 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
 
     let rejected_semantics = [
         (
-            "generic-task",
+            "generic-task-arity",
             format!(
                 "request base={initial_revision}\n\
                  expression.unit as=$task_body\n\
                  create.function as=$task module={application} name=generic-task visibility=private result=unit effect=task body=$task_body\n\
-                 add.type-parameter as=$task_type declaration=$task name=Item\n"
+                 add.type-parameter as=$task_type declaration=$task name=Item\n\
+                 expression.function-value as=$missing function=$task\n\
+                 create.function as=$observer module={application} name=missing-task-argument visibility=private result=unit effect=pure body=$missing\n"
             ),
-            "kernel_owner_generic_task",
+            "kernel_type_argument_count",
         ),
         (
-            "task-function-value",
+            "task-invoke-pure",
             format!(
                 "request base={initial_revision}\n\
                  expression.unit as=$task_body\n\
                  create.function as=$task module={application} name=task-value-target visibility=private result=unit effect=task body=$task_body\n\
                  expression.function-value as=$task_value function=$task\n\
+                 expression.invoke as=$task_invoked function=$task_value\n\
                  expression.unit as=$done\n\
                  expression.sequence as=$observer_body\n\
-                 expression.argument parent=$observer_body index=0 expression=$task_value\n\
+                 expression.argument parent=$observer_body index=0 expression=$task_invoked\n\
                  expression.argument parent=$observer_body index=1 expression=$done\n\
                  create.function as=$observer module={application} name=task-value-observer visibility=private result=unit effect=pure body=$observer_body\n"
             ),
-            "kernel_type_task_function_value",
+            "kernel_type_pure_task_call",
         ),
         (
             "missing-type-argument",
@@ -3915,7 +3920,7 @@ fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
         cases.push((name, format!("{types}type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$target module={module} name=target visibility=private result=unit effect=pure body=$unit\nadd.parameter as=$ignored function=$target name=ignored type={ty}\nexpression.function-value as=$callee function=$target\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.parameter as=$input function=$factory name=input type={ty}\n")));
     }
     cases.push(("bare-type-parameter", format!("type.parameter as=@T parameter=$T\ntype.parameter as=@U parameter=$U\ntype.function as=@thunk result=@T\nexpression.local as=$value value=$value-parameter\ncreate.function as=$identity module={module} name=identity visibility=private result=@U effect=pure body=$value\nadd.type-parameter as=$U declaration=$identity name=U\nadd.parameter as=$value-parameter function=$identity name=value type=@U\nexpression.function-value as=$callee function=$identity\ntype.argument parent=$callee index=0 type=@T\nexpression.local as=$capture value=$input\nexpression.bind as=$bound callee=$callee\nexpression.argument parent=$bound index=0 expression=$capture\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\nadd.type-parameter as=$T declaration=$factory name=T\nadd.parameter as=$input function=$factory name=input type=@T\n")));
-    cases.push(("task-empty-binding", format!("type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$task module={module} name=task visibility=private result=unit effect=task body=$unit\nexpression.function-value as=$callee function=$task\nexpression.bind as=$bound callee=$callee\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\n")));
+    cases.push(("task-erased-binding", format!("type.function as=@thunk result=unit\nexpression.unit as=$unit\ncreate.function as=$task module={module} name=task visibility=private result=unit effect=task body=$unit\nexpression.function-value as=$callee function=$task\nexpression.bind as=$bound callee=$callee\ncreate.function as=$factory module={module} name=factory visibility=private result=@thunk effect=pure body=$bound\n")));
     for (name, capture, result, arguments) in [
         (
             "wrong-prefix",
@@ -3962,7 +3967,7 @@ fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
         let records = parse_records("rejected binding", &output.stdout).unwrap();
         let code = compact_field(compact_record(&records, "diagnostic"), "code").unwrap();
         let expected = match name {
-            "task-empty-binding" => "kernel_type_task_function_value",
+            "task-erased-binding" => "kernel_type_root",
             "wrong-prefix" => "kernel_type_argument",
             "excessive-prefix" => "kernel_type_bind_arity",
             "wrong-suffix" => "kernel_type_root",
@@ -4349,7 +4354,9 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
         "request base={initial_revision} idempotency=public-affine-resource-1 intent=author-affine-resource\n\
          type.capability-resource as=@lease interface=$lease_interface\n\
          type.named as=@lease_result declaration=$lease_result\n\
-         type.function as=@task_port result=unit\n\
+         effect.row as=@task-row\n\
+         effect.requirement parent=@task-row index=0 requirement=$lease_requirement\n\
+         type.task-function as=@task_port result=unit effect=@task-row\n\
          create.interface as=$lease_interface module={application} name=LeaseAuthority visibility=private\n\
          create.variant as=$lease_result module={application} name=LeaseResult visibility=private\n\
          add.case as=$lease_some variant=$lease_result name=some payload=@lease\n\
@@ -5162,7 +5169,7 @@ add.type-parameter as=$bad_type declaration=$bad_function name=Item
 add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
-            "kernel_owner_generic_task",
+            "kernel_affine_function_resource_generic",
         ),
         (
             "resource-result",
@@ -6528,7 +6535,9 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
          type.field parent=@decision index=2 name=messages type=@messages\n\
          type.field parent=@decision index=3 name=rejection type=@rejection\n\
          type.field parent=@decision index=4 name=state type=@state-option\n\
-         type.function as=@handler-type result=@decision\n\
+         effect.row as=@handler-effects\n\
+         effect.requirement parent=@handler-effects index=0 requirement=$streams\n\
+         type.task-function as=@handler-type result=@decision effect=@handler-effects\n\
          type.argument parent=@handler-type index=0 type=@state-option\n\
          type.argument parent=@handler-type index=1 type=@event\n\
          expression.unit as=$unit\n\
@@ -7408,7 +7417,9 @@ fn public_topology_validation_rejects_runner_port_component_and_requirement_mism
          create.function as=$entry module={module} name=isolated-task visibility=private result=unit effect=task body=$body\n\
          effect.requirement parent=$entry index=0 requirement={package}/{streams}\n\
          create.component as=$component module={module} name=isolated visibility=package\n\
-         type.function as=@entry result=unit\n\
+         effect.row as=@entry-row\n\
+         effect.requirement parent=@entry-row index=0 requirement={package}/{streams}\n\
+         type.task-function as=@entry result=unit effect=@entry-row\n\
          add.port as=$port component=$component name=main type=@entry function=$entry\n\
          create.target as=$target name=isolated component=$component port=$port runner=command\n"
     );
@@ -10839,9 +10850,9 @@ create.function as=$bad module={module} name=wrong-order visibility=private resu
         (illegal, "change_mutation_owner_kind"),
         (
             format!(
-                "expression.unit as=$unit\ncreate.function as=$bad module={module} name=generic-task visibility=private result=unit effect=task body=$unit\nadd.type-parameter as=$T declaration=$bad name=T\n"
+                "expression.unit as=$unit\ncreate.function as=$bad module={module} name=generic-task visibility=private result=unit effect=task body=$unit\nadd.type-parameter as=$T declaration=$bad name=T\nexpression.function-value as=$missing function=$bad\ncreate.function as=$observer module={module} name=missing-task-application visibility=private result=unit effect=pure body=$missing\n"
             ),
-            "kernel_owner_generic_task",
+            "kernel_type_argument_count",
         ),
     ] {
         let base = current_revision_at(&copied, temporary.path(), &project);

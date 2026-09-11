@@ -101,16 +101,19 @@ pub enum NormalizedInstruction {
     JumpIfFalse(u32),
     Jump(u32),
     Call {
+        effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
     TailCall {
+        effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
     FunctionValue {
+        effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
     },
@@ -189,6 +192,9 @@ pub enum NormalizedFunctionBody {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
+    pub effect_parameters: Arc<[crate::platform::semantic_id::EffectParameterId]>,
+    pub effect: FunctionEffect,
+    pub effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
     pub declaration: DeclarationReference,
     /// Derived from the exact canonical declaration, never from an empty requirement list.
     pub pure_graph: bool,
@@ -562,6 +568,23 @@ impl NormalizedProgram {
             TypeForm::Stream { item } => TypeForm::Stream {
                 item: self.substitute_type(*item, substitutions, next)?,
             },
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => {
+                if !effect.is_closed() {
+                    return None;
+                }
+                TypeForm::TaskFunction {
+                    parameters: parameters
+                        .iter()
+                        .map(|ty| self.substitute_type(*ty, substitutions, next))
+                        .collect::<Option<_>>()?,
+                    result: self.substitute_type(*result, substitutions, next)?,
+                    effect: effect.clone(),
+                }
+            }
             TypeForm::Function { parameters, result } => TypeForm::Function {
                 parameters: parameters
                     .iter()
@@ -1178,14 +1201,25 @@ fn prepare_functions(
             (DeclarationPayload::Function(function), CompilationPayload::Function { .. }) => {
                 let canonical_requirements = match &function.effect {
                     FunctionEffect::Pure => Vec::new(),
-                    FunctionEffect::Task { requirements } => requirements
+                    FunctionEffect::Task {
+                        effect_parameters: _,
+                        requirements,
+                    } => requirements
                         .iter()
                         .map(|requirement| {
                             required_index(&indexes.requirements, *requirement, "task requirement")
                         })
                         .collect::<Result<Vec<_>, _>>()?,
                 };
-                if function.type_parameters != type_parameters
+                let CompilationPayload::Function { signature, .. } = &unit.payload else {
+                    return Err(runtime_corrupt(
+                        "normalized_callable_kind",
+                        "function payload changed",
+                    ));
+                };
+                if function.effect_parameters != signature.effect_parameters
+                    || function.effect != signature.effect
+                    || function.type_parameters != type_parameters
                     || function.parameters
                         != parameters
                             .iter()
@@ -1210,7 +1244,18 @@ fn prepare_functions(
                 ));
             }
         };
+        let (effect_parameters, effect) = match &unit.payload {
+            CompilationPayload::Function { signature, .. }
+            | CompilationPayload::External { signature, .. } => (
+                signature.effect_parameters.clone(),
+                signature.effect.clone(),
+            ),
+            _ => (Vec::new(), FunctionEffect::Pure),
+        };
         functions[index.0 as usize] = Some(NormalizedFunction {
+            effect_parameters: effect_parameters.into(),
+            effect,
+            effect_arguments: Arc::from([]),
             declaration: *declaration,
             pure_graph,
             type_parameters: type_parameters.into(),
@@ -1279,11 +1324,13 @@ fn derive_tail_dispatch(functions: &mut [NormalizedFunction]) -> Result<(), Diag
             }
             *instruction = match instruction {
                 NormalizedInstruction::Call {
+                    effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } if pure.get(function.0 as usize).copied() == Some(true) => {
                     NormalizedInstruction::TailCall {
+                        effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
                         type_arguments: type_arguments.clone(),
                         arguments: *arguments,
@@ -1446,7 +1493,7 @@ fn validate_normalized_resource_signature(
         || function.result != result
         || !matches!(
             &function.effect,
-            FunctionEffect::Task { requirements: canonical }
+            FunctionEffect::Task { effect_parameters: _, requirements: canonical }
                 if canonical == &requirement_references
                     && canonical.contains(&requirement.reference)
         )
@@ -2016,14 +2063,16 @@ fn prepare_targets(
                 ));
             }
             let mut types = TypeObjectInterner::default();
-            let expected_type = crate::platform::http::semantic_http_route_function_type(
+            let expected_type = crate::platform::http::semantic_http_route_callable_type(
                 &mut types,
                 route.selector.capture_count(),
+                &prepared_function.effect,
             )?;
             let http = crate::platform::http::semantic_http_types(&mut types)?;
             let captures = route.selector.capture_names();
             if prepared_port.function_type != expected_type
                 || !prepared_function.type_parameters.is_empty()
+                || !prepared_function.effect_parameters.is_empty()
                 || prepared_function.parameters.len() != captures.len().saturating_add(1)
                 || prepared_function
                     .parameters
@@ -2308,6 +2357,7 @@ fn translate_code(
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
             CompiledInstruction::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
@@ -2318,6 +2368,7 @@ fn translate_code(
                     "normalized call target",
                 )?;
                 NormalizedInstruction::Call {
+                    effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
                     type_arguments: type_arguments
                         .iter()
@@ -2330,6 +2381,7 @@ fn translate_code(
                 }
             }
             CompiledInstruction::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => {
@@ -2339,6 +2391,7 @@ fn translate_code(
                     "normalized function value",
                 )?;
                 NormalizedInstruction::FunctionValue {
+                    effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
                     type_arguments: type_arguments
                         .iter()

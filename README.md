@@ -94,6 +94,12 @@ runtime environments; unconstrained parameters, secrets, streams, and resources 
 capture-safe subset. The capture-safe cutover used Graph 12 while preserving monomorphic TypeObject
 10 bytes and persisted typed-data layouts; the nominal cutover advances graph admission to Graph 13
 and retains the maintained application's semantic owners.
+The current source extends that foundation with explicit effect parameters, authority-free task
+function values and graph-owned `task-fold-left` / `task-map`. A pure factory can return a bound task
+callback; an offline generic library invokes it under the consumer's exact allowance and checked
+grants. Graph 14 adds a distinct task-callable envelope while preserving unchanged pure/type/data
+bytes. The [effect campaign](docs/campaigns/202609111843.md) tracks its independent public workload,
+maintained cutover and selected publication separately from the supported v0.1.31 release.
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
 maintained-consumer cutover. The [public milestone evidence](docs/evidence/202609092050-capture-safe-public-milestone.json)

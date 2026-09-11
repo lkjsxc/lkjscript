@@ -55,6 +55,7 @@ pub struct NormalizedTestReceipt {
 }
 
 struct PreparedCommandInvocation<'a> {
+    task: bool,
     target: &'a NormalizedTarget,
     arguments: Vec<NormalizedValue>,
     result_type: TypeObjectDigest,
@@ -138,7 +139,7 @@ pub fn run_pure_command(
                 "selected target component escaped the prepared runtime table",
             )
         })?;
-    if !component.requirements.is_empty() {
+    if invocation.task || !component.requirements.is_empty() {
         return Err(runner_error(
             DiagnosticClass::Capability,
             "normalized_runner_grants_required",
@@ -195,7 +196,7 @@ pub fn run_effectful_command(
     validate_authority_binding(program, authority_binding)?;
     let invocation =
         prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
-    let component = program
+    let _component = program
         .components
         .get(invocation.target.component.0 as usize)
         .ok_or_else(|| {
@@ -205,7 +206,7 @@ pub fn run_effectful_command(
                 "selected target component escaped the prepared runtime table",
             )
         })?;
-    if component.requirements.is_empty() {
+    if !invocation.task {
         return Err(runner_error(
             DiagnosticClass::Source,
             "normalized_runner_pure_target",
@@ -379,7 +380,7 @@ fn prepare_command_invocation<'a>(
             "selected target and port disagree on their exact component",
         ));
     }
-    let (parameter_types, result_type) = function_type(program, port.function_type)?;
+    let (parameter_types, result_type, task) = function_type(program, port.function_type)?;
     let arguments = decode_strict(arguments_json, json_limits)?;
     let arguments = arguments.as_array().ok_or_else(|| {
         runner_error(
@@ -408,13 +409,14 @@ fn prepare_command_invocation<'a>(
         target,
         arguments,
         result_type,
+        task,
     })
 }
 
 fn function_type(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-) -> Result<(Vec<TypeObjectDigest>, TypeObjectDigest), Diagnostic> {
+) -> Result<(Vec<TypeObjectDigest>, TypeObjectDigest, bool), Diagnostic> {
     let object = program.types.get(&ty).ok_or_else(|| {
         runner_error(
             DiagnosticClass::Corrupt,
@@ -422,14 +424,19 @@ fn function_type(
             "selected port function type is absent from the exact artifact closure",
         )
     })?;
-    let TypeForm::Function { parameters, result } = &object.form else {
-        return Err(runner_error(
+    match &object.form {
+        TypeForm::Function { parameters, result } => Ok((parameters.clone(), *result, false)),
+        TypeForm::TaskFunction {
+            parameters,
+            result,
+            effect,
+        } if effect.is_closed() => Ok((parameters.clone(), *result, true)),
+        _ => Err(runner_error(
             DiagnosticClass::Corrupt,
             "normalized_runner_port_type",
             "selected port does not have an exact function type",
-        ));
-    };
-    Ok((parameters.clone(), *result))
+        )),
+    }
 }
 
 fn validate_authority_binding(

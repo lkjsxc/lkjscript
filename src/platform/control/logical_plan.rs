@@ -1080,7 +1080,10 @@ where
     })?;
     let requirements = match &extraction.effect {
         FunctionEffect::Pure => Vec::new(),
-        FunctionEffect::Task { requirements } => requirements.clone(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.clone(),
     };
     let affine_present = extraction
         .captures
@@ -1235,7 +1238,10 @@ fn extraction_local_reference(value: LocalValueReference) -> (&'static str, Owne
 fn extraction_requirement_count(extraction: &FunctionExtractionEvidence) -> usize {
     match &extraction.effect {
         FunctionEffect::Pure => 0,
-        FunctionEffect::Task { requirements } => requirements.len(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.len(),
     }
 }
 
@@ -3523,6 +3529,7 @@ fn parse_identity_kind(value: &str) -> Result<IdentityKind, Diagnostic> {
         IdentityKind::HttpRoute,
         IdentityKind::Documentation,
         IdentityKind::Annotation,
+        IdentityKind::EffectParameter,
     ];
     kinds
         .into_iter()
@@ -3967,7 +3974,10 @@ fn validate_extraction_evidence(
     });
     let requirements = match &extraction.effect {
         FunctionEffect::Pure => &[][..],
-        FunctionEffect::Task { requirements } => requirements.as_slice(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.as_slice(),
     };
     let requirement_count = u64::try_from(requirements.len()).unwrap_or(u64::MAX);
     let expected_generated = capture_count.saturating_mul(2).saturating_add(2);
@@ -4180,6 +4190,7 @@ pub(crate) const fn identity_kind_name(kind: IdentityKind) -> &'static str {
         IdentityKind::Module => "module",
         IdentityKind::Declaration => "declaration",
         IdentityKind::TypeParameter => "type_parameter",
+        IdentityKind::EffectParameter => "effect_parameter",
         IdentityKind::Field => "field",
         IdentityKind::Case => "case",
         IdentityKind::Operation => "operation",
@@ -4200,6 +4211,7 @@ const fn identity_kind_order(kind: IdentityKind) -> u8 {
         IdentityKind::Module => 1,
         IdentityKind::Declaration => 2,
         IdentityKind::TypeParameter => 3,
+        IdentityKind::EffectParameter => 16,
         IdentityKind::Field => 4,
         IdentityKind::Case => 5,
         IdentityKind::Operation => 6,

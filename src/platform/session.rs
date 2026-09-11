@@ -752,7 +752,18 @@ pub(crate) fn validate_session_function_type<R: SessionShapeRead>(
     function: TypeObjectDigest,
 ) -> Result<SessionPortRelation, Diagnostic> {
     validate_standard_session_shapes(read, standard)?;
-    let TypeForm::Function { parameters, result } = read.type_object(function)?.form else {
+    let object = read.type_object(function)?;
+    if matches!(&object.form, TypeForm::TaskFunction { effect, .. } if !effect.is_closed()) {
+        return Err(session_semantic(
+            "session_port_effects",
+            "interactive port effects must be closed exact requirements",
+        ));
+    }
+    let (TypeForm::Function { parameters, result }
+    | TypeForm::TaskFunction {
+        parameters, result, ..
+    }) = object.form
+    else {
         return Err(session_semantic(
             "session_port_function",
             "interactive port must have a function type",
@@ -1212,6 +1223,8 @@ mod tests {
         NominalMismatch,
         NominalSecret,
         NominalFunction,
+        NominalTaskFunction,
+        NominalNestedTaskFunction,
         NominalNestedSecret,
     }
 
@@ -1373,9 +1386,23 @@ mod tests {
         let nested = types
             .intern(TypeForm::List { item: secret })
             .expect("nested secret");
+        let task_callable = types
+            .intern(TypeForm::TaskFunction {
+                parameters: vec![],
+                result: unit,
+                effect: super::super::kernel::EffectRow::default(),
+            })
+            .expect("task callable");
+        let nested_task = types
+            .intern(TypeForm::List {
+                item: task_callable,
+            })
+            .expect("nested task callable");
         let argument = match state_kind {
             StateKind::NominalSecret => secret,
             StateKind::NominalFunction => callable,
+            StateKind::NominalTaskFunction => task_callable,
+            StateKind::NominalNestedTaskFunction => nested_task,
             StateKind::NominalNestedSecret => nested,
             _ => i64,
         };
@@ -1612,6 +1639,11 @@ mod tests {
             (StateKind::NominalMismatch, "session_port_state_identity"),
             (StateKind::NominalSecret, "session_state_live_type"),
             (StateKind::NominalFunction, "session_state_live_type"),
+            (StateKind::NominalTaskFunction, "session_state_live_type"),
+            (
+                StateKind::NominalNestedTaskFunction,
+                "session_state_live_type",
+            ),
             (StateKind::NominalNestedSecret, "session_state_live_type"),
         ] {
             let (read, standard, function) = session_oracle(kind);

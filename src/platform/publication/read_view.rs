@@ -1553,7 +1553,41 @@ impl RepositoryView {
                     "public interface type changed during canonical re-encoding",
                 ));
             }
+            selection.observe_type(&object.form);
             interface_types.insert(digest, bytes);
+        }
+        for owner in selection.owners() {
+            if interface_owners.contains_key(&owner) {
+                continue;
+            }
+            let canonical = self.owner(owner)?;
+            read_work.add(canonical.work);
+            let canonical = canonical.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_owner_missing",
+                    "callable signature requirement is absent",
+                )
+            })?;
+            let summary = self.bound_owner_summary(owner)?;
+            read_work.add(summary.work);
+            let summary = summary.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_summary_missing",
+                    "callable signature requirement has no summary",
+                )
+            })?;
+            let projected =
+                PackageInterfaceOwner::project(&canonical, &summary.summary, &selection)?
+                    .ok_or_else(|| {
+                        read_error(
+                            DiagnosticClass::Corrupt,
+                            "publication_package_interface_projection",
+                            "callable signature requirement cannot be projected",
+                        )
+                    })?;
+            interface_owners.insert(owner, projected);
         }
         let interface = build_package_interface(&interface_owners, &interface_types)?;
         let interface_digest =

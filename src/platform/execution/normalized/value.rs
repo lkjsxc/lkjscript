@@ -1,4 +1,4 @@
-//! Runtime-only dense values for normalized Graph 13 execution.
+//! Runtime-only dense values for normalized Graph 14 execution.
 
 use super::resource::NormalizedResourceHandle;
 use crate::platform::kernel::{Name, TypeObjectDigest};
@@ -88,6 +88,7 @@ pub enum NormalizedValue {
     Function {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
+        effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         bound_arguments: Option<Arc<Vec<NormalizedValue>>>,
     },
     Resource(NormalizedResourceHandle),

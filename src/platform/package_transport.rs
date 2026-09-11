@@ -770,7 +770,11 @@ fn validate_interface_dependencies(
                     else {
                         continue;
                     };
-                    let FunctionEffect::Task { requirements } = &signature.effect else {
+                    let FunctionEffect::Task {
+                        effect_parameters: _,
+                        requirements,
+                    } = &signature.effect
+                    else {
                         continue;
                     };
                     for requirement in requirements {
@@ -839,6 +843,7 @@ fn validate_interface_dependencies(
                     }
                 }
                 PackageInterfaceRecord::TypeParameter(_)
+                | PackageInterfaceRecord::EffectParameter(_)
                 | PackageInterfaceRecord::Field(_)
                 | PackageInterfaceRecord::Case(_)
                 | PackageInterfaceRecord::Operation(_)

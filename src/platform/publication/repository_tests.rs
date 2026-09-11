@@ -1121,6 +1121,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 body: AuthoredExpression {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        effect_arguments: Vec::new(),
                         function: AuthoredDeclarationReference::Exact {
                             package: exported.revision.package,
                             declaration: function,
@@ -1284,7 +1285,10 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
                 result: AuthoredType::Unit {},
-                effect: AuthoredFunctionEffect::Task { requirements },
+                effect: AuthoredFunctionEffect::Task {
+                    effect_parameters: Vec::new(),
+                    requirements,
+                },
                 body: AuthoredExpression {
                     symbol: Some("$foreign_body".to_owned()),
                     operation: AuthoredExpressionOperation::Sequence {
@@ -1292,6 +1296,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                             AuthoredExpression {
                                 symbol: Some("$foreign_call".to_owned()),
                                 operation: AuthoredExpressionOperation::Call {
+                                    effect_arguments: Vec::new(),
                                     function: AuthoredDeclarationReference::Exact {
                                         package: source_package,
                                         declaration: source_function,
@@ -1362,7 +1367,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
         view.owner(OwnerKey::Declaration(target_function)).unwrap().value,
         Some(OwnerRecord::Declaration(record))
             if matches!(record.payload, DeclarationPayload::Function(ref function)
-                if function.effect == FunctionEffect::Task {
+                if function.effect == FunctionEffect::Task { effect_parameters: Vec::new(),
                     requirements: vec![RequirementReference {
                         package: source_package,
                         requirement: source_requirement,
@@ -2699,7 +2704,64 @@ fn authored_owned_closure_leaf_selects_the_same_owner_and_relations_as_reject() 
 fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
-    let logical = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let mut logical = crate::platform::execution::normalized::tests::normalized_http_snapshot();
+    let module = logical
+        .owners
+        .keys()
+        .find_map(|owner| match owner {
+            OwnerKey::Module(id) => Some(*id),
+            _ => None,
+        })
+        .unwrap();
+    let unit = logical
+        .types
+        .iter()
+        .find_map(|(ty, object)| matches!(object.form, TypeForm::Unit).then_some(*ty))
+        .unwrap();
+    let seed = b"effect-owner-closure";
+    let function = DeclarationId::migrate(seed, 0);
+    let parameter = crate::platform::semantic_id::EffectParameterId::migrate(seed, 0);
+    let body = crate::platform::semantic_id::ExpressionId::migrate(seed, 0);
+    logical.owners.insert(
+        OwnerKey::Expression(body),
+        OwnerRecord::Expression(
+            crate::platform::kernel::ExpressionRecord::new(body, ExpressionOperation::Unit {})
+                .unwrap(),
+        ),
+    );
+    logical.owners.insert(
+        OwnerKey::EffectParameter(parameter),
+        OwnerRecord::EffectParameter(crate::platform::kernel::EffectParameterRecord {
+            header: OwnerHeader::new(
+                OwnerKey::EffectParameter(parameter),
+                OwnerKind::EffectParameter,
+            ),
+            declaration: function,
+            name: Name::new("E").unwrap(),
+        }),
+    );
+    logical.owners.insert(
+        OwnerKey::Declaration(function),
+        OwnerRecord::Declaration(crate::platform::kernel::DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+            module,
+            name: Name::new("effect-owner").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+                type_parameters: vec![],
+                effect_parameters: vec![parameter],
+                parameters: vec![],
+                result: unit,
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        }),
+    );
+    logical.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        logical.root.owners.page(),
+        logical.owners.len() as u64,
+        logical.root.owners.content(),
+    );
     let expected = logical.owners.keys().copied().collect::<BTreeSet<_>>();
     assert_eq!(
         logical
@@ -3165,6 +3227,7 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 result: AuthoredType::Unit {},
                 effect: AuthoredFunctionEffect::Pure {},
                 body: authored_expression(AuthoredExpressionOperation::Call {
+                    effect_arguments: Vec::new(),
                     function: AuthoredDeclarationReference::Local {
                         declaration: DeclarationSelector::Symbol {
                             symbol: "$callee".to_owned(),
@@ -5441,6 +5504,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                 actual: AuthoredExpression {
                     symbol: Some("$test_actual".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        effect_arguments: Vec::new(),
                         function: AuthoredDeclarationReference::Local {
                             declaration: DeclarationSelector::Symbol {
                                 symbol: "$identity".to_owned(),
@@ -5766,6 +5830,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::Result { .. } => "result",
             TypeForm::Stream { .. } => "stream",
             TypeForm::Function { .. } => "function",
+            TypeForm::TaskFunction { .. } => "task_function",
         });
     }
     assert_eq!(observed.len(), 16);
@@ -5856,6 +5921,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                             expression: AuthoredExpression {
                                 symbol: Some("$port_expression".to_owned()),
                                 operation: AuthoredExpressionOperation::FunctionValue {
+                                    effect_arguments: Vec::new(),
                                     function: local_declaration("$entry"),
                                     type_arguments: Vec::new(),
                                 },
@@ -6016,8 +6082,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         .expect("all foundational owners must lower and validate through one request");
     assert_eq!(prepared.allocated.len(), 24);
     assert_eq!(prepared.publication.receipt.counts.owners_created, 26);
-    // Canonical `unit` and `() -> unit` are reused from the accepted fixture.
-    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 2);
+    // Unit is reused; pure `() -> unit` is distinct from the fixture's task port type.
+    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 3);
     assert_eq!(
         prepared.publication.receipt.validation.profile,
         ValidationProfile::IncrementalOwnerFrontier
@@ -6268,6 +6334,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 },
                 result: AuthoredType::Bool {},
                 effect: AuthoredFunctionEffect::Task {
+                    effect_parameters: Vec::new(),
                     requirements: vec![AuthoredRequirementReference::Symbol {
                         symbol: "$added_requirement".to_owned(),
                     }],
@@ -6308,9 +6375,28 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 port: AuthoredPort {
                     symbol: "$alternate_port".to_owned(),
                     name: Name::new("alternate").unwrap(),
-                    function_type: AuthoredType::Function {
+                    function_type: AuthoredType::TaskFunction {
                         parameters: Vec::new(),
                         result: Box::new(AuthoredType::Unit {}),
+                        effect: crate::platform::change::AuthoredEffectRow {
+                            parameters: vec![],
+                            requirements: match &logical.owners[&caller] {
+                                OwnerRecord::Declaration(record) => match &record.payload {
+                                    DeclarationPayload::Function(function) => function
+                                        .effect
+                                        .row()
+                                        .requirements
+                                        .into_iter()
+                                        .map(|reference| AuthoredRequirementReference::Exact {
+                                            package: reference.package,
+                                            requirement: reference.requirement,
+                                        })
+                                        .collect(),
+                                    _ => unreachable!(),
+                                },
+                                _ => unreachable!(),
+                            },
+                        },
                     },
                     implementation: AuthoredPortImplementation::Function {
                         function: exact_declaration(caller),
@@ -6543,7 +6629,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     };
     assert!(matches!(
         function_payload.effect,
-        crate::platform::kernel::FunctionEffect::Task { requirements }
+        crate::platform::kernel::FunctionEffect::Task { effect_parameters: _, requirements }
             if requirements.as_slice() == [crate::platform::kernel::RequirementReference {
                 package,
                 requirement: match requirement {
@@ -6762,6 +6848,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 AuthoredExpression {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        effect_arguments: Vec::new(),
                         function: callee_reference.clone(),
                         type_arguments: Vec::new(),
                         arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
@@ -6770,6 +6857,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 AuthoredExpression {
                     symbol: Some("$function_value".to_owned()),
                     operation: AuthoredExpressionOperation::FunctionValue {
+                        effect_arguments: Vec::new(),
                         function: callee_reference.clone(),
                         type_arguments: Vec::new(),
                     },
@@ -6779,6 +6867,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                     operation: AuthoredExpressionOperation::Invoke {
                         callee: Box::new(authored_expression(
                             AuthoredExpressionOperation::FunctionValue {
+                                effect_arguments: Vec::new(),
                                 function: callee_reference,
                                 type_arguments: Vec::new(),
                             },
@@ -6920,6 +7009,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 parameters: Vec::new(),
                 result: AuthoredType::Unit {},
                 effect: AuthoredFunctionEffect::Task {
+                    effect_parameters: Vec::new(),
                     requirements: vec![requirement_reference],
                 },
                 body: task_body,

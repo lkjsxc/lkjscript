@@ -45,19 +45,19 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_21612dff15aa137efb8440c5852176d692f9ef524aba4f74c556524ee5e60684",
+            "recipe_projection_e2cd47d1efd34aab0298a9dfcfb2b5c995734f56fcee5bf13c5c903835e4315c",
             21,
             12,
             10,
-            36,
+            37,
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_8fc407096c57b11f3f10e01544f131a3ec0071347208de8c13d2a5aab8c5c0f7",
+            "recipe_projection_4a6c48bb61c2148e6521a45978f18d4eaa1176eadd17002bf5d91bdeaef625ae",
             56,
             12,
             43,
-            85,
+            87,
         ),
     ];
     for (template, expected_digest, owners, types, expressions, relations) in cases {
@@ -134,6 +134,14 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
                 id.to_string(),
                 format!(
                     "type-parameter:{}/{}",
+                    identity(&identities, record.declaration),
+                    record.name
+                ),
+            )),
+            (OwnerKey::EffectParameter(id), OwnerRecord::EffectParameter(record)) => Some((
+                id.to_string(),
+                format!(
+                    "effect-parameter:{}/{}",
                     identity(&identities, record.declaration),
                     record.name
                 ),
@@ -270,6 +278,38 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
             identities.contains_key(&owner.to_string()),
             "recipe projection has no generation-neutral label for {owner}"
         );
+    }
+
+    // Task rows include recipe-local requirement identities, so their type digests
+    // vary with each fresh repository. Normalize that meaning and its type parents
+    // without changing the predecessor pure/scalar projection identities.
+    let mut pending = snapshot
+        .types
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    while !pending.is_empty() {
+        let before = pending.len();
+        for ty in pending.clone() {
+            let object = &snapshot.types[&ty];
+            let children = object.child_types();
+            if children.iter().any(|child| pending.contains(child)) {
+                continue;
+            }
+            if matches!(
+                object.form,
+                crate::platform::kernel::TypeForm::TaskFunction { .. }
+            ) || children
+                .iter()
+                .any(|child| identities.contains_key(&child.to_string()))
+            {
+                let meaning = normalized_json(object, &identities);
+                let digest = blake3::hash(meaning.as_bytes()).to_hex();
+                identities.insert(ty.to_string(), format!("type:task-projection:{digest}"));
+            }
+            pending.remove(&ty);
+        }
+        assert!(pending.len() < before, "recipe type projection cycle");
     }
 
     let mut lines = vec![format!("package-name {}", snapshot.root.package_name)];
@@ -528,8 +568,15 @@ fn normalize_semantic_sets(value: &mut Value) {
                     sort_json_array(fields.get_mut("requirements"));
                     sort_json_array(fields.get_mut("ports"));
                 }
-                Some("task") => sort_json_array(fields.get_mut("requirements")),
+                Some("task") => {
+                    sort_json_array(fields.get_mut("requirements"));
+                    sort_json_array(fields.get_mut("effect_parameters"));
+                }
                 _ => {}
+            }
+            if fields.contains_key("requirements") && fields.contains_key("parameters") {
+                sort_json_array(fields.get_mut("requirements"));
+                sort_json_array(fields.get_mut("parameters"));
             }
         }
         Value::Array(values) => {
@@ -564,6 +611,16 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             // changes with maintained materialization; its stable package identity remains here.
             values.remove("contract_version");
             values.remove("graph_contract_version");
+            // Effect arity zero preserves predecessor meaning; task kind and every nonempty
+            // row/application remain represented in this generation-neutral observation.
+            for key in ["effect_parameters", "effect_arguments"] {
+                if values
+                    .get(key)
+                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                {
+                    values.remove(key);
+                }
+            }
             // Graph 13 makes zero-arity nominal declarations and constructors explicit.
             // Keep the pre-existing monomorphic recipe projection, while retaining every
             // nonempty vector so a parametric semantic change still changes this oracle.

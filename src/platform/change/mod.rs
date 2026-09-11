@@ -56,6 +56,7 @@ pub use prepare::{
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
+    AuthoredEffectParameter, AuthoredEffectParameterReference, AuthoredEffectRow,
     AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
     AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
     AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,

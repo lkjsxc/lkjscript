@@ -298,6 +298,17 @@ impl PackageContainer {
                 return Err(limit("per-object bytes"));
             }
             let object = cursor.take(length)?;
+            if domain == ObjectDomain::Owner
+                && object.starts_with(b"LKJOWN")
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::OWNER_MAGIC.as_slice())
+            {
+                return Err(package_error(
+                    DiagnosticClass::Source,
+                    "package_source_owner_contract",
+                    "package contains unsupported predecessor or foreign canonical owners; retain the export and use its matching executable, or rebuild from supported current meaning",
+                ));
+            }
             let key = ObjectKey::from_digest(domain, digest);
             key.verify(object).map_err(store_diagnostic)?;
             objects.insert(key, object.to_vec());
@@ -1012,7 +1023,7 @@ fn project(
     snapshot: &KernelSnapshot,
     witness: &FullWitness,
 ) -> Result<InterfaceProjection, Diagnostic> {
-    let selection =
+    let mut selection =
         PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)?;
     let mut owners = BTreeMap::new();
     for owner in selection.owners() {
@@ -1053,7 +1064,33 @@ fn project(
                 )
             })?;
         pending.extend(object.child_types());
+        selection.observe_type(&object.form);
         types.insert(digest, encode_type_object(object)?.1);
+    }
+    for owner in selection.owners() {
+        if owners.contains_key(&owner) {
+            continue;
+        }
+        let canonical = snapshot.owners.get(&owner).ok_or_else(|| {
+            corrupt(
+                "package_source_public_owner",
+                "callable requirement is absent",
+            )
+        })?;
+        let summary = witness.summaries.get(&owner).ok_or_else(|| {
+            corrupt(
+                "package_source_summary",
+                "callable requirement summary is absent",
+            )
+        })?;
+        let projected = PackageInterfaceOwner::project(canonical, summary, &selection)?
+            .ok_or_else(|| {
+                corrupt(
+                    "package_source_public_owner",
+                    "callable requirement cannot be projected",
+                )
+            })?;
+        owners.insert(owner, projected);
     }
     Ok((owners, types))
 }
@@ -1262,7 +1299,21 @@ mod tests {
                 .unwrap();
         assert_eq!(
             PackageContainer::decode(bytes, transport).unwrap_err().code,
-            "object_digest_mismatch"
+            "package_source_owner_contract"
+        );
+        assert_not_ready(bytes, transport);
+    }
+
+    #[test]
+    fn exact_graph13_effect_predecessor_rejects_without_partial_readiness() {
+        let bytes = include_bytes!("../../../tests/fixtures/graph13-standard.lkjp");
+        let transport =
+            "package_transport_c41a09e89199b7da9b247934d181b9745a8b8cb9b64c4e5b93fb1e8ff0991d45"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            PackageContainer::decode(bytes, transport).unwrap_err().code,
+            "package_source_owner_contract"
         );
         assert_not_ready(bytes, transport);
     }

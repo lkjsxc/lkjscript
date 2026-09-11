@@ -10,6 +10,9 @@ pub(super) struct Request {
 }
 
 impl Request {
+    pub(crate) fn http_request_type(&mut self) {
+        self.text.push_str("type.structural-record as=@http-request-header\ntype.field parent=@http-request-header index=0 name=name type=text\ntype.field parent=@http-request-header index=1 name=value type=bytes\ntype.list as=@http-request-headers item=@http-request-header\ntype.stream as=@http-request-body item=bytes\ntype.list as=@http-query-values item=text\ntype.map as=@http-query key=text value=@http-query-values\ntype.structural-record as=@http-request\ntype.field parent=@http-request index=0 name=body type=@http-request-body\ntype.field parent=@http-request index=1 name=headers type=@http-request-headers\ntype.field parent=@http-request index=2 name=method type=text\ntype.field parent=@http-request index=3 name=path type=text\ntype.field parent=@http-request index=4 name=query type=text\ntype.field parent=@http-request index=5 name=query_parameters type=@http-query\n");
+    }
     pub(crate) fn expression(&mut self, form: &str, fields: &str) -> String {
         let symbol = format!("$e{}", self.next);
         self.next += 1;
@@ -38,6 +41,14 @@ impl Request {
         for (index, ty) in types.iter().enumerate() {
             self.text.push_str(&format!(
                 "type.argument parent={symbol} index={index} type={ty}\n"
+            ));
+        }
+    }
+
+    pub(crate) fn effects(&mut self, symbol: &str, rows: &[&str]) {
+        for (index, row) in rows.iter().enumerate() {
+            self.text.push_str(&format!(
+                "effect.argument parent={symbol} index={index} effect={row}\n"
             ));
         }
     }
@@ -132,6 +143,7 @@ pub(super) fn http(
     nominal: &BTreeMap<String, String>,
 ) -> String {
     let mut request = Request::default();
+    request.http_request_type();
     request.text.push_str(&format!("create.variant as=$Edit module={} name=Edit visibility=public\nadd.type-parameter as=$EditT declaration=$Edit name=T\ntype.parameter as=@EditT parameter=$EditT\ntype.application as=@EditBatch declaration={}\ntype.argument parent=@EditBatch index=0 type=@EditT\nadd.case as=$Keep variant=$Edit name=keep\nadd.case as=$Replace variant=$Edit name=replace payload=@EditBatch\ntype.application as=@StoredBatch declaration={}\ntype.argument parent=@StoredBatch index=0 type=i64\ntype.application as=@StoredEdit declaration=$Edit\ntype.argument parent=@StoredEdit index=0 type=i64\ntype.structural-record as=@Stored\ntype.field parent=@Stored index=0 name=batch type=@StoredBatch\ntype.field parent=@Stored index=1 name=edit type=@StoredEdit\n",bindings["module"],nominal["batch"],nominal["batch"]));
     request.text.push_str(&format!("type.list as=@items item=i64\ntype.named as=@key-part declaration={}\nadd.requirement as=$data component={} name=data interface={}\nrequirement.limit parent=$data index=0 name=maximum_calls maximum=16 unit=calls\n",standard["DataKeyPart"],bindings["component"],standard["DataStore"]));
     for (index, name) in [
@@ -333,7 +345,7 @@ pub(super) fn http(
     request.text.push_str("type.list as=@headers item=@header\ntype.structural-record as=@response\ntype.field parent=@response index=0 name=body type=bytes\ntype.field parent=@response index=1 name=headers type=@headers\ntype.field parent=@response index=2 name=status type=i64\n");
     let retained = request.expression("let", &format!("body={response}"));
     request.text.push_str(&format!("expression.binding parent={retained} index=0 as=$request-data name=request-data value={configured} type=@configured-input\n"));
-    request.text.push_str(&format!("set.function-contract as=%contract function={} result=@response effect=task\neffect.requirement parent=%contract index=0 requirement={}\neffect.requirement parent=%contract index=1 requirement=$data\nreplace.body function={} body={retained}\n",bindings["function"],bindings["streams"],bindings["function"]));
+    request.text.push_str(&format!("set.function-contract as=%contract function={} result=@response effect=task\neffect.requirement parent=%contract index=0 requirement={}\neffect.requirement parent=%contract index=1 requirement=$data\nreplace.body function={} body={retained}\neffect.row as=@http-effects\neffect.requirement parent=@http-effects index=0 requirement={}\neffect.requirement parent=@http-effects index=1 requirement=$data\ntype.task-function as=@http-handler result=@response effect=@http-effects\ntype.argument parent=@http-handler index=0 type={}\nset.port-contract port={} type=@http-handler\n",bindings["function"],bindings["streams"],bindings["function"],bindings["streams"],"@http-request",bindings["port"]));
     request.text
 }
 

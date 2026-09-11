@@ -246,6 +246,7 @@ fn external_parent(record: &OwnerRecord) -> Option<OwnerKey> {
         OwnerRecord::HttpRoute(record) => Some(OwnerKey::Target(record.target)),
         OwnerRecord::Module(_)
         | OwnerRecord::TypeParameter(_)
+        | OwnerRecord::EffectParameter(_)
         | OwnerRecord::Field(_)
         | OwnerRecord::Case(_)
         | OwnerRecord::Operation(_)
@@ -370,6 +371,7 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
     let record = lowerer.owners[&root].record.clone();
     let parent = match &record {
         OwnerRecord::TypeParameter(record) => OwnerKey::Declaration(record.declaration),
+        OwnerRecord::EffectParameter(record) => OwnerKey::Declaration(record.declaration),
         OwnerRecord::Field(record) => OwnerKey::Declaration(record.declaration),
         OwnerRecord::Case(record) => OwnerKey::Declaration(record.declaration),
         OwnerRecord::Operation(record) => OwnerKey::Declaration(record.declaration),
@@ -398,6 +400,15 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
 
     let parent_record = lowerer.candidate_mut(parent)?;
     match (record, parent_record) {
+        (OwnerRecord::EffectParameter(_), OwnerRecord::Declaration(parent)) => {
+            let OwnerKey::EffectParameter(child) = root else {
+                return Err(parent_kind_error(root, parent.header.owner));
+            };
+            let DeclarationPayload::Function(function) = &mut parent.payload else {
+                return Err(parent_kind_error(root, parent.header.owner));
+            };
+            remove_exact(&mut function.effect_parameters, child, "effect parameter")
+        }
         (OwnerRecord::TypeParameter(_), OwnerRecord::Declaration(parent)) => {
             let OwnerKey::TypeParameter(child) = root else {
                 return Err(parent_kind_error(root, parent.header.owner));

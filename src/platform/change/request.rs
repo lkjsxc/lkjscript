@@ -8,7 +8,8 @@ mod precondition;
 
 pub use creation::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
-    AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
+    AuthoredDeclarationReference, AuthoredEffectParameter, AuthoredEffectParameterReference,
+    AuthoredEffectRow, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
     AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
     AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
@@ -32,9 +33,9 @@ use crate::platform::kernel::{
     TypeObjectDigest, TypeObjectInterner, encode_dependency, encode_owner,
 };
 use crate::platform::semantic_id::{
-    AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
-    HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RequirementId, RevisionId, TargetId,
-    TypeParameterId,
+    AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, EffectParameterId,
+    ExpressionId, FieldId, HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RequirementId,
+    RevisionId, TargetId, TypeParameterId,
 };
 use crate::platform::witness::NamespaceKey;
 use std::collections::{BTreeMap, BTreeSet};
@@ -157,6 +158,10 @@ pub enum AuthoredChange {
         interface: DeclarationSelector,
         operation: AuthoredOperation,
     },
+    AddEffectParameter {
+        declaration: DeclarationSelector,
+        parameter: AuthoredEffectParameter,
+    },
     AddTypeParameter {
         declaration: DeclarationSelector,
         parameter: AuthoredTypeParameter,
@@ -209,6 +214,10 @@ pub enum AuthoredChange {
     SetParameterType {
         parameter: OwnerSelector,
         ty: AuthoredType,
+    },
+    SetPortContract {
+        port: OwnerSelector,
+        function_type: AuthoredType,
     },
     SetOperationContract {
         operation: OwnerSelector,
@@ -317,6 +326,7 @@ pub(super) enum SymbolKind {
     Module,
     Declaration,
     TypeParameter,
+    EffectParameter,
     Field,
     Case,
     Operation,
@@ -340,6 +350,7 @@ impl SymbolKind {
             Self::Module => 1,
             Self::Declaration => 2,
             Self::TypeParameter => 3,
+            Self::EffectParameter => 19,
             Self::Field => 4,
             Self::Case => 5,
             Self::Operation => 6,
@@ -360,6 +371,7 @@ impl SymbolKind {
 
     const fn allocation_domain(self) -> u8 {
         match self {
+            Self::EffectParameter => 16,
             Self::Module => 1,
             Self::Declaration => 2,
             Self::TypeParameter => 3,
@@ -383,6 +395,7 @@ impl SymbolKind {
             Self::Module => IdentityKind::Module,
             Self::Declaration => IdentityKind::Declaration,
             Self::TypeParameter => IdentityKind::TypeParameter,
+            Self::EffectParameter => IdentityKind::EffectParameter,
             Self::Field => IdentityKind::Field,
             Self::Case => IdentityKind::Case,
             Self::Operation => IdentityKind::Operation,
@@ -404,6 +417,9 @@ impl SymbolKind {
         match self {
             Self::Module => OwnerKey::Module(ModuleId::allocate(seed, ordinal)),
             Self::Declaration => OwnerKey::Declaration(DeclarationId::allocate(seed, ordinal)),
+            Self::EffectParameter => {
+                OwnerKey::EffectParameter(EffectParameterId::allocate(seed, ordinal))
+            }
             Self::TypeParameter => {
                 OwnerKey::TypeParameter(TypeParameterId::allocate(seed, ordinal))
             }
@@ -437,6 +453,8 @@ pub struct AuthoredLoweringWork {
     pub preconditions_checked: u64,
     pub allocated_identities: u64,
     pub type_nodes_interned: u64,
+    /// Effect-row occurrences and canonicalization work, admitted as semantic validation steps.
+    pub effect_normalization_steps: u64,
     pub ownership_steps: u64,
     pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
@@ -450,6 +468,10 @@ impl AuthoredLoweringWork {
             preconditions_checked: self.preconditions_checked,
             allocated_identities: self.allocated_identities,
             authored_type_nodes: self.type_nodes_interned,
+            validation: super::budget::ValidationBudgetWork {
+                expression_steps: self.effect_normalization_steps,
+                ..Default::default()
+            },
             canonical_reads: self.canonical,
             witness_reads: self.witness,
             impact_ownership_steps: self.ownership_steps,
@@ -732,6 +754,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }
@@ -795,6 +818,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
@@ -810,6 +834,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::SetFieldType { .. }
             | AuthoredChange::SetCasePayload { .. }
             | AuthoredChange::SetParameterType { .. }
+            | AuthoredChange::SetPortContract { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
             | AuthoredChange::SetTarget { .. }
@@ -984,6 +1009,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
@@ -994,6 +1020,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::SetFieldType { .. }
             | AuthoredChange::SetCasePayload { .. }
             | AuthoredChange::SetParameterType { .. }
+            | AuthoredChange::SetPortContract { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
             | AuthoredChange::SetTarget { .. }
@@ -1465,6 +1492,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     fn declaration_symbol(&self, symbol: &str) -> Result<DeclarationId, Diagnostic> {
         match self.symbol_owner(symbol, SymbolKind::Declaration)? {
             OwnerKey::Declaration(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn effect_parameter_symbol(&self, symbol: &str) -> Result<EffectParameterId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::EffectParameter)? {
+            OwnerKey::EffectParameter(value) => Ok(value),
             _ => Err(symbol_domain_corrupt(symbol)),
         }
     }

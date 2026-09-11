@@ -3,6 +3,9 @@
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "effect_tests.rs"]
+pub(crate) mod effect_tests;
+
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
     NormalizedCapabilityAdapter, NormalizedCapabilityGrant, NormalizedCapabilityGrantDescriptor,
@@ -18,7 +21,11 @@ use super::deployment::{
 use super::http::NormalizedHttpApplication;
 
 #[test]
-fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
+fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
+    let transition: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/graph13-effect-cutover.json"
+    ))
+    .unwrap();
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../tests/fixtures/graph10-unchanged-types-and-data.json"
     ))
@@ -29,7 +36,7 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        13
+        14
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -87,11 +94,27 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
         assert_eq!(snapshot.root.package_id.to_string(), project["package"]);
         assert_eq!(snapshot.root.package_name.as_str(), project["package_name"]);
         let old_owners = project["owners"].as_object().unwrap();
+        let effects = transition["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["observed_predecessor_root"]["package_id"] == project["package"])
+            .unwrap();
         let old_retirements = project["retirements"].as_object().unwrap();
         for (key, owner) in &snapshot.owners {
             if let Some(expected) = old_owners.get(&key.to_string()) {
+                let mut value = serde_json::to_value(owner).unwrap();
+                if let Some(change) = effects["port_changes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|change| change["owner"] == serde_json::to_value(key).unwrap())
+                {
+                    assert_eq!(value["record"]["function_type"], change["current_type"]);
+                    value["record"]["function_type"] = change["previous_type"].clone();
+                }
                 assert_eq!(
-                    &neutral_binding_generation_hash(serde_json::to_value(owner).unwrap()),
+                    &neutral_binding_generation_hash(value),
                     expected,
                     "changed predecessor owner {key}"
                 );
@@ -119,7 +142,7 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             .iter()
             .filter(|(key, _)| !old_owners.contains_key(&key.to_string()))
             .collect::<Vec<_>>();
-        assert_eq!(additions.len(), if type_count == 85 { 252 } else { 0 });
+        assert_eq!(additions.len(), if type_count == 85 { 338 } else { 0 });
         let new_declarations = additions
             .iter()
             .filter_map(|(_, owner)| match owner {
@@ -132,6 +155,10 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
             if type_count == 85 {
                 BTreeSet::from([
                     "pair",
+                    "task-map",
+                    "task-map-step",
+                    "task-fold-left",
+                    "task-fold-left-range",
                     "pair-new",
                     "pair-first",
                     "pair-second",
@@ -189,9 +216,19 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
                 .types
                 .get(&ty)
                 .or_else(|| application.types.get(&ty))
-                .or_else(|| application.dependency_types.get(&ty))
-                .expect("unchanged maintained type");
-            assert_eq!(current, &object);
+                .or_else(|| application.dependency_types.get(&ty));
+            if let Some(current) = current {
+                assert_eq!(current, &object);
+            } else {
+                assert!(
+                    effects["port_changes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|change| change["previous_type"] == witness["type"]),
+                    "unreviewed missing predecessor type"
+                );
+            }
         }
         for witness in project["typed_data"].as_array().unwrap() {
             let ty: TypeObjectDigest = serde_json::from_value(witness["type"].clone()).unwrap();
@@ -232,6 +269,7 @@ fn graph13_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
 }
 
 fn neutral_binding_generation_hash(mut value: serde_json::Value) -> serde_json::Value {
+    crate::platform::contributor::effect_cutover_tests::neutral_effect_fields(&mut value);
     fn remove_generation(value: &mut serde_json::Value) {
         match value {
             serde_json::Value::Object(fields) => {
@@ -462,6 +500,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    effect_parameters: Vec::new(),
                     type_parameters: vec![],
                     parameters: vec![input],
                     result: unit,
@@ -916,6 +955,7 @@ fn linked_pure_program() -> (
                 body: AuthoredExpression {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        effect_arguments: Vec::new(),
                         function: AuthoredDeclarationReference::Exact {
                             package: source_reference.package,
                             declaration: source_reference.declaration,
@@ -983,22 +1023,14 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
         OwnerRecord::Declaration(record) => record.module,
         _ => panic!("pure command implementation owner kind"),
     };
-    let function_type = snapshot
-        .types
-        .iter()
-        .find_map(|(digest, object)| match &object.form {
-            TypeForm::Function { parameters, result }
-                if parameters.is_empty()
-                    && snapshot
-                        .types
-                        .get(result)
-                        .is_some_and(|object| matches!(object.form, TypeForm::Unit)) =>
-            {
-                Some(*digest)
-            }
-            _ => None,
-        })
-        .expect("fixture unit command function type");
+    let unit = admit_snapshot_type(&mut snapshot, TypeForm::Unit);
+    let function_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: Vec::new(),
+            result: unit,
+        },
+    );
     let component = DeclarationId::migrate(SEED, 0);
     let port = PortId::migrate(SEED, 0);
     let target = TargetId::migrate(SEED, 0);
@@ -1128,6 +1160,7 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
                     name: Name::new("worker_iteration").unwrap(),
                     visibility: DeclarationVisibility::Package,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        effect_parameters: Vec::new(),
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
                         result: bool_type,
@@ -1145,11 +1178,19 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
     else {
         panic!("pure command port owner kind")
     };
+    let previous_port_type = port_record.function_type;
     port_record.function_type = port_type;
     port_record.implementation = PortImplementation::Function(DeclarationReference {
         package,
         declaration: function,
     });
+    if !snapshot
+        .owners
+        .values()
+        .any(|owner| owner.type_roots().contains(&previous_port_type))
+    {
+        snapshot.types.remove(&previous_port_type);
+    }
     let OwnerRecord::Target(target_record) = snapshot
         .owners
         .get_mut(&OwnerKey::Target(target))
@@ -1172,7 +1213,9 @@ fn wall_clock_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     let i64_object = TypeObject::new(TypeForm::I64).expect("I64 type object");
     let (i64_type, _) = encode_type_object(&i64_object).expect("I64 type encoding");
     snapshot.types.insert(i64_type, i64_object);
-    let function_object = TypeObject::new(TypeForm::Function {
+    let effect = fixture_task_row(&snapshot);
+    let function_object = TypeObject::new(TypeForm::TaskFunction {
+        effect,
         parameters: Vec::new(),
         result: i64_type,
     })
@@ -1180,7 +1223,10 @@ fn wall_clock_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     let (function_type, _) =
         encode_type_object(&function_object).expect("wall-clock port type encoding");
     snapshot.types.retain(|digest, object| {
-        !matches!(object.form, TypeForm::Function { .. }) || *digest == function_type
+        !matches!(
+            object.form,
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+        ) || *digest == function_type
     });
     snapshot.types.insert(function_type, function_object);
 
@@ -1217,6 +1263,22 @@ fn admit_snapshot_type(
     digest
 }
 
+fn fixture_task_row(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+) -> crate::platform::kernel::EffectRow {
+    let caller = declaration_named(snapshot, "caller");
+    let OwnerRecord::Declaration(declaration) =
+        &snapshot.owners[&OwnerKey::Declaration(caller.declaration)]
+    else {
+        panic!("fixture caller declaration")
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        panic!("fixture caller function")
+    };
+    assert!(matches!(function.effect, FunctionEffect::Task { .. }));
+    function.effect.row()
+}
+
 fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     const SEED: &[u8] = b"normalized-byte-stream-command";
 
@@ -1246,15 +1308,20 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
             ],
         },
     );
+    let effect = fixture_task_row(&snapshot);
     let port_type = admit_snapshot_type(
         &mut snapshot,
-        TypeForm::Function {
+        TypeForm::TaskFunction {
+            effect,
             parameters: vec![stream_type],
             result: bytes_type,
         },
     );
     snapshot.types.retain(|digest, object| {
-        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+        !matches!(
+            object.form,
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+        ) || *digest == port_type
     });
 
     let read_all = snapshot
@@ -1580,15 +1647,20 @@ pub(crate) fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnaps
             ],
         },
     );
+    let effect = fixture_task_row(&snapshot);
     let port_type = admit_snapshot_type(
         &mut snapshot,
-        TypeForm::Function {
+        TypeForm::TaskFunction {
+            effect,
             parameters: vec![request_type],
             result: response_type,
         },
     );
     snapshot.types.retain(|digest, object| {
-        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+        !matches!(
+            object.form,
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+        ) || *digest == port_type
     });
 
     let caller = declaration_named(&snapshot, "caller").declaration;
@@ -1964,6 +2036,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             concatenated,
             ExpressionOperation::Call {
+                effect_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
                     declaration: concat,
@@ -1975,6 +2048,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             captured_body,
             ExpressionOperation::Call {
+                effect_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
                     declaration: from_text,
@@ -2065,15 +2139,20 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
     function
         .parameters
         .extend([left_parameter, right_parameter]);
+    let effect = fixture_task_row(&snapshot);
     let port_type = admit_snapshot_type(
         &mut snapshot,
-        TypeForm::Function {
+        TypeForm::TaskFunction {
+            effect,
             parameters: vec![request_type, text_type, text_type],
             result: response_type,
         },
     );
     snapshot.types.retain(|digest, object| {
-        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+        !matches!(
+            object.form,
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+        ) || *digest == port_type
     });
     for record in snapshot.owners.values_mut() {
         if let OwnerRecord::Port(port) = record {
@@ -3879,7 +3958,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph13_dense_bytecode_8");
+    assert_eq!(observation.production_tier, "graph14_dense_bytecode_9");
 }
 
 #[test]
@@ -4113,6 +4192,7 @@ fn call_policy_separates_exact_task_requirement_from_component_grant_alias() {
         panic!("task function expected");
     };
     task_function.effect = FunctionEffect::Task {
+        effect_parameters: Vec::new(),
         requirements: vec![crate::platform::kernel::RequirementReference {
             package,
             requirement: alias_id,
@@ -4134,6 +4214,7 @@ fn call_policy_separates_exact_task_requirement_from_component_grant_alias() {
         panic!("capability call expected");
     };
     requirement.requirement = alias_id;
+    crate::platform::kernel::tests::update_fixture_task_port_row(&mut snapshot, task.declaration);
     crate::platform::kernel::validate_full(&snapshot).expect("valid requirement alias fixture");
 
     let program = prepare_snapshot(&snapshot);
@@ -4175,7 +4256,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph13_reference_records_7"
+        "graph14_reference_records_8"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -4317,6 +4398,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    effect_arguments: Arc::from([]),
                     function: super::value::FunctionIndex(u32::MAX, program.value_origin),
                     type_arguments: Arc::from([]),
                     arguments: 0,
@@ -4329,6 +4411,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    effect_arguments: Arc::from([]),
                     function: callee_index,
                     type_arguments: Arc::from([TypeObjectDigest::from_bytes([0xff; 32])]),
                     arguments: 0,
@@ -4427,6 +4510,7 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                 list.clone(),
                 NormalizedValue::I64(0),
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: index,
                     type_arguments: Arc::from([]),
                     bound_arguments: None,
@@ -4530,6 +4614,7 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
         .expect("transaction instruction");
     let mut instructions = code.instructions[..=begin].to_vec();
     instructions.push(NormalizedInstruction::TailCall {
+        effect_arguments: Arc::from([]),
         function: super::value::FunctionIndex(
             u32::try_from(callee).expect("callee index"),
             program.value_origin,

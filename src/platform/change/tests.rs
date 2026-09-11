@@ -157,6 +157,7 @@ fn task_body_edit_retains_an_owned_requirement_in_incremental_summaries() {
         panic!("task function payload expected");
     };
     task_function.effect = crate::platform::kernel::FunctionEffect::Task {
+        effect_parameters: Vec::new(),
         requirements: vec![crate::platform::kernel::RequirementReference {
             package,
             requirement: requirement_id,
@@ -189,6 +190,7 @@ fn task_body_edit_retains_an_owned_requirement_in_incremental_summaries() {
         panic!("capability call expected");
     };
     capability_requirement.requirement = requirement_id;
+    crate::platform::kernel::tests::update_fixture_task_port_row(&mut base, task_id);
     validate_full(&base).expect("task-owned requirement fixture");
 
     let base_witness = rebuild_full_witness(&base).expect("base witness");
@@ -300,6 +302,7 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
         name: Name::new("other_function").expect("valid name"),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+            effect_parameters: Vec::new(),
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             result: old_function_payload.result,
@@ -312,6 +315,7 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
         panic!("test actual expression expected");
     };
     actual.operation = ExpressionOperation::Call {
+        effect_arguments: Vec::new(),
         function: crate::platform::kernel::DeclarationReference {
             package: base.root.package_id,
             declaration: new_function,

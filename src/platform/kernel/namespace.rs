@@ -22,10 +22,11 @@ pub enum NamespaceClass {
     Requirement,
     Port,
     Target,
+    EffectParameter,
 }
 
 impl NamespaceClass {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Module,
         Self::Declaration,
         Self::TypeParameter,
@@ -36,6 +37,7 @@ impl NamespaceClass {
         Self::Requirement,
         Self::Port,
         Self::Target,
+        Self::EffectParameter,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -43,6 +45,7 @@ impl NamespaceClass {
             Self::Module => 1,
             Self::Declaration => 2,
             Self::TypeParameter => 3,
+            Self::EffectParameter => 11,
             Self::Field => 4,
             Self::Case => 5,
             Self::Operation => 6,
@@ -58,6 +61,7 @@ impl NamespaceClass {
             Self::Module => "module",
             Self::Declaration => "declaration",
             Self::TypeParameter => "type_parameter",
+            Self::EffectParameter => "effect_parameter",
             Self::Field => "field",
             Self::Case => "case",
             Self::Operation => "operation",
@@ -99,6 +103,11 @@ pub fn owner_namespace(record: &OwnerRecord) -> Option<NamespaceEntryRef<'_>> {
             Some(OwnerKey::Module(declaration.module)),
             NamespaceClass::Declaration,
             &declaration.name,
+        ),
+        OwnerRecord::EffectParameter(parameter) => (
+            Some(OwnerKey::Declaration(parameter.declaration)),
+            NamespaceClass::EffectParameter,
+            &parameter.name,
         ),
         OwnerRecord::TypeParameter(parameter) => (
             Some(OwnerKey::Declaration(parameter.declaration)),

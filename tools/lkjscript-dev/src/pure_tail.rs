@@ -1405,6 +1405,12 @@ fn standalone_http(
         true,
     )?;
     let component = field(&component, "owner", "id")?;
+    let port = context.cli(
+        Some(&http.path),
+        &["query", "find", "port", "http", "--parent", &component],
+        true,
+    )?;
+    let port = field(&port, "owner", "id")?;
     let definition = context.cli(
         Some(&http.path),
         &[
@@ -1422,6 +1428,11 @@ fn standalone_http(
         true,
     )?;
     let bindings = BTreeMap::from([
+        ("port".to_owned(), port),
+        (
+            "request-type".to_owned(),
+            field(&definition, "definition.parameter", "type")?,
+        ),
         ("module".to_owned(), module),
         ("component".to_owned(), component),
         ("function".to_owned(), function),

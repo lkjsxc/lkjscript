@@ -1,4 +1,4 @@
-//! Stable-ID Graph 13 expression records.
+//! Stable-ID Graph 14 expression records.
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN, MAXIMUM_INLINE_TEXT_BYTES};
 use super::digest::{BlobObjectDigest, TypeObjectDigest};
@@ -100,11 +100,13 @@ pub enum ExpressionOperation {
         items: Vec<ExpressionId>,
     },
     Call {
+        effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
         arguments: Vec<ExpressionId>,
     },
     FunctionValue {
+        effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
     },
@@ -376,7 +378,7 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
     if (!allow_zero && count == 0) || count > MAXIMUM_CHILDREN {
         return Err(expression_error(
             "kernel_expression_child_count",
-            format!("{label} count {count} is outside the Graph 13 bound"),
+            format!("{label} count {count} is outside the Graph 14 bound"),
         ));
     }
     Ok(())

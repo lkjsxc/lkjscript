@@ -1,4 +1,4 @@
-//! Language-order affine capability-resource validation for Graph 13.
+//! Language-order affine capability-resource validation for Graph 14.
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
@@ -1132,7 +1132,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                         active_declarations,
                     )?
             }
-            TypeForm::Function { parameters, result } => {
+            TypeForm::Function { parameters, result }
+            | TypeForm::TaskFunction {
+                parameters, result, ..
+            } => {
                 let mut contains =
                     self.type_contains_resource_inner(result, active_types, active_declarations)?;
                 for parameter in parameters {
@@ -1565,7 +1568,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing task function must be private",
             ));
         }
-        if !function.type_parameters.is_empty() {
+        if !function.type_parameters.is_empty() || !function.effect_parameters.is_empty() {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
                 owner,
@@ -1579,7 +1582,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing task function cannot return a capability resource",
             ));
         }
-        let FunctionEffect::Task { requirements } = function.effect else {
+        let FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } = function.effect
+        else {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_effect",
                 owner,

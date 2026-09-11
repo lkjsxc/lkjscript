@@ -236,6 +236,7 @@ fn recursive_monomorphic_predecessor_cost_comparison() {
                 observations: BTreeMap::new(),
                 nominal: Default::default(),
                 recursive: Default::default(),
+                effects: Default::default(),
                 files: vec![],
                 cleanup_complete: false,
                 failure: None,

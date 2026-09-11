@@ -55,6 +55,10 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("pure-tail") => pure_tail::command(arguments),
         Some("pure-tail-probe") => pure_tail::probe_command(arguments),
         Some("recursive-probe") => offline_packages::recursive_probe_command(arguments),
+        Some("effect-probe") => offline_packages::effect_probe_command(arguments),
+        Some("effect-transaction-probe") => {
+            offline_packages::effect_transaction_probe_command(arguments)
+        }
         Some("recursive-transaction-probe") => {
             offline_packages::recursive_transaction_probe_command(arguments)
         }

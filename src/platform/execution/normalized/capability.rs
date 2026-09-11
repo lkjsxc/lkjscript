@@ -463,10 +463,6 @@ impl NormalizedCapabilities {
             .begin_transaction(&policy, resources, control)
     }
 
-    pub(crate) fn requires_exact(&self, requirement: RequirementReference) -> bool {
-        self.exact_bindings.contains_key(&requirement)
-    }
-
     pub(crate) fn maximum_calls_exact(
         &self,
         requirement: RequirementReference,
@@ -705,24 +701,17 @@ impl NormalizedCapabilities {
     }
 }
 
-fn equivalent_requirement(
+pub(super) fn equivalent_requirement(
     candidate: &super::prepare::NormalizedRequirement,
     component: &super::prepare::NormalizedRequirement,
 ) -> bool {
-    let candidate_operations = candidate
-        .operations
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    let component_operations = component
-        .operations
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
     candidate.reference.package == component.reference.package
         && candidate.name == component.name
         && candidate.interface == component.interface
-        && candidate_operations.is_subset(&component_operations)
+        && candidate
+            .operations
+            .iter()
+            .all(|operation| component.operations.contains(operation))
         && candidate.limits.iter().all(|required| {
             component.limits.iter().any(|available| {
                 available.name == required.name

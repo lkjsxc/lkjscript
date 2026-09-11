@@ -129,6 +129,21 @@ impl<R: SessionShapeRead> Closure<'_, R> {
                     result: self.substitute(result, bindings, next)?,
                 }
             }
+            TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => {
+                self.reserve::<TypeObjectDigest>(parameters.len())?;
+                TypeForm::TaskFunction {
+                    parameters: parameters
+                        .into_iter()
+                        .map(|ty| self.substitute(ty, bindings, next))
+                        .collect::<Result<_, _>>()?,
+                    result: self.substitute(result, bindings, next)?,
+                    effect,
+                }
+            }
             form => form,
         };
         let resolved = TypeObject::new(form)?;
@@ -233,7 +248,8 @@ pub(super) fn validate<R: SessionShapeRead>(
             | TypeForm::Result { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
-            | TypeForm::Function { .. } => {
+            | TypeForm::Function { .. }
+            | TypeForm::TaskFunction { .. } => {
                 return Err(session_semantic(
                     "session_state_live_type",
                     "retained session state contains a live, callable, static, secret, or unresolved type",

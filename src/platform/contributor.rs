@@ -32,8 +32,61 @@ pub fn strict_artifact_admission_probe(bytes: &[u8]) -> Result<(), Diagnostic> {
     super::compiler::load_artifact(bytes).map(|_| ())
 }
 
+/// Bind output evidence to an independently transported exact source closure. This is a
+/// read-only verifier boundary; an older self-consistent standalone bundle remains executable.
+pub fn strict_artifact_source_probe(
+    artifact: &[u8],
+    source: &[u8],
+    transport: &str,
+) -> Result<serde_json::Value, Diagnostic> {
+    let loaded = super::compiler::load_artifact(artifact)?;
+    let container =
+        super::package_transport::source::PackageContainer::decode(source, transport.parse()?)?;
+    let oracle = super::package_transport::oracle::reconstruct(&container)?;
+    let mismatch = || {
+        Diagnostic::new(
+            DiagnosticClass::Corrupt,
+            "contributor_artifact_source",
+            "artifact output does not bind the selected exact transported source closure",
+        )
+    };
+    let root = loaded.root_package().ok_or_else(mismatch)?;
+    if root.package_revision != container.root.package_revision
+        || loaded.manifest.packages.len() != oracle.snapshots.len()
+    {
+        return Err(mismatch());
+    }
+    for package in &loaded.manifest.packages {
+        let source = oracle
+            .snapshots
+            .get(&package.package)
+            .ok_or_else(mismatch)?;
+        let revision = oracle
+            .revisions
+            .get(&package.package)
+            .ok_or_else(mismatch)?;
+        if package.package_revision != revision.encode()?.0
+            || package.semantic_revision != revision.revision.revision_id()?
+            || package.semantic_state != super::kernel::semantic_state_digest(source)?
+        {
+            return Err(mismatch());
+        }
+    }
+    Ok(serde_json::json!({
+        "bundle": loaded.bundle_digest.to_string(),
+        "source_transport": transport,
+        "package": root.package.to_string(),
+        "revision": root.semantic_revision.to_string(),
+        "package_revision": root.package_revision.to_string(),
+        "packages": loaded.manifest.packages.len(),
+    }))
+}
+
 #[cfg(test)]
 mod nominal_cutover_tests;
+
+#[cfg(test)]
+pub(crate) mod effect_cutover_tests;
 
 /// Neutral canonical type identity for independent contributor byte oracles. This
 /// performs no graph authoring, scope proof, layout derivation or value encoding.
@@ -71,6 +124,19 @@ pub fn pure_tail_execution_probe(project: &Path) -> Result<serde_json::Value, Di
 /// Source/verifier-bound resource observations of the separately authored recursive fixture.
 pub fn recursive_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
     super::execution::normalized::pure_tail_probe::observe_recursive(project)
+}
+
+/// Independent neutral-grant runs and resource observations over the public task-library fixture.
+pub fn effect_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::effect_probe::observe(project)
+}
+
+/// One disposable production invocation, cancelled after a callback stages data in its caller's transaction.
+pub fn effect_transaction_probe(
+    deployment: &Path,
+    function: &str,
+) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::effect_transaction_probe::observe(deployment, function)
 }
 
 /// One isolated production transaction cancellation after staging recursive typed data.
@@ -1175,8 +1241,10 @@ fn reconstruct_function_extraction(
             ExpressionOperation::Call {
                 function: called, ..
             } => {
-                if let FunctionEffect::Task { requirements } =
-                    oracle_function_effect(snapshot, *called)?
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = oracle_function_effect(snapshot, *called)?
                 {
                     required.extend(requirements);
                 }
@@ -1194,7 +1262,10 @@ fn reconstruct_function_extraction(
                 "pure caller cannot supply selected task requirements",
             ));
         }
-        FunctionEffect::Task { requirements } => {
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => {
             if required
                 .iter()
                 .any(|requirement| !requirements.contains(requirement))
@@ -1738,7 +1809,11 @@ fn oracle_capture_requirement(
         ));
     };
     if matches!(source, LocalValueReference::MatchPayload(_)) {
-        let FunctionEffect::Task { requirements } = &function.effect else {
+        let FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } = &function.effect
+        else {
             return Err(oracle_error(
                 DiagnosticClass::Semantic,
                 "contributor_extraction_resource_source",
@@ -1951,7 +2026,10 @@ fn reconstruct_function_definition(
     }
     let requirements = match &function_record.effect {
         FunctionEffect::Pure => &[][..],
-        FunctionEffect::Task { requirements } => requirements.as_slice(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.as_slice(),
     };
     for (ordinal, requirement) in requirements.iter().copied().enumerate() {
         if requirement.package != package {
@@ -2703,7 +2781,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 802);
+        assert_eq!(inventory.owners, 888);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);
@@ -2871,6 +2949,7 @@ mod tests {
             panic!("recursive selected expression")
         };
         expression.operation = ExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
                 declaration: function,
@@ -3033,7 +3112,10 @@ mod tests {
             extraction.captures[1].use_mode,
             crate::platform::kernel::ParameterUse::Consume
         );
-        let crate::platform::kernel::FunctionEffect::Task { requirements } = &extraction.effect
+        let crate::platform::kernel::FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } = &extraction.effect
         else {
             panic!("affine extraction helper must be task effect")
         };

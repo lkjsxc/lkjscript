@@ -320,7 +320,11 @@ fn selected_aggregation_children<R: SummaryRead>(
     let DeclarationPayload::Function(function) = &declaration.payload else {
         return Ok(children);
     };
-    let FunctionEffect::Task { requirements } = &function.effect else {
+    let FunctionEffect::Task {
+        effect_parameters: _,
+        requirements,
+    } = &function.effect
+    else {
         return Ok(children);
     };
     for requirement in requirements {
@@ -459,6 +463,7 @@ fn aggregation_mode(role: OwnershipRole) -> AggregationMode {
     }
     match role {
         OwnershipRole::DeclarationTypeParameter
+        | OwnershipRole::DeclarationEffectParameter
         | OwnershipRole::DeclarationField
         | OwnershipRole::DeclarationCase
         | OwnershipRole::DeclarationOperation
@@ -812,6 +817,12 @@ pub(crate) fn aggregation_children(
                 }));
             }
             DeclarationPayload::Function(function) => {
+                children.extend(function.effect_parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationEffectParameter,
+                        OwnerKey::EffectParameter(*parameter),
+                    )
+                }));
                 children.extend(function.type_parameters.iter().map(|parameter| {
                     (
                         OwnershipRole::DeclarationTypeParameter,
@@ -933,6 +944,7 @@ pub(crate) fn aggregation_children(
         }
         OwnerRecord::Module(_)
         | OwnerRecord::TypeParameter(_)
+        | OwnerRecord::EffectParameter(_)
         | OwnerRecord::Field(_)
         | OwnerRecord::Case(_)
         | OwnerRecord::Parameter(_)
@@ -1027,13 +1039,18 @@ fn local_summary(
                     implementation.piece(1, &function.implementation)?;
                 }
                 DeclarationPayload::Function(function) => {
+                    interface.piece(7, &function.effect_parameters)?;
                     interface.raw_piece(2, &[5]);
                     interface.piece(4, &function.type_parameters)?;
                     interface.piece(5, &function.parameters)?;
                     interface.piece(6, &function.result)?;
                     implementation.piece(2, &function.body)?;
                     effect.piece(1, &function.effect)?;
-                    if let FunctionEffect::Task { requirements } = &function.effect {
+                    if let FunctionEffect::Task {
+                        effect_parameters: _,
+                        requirements,
+                    } = &function.effect
+                    {
                         capability.piece(1, requirements)?;
                     }
                 }
@@ -1066,6 +1083,9 @@ fn local_summary(
                     test = Some(material.finish(TEST_DIGEST_DOMAIN));
                 }
             }
+        }
+        OwnerRecord::EffectParameter(record) => {
+            presentation.piece(1, &record.name)?;
         }
         OwnerRecord::TypeParameter(record) => {
             presentation.piece(1, &record.name)?;

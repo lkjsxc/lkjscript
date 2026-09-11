@@ -7,7 +7,6 @@ use std::collections::BTreeSet;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Ownership {
     Ordinary,
-    Port,
     Capability,
     AffineVariant,
 }
@@ -19,7 +18,12 @@ pub(super) struct Value {
     ownership: Ownership,
 }
 
-type Invocation = (DeclarationReference, Arc<[TypeObjectDigest]>, Vec<Value>);
+type Invocation = (
+    DeclarationReference,
+    Arc<[TypeObjectDigest]>,
+    Arc<[EffectRow]>,
+    Vec<Value>,
+);
 
 impl Value {
     pub(super) fn raw(&self) -> &NormalizedValue {
@@ -47,7 +51,7 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         match (self.ownership, use_mode) {
-            (Ownership::Ordinary | Ownership::Port, ParameterUse::Unrestricted)
+            (Ownership::Ordinary, ParameterUse::Unrestricted)
             | (Ownership::Capability, ParameterUse::Borrow) => Ok(Self {
                 datum: self.datum.clone(),
                 preparation: self.preparation,
@@ -85,6 +89,7 @@ impl Value {
         schema: &BoundReferenceSchema,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
+        effect_arguments: Arc<[EffectRow]>,
         signature: &ReferenceSignature,
     ) -> Result<Self, ExecutionError> {
         if function.1 != schema.value_origin || schema.functions.get(function.0 as usize).is_none()
@@ -94,6 +99,10 @@ impl Value {
             ));
         }
         if signature.type_parameters.len() != type_arguments.len()
+            || signature.effect_parameters.len() != effect_arguments.len()
+            || effect_arguments
+                .iter()
+                .any(|row| !row.is_closed() || row.validate().is_err())
             || type_arguments
                 .iter()
                 .any(|ty| schema.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
@@ -119,14 +128,11 @@ impl Value {
             datum: NormalizedValue::Function {
                 function,
                 type_arguments,
+                effect_arguments,
                 bound_arguments: None,
             },
             preparation: schema.value_origin,
-            ownership: if signature.pure {
-                Ownership::Ordinary
-            } else {
-                Ownership::Port
-            },
+            ownership: Ownership::Ordinary,
         })
     }
 
@@ -881,10 +887,14 @@ impl ReferenceState<'_> {
                     }
                     self.resources.validate_admission(*handle, None, None)?;
                 }
-                TypeForm::Function { parameters, result } => {
+                TypeForm::Function { parameters, result }
+                | TypeForm::TaskFunction {
+                    parameters, result, ..
+                } => {
                     let NormalizedValue::Function {
                         function,
                         type_arguments,
+                        effect_arguments,
                         bound_arguments,
                     } = node
                     else {
@@ -893,8 +903,23 @@ impl ReferenceState<'_> {
                         ));
                     };
                     let declaration = schema.functions.get(function.0 as usize).copied().filter(|_| function.1 == schema.value_origin).ok_or_else(|| reject("raw callback belongs to another preparation; select the current callable"))?;
-                    let signature = self.function_signature(declaration)?;
-                    if !signature.pure
+                    let signature = self
+                        .applied_signature(declaration, type_arguments, effect_arguments)
+                        .map_err(|error| {
+                            if error.code == "normalized_reference_type" {
+                                reject(format!("raw callback signature: {}", error.message))
+                            } else {
+                                error
+                            }
+                        })?;
+                    let kind_matches = match ty {
+                        TypeForm::Function { .. } => signature.pure,
+                        TypeForm::TaskFunction { effect, .. } => {
+                            !signature.pure && signature.effect.row() == *effect
+                        }
+                        _ => false,
+                    };
+                    if !kind_matches
                         || bound_arguments
                             .as_ref()
                             .is_some_and(|prefix| prefix.is_empty())
@@ -912,7 +937,7 @@ impl ReferenceState<'_> {
                             .any(|parameter| parameter.resource_requirement.is_some())
                     {
                         return Err(reject(
-                            "raw callback has a foreign arity or effect; supply its exact pure signature",
+                            "raw callback has a foreign arity or effect; supply its exact callable signature",
                         ));
                     }
                     if type_arguments
@@ -1047,7 +1072,7 @@ impl ReferenceState<'_> {
         arguments: Vec<NormalizedValue>,
     ) -> Result<Vec<Value>, ExecutionError> {
         let arguments = super::super::value::RawArguments::new(arguments);
-        let signature = self.function_signature(declaration)?;
+        let signature = self.applied_signature(declaration, types, &[])?;
         if signature.parameters.len() != arguments.len()
             || signature.type_parameters.len() != types.len()
         {
@@ -1105,7 +1130,8 @@ impl ReferenceState<'_> {
     ) -> Result<Vec<Value>, ExecutionError> {
         let arguments = super::super::value::RawArguments::new(arguments);
         let schema = Arc::clone(&self.schema);
-        let Some(TypeForm::Function { parameters, .. }) = schema.types.get(&ty).map(|ty| &ty.form)
+        let Some(TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. }) =
+            schema.types.get(&ty).map(|ty| &ty.form)
         else {
             return Err(reference_type_error(
                 "raw port boundary has no exact function type",
@@ -1134,27 +1160,27 @@ impl ReferenceState<'_> {
         self.control.check()?;
         if callee.ownership(&self.schema, &mut self.observation.value_work)? != Ownership::Ordinary
         {
-            return Err(reject("binding cannot retain a task-port callable"));
+            return Err(reject("binding requires an admitted immutable callable"));
         }
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments,
             bound_arguments,
         } = callee.raw()
         else {
             return Err(reference_type_error("bind callee is not a function"));
         };
         let declaration = self.function_reference(*function)?;
-        let signature = self.function_signature(declaration)?;
-        if !signature.pure
-            || signature.type_parameters.len() != type_arguments.len()
+        let signature = self.applied_signature(declaration, type_arguments, effect_arguments)?;
+        if signature.type_parameters.len() != type_arguments.len()
             || signature
                 .parameters
                 .iter()
                 .any(|parameter| parameter.resource_requirement.is_some())
         {
             return Err(reject(
-                "binding requires the exact pure canonical function signature",
+                "binding requires the exact canonical callable signature",
             ));
         }
         let retained = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
@@ -1192,7 +1218,7 @@ impl ReferenceState<'_> {
             if value.ownership(&self.schema, &mut self.observation.value_work)?
                 != Ownership::Ordinary
             {
-                return Err(reject("capture contains affine or task-port ownership"));
+                return Err(reject("capture contains affine ownership"));
             }
             let parameter = signature
                 .parameters
@@ -1218,6 +1244,7 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::Function {
                 function: *function,
                 type_arguments: Arc::clone(type_arguments),
+                effect_arguments: Arc::clone(effect_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             preparation: self.schema.value_origin,
@@ -1229,16 +1256,16 @@ impl ReferenceState<'_> {
         &mut self,
         callee: Value,
         arguments: Vec<Value>,
-        port: bool,
     ) -> Result<Invocation, ExecutionError> {
         self.control.check()?;
         let ownership = callee.ownership(&self.schema, &mut self.observation.value_work)?;
-        if ownership != Ownership::Ordinary && !(port && ownership == Ownership::Port) {
-            return Err(reject("invocation requires a checked pure callable"));
+        if ownership != Ownership::Ordinary {
+            return Err(reject("invocation requires a checked callable"));
         }
         let NormalizedValue::Function {
             function,
             type_arguments,
+            effect_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -1246,7 +1273,12 @@ impl ReferenceState<'_> {
         };
         let declaration = self.function_reference(*function)?;
         let Some(prefix) = bound_arguments else {
-            return Ok((declaration, Arc::clone(type_arguments), arguments));
+            return Ok((
+                declaration,
+                Arc::clone(type_arguments),
+                Arc::clone(effect_arguments),
+                arguments,
+            ));
         };
         let total = prefix
             .len()
@@ -1277,7 +1309,12 @@ impl ReferenceState<'_> {
             });
         }
         complete.extend(arguments);
-        Ok((declaration, Arc::clone(type_arguments), complete))
+        Ok((
+            declaration,
+            Arc::clone(type_arguments),
+            Arc::clone(effect_arguments),
+            complete,
+        ))
     }
 
     fn charge_reference_bindings(&mut self, count: usize) -> Result<(), ExecutionError> {
@@ -1355,7 +1392,8 @@ impl ReferenceState<'_> {
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText
-                | TypeForm::Function { .. } => {}
+                | TypeForm::Function { .. }
+                | TypeForm::TaskFunction { .. } => {}
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }
@@ -1405,6 +1443,6 @@ impl ReferenceState<'_> {
     }
 }
 
-fn reject(message: &'static str) -> ExecutionError {
+fn reject(message: impl Into<String>) -> ExecutionError {
     reference_error("normalized_reference_value_admission", message)
 }

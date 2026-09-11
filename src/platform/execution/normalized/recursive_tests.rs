@@ -134,6 +134,7 @@ fn fixture(
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    effect_parameters: Vec::new(),
                     type_parameters: vec![],
                     parameters: vec![input],
                     result: unit,
@@ -188,10 +189,10 @@ fn recursive_instances_properties_ingress_and_codec_limits_are_independent() {
         canonical: Arc::new(reference.clone()),
         value_origin: program.value_origin,
     };
-    // One symbolic instance and exactly four complete concrete applications; payload length
-    // cannot create type instances. The declaration's template has its separate selector index.
-    assert_eq!(program.variant_instances.len(), 5);
-    assert_eq!(reference.variant_instances.len(), 5);
+    // Exactly four closed applications; open generic metadata is not a runtime instance.
+    // Payload length cannot create types. The template has its separate selector index.
+    assert_eq!(program.variant_instances.len(), 4);
+    assert_eq!(reference.variant_instances.len(), 4);
     for (index, ty) in roots.iter().enumerate() {
         assert!(program.ordinary_types.contains(ty));
         assert!(reference.ordinary_types.contains(ty));

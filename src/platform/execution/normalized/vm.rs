@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 13 compiler units.
+//! Bounded dense-index virtual machine for normalized Graph 14 compiler units.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
@@ -343,6 +343,7 @@ impl<'a> NormalizedVm<'a> {
         let list_work = super::list::Work::current();
         let mut machine = Machine {
             program: self.program,
+            root_allowance: None,
             policy: self.policy,
             host: self.host,
             capabilities,
@@ -368,7 +369,7 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph13_dense_bytecode_8",
+                production_tier: "graph14_dense_bytecode_9",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -383,6 +384,7 @@ impl<'a> NormalizedVm<'a> {
             },
         };
         let result = (|| {
+            machine.select_root_allowance(&entry)?;
             let proof_bytes = self
                 .program
                 .capture_proof_bytes
@@ -426,7 +428,7 @@ impl<'a> NormalizedVm<'a> {
                 return Ok(value);
             };
             let (function, type_arguments, arguments) =
-                machine.prepare_invocation(value, arguments, true)?;
+                machine.prepare_invocation(value, arguments)?;
             machine.call(function, type_arguments, arguments)?;
             finish_admitted(&mut machine)
         })();
@@ -493,6 +495,7 @@ struct ActiveTransaction {
 }
 
 struct Machine<'a> {
+    root_allowance: Option<Arc<[RequirementIndex]>>,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: Option<&'a dyn NormalizedHost>,
@@ -510,6 +513,135 @@ struct Machine<'a> {
 }
 
 impl Machine<'_> {
+    fn select_root_allowance(
+        &mut self,
+        entry: &NormalizedEntryPoint,
+    ) -> Result<(), ExecutionError> {
+        let program = self.program;
+        let function = match entry {
+            NormalizedEntryPoint::Function(function) => Some(*function),
+            #[cfg(test)]
+            NormalizedEntryPoint::InstantiatedFunction(function, _) => Some(*function),
+            _ => None,
+        };
+        if let Some(index) = function {
+            let function = program
+                .functions
+                .get(index.0 as usize)
+                .filter(|_| index.1 == program.value_origin)
+                .ok_or_else(|| type_error("entry callable has a foreign preparation"))?;
+            if matches!(
+                function.effect,
+                crate::platform::kernel::FunctionEffect::Task { .. }
+            ) {
+                self.root_allowance = Some(Arc::clone(&function.task_requirements));
+            }
+        } else if let NormalizedEntryPoint::PortExpression(_, ty) = entry {
+            let ty = program
+                .types
+                .get(ty)
+                .ok_or_else(|| type_error("port callable type is missing"))?;
+            if let TypeForm::TaskFunction { effect, .. } = &ty.form {
+                if !effect.is_closed() {
+                    return Err(type_error("port effect row is not closed"));
+                }
+                let bytes = effect
+                    .requirements
+                    .len()
+                    .checked_mul(std::mem::size_of::<RequirementIndex>())
+                    .and_then(|bytes| u64::try_from(bytes).ok())
+                    .ok_or_else(|| type_error("port effect row allocation overflow"))?;
+                self.charge_allocation(bytes)?;
+                let mut indices = Vec::with_capacity(effect.requirements.len());
+                for reference in &effect.requirements {
+                    self.control.check()?;
+                    let index = program
+                        .requirements
+                        .iter()
+                        .position(|r| r.reference == *reference)
+                        .ok_or_else(|| {
+                            type_error("port row requirement is missing from preparation")
+                        })?;
+                    indices.push(RequirementIndex(
+                        u32::try_from(index)
+                            .map_err(|_| type_error("port requirement index overflow"))?,
+                    ));
+                }
+                self.root_allowance = Some(indices.into());
+            }
+        }
+        Ok(())
+    }
+
+    fn allowance(&self) -> Option<&[RequirementIndex]> {
+        match self.frames.last().and_then(|frame| frame.function) {
+            Some(index) => {
+                let function = self.program.functions.get(index.0 as usize)?;
+                matches!(
+                    function.effect,
+                    crate::platform::kernel::FunctionEffect::Task { .. }
+                )
+                .then_some(function.task_requirements.as_ref())
+            }
+            None => self.root_allowance.as_deref(),
+        }
+    }
+
+    fn admit_task_call(&self, required: &[RequirementIndex]) -> Result<(), ExecutionError> {
+        let available = self.allowance().ok_or_else(|| type_error("task invocation requires a declared task calling context, including for an empty row"))?;
+        for requirement in required {
+            let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
+            self.control.check()?;
+            let candidate = self
+                .program
+                .requirements
+                .get(requirement.0 as usize)
+                .ok_or_else(|| type_error("task row has a foreign requirement"))?;
+            let canonical = capabilities.canonical_requirement(*requirement)?;
+            let mut covered = false;
+            for allowance in available {
+                let declaration = self
+                    .program
+                    .requirements
+                    .get(allowance.0 as usize)
+                    .ok_or_else(|| type_error("activation row has a foreign requirement"))?;
+                if (*allowance == *requirement
+                    || super::capability::equivalent_requirement(candidate, declaration))
+                    && capabilities.canonical_requirement(*allowance)? == canonical
+                {
+                    covered = true;
+                    break;
+                }
+            }
+            if !covered {
+                return Err(ExecutionError::new(
+                    ExecutionFailureClass::Infrastructure,
+                    "normalized_runtime_type",
+                    format!(
+                        "task requirement {}/{} exceeds the current activation allowance or canonical grant binding",
+                        candidate.reference.package, candidate.reference.requirement
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn admit_operation_allowance(
+        &self,
+        requirement: RequirementIndex,
+    ) -> Result<(), ExecutionError> {
+        if self
+            .allowance()
+            .is_none_or(|row| !row.contains(&requirement))
+        {
+            return Err(type_error(
+                "capability operation is outside the current activation's declared row",
+            ));
+        }
+        Ok(())
+    }
+
     fn run(&mut self) -> Result<CheckedValue, ExecutionError> {
         loop {
             self.control.check()?;
@@ -574,7 +706,7 @@ impl Machine<'_> {
                     })?;
                     let class = value.class(self.program, &mut self.observation.value_work)?;
                     let valid = match use_mode {
-                        ParameterUse::Unrestricted => matches!(class, Class::Free | Class::Port),
+                        ParameterUse::Unrestricted => matches!(class, Class::Free),
                         ParameterUse::Borrow => class == Class::Direct,
                         ParameterUse::Consume => class != Class::Free,
                     };
@@ -606,27 +738,39 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::Jump(target) => self.jump(target)?,
                 NormalizedInstruction::Call {
+                    effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
+                    if !effect_arguments.is_empty() {
+                        return Err(type_error("effect application requires prepared closure"));
+                    }
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                     self.call(function, type_arguments, arguments)?;
                 }
                 NormalizedInstruction::TailCall {
+                    effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } => {
+                    if !effect_arguments.is_empty() {
+                        return Err(type_error("effect application requires prepared closure"));
+                    }
                     let arguments = self.pop_many(arguments as usize)?;
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                     self.dispatch_call(function, type_arguments, arguments, true)?;
                 }
                 NormalizedInstruction::FunctionValue {
+                    effect_arguments,
                     function,
                     type_arguments,
                 } => {
+                    if !effect_arguments.is_empty() {
+                        return Err(type_error("effect application requires prepared closure"));
+                    }
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                     self.push(CheckedValue::function(
                         self.program,
@@ -638,7 +782,7 @@ impl Machine<'_> {
                     let arguments = self.pop_many(arguments as usize)?;
                     let callee = self.pop()?;
                     let (function, type_arguments, arguments) =
-                        self.prepare_invocation(callee, arguments, false)?;
+                        self.prepare_invocation(callee, arguments)?;
                     self.call(function, type_arguments, arguments)?;
                 }
                 NormalizedInstruction::BeginBind { arguments } => {
@@ -705,7 +849,7 @@ impl Machine<'_> {
                     let arguments = self.pop_many(arguments as usize)?;
                     let callee = self.pop()?;
                     let (function, type_arguments, arguments) =
-                        self.prepare_invocation(callee, arguments, false)?;
+                        self.prepare_invocation(callee, arguments)?;
                     self.validate_tail_caller()?;
                     let tail = self
                         .program
@@ -855,6 +999,7 @@ impl Machine<'_> {
                     arguments,
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
+                    self.admit_operation_allowance(requirement)?;
                     self.validate_operation_arguments(requirement, operation, &arguments)?;
                     let arguments = arguments.into_iter().map(CheckedValue::into_raw).collect();
                     self.charge_capability_call(requirement)?;
@@ -896,6 +1041,7 @@ impl Machine<'_> {
                     requirement,
                     binding,
                 } => {
+                    self.admit_operation_allowance(requirement)?;
                     let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
                     let canonical = capabilities.canonical_requirement(requirement)?;
                     if self.transactions.contains_key(&canonical) {
@@ -1055,7 +1201,6 @@ impl Machine<'_> {
         &mut self,
         callee: CheckedValue,
         arguments: Vec<CheckedValue>,
-        allow_port: bool,
     ) -> Result<checked::Invocation, ExecutionError> {
         self.control.check()?;
         #[cfg(test)]
@@ -1088,7 +1233,7 @@ impl Machine<'_> {
                 })?;
             self.charge_allocation(slots as u64)?;
         }
-        let (function, types, mut complete) = callee.invocation(self.program, allow_port)?;
+        let (function, types, mut complete) = callee.invocation(self.program)?;
         if prefix == 0 {
             return Ok((function, types, arguments));
         }
@@ -1124,6 +1269,17 @@ impl Machine<'_> {
                     "normalized function index escaped the prepared table",
                 )
             })?;
+        if !function.effect_parameters.is_empty() {
+            return Err(type_error(
+                "callee effect arguments are not closed by this preparation",
+            ));
+        }
+        if matches!(
+            function.effect,
+            crate::platform::kernel::FunctionEffect::Task { .. }
+        ) {
+            self.admit_task_call(&function.task_requirements)?;
+        }
         if arguments.len() != function.parameter_count as usize {
             return Err(type_error("function argument count is foreign"));
         }

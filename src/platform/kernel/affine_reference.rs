@@ -582,11 +582,16 @@ impl Reference<'_> {
         };
         if declaration.visibility != DeclarationVisibility::Private
             || !function.type_parameters.is_empty()
+            || !function.effect_parameters.is_empty()
             || self.contains_resource(function.result, &mut BTreeSet::new())
         {
             return Err(());
         }
-        let FunctionEffect::Task { requirements } = &function.effect else {
+        let FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } = &function.effect
+        else {
             return Err(());
         };
         if resource.right.requirement.package != self.snapshot.root.package_id
@@ -814,7 +819,10 @@ impl Reference<'_> {
                 ok: key,
                 error: value,
             } => self.contains_resource(*key, active) || self.contains_resource(*value, active),
-            TypeForm::Function { parameters, result } => {
+            TypeForm::Function { parameters, result }
+            | TypeForm::TaskFunction {
+                parameters, result, ..
+            } => {
                 self.contains_resource(*result, active)
                     || parameters
                         .iter()
@@ -1369,6 +1377,7 @@ fn mutate_resource_self_recursion(snapshot: &mut KernelSnapshot) {
     let call_record = super::ExpressionRecord::new(
         call,
         ExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package: snapshot.root.package_id,
                 declaration: helper,
@@ -1438,6 +1447,7 @@ fn mutate_resource_function_value(snapshot: &mut KernelSnapshot) {
         panic!("maintained resource handoff expression");
     };
     record.operation = ExpressionOperation::FunctionValue {
+        effect_arguments: Vec::new(),
         function: DeclarationReference {
             package: snapshot.root.package_id,
             declaration: helper,

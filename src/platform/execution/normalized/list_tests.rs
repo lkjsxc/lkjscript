@@ -313,6 +313,7 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
             )))]),
         }),
         NormalizedValue::Function {
+            effect_arguments: Arc::from([]),
             function: FunctionIndex(3, origin),
             type_arguments: Arc::from([]),
             bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(5)])),

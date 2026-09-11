@@ -1,4 +1,4 @@
-//! Declaration-sized compiler units for normalized Graph 13 authority.
+//! Declaration-sized compiler units for normalized Graph 14 authority.
 //!
 //! This boundary is intentionally separate from the predecessor recursive-AST compiler. It reads
 //! exact stable-ID records through the same revision-pinned surfaces as validation and emits

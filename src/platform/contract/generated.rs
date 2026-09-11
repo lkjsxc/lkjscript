@@ -670,6 +670,7 @@ fn package_owner_name(record: &PackageInterfaceRecord) -> &str {
     match record {
         PackageInterfaceRecord::Declaration(value) => value.name.as_str(),
         PackageInterfaceRecord::TypeParameter(value) => value.name.as_str(),
+        PackageInterfaceRecord::EffectParameter(value) => value.name.as_str(),
         PackageInterfaceRecord::Field(value) => value.name.as_str(),
         PackageInterfaceRecord::Case(value) => value.name.as_str(),
         PackageInterfaceRecord::Operation(value) => value.name.as_str(),
@@ -682,6 +683,9 @@ fn package_owner_name(record: &PackageInterfaceRecord) -> &str {
 fn package_owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
     match record {
         PackageInterfaceRecord::Declaration(_) => None,
+        PackageInterfaceRecord::EffectParameter(value) => {
+            Some(OwnerKey::Declaration(value.declaration))
+        }
         PackageInterfaceRecord::TypeParameter(value) => {
             Some(OwnerKey::Declaration(value.declaration))
         }

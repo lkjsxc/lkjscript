@@ -10,11 +10,11 @@ pub(crate) use change::{
     COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_EDGE_DESCRIPTORS,
     COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
     COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
-    COMPACT_EXPRESSION_FORM_FIELDS, COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS,
-    COMPACT_NAMESPACE_CLASSES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
-    ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
-    NormalizedChangeRequest, compact_change_operation_descriptor, decode_compact_change,
-    normalize_change_request,
+    COMPACT_EFFECT_FORM_FIELDS, COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS,
+    COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
+    COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, ChangeRequestCommitment, CompactChangeFieldForm,
+    CompactChangeOperation, NormalizedChangeRequest, compact_change_operation_descriptor,
+    decode_compact_change, normalize_change_request,
 };
 pub use compact::{
     CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,

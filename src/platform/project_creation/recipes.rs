@@ -2,12 +2,13 @@
 
 use super::{ProjectAuxiliary, ProjectRecipe, ProjectTemplate};
 use crate::platform::change::{
-    AuthoredChange, AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation,
-    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
-    AuthoredOperationReference, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
-    AuthoredPortReference, AuthoredRecordExpressionField, AuthoredRequirement,
-    AuthoredRequirementReference, AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType,
-    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector,
+    AuthoredChange, AuthoredDeclarationReference, AuthoredEffectRow, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameterReference, DeclarationSelector,
+    ModuleSelector,
 };
 use crate::platform::deployment::{
     encode_deployment, starter_http_deployment, starter_nostr_relay_deployment,
@@ -123,7 +124,14 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
     let request_type = authored_type(&interner, semantic_http.request_type)?;
     let response_type = authored_type(&interner, semantic_http.response_type)?;
     let header_type = authored_type(&interner, semantic_http.header_type)?;
-    let function_type = authored_type(&interner, semantic_http.function_type)?;
+    let function_type = AuthoredType::TaskFunction {
+        parameters: vec![request_type.clone()],
+        result: Box::new(response_type.clone()),
+        effect: AuthoredEffectRow {
+            requirements: vec![local_requirement(STREAMS)],
+            parameters: Vec::new(),
+        },
+    };
     let mut expressions = RecipeExpressions::default();
 
     let response_text = expressions.static_text("hello from lkjscript");
@@ -186,6 +194,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
                 parameters: Vec::new(),
                 result: response_type,
                 effect: AuthoredFunctionEffect::Task {
+                    effect_parameters: Vec::new(),
                     requirements: vec![local_requirement(STREAMS)],
                 },
                 body: handler_body,
@@ -245,7 +254,14 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
     let response_type = authored_type(&interner, semantic_http.response_type)?;
     let header_type = authored_type(&interner, semantic_http.header_type)?;
     let client_response_type = authored_type(&interner, semantic_client.response_type)?;
-    let function_type = authored_type(&interner, semantic_http.function_type)?;
+    let function_type = AuthoredType::TaskFunction {
+        parameters: vec![request_type.clone()],
+        result: Box::new(response_type.clone()),
+        effect: AuthoredEffectRow {
+            requirements: vec![local_requirement(STREAMS), local_requirement(RELAY)],
+            parameters: Vec::new(),
+        },
+    };
     let mut expressions = RecipeExpressions::default();
 
     let header_name_source = expressions.local("$header");
@@ -393,6 +409,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
                 parameters: Vec::new(),
                 result: response_type,
                 effect: AuthoredFunctionEffect::Task {
+                    effect_parameters: Vec::new(),
                     requirements: vec![local_requirement(STREAMS), local_requirement(RELAY)],
                 },
                 body: handler_body,
@@ -641,6 +658,37 @@ fn authored_type(
         TypeForm::Stream { item } => AuthoredType::Stream {
             item: Box::new(authored_type(interner, *item)?),
         },
+        TypeForm::TaskFunction {
+            parameters,
+            result,
+            effect,
+        } => AuthoredType::TaskFunction {
+            parameters: parameters
+                .iter()
+                .map(|ty| authored_type(interner, *ty))
+                .collect::<Result<_, _>>()?,
+            result: Box::new(authored_type(interner, *result)?),
+            effect: crate::platform::change::AuthoredEffectRow {
+                requirements: effect
+                    .requirements
+                    .iter()
+                    .map(|r| AuthoredRequirementReference::Exact {
+                        package: r.package,
+                        requirement: r.requirement,
+                    })
+                    .collect(),
+                parameters: effect
+                    .parameters
+                    .iter()
+                    .map(
+                        |p| crate::platform::change::AuthoredEffectParameterReference::Exact {
+                            package: p.package,
+                            parameter: p.parameter,
+                        },
+                    )
+                    .collect(),
+            },
+        },
         TypeForm::Function { parameters, result } => AuthoredType::Function {
             parameters: parameters
                 .iter()
@@ -705,6 +753,7 @@ impl RecipeExpressions {
         arguments: Vec<AuthoredExpression>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function,
             type_arguments,
             arguments,
@@ -730,6 +779,7 @@ impl RecipeExpressions {
         type_arguments: Vec<AuthoredType>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::FunctionValue {
+            effect_arguments: Vec::new(),
             function,
             type_arguments,
         })

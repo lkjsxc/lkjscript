@@ -29,6 +29,9 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
             }
             Ok(())
         }
+        AuthoredChange::AddEffectParameter { parameter, .. } => {
+            define_symbol(definitions, &parameter.symbol, SymbolKind::EffectParameter)
+        }
         AuthoredChange::AddTypeParameter { parameter, .. } => {
             define_symbol(definitions, &parameter.symbol, SymbolKind::TypeParameter)
         }
@@ -57,6 +60,7 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
         }
         AuthoredChange::SetDeclarationVisibility { .. }
         | AuthoredChange::SetFunctionContract { .. }
+        | AuthoredChange::SetPortContract { .. }
         | AuthoredChange::SetExternalContract { .. }
         | AuthoredChange::SetFieldType { .. }
         | AuthoredChange::SetCasePayload { .. }
@@ -88,6 +92,31 @@ pub(in crate::platform::change::request) fn lower_mutation<
             interface,
             operation,
         } => lower_add_operation(lowerer, interface, operation),
+        AuthoredChange::AddEffectParameter {
+            declaration,
+            parameter,
+        } => {
+            let declaration = lowerer.resolve_declaration(declaration)?;
+            let id = lowerer.effect_parameter_symbol(&parameter.symbol)?;
+            let owner = OwnerKey::Declaration(declaration);
+            let OwnerRecord::Declaration(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("function", owner));
+            };
+            let DeclarationPayload::Function(function) = &mut record.payload else {
+                return Err(mutation_kind("function", owner));
+            };
+            function.effect_parameters.push(id);
+            lowerer.insert_created(OwnerRecord::EffectParameter(
+                crate::platform::kernel::EffectParameterRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::EffectParameter(id),
+                        OwnerKind::EffectParameter,
+                    ),
+                    declaration,
+                    name: parameter.name.clone(),
+                },
+            ))
+        }
         AuthoredChange::AddTypeParameter {
             declaration,
             parameter,
@@ -149,6 +178,18 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 return Err(mutation_kind("parameter", owner));
             };
             record.ty = ty;
+            Ok(())
+        }
+        AuthoredChange::SetPortContract {
+            port,
+            function_type,
+        } => {
+            let function_type = lowerer.lower_type(function_type)?;
+            let owner = lowerer.resolve_owner(port)?;
+            let OwnerRecord::Port(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("port", owner));
+            };
+            record.function_type = function_type;
             Ok(())
         }
         AuthoredChange::SetTypeParameterConstraint {

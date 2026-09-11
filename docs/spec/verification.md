@@ -4,7 +4,37 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
-Parametric nominal acceptance extends these same owners. Offline receipt 5 requires one independent
+Explicit effects extend the existing offline-package owner, without another public aggregate child.
+Receipt 6 requires the separately authored transported task library, a pure effect-parametric bound
+factory, parametric/recursive payloads, complete paginated definitions and interfaces, distinct
+consumer configuration/data rows, reviewed contract/dependency changes, and exact source/artifact
+binding. The transferred reader independently requires complete results at lengths 0, 1, 31, 32,
+33, 4,097 and 8,192, ordered repeated-key writes, restart persistence, transaction commit/rollback,
+forbidden nested transactions, nontransactional partial visibility and preserved older-bundle behavior.
+The stateful HTTP owner supplies the shared disposable listener/data lifecycle.
+
+The source-bound effect observations use separate neutral grants for production and canonical
+reference execution, never live-effect replay. Both record preparation, execution, disabled
+observation cost, callback traces, frame high-water, allocation, indexed-list work and cleanup.
+An equivalent concrete task range traversal supplies the comparison. A 64-frame test policy and
+2 MiB thread stack admit the largest case; normal work/allocation defaults remain unchanged except
+explicit stopping probes selecting 1,000 execution steps or 500,000 production / 280,000 reference
+allocated bytes, including each evaluator's preparation-metadata admission. Quota, callback
+failure, cancellation and malformed results must stop subsequent work, emit no successful partial
+result, clean up owned state and preserve an old input alias. Live cancellation separately stops
+after one staged callback and requires rollback observed through a fresh public restart.
+
+Kernel tests compare rows against an independent finite-bitset model, including multiple parameters,
+recursive forwarding/permutation/union and exact coverage. Raw evaluator tests require both task
+allowance and canonical grant bindings, reject fabricated descriptors and wider shared-grant
+requirements, and separate transient containment from durable/session eligibility. Rehashed
+artifact tests alter parameter ownership/order, erase rows/arguments, forge targets, hide task
+effects in nominal signatures and restore task-as-pure ports. Strict canonical/compiled comparison
+must reject them. An isolated decisive-check fault build must fail the intended authority test.
+Retained Graph 10/12 fixtures and the enumerated Graph 13 transition inventory preserve predecessor
+owner identities, unchanged type/data bytes and recoverable unsupported input identities.
+
+Parametric nominal acceptance extends these same owners. Offline receipt 6 requires one independent
 batch/edit library, complete I64/Text/nested-list/consumer-nominal results after producer removal,
 retained snapshots, heterogeneous and changed-body mapping, and an exact dependency replacement
 changing field, case and bound meaning. It also requires a copied-artifact pair session's raw
@@ -28,7 +58,7 @@ secret or callable state must reject during strict artifact loading and deployme
 before readiness. This complements public request rejection and the copied live session witness.
 
 Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
-source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 5. Transferred
+source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 6. Transferred
 receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
 mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
 removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its

@@ -479,11 +479,17 @@ fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBase
                     ));
                 }
             };
-            let expected_function_type = crate::platform::http::semantic_http_route_function_type(
-                &mut TypeObjectInterner::default(),
+            let shape = overlay.type_object(port.function_type)?.ok_or_else(|| {
+                validation_error(
+                    DiagnosticClass::Corrupt,
+                    "kernel_type_http_route_port",
+                    "HTTP route callable type is absent",
+                )
+            })?;
+            if !crate::platform::http::has_semantic_http_route_shape(
+                &shape.form,
                 route.selector.capture_count(),
-            )?;
-            if port.function_type != expected_function_type {
+            )? {
                 return Err(validation_error(
                     DiagnosticClass::Semantic,
                     "kernel_type_http_route_port",

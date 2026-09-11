@@ -97,9 +97,16 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         .intern(TypeForm::Unit)
         .expect("unit type must intern");
     let function_type = interner
-        .intern(TypeForm::Function {
+        .intern(TypeForm::TaskFunction {
             parameters: Vec::new(),
             result: unit_type,
+            effect: EffectRow {
+                requirements: vec![RequirementReference {
+                    package,
+                    requirement,
+                }],
+                parameters: Vec::new(),
+            },
         })
         .expect("function type must intern");
 
@@ -330,6 +337,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("callee"),
             visibility: DeclarationVisibility::Package,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: vec![parameter],
                 result: unit_type,
@@ -344,6 +352,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         2,
         ExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
                 declaration: callee,
@@ -457,10 +466,12 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("caller"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
                 result: unit_type,
                 effect: FunctionEffect::Task {
+                    effect_parameters: Vec::new(),
                     requirements: vec![RequirementReference {
                         package,
                         requirement,
@@ -508,6 +519,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("with_binding"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
                 result: unit_type,
@@ -521,6 +533,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         17,
         ExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
                 declaration: binding_function,
@@ -593,6 +606,56 @@ pub(crate) fn witness_snapshot() -> KernelSnapshot {
     prototype_snapshot().0
 }
 
+/// Keep a fixture's exact task port signature in step with an intentionally changed target row.
+pub(crate) fn update_fixture_task_port_row(snapshot: &mut KernelSnapshot, function: DeclarationId) {
+    let OwnerRecord::Declaration(owner) = &snapshot.owners[&OwnerKey::Declaration(function)] else {
+        panic!("function");
+    };
+    let DeclarationPayload::Function(signature) = &owner.payload else {
+        panic!("signature");
+    };
+    assert!(matches!(signature.effect, FunctionEffect::Task { .. }));
+    let effect = signature.effect.row();
+    let mut obsolete = Vec::new();
+    for owner in snapshot.owners.values_mut() {
+        if let OwnerRecord::Port(port) = owner
+            && matches!(port.implementation, PortImplementation::Function(target) if target.declaration == function && target.package == snapshot.root.package_id)
+        {
+            let old = port.function_type;
+            let (parameters, result) = match snapshot.types[&old].form.clone() {
+                TypeForm::Function { parameters, result }
+                | TypeForm::TaskFunction {
+                    parameters, result, ..
+                } => (parameters, result),
+                _ => panic!("callable port"),
+            };
+            let object = TypeObject::new(TypeForm::TaskFunction {
+                parameters,
+                result,
+                effect: effect.clone(),
+            })
+            .unwrap();
+            let digest = encode_type_object(&object).unwrap().0;
+            snapshot.types.insert(digest, object);
+            port.function_type = digest;
+            obsolete.push(old);
+        }
+    }
+    for old in obsolete {
+        if !snapshot
+            .owners
+            .values()
+            .any(|owner| owner.type_roots().contains(&old))
+            && !snapshot
+                .types
+                .values()
+                .any(|ty| ty.child_types().contains(&old))
+        {
+            snapshot.types.remove(&old);
+        }
+    }
+}
+
 /// Package-admission fixture: the frozen kernel/host-dispatch fixture above deliberately has a
 /// test-only host name. A transported source must use the real closed intrinsic registry.
 pub(crate) fn transport_snapshot() -> KernelSnapshot {
@@ -636,7 +699,7 @@ fn normalized_prototype_passes_full_oracle() {
     assert_eq!(report.owners_checked, 43);
     assert_eq!(report.type_objects_checked, 2);
     assert_eq!(report.expression_records_checked, 20);
-    assert_eq!(report.relation_edges, 63);
+    assert_eq!(report.relation_edges, 64);
     assert!(report.work_consumed < 1_000);
 }
 
@@ -1150,6 +1213,8 @@ fn signature_indexed_http_snapshot() -> (
     if previous_function_type != function_type {
         snapshot.types.remove(&previous_function_type);
     }
+    update_fixture_task_port_row(&mut snapshot, function.declaration);
+    snapshot.types.remove(&http.function_type);
 
     snapshot
         .owners
@@ -1681,7 +1746,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "0166937445972bb896c4c09606f0a959021c6c48c931d84c2ef5a08c97c43384"
+        "2e718cb9174246297b3cf4cb4e5ddd7dd3292d87c302a5e6c54230e8af5a9164"
     );
 }
 
@@ -2263,7 +2328,7 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
 }
 
 #[test]
-fn full_oracle_rejects_generic_task_functions() {
+fn generic_task_functions_require_explicit_applications_at_ports() {
     let (mut snapshot, ids) = prototype_snapshot();
     let parameter = TypeParameterId::migrate(TEST_SEED, 52);
     insert(
@@ -2286,12 +2351,43 @@ fn full_oracle_rejects_generic_task_functions() {
     caller.type_parameters.push(parameter);
     snapshot.root.owners = map_root(snapshot.owners.len(), 1);
 
-    let diagnostics = validate_full(&snapshot).expect_err("generic task function must reject");
+    let diagnostics =
+        validate_full(&snapshot).expect_err("bare port reference omits ordinary type arguments");
     assert!(
         diagnostics
             .iter()
-            .any(|diagnostic| diagnostic.code == "kernel_owner_generic_task")
+            .any(|diagnostic| diagnostic.code == "kernel_type_argument_count")
     );
+    let unit = snapshot
+        .types
+        .iter()
+        .find_map(|(ty, object)| matches!(object.form, TypeForm::Unit).then_some(*ty))
+        .unwrap();
+    let value = ExpressionId::migrate(TEST_SEED, 52);
+    snapshot.owners.insert(
+        OwnerKey::Expression(value),
+        OwnerRecord::Expression(
+            ExpressionRecord::new(
+                value,
+                ExpressionOperation::FunctionValue {
+                    function: DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: ids.caller,
+                    },
+                    type_arguments: vec![unit],
+                    effect_arguments: vec![],
+                },
+            )
+            .unwrap(),
+        ),
+    );
+    for owner in snapshot.owners.values_mut() {
+        if let OwnerRecord::Port(port) = owner {
+            port.implementation = PortImplementation::Expression(value);
+        }
+    }
+    snapshot.root.owners = map_root(snapshot.owners.len(), 1);
+    validate_full(&snapshot).expect("generic task application closes before port entry");
 }
 
 #[test]
@@ -2329,7 +2425,7 @@ fn owner_blob_roots_cover_expression_and_documentation_authority() {
 }
 
 #[test]
-fn pure_binding_cannot_retain_task_port_values_through_annotated_locals() {
+fn authority_free_task_port_descriptors_can_bind_through_annotated_locals() {
     let (mut snapshot, ids) = prototype_snapshot();
     let callee = ExpressionId::migrate(b"bind-port-task-negative", 0);
     snapshot.owners.insert(
@@ -2338,6 +2434,7 @@ fn pure_binding_cannot_retain_task_port_values_through_annotated_locals() {
             ExpressionRecord::new(
                 callee,
                 ExpressionOperation::FunctionValue {
+                    effect_arguments: Vec::new(),
                     function: DeclarationReference {
                         package: snapshot.root.package_id,
                         declaration: ids.caller,
@@ -2426,13 +2523,6 @@ fn pure_binding_cannot_retain_task_port_values_through_annotated_locals() {
         record.implementation =
             PortImplementation::Expression(if annotated { root } else { bound });
         candidate.root.owners = map_root(candidate.owners.len(), 1);
-        let errors = validate_full(&candidate)
-            .expect_err("task-port context cannot certify a pure environment");
-        assert!(
-            errors
-                .iter()
-                .any(|error| error.code == "kernel_type_task_function_value"),
-            "{errors:?}"
-        );
+        validate_full(&candidate).expect("descriptor binding performs no task invocation");
     }
 }

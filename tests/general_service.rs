@@ -172,9 +172,10 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
 }
 
 #[test]
-fn checked_in_service_artifact_uses_only_bundle_contract_17() {
+fn checked_in_service_artifact_uses_only_bundle_contract_18() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART17".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJART18".as_slice()));
+    assert_ne!(bytes.get(..8), Some(b"LKJART17".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART16".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART15".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART14".as_slice()));
@@ -187,6 +188,7 @@ fn checked_in_service_artifact_uses_only_bundle_contract_17() {
 fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness() {
     let temporary = tempfile::tempdir().expect("isolated predecessor deployment");
     for magic in [
+        b"LKJART17",
         b"LKJART16",
         b"LKJART15",
         b"LKJART14",

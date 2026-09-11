@@ -562,6 +562,15 @@ impl Writer {
                 self.declaration_selector(interface, definitions)?;
                 self.operation(operation, definitions)
             }
+            AuthoredChange::AddEffectParameter {
+                declaration,
+                parameter,
+            } => {
+                self.tag(40)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.symbol(&parameter.symbol, definitions)?;
+                self.name(&parameter.name)
+            }
             AuthoredChange::AddTypeParameter {
                 declaration,
                 parameter,
@@ -640,6 +649,14 @@ impl Writer {
                 self.tag(25)?;
                 self.owner_selector(parameter, definitions)?;
                 self.authored_type(ty, definitions, 1)
+            }
+            AuthoredChange::SetPortContract {
+                port,
+                function_type,
+            } => {
+                self.tag(41)?;
+                self.owner_selector(port, definitions)?;
+                self.authored_type(function_type, definitions, 1)
             }
             AuthoredChange::SetOperationContract {
                 operation,
@@ -886,6 +903,36 @@ impl Writer {
         })
     }
 
+    fn effect_parameter_reference(
+        &mut self,
+        value: &AuthoredEffectParameterReference,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        match value {
+            AuthoredEffectParameterReference::Symbol { symbol } => {
+                self.tag(1)?;
+                self.symbol(symbol, definitions)
+            }
+            AuthoredEffectParameterReference::Exact { package, parameter } => {
+                self.tag(2)?;
+                self.string(&package.to_string())?;
+                self.string(&parameter.to_string())
+            }
+        }
+    }
+    fn effect_row(
+        &mut self,
+        value: &AuthoredEffectRow,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.list(&value.requirements, |writer, value| {
+            writer.requirement_reference(value, definitions)
+        })?;
+        self.list(&value.parameters, |writer, value| {
+            writer.effect_parameter_reference(value, definitions)
+        })
+    }
+
     fn function_effect(
         &mut self,
         value: &AuthoredFunctionEffect,
@@ -893,8 +940,14 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         match value {
             AuthoredFunctionEffect::Pure {} => self.tag(1),
-            AuthoredFunctionEffect::Task { requirements } => {
+            AuthoredFunctionEffect::Task {
+                requirements,
+                effect_parameters,
+            } => {
                 self.tag(2)?;
+                self.list(effect_parameters, |writer, value| {
+                    writer.effect_parameter_reference(value, definitions)
+                })?;
                 self.list(requirements, |writer, value| {
                     writer.requirement_reference(value, definitions)
                 })
@@ -1002,6 +1055,17 @@ impl Writer {
                     self.tag(14)?;
                     pending.push(Frame::Type(error, next));
                     pending.push(Frame::Type(ok, next));
+                }
+                AuthoredType::TaskFunction {
+                    parameters,
+                    result,
+                    effect,
+                } => {
+                    self.tag(18)?;
+                    self.effect_row(effect, definitions)?;
+                    self.length(parameters.len())?;
+                    pending.push(Frame::Type(result, next));
+                    pending.push(Frame::Types(parameters, next));
                 }
                 AuthoredType::Function { parameters, result } => {
                     self.tag(16)?;
@@ -1266,11 +1330,15 @@ impl Writer {
                 })
             }
             AuthoredExpressionOperation::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
                 self.tag(11)?;
+                self.list(effect_arguments, |writer, row| {
+                    writer.effect_row(row, definitions)
+                })?;
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |writer, value| {
                     writer.authored_type(value, definitions, 1)
@@ -1280,10 +1348,14 @@ impl Writer {
                 })
             }
             AuthoredExpressionOperation::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => {
                 self.tag(12)?;
+                self.list(effect_arguments, |writer, row| {
+                    writer.effect_row(row, definitions)
+                })?;
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |writer, value| {
                     writer.authored_type(value, definitions, 1)

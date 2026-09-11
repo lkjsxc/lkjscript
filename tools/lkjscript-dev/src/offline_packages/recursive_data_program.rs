@@ -42,6 +42,7 @@ pub(super) fn program(
     library: &BTreeMap<String, String>,
 ) -> String {
     let mut r = Request::default();
+    r.http_request_type();
     r.text.push_str(&format!("type.application as=@Tree declaration={}\ntype.argument parent=@Tree index=0 type=i64\ncreate.record as=$Stored module={} name=Stored visibility=private\nadd.field as=$stored-value record=$Stored name=value type=@Tree\ntype.named as=@Stored declaration=$Stored\ntype.named as=@KeyPart declaration={}\ntype.named as=@Entry declaration={}\nadd.requirement as=$data component={} name=data interface={}\nrequirement.limit parent=$data index=0 name=maximum_calls maximum=64 unit=calls\n",library["tree"],b["module"],s["DataKeyPart"],s["DataEntry"],b["component"],s["DataStore"]));
     for (i, name) in [
         "schema-read",
@@ -191,5 +192,6 @@ pub(super) fn program(
     );
     let body = r.expression("let", &format!("body={body}"));
     r.text.push_str(&format!("expression.binding parent={body} index=0 as=$request-data name=request-data value={data} type=@Input\nset.function-contract as=%contract function={} result=@Response effect=task\neffect.requirement parent=%contract index=0 requirement={}\neffect.requirement parent=%contract index=1 requirement=$data\nreplace.body function={} body={body}\n",b["function"],b["streams"],b["function"]));
+    r.text.push_str(&format!("effect.row as=@http-effects\neffect.requirement parent=@http-effects index=0 requirement={}\neffect.requirement parent=@http-effects index=1 requirement=$data\ntype.task-function as=@http-handler result=@Response effect=@http-effects\ntype.argument parent=@http-handler index=0 type={}\nset.port-contract port={} type=@http-handler\n",b["streams"],"@http-request",b["port"]));
     r.text
 }

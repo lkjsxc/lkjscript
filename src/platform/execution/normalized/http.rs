@@ -407,8 +407,14 @@ impl NormalizedHttpApplication {
                     "selected HTTP route port escaped the exact runtime table",
                 )
             })?;
-            let expected_type = crate::platform::http::semantic_http_route_function_type(
-                &mut TypeObjectInterner::default(),
+            let shape = program.types.get(&port.function_type).ok_or_else(|| {
+                http_corrupt(
+                    "normalized_http_route_type",
+                    "HTTP port callable type is absent",
+                )
+            })?;
+            let matches_shape = crate::platform::http::has_semantic_http_route_shape(
+                &shape.form,
                 route.selector.capture_count(),
             )?;
             let function = match &port.entry {
@@ -421,7 +427,7 @@ impl NormalizedHttpApplication {
                 }
             };
             if port.component != resident.target().component
-                || port.function_type != expected_type
+                || !matches_shape
                 || function != route.function
             {
                 return Err(http_diagnostic(

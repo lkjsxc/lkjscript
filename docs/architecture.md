@@ -110,7 +110,8 @@ locked source + typed target policy
                               │
                immutable GitHub Release
                               │
- anonymous exact/latest static + five independent behavioral owners
+ independent exact/latest admission and small command lifecycles
+           + one within-pair five-owner behavioral suite
 ```
 
 `tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
@@ -128,7 +129,9 @@ bytes before restoring executable mode after artifact transport. The pre-publica
 no source, safely extracts and re-inspects the packaged candidate, then runs all five transferred
 behavioral owners through `release transferred run`. The publication job receives only the release handoff and is the only job with
 release-write authority. Post-publication verification downloads exact and latest assets
-anonymously and runs strict static inspection plus all five owners independently against each.
+anonymously. The pair owner independently performs strict admission and the small command lifecycle
+for each route, proves required byte/mode equality, then binds one freshly executed five-owner
+suite within that invocation. Latest records a bound observation of the exact route's full suite.
 The release owner has one finite behavioral inventory shared by target admission, verifier handoff,
 and transferred execution; each child owner validates its current complete receipt. The aggregate
 owns identities, orchestration, failure retention, and cleanup; application and language semantics
@@ -548,6 +551,27 @@ argument transfers, and tail invocation use checked roots without descendant rea
 signatures are leaves for capture safety, allowing generic composition; a stored unconstrained type
 parameter remains rejected. Runtime environments have neither semantic equality nor external or
 durable encoding.
+
+Graph 14 adds function-owned effect parameters and exact finite rows. Pure and task callable kinds
+remain distinct; only task types use the new `LKJTFN01` envelope. Effect substitution traverses
+nested callable and nominal types before ordinary type arguments are installed. Compiler operands
+retain exact ordered applications, and strict artifact loading compares executable contents with
+canonical owners before preparation. Production closes effect applications under checked work and
+storage limits. The canonical reference derives its own closure, signatures and activation rows.
+
+Descriptors carry an exact prepared target, closed ordered type/effect arguments and flat safe
+prefix. They carry no grant, adapter, resource, transaction or frame. Every task invocation checks
+the current activation's allowance and resolves compatible concrete references to the same checked
+canonical grant. Nested activations receive their own declared allowance. Both evaluators preserve
+grant accounting and lexical transactions through imported callbacks. HTTP, worker and session
+ports use explicit closed task-callable types; the production task-as-pure exception is retired.
+
+The standard range task fold and bound-mapper task map are accepted graph functions. The offline
+package owner constructs a separate library and consumer through the copied binary, removes the
+producer, and observes configuration results and transactional data through public HTTP. Its
+source-bound neutral-grant probes measure logarithmic additional range frames separately from
+callback work and indexed list access. This fresh workload is distinct from the maintained standard
+and lkjournal encoding/dependency/port cutover.
 
 Graph 13 adds ordered nominal parameters and explicit applications. Existing TypeObject 10 magic,
 digest domains and bytes remain stable; a separate application envelope binds the exact declaration

@@ -1,5 +1,11 @@
 //! Transferable, public-authored offline composition oracle. No producer API writes meaning.
 
+mod effects;
+mod effects_consumer;
+#[cfg(test)]
+mod effects_iteration;
+mod effects_program;
+mod effects_resources;
 mod nominal;
 mod nominal_session;
 mod recursive;
@@ -48,6 +54,7 @@ pub(crate) struct Receipt {
     pub observations: BTreeMap<String, String>,
     pub nominal: nominal::NominalReceipt,
     pub recursive: recursive::RecursiveReceipt,
+    pub effects: effects::EffectReceipt,
     pub files: Vec<evidence::FileProof>,
     pub cleanup_complete: bool,
     pub failure: Option<String>,
@@ -136,7 +143,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-5".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-6".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -153,6 +160,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             observations: BTreeMap::new(),
             nominal: nominal::NominalReceipt::default(),
             recursive: recursive::RecursiveReceipt::default(),
+            effects: effects::EffectReceipt::default(),
             files: Vec::new(),
             cleanup_complete: false,
             failure: None,
@@ -218,6 +226,39 @@ pub(crate) fn recursive_probe_command(
     )?;
     let observed = lkjscript::platform::contributor::recursive_execution_probe(Path::new(&project))
         .map_err(|e| DevError::corrupt(e.to_string()))?;
+    println!("{}", serde_json::to_string(&observed)?);
+    Ok(0)
+}
+
+pub(crate) fn effect_probe_command(
+    mut arguments: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<u8, DevError> {
+    let project = crate::next_utf8(&mut arguments, "project")?
+        .ok_or_else(|| DevError::usage("effect-probe requires one owned project"))?;
+    require(arguments.next().is_none(), "effect-probe takes one project")?;
+    let observed = lkjscript::platform::contributor::effect_execution_probe(Path::new(&project))
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    println!("{}", serde_json::to_string(&observed)?);
+    Ok(0)
+}
+
+pub(crate) fn effect_transaction_probe_command(
+    mut arguments: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<u8, DevError> {
+    let descriptor = crate::next_utf8(&mut arguments, "descriptor")?
+        .ok_or_else(|| DevError::usage("effect transaction probe requires one owned descriptor"))?;
+    let function = crate::next_utf8(&mut arguments, "function")?.ok_or_else(|| {
+        DevError::usage("effect transaction probe requires the exact public helper")
+    })?;
+    require(
+        arguments.next().is_none(),
+        "effect transaction probe takes two arguments",
+    )?;
+    let observed = lkjscript::platform::contributor::effect_transaction_probe(
+        Path::new(&descriptor),
+        &function,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
     println!("{}", serde_json::to_string(&observed)?);
     Ok(0)
 }
@@ -1405,6 +1446,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     standalone_http(context, &d)?;
     nominal::workflow(context, &mut standard)?;
     recursive::workflow(context, &mut standard)?;
+    effects::workflow(context, &mut standard)?;
     Ok(())
 }
 
@@ -1711,7 +1753,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-5"
+        receipt.schema == "lkjscript-offline-packages-acceptance-6"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1789,7 +1831,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     require(
-        receipt.runners.len() == 6
+        receipt.runners.len() == 8
             && receipt
                 .runners
                 .iter()
@@ -1875,9 +1917,9 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 20
-            && receipt.transport_digests.len() == 20
-            && receipt.producer_inventories.len() == 20,
+        receipt.inventories.len() == 24
+            && receipt.transport_digests.len() == 24
+            && receipt.producer_inventories.len() == 24,
         "complete producer, replacement, and HTTP source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -1976,6 +2018,8 @@ pub(crate) fn read_transferred_receipt(
     verify_observation_files(&receipt.runners[3], &receipt.files, "recursive-session")?;
     verify_observation_files(&receipt.runners[4], &receipt.files, "recursive-transaction")?;
     verify_observation_files(&receipt.runners[5], &receipt.files, "recursive-resources")?;
+    verify_observation_files(&receipt.runners[6], &receipt.files, "effect-resources")?;
+    verify_observation_files(&receipt.runners[7], &receipt.files, "effect-transaction")?;
     let retained: serde_json::Value = serde_json::from_slice(&process::read_bounded(
         &root.join("nominal-session-state.stdout"),
         MAXIMUM_OUTPUT_BYTES,
@@ -2066,6 +2110,7 @@ pub(crate) fn read_transferred_receipt(
             == b"offline-package-closure",
         "transferred raw HTTP body changed",
     )?;
+    effects::validate(&receipt, &root)?;
     Ok(receipt)
 }
 

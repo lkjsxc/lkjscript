@@ -18,12 +18,12 @@ use super::super::control::{
     COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_EDGE_DESCRIPTORS,
     COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
     COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
-    COMPACT_EXPRESSION_FORM_FIELDS, COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS,
-    COMPACT_NAMESPACE_CLASSES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
-    CompactChangeFieldForm, CompactChangeOperation, LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
-    LOGICAL_CHANGE_PLAN_CONTRACT_VERSION, LOGICAL_PLAN_RECORD_DESCRIPTORS,
-    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
-    PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
+    COMPACT_EFFECT_FORM_FIELDS, COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS,
+    COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
+    COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
+    LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
+    LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
+    MAXIMUM_LOGICAL_PLAN_RECORDS, PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::data::{
     DATA_BACKUP_CONTRACT_IDENTITY, DATA_BACKUP_CONTRACT_VERSION, DATA_STORE_CONTRACT_IDENTITY,
@@ -99,16 +99,16 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-16";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 16;
-pub const CLI_CONTRACT_VERSION: u16 = 30;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-17";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 17;
+pub const CLI_CONTRACT_VERSION: u16 = 31;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-5";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 5;
+    "lkjscript-function-definition-projection-6";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 6;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -207,6 +207,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "name"),
     ("definition.function", "visibility"),
     ("definition.function", "type-parameters"),
+    ("definition.function", "effect-parameters"),
+    ("definition.function", "effect-row-parameters"),
     ("definition.function", "parameters"),
     ("definition.function", "result"),
     ("definition.function", "effect"),
@@ -217,6 +219,14 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.type-parameter", "index"),
     ("definition.type-parameter", "name"),
     ("definition.type-parameter", "constraint"),
+    ("definition.effect-parameter", "id"),
+    ("definition.effect-parameter", "parent"),
+    ("definition.effect-parameter", "index"),
+    ("definition.effect-parameter", "name"),
+    ("definition.effect-argument", "parent"),
+    ("definition.effect-argument", "index"),
+    ("definition.effect-argument", "requirements"),
+    ("definition.effect-argument", "parameters"),
     ("definition.parameter", "id"),
     ("definition.parameter", "parent"),
     ("definition.parameter", "index"),
@@ -252,6 +262,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "text-fragments"),
     ("definition.expression", "blob"),
     ("definition.expression", "type-arguments"),
+    ("definition.expression", "effect-arguments"),
     ("definition.expression", "arguments"),
     ("definition.expression", "bindings"),
     ("definition.expression", "items"),
@@ -2077,6 +2088,12 @@ const fn package_source_diagnostic(code: &'static str) -> DiagnosticDescriptor {
 
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
+        diagnostic(
+            "package_source_owner_contract",
+            DiagnosticClass::Source,
+            "Transported canonical owners use an unsupported predecessor or foreign graph contract.",
+            "Retain the export and its matching predecessor executable, or rebuild from supported current meaning; staging does not migrate it.",
+        ),
         package_source_diagnostic("package_container_completeness"),
         package_source_diagnostic("package_container_contract"),
         package_source_diagnostic("package_container_object_domain"),
@@ -3443,8 +3460,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_type_task_requirement",
             DiagnosticClass::Semantic,
-            "A task function requires a capability absent from its component closure.",
-            "Add a matching component requirement with every operation used by the function.",
+            "A task row is not covered by the current activation allowance or selected component contract.",
+            "Inspect exact rows and declared operations/limits; preserve the callback's original requirement identity and provide valid calling context plus checked bindings.",
         ),
         diagnostic(
             "kernel_affine_resource_parameter_use",
@@ -3653,8 +3670,38 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_type_bind",
             DiagnosticClass::Semantic,
-            "The binding callee is not an exact pure function value.",
-            "Use an explicitly instantiated pure named function or an already checked pure callable.",
+            "The binding callee is not an exact pure or task function value.",
+            "Use an explicitly instantiated named function or an already checked callable with exact kind and effect row.",
+        ),
+        diagnostic(
+            "kernel_effect_argument_count",
+            DiagnosticClass::Semantic,
+            "A named call or function value does not supply the target's exact ordered effect arity.",
+            "Inspect the target's effect parameters and supply one explicit row per parameter, including unused parameters.",
+        ),
+        diagnostic(
+            "kernel_effect_parameter_scope",
+            DiagnosticClass::Semantic,
+            "An effect row refers to a parameter outside its exact declaration scope.",
+            "Use the caller's declared effect parameters or closed exact requirement rows; names do not establish scope.",
+        ),
+        diagnostic(
+            "kernel_effect_parameter_owner",
+            DiagnosticClass::Semantic,
+            "An effect parameter has a foreign, missing or inconsistent function owner/order.",
+            "Declare the parameter once on its exact graph function and preserve the ordered declaration inventory.",
+        ),
+        diagnostic(
+            "kernel_effect_row_count",
+            DiagnosticClass::Semantic,
+            "An effect row exceeds the canonical atom bound.",
+            "Reduce the finite row or the selected instantiation workload within advertised admission limits.",
+        ),
+        diagnostic(
+            "kernel_effect_row_order",
+            DiagnosticClass::Semantic,
+            "An encoded effect row contains duplicate or noncanonical exact atoms.",
+            "Author the union through normal changes; strict transported rows must already be sorted and unique.",
         ),
         diagnostic(
             "kernel_type_bind_arity",
@@ -3666,7 +3713,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_type_bind_capture",
             DiagnosticClass::Semantic,
             "A stored capture type contains a secret, stream, capability resource, or unresolved type parameter.",
-            "Capture recursively safe ordinary values or pure callables; inspect every nominal case, including absent resource cases.",
+            "Capture recursively safe ordinary values or checked pure/task callables; inspect every nominal case, including absent resource cases.",
         ),
         diagnostic(
             "change_type_parameter_constraint",
@@ -6062,6 +6109,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Type => {
+            for form in COMPACT_EFFECT_FORMS {
+                records.push(compact_record(
+                    "effect.form",
+                    &[("name", (*form).to_owned())],
+                )?);
+            }
+            for field in COMPACT_EFFECT_FORM_FIELDS {
+                records.push(compact_record(
+                    "effect.field",
+                    &[
+                        ("form", field.form.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("syntax", field.syntax.to_owned()),
+                    ],
+                )?);
+            }
             for form in COMPACT_TYPE_FORMS {
                 records.push(compact_record(
                     "type.form",
@@ -6299,7 +6363,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "execution.binding",
                 &[
                     ("expression", "bind".to_owned()),
-                    ("target", "exact-pure-named-code".to_owned()),
+                    ("target", "exact-pure-or-task-named-code".to_owned()),
                     ("environment", "immutable-flat-prefix".to_owned()),
                     (
                         "order",
@@ -6312,7 +6376,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("complete", "zero-argument-function".to_owned()),
                     (
                         "capture-types",
-                        "recursive-ordinary-data-and-pure-callables".to_owned(),
+                        "recursive-ordinary-data-and-checked-callables".to_owned(),
                     ),
                     (
                         "stored-type-parameters",
@@ -6324,7 +6388,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "task-targets",
-                        "rejected-including-port-preparation".to_owned(),
+                        "authority-free-descriptors-preserving-exact-row".to_owned(),
                     ),
                     ("serialization", "forbidden".to_owned()),
                     (
@@ -6683,6 +6747,7 @@ fn validate_compact_form_grammar() -> Result<(), String> {
     )?;
     for (label, forms, fields) in [
         ("type", COMPACT_TYPE_FORMS, COMPACT_TYPE_FORM_FIELDS),
+        ("effect", COMPACT_EFFECT_FORMS, COMPACT_EFFECT_FORM_FIELDS),
         (
             "expression",
             COMPACT_EXPRESSION_FORMS,
@@ -7059,9 +7124,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-5"
+            "lkjscript-function-definition-projection-6"
         );
-        assert_eq!(contract.version, 5);
+        assert_eq!(contract.version, 6);
         assert_eq!(
             contract_descriptors()
                 .iter()

@@ -123,10 +123,15 @@ stateful HTTP, transferred outbound HTTP, transferred offline-package compositio
 pure-tail execution, and standalone
 service oracles. The offline-package oracle reconstructs retained source containers independently,
 checks the fixed 11/12 diamond and standalone HTTP body without producer directories, and binds
-its complete command/file inventories to target-admission receipt 4. Offline receipt 5 additionally
+its complete command/file inventories to target-admission receipt 4. Offline receipt 6 additionally
 requires the finite-recursive tree library and consumers, complete shape/ordered results, exact
 dependency replacement, public recursive sessions, restarted typed storage and fault recovery.
-Both anonymous download boundaries execute these observations through the existing offline owner.
+It also requires the effect-parametric task library, pure bound factory, complete ordered
+configuration/data results, activation/grant and stopping observations, transaction/restart recovery
+and exact dependency/artifact replacement. The public pair strictly admits both routes and executes
+each small command lifecycle; its exact route freshly executes the full five-owner suite once and
+latest binds that within-pair evidence after equality checks. It does not fabricate fresh latest
+child receipts or repeat the full suite for latest.
 The pure-tail oracle binds
 the exact candidate's long copied-public executions, bounded-stack resource probes, and isolated
 transactional HTTP success, rollback, cancellation, and cleanup. The outbound oracle uses

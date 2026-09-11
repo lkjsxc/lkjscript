@@ -107,7 +107,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             "extract.function selector does not name a local function declaration",
         ));
     };
-    if !function.type_parameters.is_empty() {
+    if !function.type_parameters.is_empty() || !function.effect_parameters.is_empty() {
         return Err(extract_error(
             "change_extract_generic_target",
             "extract.function does not admit generic target functions",
@@ -355,6 +355,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer.insert_created(OwnerRecord::Expression(ExpressionRecord::new(
         call,
         ExpressionOperation::Call {
+            effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package: lowerer.base.package_id(),
                 declaration: helper,
@@ -376,6 +377,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         name: helper_name.clone(),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            effect_parameters: Vec::new(),
             type_parameters: Vec::new(),
             parameters: capture_evidence
                 .iter()
@@ -1030,7 +1032,11 @@ fn capture_resource_requirement<B: CanonicalBaseRead + ?Sized>(
         )
     })?;
     if matches!(source, LocalValueReference::MatchPayload(_)) {
-        let FunctionEffect::Task { requirements } = &function.effect else {
+        let FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } = &function.effect
+        else {
             return Err(extract_error(
                 "change_extract_resource_provenance",
                 "captured match payload has no task requirement provenance",
@@ -1181,6 +1187,7 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
                 match referenced_function_effect(reader, *function)? {
                     FunctionEffect::Pure => {}
                     FunctionEffect::Task {
+                        effect_parameters: _,
                         requirements: called,
                     } => requirements.extend(called),
                 }
@@ -1195,7 +1202,10 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
     );
     let available = match &function.effect {
         FunctionEffect::Pure => BTreeSet::new(),
-        FunctionEffect::Task { requirements } => requirements.iter().copied().collect(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.iter().copied().collect(),
     };
     if let Some(missing) = requirements
         .iter()
@@ -1256,6 +1266,7 @@ fn inferred_effect(
         return Ok(FunctionEffect::Pure);
     }
     let FunctionEffect::Task {
+        effect_parameters: _,
         requirements: caller_requirements,
     } = caller
     else {
@@ -1265,6 +1276,7 @@ fn inferred_effect(
         ));
     };
     Ok(FunctionEffect::Task {
+        effect_parameters: Vec::new(),
         requirements: caller_requirements
             .iter()
             .copied()

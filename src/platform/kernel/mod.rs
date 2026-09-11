@@ -14,6 +14,7 @@ mod affine_reference;
 mod codec;
 pub mod contract;
 mod digest;
+mod effect;
 mod expression;
 mod id;
 mod implementation;
@@ -43,6 +44,7 @@ pub use digest::{
     PackageInterfaceDigest, PackageRevisionDigest, PackageTransportDigest, RetirementObjectDigest,
     SemanticRootDigest, SemanticStateDigest, SequenceObjectDigest, TypeObjectDigest,
 };
+pub use effect::*;
 pub use expression::*;
 pub use id::{
     EncodedOwnerKey, ExactOwnerKey, IdentityKind, OwnerHeader, OwnerKey, OwnerKind, PackageId,

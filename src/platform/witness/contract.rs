@@ -3,16 +3,16 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-8";
-pub const WITNESS_CONTRACT_VERSION: u16 = 8;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-8";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 8;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-13";
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
+pub const WITNESS_CONTRACT_VERSION: u16 = 9;
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-9";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 9;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-14";
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT08";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM13";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v8";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v8";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM14";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v9";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v9";
 
 pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v8";
 pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v8";

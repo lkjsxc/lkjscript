@@ -1,40 +1,43 @@
-//! Graph Contract 13 identities, current type-object codec, and hostile-decoder limits.
+//! Graph Contract 14 identities, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-13";
-pub const GRAPH_CONTRACT_VERSION: u16 = 13;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-14";
+pub const GRAPH_CONTRACT_VERSION: u16 = 14;
 /// TypeForm is unchanged by expression generations. Its bytes and layout identities stay current.
 pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
 pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
 pub const NOMINAL_APPLICATION_CONTRACT_VERSION: u16 = 1;
+pub const TASK_FUNCTION_CONTRACT_VERSION: u16 = 1;
+pub const TASK_FUNCTION_MAGIC: [u8; 8] = *b"LKJTFN01";
+pub const TASK_FUNCTION_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.task-function-envelope.v1";
 pub const NOMINAL_APPLICATION_MAGIC: [u8; 8] = *b"LKJTAP01";
 pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN13";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN14";
 pub const TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYP10";
 pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
-pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP13";
-pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET13";
+pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
+pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v13";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v14";
 pub const TYPE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.type-envelope.v10";
-pub const ROOT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.root-envelope.v13";
-pub const DEPENDENCY_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.dependency-envelope.v13";
-pub const RETIREMENT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.retirement-envelope.v13";
+pub const ROOT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.root-envelope.v14";
+pub const DEPENDENCY_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.dependency-envelope.v14";
+pub const RETIREMENT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.retirement-envelope.v14";
 
-pub const OWNER_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.owner-object.v13";
+pub const OWNER_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.owner-object.v14";
 pub const TYPE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.type-object.v10";
 pub const BLOB_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.blob-object.v5";
 pub const SEQUENCE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.sequence-object.v5";
-pub const SEMANTIC_ROOT_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-root.v13";
+pub const SEMANTIC_ROOT_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-root.v14";
 pub const SEMANTIC_STATE_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-state.v1";
-pub const DEPENDENCY_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.dependency-object.v13";
-pub const RETIREMENT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.retirement-object.v13";
+pub const DEPENDENCY_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.dependency-object.v14";
+pub const RETIREMENT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.retirement-object.v14";
 pub const PACKAGE_REVISION_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-revision.v1";
 pub const PACKAGE_INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-interface.v1";
 pub const PACKAGE_TRANSPORT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-transport.v1";
-pub const CHANGE_DIGEST_DOMAIN: &str = "lkjscript.kernel.change.v13";
+pub const CHANGE_DIGEST_DOMAIN: &str = "lkjscript.kernel.change.v14";
 pub const PACKAGE_ID_MIGRATION_DOMAIN: &str = "lkjscript.kernel.package-identity-migration.v11";
 
 pub const MAXIMUM_OWNER_OBJECT_BYTES: usize = 4 * 1_048_576;

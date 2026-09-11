@@ -3,6 +3,7 @@ use super::*;
 use serde_json::Value;
 
 fn neutral(value: &mut Value) {
+    super::effect_cutover_tests::neutral_effect_fields(value);
     match value {
         Value::Object(fields) => {
             fields.remove("contract_version");
@@ -35,6 +36,12 @@ fn neutral(value: &mut Value) {
 
 #[test]
 fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirement() {
+    // The retained Graph 12 oracle stays immutable. Account only for the separately
+    // enumerated Graph 14 additions and explicit task-port type replacements.
+    let effects: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/graph13-effect-cutover.json"
+    ))
+    .unwrap();
     for (project, fixture) in [
         (
             "packages/standard",
@@ -46,6 +53,12 @@ fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirem
         ),
     ] {
         let fixture: Value = serde_json::from_str(fixture).unwrap();
+        let transition = effects["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["project"] == project)
+            .unwrap();
         assert_eq!(
             fixture["source_commit"],
             "c0c4975851f34a9a2b3be8cbd3008a1f8bbafc18"
@@ -78,13 +91,31 @@ fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirem
         let retained = snapshot
             .owners
             .iter()
-            .filter(|(owner, _)| !added.contains(&serde_json::to_value(owner).unwrap()))
+            .filter(|(owner, _)| {
+                let key = serde_json::to_value(owner).unwrap();
+                !added.contains(&key)
+                    && !transition["added_owners"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&key)
+            })
             .collect::<Vec<_>>();
         assert_eq!(
             retained.len() as u64,
             fixture["stable_owner_count"].as_u64().unwrap()
         );
         let mut owners = serde_json::to_value(retained).unwrap();
+        for owner in owners.as_array_mut().unwrap() {
+            if let Some(change) = transition["port_changes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|change| change["owner"] == owner[0])
+            {
+                assert_eq!(owner[1]["record"]["function_type"], change["current_type"]);
+                owner[1]["record"]["function_type"] = change["previous_type"].clone();
+            }
+        }
         neutral(&mut owners);
         let hash = |value: &Value| {
             blake3::hash(&serde_json::to_vec(value).unwrap())
@@ -109,8 +140,31 @@ fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirem
             let object = snapshot
                 .types
                 .get(&digest)
-                .or_else(|| snapshot.dependency_types.get(&digest))
-                .expect("unchanged type exists");
+                .or_else(|| snapshot.dependency_types.get(&digest));
+            let retired_port;
+            let object = if let Some(object) = object {
+                object
+            } else {
+                assert!(
+                    transition["port_changes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|change| change["previous_type"] == expected["type"]),
+                    "unreviewed missing predecessor type"
+                );
+                let bytes = expected["bytes"]
+                    .as_str()
+                    .unwrap()
+                    .as_bytes()
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+                    .collect::<Vec<_>>();
+                retired_port = crate::platform::kernel::decode_type_object(&bytes, digest).unwrap();
+                &retired_port
+            };
             let (actual, bytes) = crate::platform::kernel::encode_type_object(object).unwrap();
             assert_eq!(actual, digest);
             assert_eq!(

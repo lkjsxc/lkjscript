@@ -3,6 +3,9 @@
 #[path = "nominal_session_tests.rs"]
 mod nominal_session_tests;
 
+#[path = "effect_tests.rs"]
+mod effect_tests;
+
 use super::*;
 use crate::platform::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget, PrimitiveEdit};
 use crate::platform::kernel::{
@@ -427,6 +430,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         &mut snapshot,
         8,
         ExpressionOperation::FunctionValue {
+            effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
                 declaration: callee,
@@ -438,6 +442,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         &mut snapshot,
         9,
         ExpressionOperation::FunctionValue {
+            effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
                 declaration: callee,
@@ -639,7 +644,11 @@ fn task_unit_uses_exact_dense_nominal_and_capability_operands() {
     else {
         panic!("caller function")
     };
-    let crate::platform::kernel::FunctionEffect::Task { requirements } = &function.effect else {
+    let crate::platform::kernel::FunctionEffect::Task {
+        effect_parameters: _,
+        requirements,
+    } = &function.effect
+    else {
         panic!("caller task effect")
     };
     assert_eq!(requirements, &[declared_requirement]);

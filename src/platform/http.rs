@@ -92,21 +92,66 @@ pub(crate) fn semantic_http_types(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn semantic_http_route_function_type(
     types: &mut TypeObjectInterner,
     capture_count: usize,
 ) -> Result<TypeObjectDigest, Diagnostic> {
+    semantic_http_route_callable_type(
+        types,
+        capture_count,
+        &crate::platform::kernel::FunctionEffect::Pure,
+    )
+}
+
+pub(crate) fn semantic_http_route_callable_type(
+    types: &mut TypeObjectInterner,
+    capture_count: usize,
+    effect: &crate::platform::kernel::FunctionEffect,
+) -> Result<TypeObjectDigest, Diagnostic> {
     let http = semantic_http_types(types)?;
-    if capture_count == 0 {
+    if capture_count == 0 && matches!(effect, crate::platform::kernel::FunctionEffect::Pure) {
         return Ok(http.function_type);
     }
     let mut parameters = Vec::with_capacity(capture_count.saturating_add(1));
     parameters.push(http.request_type);
     parameters.extend(std::iter::repeat_n(http.text_type, capture_count));
-    types.intern(TypeForm::Function {
-        parameters,
-        result: http.response_type,
-    })
+    types.intern(
+        if matches!(effect, crate::platform::kernel::FunctionEffect::Pure) {
+            TypeForm::Function {
+                parameters,
+                result: http.response_type,
+            }
+        } else {
+            TypeForm::TaskFunction {
+                parameters,
+                result: http.response_type,
+                effect: effect.row(),
+            }
+        },
+    )
+}
+
+/// Transport shape only. Exact task kind, row and component coverage are separately
+/// checked against the canonical port implementation at admission.
+pub(crate) fn has_semantic_http_route_shape(
+    form: &TypeForm,
+    captures: usize,
+) -> Result<bool, Diagnostic> {
+    let (parameters, result) = match form {
+        TypeForm::Function { parameters, result } => (parameters, result),
+        TypeForm::TaskFunction {
+            parameters,
+            result,
+            effect,
+        } if effect.is_closed() => (parameters, result),
+        _ => return Ok(false),
+    };
+    let http = semantic_http_types(&mut TypeObjectInterner::default())?;
+    Ok(parameters.len() == captures.saturating_add(1)
+        && parameters.first() == Some(&http.request_type)
+        && parameters.iter().skip(1).all(|ty| *ty == http.text_type)
+        && *result == http.response_type)
 }
 
 fn semantic_type_field(

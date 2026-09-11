@@ -4125,6 +4125,43 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         Ok(Some(record))
     }
 
+    fn add_effect_arguments(
+        &mut self,
+        owner: KernelOwnerKey,
+        arguments: &[super::kernel::EffectRow],
+    ) -> Result<(), Diagnostic> {
+        for (index, row) in arguments.iter().enumerate() {
+            self.push_fields(
+                DefinitionSection::Body,
+                "definition.effect-argument",
+                &[
+                    ("parent", owner.to_string()),
+                    ("index", index.to_string()),
+                    ("requirements", row.requirements.len().to_string()),
+                    ("parameters", row.parameters.len().to_string()),
+                ],
+            )?;
+            for (atom, requirement) in row.requirements.iter().enumerate() {
+                self.add_requirement_reference(
+                    format!("effect_argument_{index}_requirement"),
+                    owner,
+                    atom,
+                    *requirement,
+                )?;
+            }
+            for (atom, parameter) in row.parameters.iter().enumerate() {
+                self.add_reference(
+                    format!("effect_argument_{index}_parameter"),
+                    owner,
+                    atom,
+                    "effect_parameter",
+                    format!("{}/{}", parameter.package, parameter.parameter),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     fn visit_expression(
         &mut self,
         expression: super::semantic_id::ExpressionId,
@@ -4230,6 +4267,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("items", items.len().to_string()));
             }
             ExpressionOperation::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
@@ -4240,13 +4278,16 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     format!("{}/{}", function.package, function.declaration),
                 ));
                 fields.push(("type-arguments", type_arguments.len().to_string()));
+                fields.push(("effect-arguments", effect_arguments.len().to_string()));
                 fields.push(("arguments", arguments.len().to_string()));
                 self.add_declaration_reference("call_function", owner, 0, *function)?;
                 for (index, argument) in type_arguments.iter().copied().enumerate() {
                     self.add_type_reference("call_type_argument", owner, index, argument)?;
                 }
+                self.add_effect_arguments(owner, effect_arguments)?;
             }
             ExpressionOperation::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => {
@@ -4256,6 +4297,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     format!("{}/{}", function.package, function.declaration),
                 ));
                 fields.push(("type-arguments", type_arguments.len().to_string()));
+                fields.push(("effect-arguments", effect_arguments.len().to_string()));
                 self.add_declaration_reference("function_value", owner, 0, *function)?;
                 for (index, argument) in type_arguments.iter().copied().enumerate() {
                     self.add_type_reference(
@@ -4265,6 +4307,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         argument,
                     )?;
                 }
+                self.add_effect_arguments(owner, effect_arguments)?;
             }
             ExpressionOperation::Invoke { arguments, .. } => {
                 fields.push(("form", "invoke".to_owned()));
@@ -4936,6 +4979,7 @@ fn definition_identity_kind_name(owner: KernelOwnerKey) -> &'static str {
         KernelOwnerKey::Module(_) => "module",
         KernelOwnerKey::Declaration(_) => "declaration",
         KernelOwnerKey::TypeParameter(_) => "type_parameter",
+        KernelOwnerKey::EffectParameter(_) => "effect_parameter",
         KernelOwnerKey::Field(_) => "field",
         KernelOwnerKey::Case(_) => "case",
         KernelOwnerKey::Operation(_) => "operation",
@@ -5003,7 +5047,10 @@ fn materialize_function_definition(
     };
     let requirements = match &function.effect {
         FunctionEffect::Pure => &[][..],
-        FunctionEffect::Task { requirements } => requirements.as_slice(),
+        FunctionEffect::Task {
+            effect_parameters: _,
+            requirements,
+        } => requirements.as_slice(),
     };
     materializer.push_fields(
         DefinitionSection::Contract,
@@ -5026,6 +5073,14 @@ fn materialize_function_definition(
             (
                 "type-parameters",
                 function.type_parameters.len().to_string(),
+            ),
+            (
+                "effect-parameters",
+                function.effect_parameters.len().to_string(),
+            ),
+            (
+                "effect-row-parameters",
+                function.effect.row().parameters.len().to_string(),
             ),
             ("parameters", function.parameters.len().to_string()),
             ("result", function.result.to_string()),
@@ -5089,6 +5144,62 @@ fn materialize_function_definition(
                 ("constraint", record.constraints.name().to_owned()),
             ],
         )?;
+    }
+
+    for (index, parameter) in function.effect_parameters.iter().copied().enumerate() {
+        let owner = KernelOwnerKey::EffectParameter(parameter);
+        materializer.add_local_reference(
+            "function_effect_parameter",
+            function_owner,
+            index,
+            owner,
+        )?;
+        let record = materializer.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(function_owner),
+                OwnershipRole::DeclarationEffectParameter,
+            ),
+            None,
+        )?;
+        let OwnerRecord::EffectParameter(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("function effect parameter '{owner}' has the wrong owner record"),
+            ));
+        };
+        if record.declaration != function_id {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!("function effect parameter '{owner}' names another declaration"),
+            ));
+        }
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.effect-parameter",
+            &[
+                ("id", owner.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", record.name.as_str().to_owned()),
+            ],
+        )?;
+    }
+    if let FunctionEffect::Task {
+        effect_parameters, ..
+    } = &function.effect
+    {
+        for (index, parameter) in effect_parameters.iter().enumerate() {
+            materializer.add_reference(
+                "function_effect_row_parameter",
+                function_owner,
+                index,
+                "effect_parameter",
+                format!("{}/{}", parameter.package, parameter.parameter),
+            )?;
+        }
     }
 
     for (index, parameter) in function.parameters.iter().copied().enumerate() {

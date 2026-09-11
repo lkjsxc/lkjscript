@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 13 artifact contract and strict standalone loader.
+//! Deterministic segmented Graph 14 artifact contract and strict standalone loader.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -45,17 +45,17 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-17";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-17";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 17;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF17";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART17";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN17";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-18";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-18";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 18;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF18";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART18";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN18";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v17";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v17";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v17";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v17";
+    "lkjscript.artifact-manifest-envelope.v18";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v18";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v18";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -239,6 +239,7 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
             | OwnerKind::Record
             | OwnerKind::Variant
             | OwnerKind::TypeParameter
+            | OwnerKind::EffectParameter
             | OwnerKind::Field
             | OwnerKind::Case
             | OwnerKind::Operation
@@ -1016,6 +1017,9 @@ pub(crate) enum RuntimeOwnerExpectation {
         declaration: DeclarationId,
         constraints: crate::platform::kernel::TypeParameterConstraints,
     },
+    EffectParameter {
+        declaration: DeclarationId,
+    },
     Field {
         declaration: DeclarationId,
         ty: TypeObjectDigest,
@@ -1078,6 +1082,7 @@ impl RuntimeOwnerExpectation {
             Self::Variant { .. } => OwnerKind::Variant,
             Self::ResourceFunction { .. } => OwnerKind::TaskFunction,
             Self::TypeParameter { .. } => OwnerKind::TypeParameter,
+            Self::EffectParameter { .. } => OwnerKind::EffectParameter,
             Self::Field { .. } => OwnerKind::Field,
             Self::Case { .. } => OwnerKind::Case,
             Self::Operation { .. } => OwnerKind::Operation,
@@ -1132,12 +1137,12 @@ impl RuntimeOwnerExpectation {
                     (
                         DeclarationVisibility::Private,
                         DeclarationPayload::Function(function),
-                    ) if function.type_parameters.is_empty()
+                    ) if function.type_parameters.is_empty() && function.effect_parameters.is_empty()
                         && function.parameters == *parameters
                         && function.result == *result
                         && matches!(
                             &function.effect,
-                            FunctionEffect::Task {
+                            FunctionEffect::Task { effect_parameters: _,
                                 requirements: actual,
                             } if actual == requirements
                         )
@@ -1150,6 +1155,9 @@ impl RuntimeOwnerExpectation {
                 },
                 OwnerRecord::TypeParameter(record),
             ) => record.declaration == *declaration && record.constraints == *constraints,
+            (Self::EffectParameter { declaration }, OwnerRecord::EffectParameter(record)) => {
+                record.declaration == *declaration
+            }
             (Self::Field { declaration, ty }, OwnerRecord::Field(record)) => {
                 record.declaration == *declaration && record.ty == *ty
             }
@@ -1667,17 +1675,6 @@ fn validate_artifact_http_route_contracts(
                     "HTTP route port is not an exact function-backed runtime owner",
                 ));
             };
-            let expected_type = crate::platform::http::semantic_http_route_function_type(
-                &mut crate::platform::kernel::TypeObjectInterner::default(),
-                route.selector.capture_count(),
-            )?;
-            if *function_type != expected_type {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_http_route_port_type",
-                    "HTTP route port type disagrees with its selector-indexed contract",
-                ));
-            }
             let function_unit = units
                 .get(&(
                     function.package,
@@ -1697,6 +1694,18 @@ fn validate_artifact_http_route_contracts(
                     "HTTP route backing declaration is not a function payload",
                 ));
             };
+            let expected_type = crate::platform::http::semantic_http_route_callable_type(
+                &mut crate::platform::kernel::TypeObjectInterner::default(),
+                route.selector.capture_count(),
+                &signature.effect,
+            )?;
+            if *function_type != expected_type {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_http_route_port_type",
+                    "HTTP route port type disagrees with its selector-indexed contract",
+                ));
+            }
             let http = crate::platform::http::semantic_http_types(
                 &mut crate::platform::kernel::TypeObjectInterner::default(),
             )?;
@@ -1717,6 +1726,7 @@ fn validate_artifact_http_route_contracts(
                 "HTTP response result type",
             )?;
             if !signature.type_parameters.is_empty()
+                || !signature.effect_parameters.is_empty()
                 || signature.parameters.len() != route.selector.capture_count().saturating_add(1)
                 || first_type != Some(http.request_type)
                 || result != http.response_type
@@ -1805,6 +1815,13 @@ fn insert_signature_expectations(
     signature: &CompiledSignature,
     unit: &CompilationUnit,
 ) -> Result<(), Diagnostic> {
+    for parameter in &signature.effect_parameters {
+        insert_runtime_expectation(
+            expected,
+            (package, OwnerKey::EffectParameter(*parameter)),
+            RuntimeOwnerExpectation::EffectParameter { declaration },
+        )?;
+    }
     for (parameter, constraints) in signature
         .type_parameters
         .iter()
@@ -2241,6 +2258,17 @@ fn validate_nominal_instruction_inventory(
             Vec<FieldSelector>,
         ),
         Variant(CaseReference, Vec<TypeObjectDigest>, bool),
+        Call(
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Vec<crate::platform::kernel::EffectRow>,
+            usize,
+        ),
+        FunctionValue(
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Vec<crate::platform::kernel::EffectRow>,
+        ),
     }
     let mut work = 0usize;
     let mut tick = || {
@@ -2325,6 +2353,29 @@ fn validate_nominal_instruction_inventory(
                 ));
             };
             let constructor = match &record.operation {
+                ExpressionOperation::Constant { declaration } => {
+                    Some(Constructor::Call(*declaration, Vec::new(), Vec::new(), 0))
+                }
+                ExpressionOperation::Call {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    arguments,
+                } => Some(Constructor::Call(
+                    *function,
+                    type_arguments.clone(),
+                    effect_arguments.clone(),
+                    arguments.len(),
+                )),
+                ExpressionOperation::FunctionValue {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                } => Some(Constructor::FunctionValue(
+                    *function,
+                    type_arguments.clone(),
+                    effect_arguments.clone(),
+                )),
                 ExpressionOperation::Record {
                     nominal_type,
                     type_arguments,
@@ -2386,6 +2437,36 @@ fn validate_nominal_instruction_inventory(
             for instruction in &code.instructions {
                 tick()?;
                 let constructor = match instruction {
+                    CompiledInstruction::Call {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                        arguments,
+                    } => Some(Constructor::Call(
+                        table_value(&unit.tables.declarations, *function, "call target")?,
+                        type_arguments
+                            .iter()
+                            .map(|index| {
+                                table_value(&unit.tables.types, *index, "call type argument")
+                            })
+                            .collect::<Result<_, _>>()?,
+                        effect_arguments.clone(),
+                        *arguments as usize,
+                    )),
+                    CompiledInstruction::FunctionValue {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                    } => Some(Constructor::FunctionValue(
+                        table_value(&unit.tables.declarations, *function, "callable target")?,
+                        type_arguments
+                            .iter()
+                            .map(|index| {
+                                table_value(&unit.tables.types, *index, "callable type argument")
+                            })
+                            .collect::<Result<_, _>>()?,
+                        effect_arguments.clone(),
+                    )),
                     CompiledInstruction::Record {
                         nominal_type,
                         type_arguments,
@@ -3428,7 +3509,7 @@ fn validate_reference_owners(
                         "reference declaration has no exact compiler unit in the artifact closure",
                     )
                 })?;
-                if !reference_payload_matches(&unit.payload, &declaration.payload) {
+                if !reference_payload_matches(unit, &declaration.payload) {
                     return Err(artifact_error(
                         DiagnosticClass::Corrupt,
                         "artifact_reference_declaration_payload",
@@ -3516,10 +3597,23 @@ fn reference_callable_payload(payload: &CompilationPayload) -> bool {
     )
 }
 
-fn reference_payload_matches(
-    compiled: &CompilationPayload,
-    canonical: &DeclarationPayload,
-) -> bool {
+fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayload) -> bool {
+    let compiled = &unit.payload;
+    if let (
+        CompilationPayload::Function { signature, .. },
+        DeclarationPayload::Function(function),
+    ) = (compiled, canonical)
+    {
+        return signature.type_parameters == function.type_parameters
+            && signature.effect_parameters == function.effect_parameters
+            && signature.effect == function.effect
+            && signature
+                .parameters
+                .iter()
+                .map(|p| p.parameter)
+                .eq(function.parameters.iter().copied())
+            && unit.tables.types.get(signature.result as usize) == Some(&function.result);
+    }
     matches!(
         (compiled, canonical),
         (

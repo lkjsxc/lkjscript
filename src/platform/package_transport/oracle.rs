@@ -512,6 +512,14 @@ fn public_inventory(
                 }
             }
             DeclarationPayload::Function(function) => {
+                reader.charge(function.effect_parameters.len())?;
+                selected.extend(
+                    function
+                        .effect_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::EffectParameter),
+                );
                 reader.charge(function.parameters.len() + function.type_parameters.len())?;
                 selected.extend(function.parameters.iter().copied().map(OwnerKey::Parameter));
                 selected.extend(
@@ -521,7 +529,11 @@ fn public_inventory(
                         .copied()
                         .map(OwnerKey::TypeParameter),
                 );
-                if let FunctionEffect::Task { requirements } = &function.effect {
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = &function.effect
+                {
                     reader.charge(requirements.len())?;
                     selected.extend(
                         requirements
@@ -531,6 +543,7 @@ fn public_inventory(
                     );
                 }
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
                     result: function.result,
@@ -591,6 +604,9 @@ fn public_inventory(
             .get(&owner)
             .ok_or_else(|| failure("public declaration names absent member"))?;
         let projected = match record {
+            OwnerRecord::EffectParameter(value) => {
+                PackageInterfaceRecord::EffectParameter(value.clone())
+            }
             OwnerRecord::TypeParameter(value) => {
                 PackageInterfaceRecord::TypeParameter(value.clone())
             }
@@ -616,6 +632,40 @@ fn public_inventory(
             }
         };
         result.insert(owner, projected);
+    }
+    let mut types = result
+        .values()
+        .flat_map(PackageInterfaceRecord::type_roots)
+        .collect::<Vec<_>>();
+    let mut visited = BTreeSet::new();
+    while let Some(digest) = types.pop() {
+        reader.charge(1)?;
+        if !visited.insert(digest) {
+            continue;
+        }
+        let object = snapshot
+            .types
+            .get(&digest)
+            .or_else(|| snapshot.dependency_types.get(&digest))
+            .ok_or_else(|| failure("public signature type is absent from canonical inventory"))?;
+        let children = object.child_types();
+        reader.charge(children.len())?;
+        types.extend(children);
+        if let TypeForm::TaskFunction { effect, .. } = &object.form {
+            reader.charge(effect.requirements.len())?;
+            for reference in &effect.requirements {
+                if reference.package != snapshot.root.package_id {
+                    continue;
+                }
+                let owner = OwnerKey::Requirement(reference.requirement);
+                let Some(OwnerRecord::Requirement(record)) = snapshot.owners.get(&owner) else {
+                    return Err(failure(
+                        "public callable requirement is absent from canonical inventory",
+                    ));
+                };
+                result.insert(owner, PackageInterfaceRecord::Requirement(record.clone()));
+            }
+        }
     }
     Ok(result)
 }

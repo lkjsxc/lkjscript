@@ -16,6 +16,7 @@ enum Term {
     List(Box<Term>),
     Apply(usize, Vec<Term>),
     Function(Box<Term>, Box<Term>),
+    TaskFunction(Box<Term>, Box<Term>),
 }
 
 impl Term {
@@ -24,7 +25,9 @@ impl Term {
             Self::Parameter(_) | Self::Atom => vec![],
             Self::List(item) => vec![item],
             Self::Apply(_, arguments) => arguments.iter().collect(),
-            Self::Function(parameter, result) => vec![parameter, result],
+            Self::Function(parameter, result) | Self::TaskFunction(parameter, result) => {
+                vec![parameter, result]
+            }
         }
     }
 
@@ -39,6 +42,9 @@ impl Term {
             ),
             Self::Function(parameter, result) => {
                 function(parameter.replace(arguments), result.replace(arguments))
+            }
+            Self::TaskFunction(parameter, result) => {
+                task_function(parameter.replace(arguments), result.replace(arguments))
             }
         }
     }
@@ -55,6 +61,9 @@ fn app(declaration: usize, arguments: Vec<Term>) -> Term {
 }
 fn function(parameter: Term, result: Term) -> Term {
     Term::Function(Box::new(parameter), Box::new(result))
+}
+fn task_function(parameter: Term, result: Term) -> Term {
+    Term::TaskFunction(Box::new(parameter), Box::new(result))
 }
 
 type Schema = Vec<(usize, Vec<Term>)>;
@@ -199,6 +208,11 @@ impl Read {
                 parameters: vec![self.term(owner, parameter)],
                 result: self.term(owner, result),
             },
+            Term::TaskFunction(parameter, result) => TypeForm::TaskFunction {
+                parameters: vec![self.term(owner, parameter)],
+                result: self.term(owner, result),
+                effect: super::super::EffectRow::default(),
+            },
         };
         self.interner.intern(form).unwrap()
     }
@@ -321,6 +335,21 @@ fn cases() -> Vec<(&'static str, Schema, bool)> {
             "signature-forward",
             vec![(1, vec![function(Term::Atom, app(0, vec![p(0)]))])],
             true,
+        ),
+        (
+            "task-signature-forward",
+            vec![(1, vec![task_function(Term::Atom, app(0, vec![p(0)]))])],
+            true,
+        ),
+        (
+            "task-signature-hidden-growth",
+            vec![(1, vec![task_function(app(0, vec![list(p(0))]), Term::Atom)])],
+            false,
+        ),
+        (
+            "task-signature-argument-growth",
+            vec![(1, vec![app(0, vec![task_function(p(0), Term::Atom)])])],
+            false,
         ),
         (
             "expanding-self",

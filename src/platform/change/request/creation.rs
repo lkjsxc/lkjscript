@@ -1,4 +1,64 @@
-//! Typed Graph 10 declaration, type-object, and expression authoring builders.
+//! Typed graph declaration, type-object, effect-row and expression authoring builders.
+
+#[cfg(test)]
+mod effect_admission_tests {
+    use super::super::AuthoredLoweringInputs;
+    use super::*;
+    use crate::platform::change::ChangeBudget;
+    use crate::platform::kernel::ChangeDigest;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn effect_normalization_admits_occurrences_before_growth_and_uses_one_canonical_atom() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
+        let requirement = base
+            .owners
+            .keys()
+            .find_map(|key| match key {
+                OwnerKey::Requirement(id) => Some(*id),
+                _ => None,
+            })
+            .unwrap();
+        let atoms = vec![
+            AuthoredRequirementReference::Exact {
+                package: base.root.package_id,
+                requirement
+            };
+            4
+        ];
+        for maximum in [12, 13] {
+            let mut budget = ChangeBudget::default();
+            budget.validation.maximum_expression_steps = maximum;
+            let mut lowerer = AuthoredLowerer::new(
+                &base,
+                &witness,
+                AuthoredLoweringInputs {
+                    allocation_seed: [0; 32],
+                    deletion_change: ChangeDigest::of(b"effect normalization admission"),
+                    allocated: BTreeMap::new(),
+                    definitions: BTreeMap::new(),
+                    allocations: vec![],
+                    budget,
+                },
+            )
+            .unwrap();
+            let result = lowerer.lower_effect_row_parts(&atoms, &[]);
+            if maximum == 12 {
+                assert_eq!(
+                    result.unwrap_err().code,
+                    "change_budget_validation_expression_steps"
+                );
+            } else {
+                let row = result.unwrap();
+                assert_eq!(row.requirements.len(), 1);
+                row.validate().unwrap();
+            }
+            assert_eq!(lowerer.work.effect_normalization_steps, 13);
+            assert!(lowerer.owner_edits.is_empty() && lowerer.type_additions.is_empty());
+        }
+    }
+}
 
 mod declarations;
 mod mutation;
@@ -52,10 +112,34 @@ pub struct AuthoredParameter {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredEffectParameter {
+    pub symbol: String,
+    pub name: Name,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthoredEffectParameterReference {
+    Exact {
+        package: crate::platform::kernel::PackageId,
+        parameter: crate::platform::semantic_id::EffectParameterId,
+    },
+    Symbol {
+        symbol: String,
+    },
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AuthoredEffectRow {
+    pub requirements: Vec<AuthoredRequirementReference>,
+    pub parameters: Vec<AuthoredEffectParameterReference>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredFunctionEffect {
     Pure {},
     Task {
         requirements: Vec<AuthoredRequirementReference>,
+        effect_parameters: Vec<AuthoredEffectParameterReference>,
     },
 }
 
@@ -100,6 +184,11 @@ pub enum AuthoredType {
     },
     Stream {
         item: Box<AuthoredType>,
+    },
+    TaskFunction {
+        parameters: Vec<AuthoredType>,
+        result: Box<AuthoredType>,
+        effect: AuthoredEffectRow,
     },
     Function {
         parameters: Vec<AuthoredType>,
@@ -224,11 +313,13 @@ pub enum AuthoredExpressionOperation {
         items: Vec<AuthoredExpression>,
     },
     Call {
+        effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
         arguments: Vec<AuthoredExpression>,
     },
     FunctionValue {
+        effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
     },
@@ -516,6 +607,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
         name: name.clone(),
         visibility,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            effect_parameters: Vec::new(),
             type_parameters: type_parameter_ids,
             parameters: parameter_ids,
             result,
@@ -609,6 +701,15 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredType::Stream { item } => TypeForm::Stream {
                 item: self.lower_type(item)?,
             },
+            AuthoredType::TaskFunction {
+                parameters,
+                result,
+                effect,
+            } => TypeForm::TaskFunction {
+                parameters: self.lower_types(parameters)?,
+                result: self.lower_type(result)?,
+                effect: self.lower_effect_row(effect)?,
+            },
             AuthoredType::Function { parameters, result } => {
                 let mut lowered = Vec::with_capacity(parameters.len());
                 for parameter in parameters {
@@ -674,27 +775,109 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(())
     }
 
+    fn lower_effect_parameter(
+        &self,
+        authored: &AuthoredEffectParameterReference,
+    ) -> Result<crate::platform::kernel::EffectParameterReference, Diagnostic> {
+        Ok(match authored {
+            AuthoredEffectParameterReference::Exact { package, parameter } => {
+                crate::platform::kernel::EffectParameterReference {
+                    package: *package,
+                    parameter: *parameter,
+                }
+            }
+            AuthoredEffectParameterReference::Symbol { symbol } => {
+                crate::platform::kernel::EffectParameterReference {
+                    package: self.base.package_id(),
+                    parameter: self.effect_parameter_symbol(symbol)?,
+                }
+            }
+        })
+    }
+
+    fn lower_effect_row(
+        &mut self,
+        authored: &AuthoredEffectRow,
+    ) -> Result<crate::platform::kernel::EffectRow, Diagnostic> {
+        self.lower_effect_row_parts(&authored.requirements, &authored.parameters)
+    }
+
+    fn admit_effect_work(&mut self, atoms: usize) -> Result<(), Diagnostic> {
+        let overflow = || {
+            request_error(
+                DiagnosticClass::Resource,
+                "change_budget_validation_expression_steps",
+                "effect normalization work overflow",
+            )
+        };
+        let count = u64::try_from(atoms).map_err(|_| overflow())?;
+        let factor = u64::from(count.checked_ilog2().unwrap_or(0)) + 1;
+        let steps = count
+            .checked_mul(factor)
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(overflow)?;
+        self.work.effect_normalization_steps = self
+            .work
+            .effect_normalization_steps
+            .checked_add(steps)
+            .ok_or_else(overflow)?;
+        self.check_budget("effect row normalization before allocation")
+    }
+
+    fn lower_effect_row_parts(
+        &mut self,
+        requirements: &[AuthoredRequirementReference],
+        parameters: &[AuthoredEffectParameterReference],
+    ) -> Result<crate::platform::kernel::EffectRow, Diagnostic> {
+        let atoms = requirements
+            .len()
+            .checked_add(parameters.len())
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_budget_validation_expression_steps",
+                    "effect row size overflow",
+                )
+            })?;
+        self.admit_effect_work(atoms)?;
+        let mut row = crate::platform::kernel::EffectRow {
+            requirements: requirements
+                .iter()
+                .map(|r| self.lower_requirement_reference(r))
+                .collect::<Result<_, _>>()?,
+            parameters: parameters
+                .iter()
+                .map(|p| self.lower_effect_parameter(p))
+                .collect::<Result<_, _>>()?,
+        };
+        row.normalize()?;
+        Ok(row)
+    }
+
+    fn lower_effect_rows(
+        &mut self,
+        rows: &[AuthoredEffectRow],
+    ) -> Result<Vec<crate::platform::kernel::EffectRow>, Diagnostic> {
+        if !rows.is_empty() {
+            self.admit_effect_work(rows.len())?;
+        }
+        rows.iter().map(|row| self.lower_effect_row(row)).collect()
+    }
+
     fn lower_effect(
         &mut self,
         authored: &AuthoredFunctionEffect,
     ) -> Result<FunctionEffect, Diagnostic> {
         match authored {
             AuthoredFunctionEffect::Pure {} => Ok(FunctionEffect::Pure),
-            AuthoredFunctionEffect::Task { requirements } => {
-                let mut lowered = requirements
-                    .iter()
-                    .map(|requirement| self.lower_requirement_reference(requirement))
-                    .collect::<Result<Vec<_>, _>>()?;
-                lowered.sort_unstable();
-                if lowered.windows(2).any(|pair| pair[0] == pair[1]) {
-                    return Err(request_error(
-                        DiagnosticClass::Semantic,
-                        "change_authored_requirement_duplicate",
-                        "task effect contains a duplicate exact requirement",
-                    ));
-                }
+            AuthoredFunctionEffect::Task {
+                requirements,
+                effect_parameters,
+            } => {
+                let row = self.lower_effect_row_parts(requirements, effect_parameters)?;
                 Ok(FunctionEffect::Task {
-                    requirements: lowered,
+                    requirements: row.requirements,
+                    effect_parameters: row.parameters,
                 })
             }
         }
@@ -770,18 +953,22 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 items: self.lower_expressions(items)?,
             },
             AuthoredExpressionOperation::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => ExpressionOperation::Call {
+                effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
                 arguments: self.lower_expressions(arguments)?,
             },
             AuthoredExpressionOperation::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => ExpressionOperation::FunctionValue {
+                effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
             },

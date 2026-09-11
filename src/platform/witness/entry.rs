@@ -78,6 +78,7 @@ pub enum OwnershipRole {
     TargetHttpRoute,
     ModuleDeclaration,
     DeclarationTypeParameter,
+    DeclarationEffectParameter,
     DeclarationField,
     DeclarationCase,
     DeclarationOperation,
@@ -106,6 +107,7 @@ impl OwnershipRole {
         matches!(
             self,
             Self::DeclarationTypeParameter
+                | Self::DeclarationEffectParameter
                 | Self::DeclarationField
                 | Self::DeclarationCase
                 | Self::DeclarationOperation

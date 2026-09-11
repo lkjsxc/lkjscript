@@ -1,4 +1,4 @@
-//! Strict Graph 13 owner codecs, unchanged base TypeObject 10 and disjoint nominal applications.
+//! Strict Graph 14 owner codecs, unchanged base TypeObject 10 and disjoint nominal applications.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -230,6 +230,26 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if let super::TypeForm::TaskFunction {
+        parameters,
+        result,
+        effect,
+    } = &object.form
+    {
+        let bytes = packed::encode(
+            super::contract::TASK_FUNCTION_MAGIC,
+            super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
+            &TaskFunctionObject {
+                contract_version: object.contract_version,
+                tag: 1,
+                parameters: parameters.clone(),
+                result: *result,
+                effect: effect.clone(),
+            },
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if let super::type_object::TypeForm::Applied {
         declaration,
         arguments,
@@ -265,6 +285,15 @@ struct NominalApplicationObject {
     arguments: Vec<TypeObjectDigest>,
 }
 
+#[derive(bincode::Encode, bincode::Decode)]
+struct TaskFunctionObject {
+    contract_version: u16,
+    tag: u8,
+    parameters: Vec<TypeObjectDigest>,
+    result: TypeObjectDigest,
+    effect: super::EffectRow,
+}
+
 pub fn decode_type_object(
     bytes: &[u8],
     expected_digest: TypeObjectDigest,
@@ -274,6 +303,37 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::TASK_FUNCTION_MAGIC) {
+        let task: TaskFunctionObject = packed::decode(
+            bytes,
+            super::contract::TASK_FUNCTION_MAGIC,
+            super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        if task.tag != 1 {
+            return Err(codec_error(
+                "kernel_task_function_tag",
+                "unknown task callable tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version: task.contract_version,
+            form: super::TypeForm::TaskFunction {
+                parameters: task.parameters,
+                result: task.result,
+                effect: task.effect,
+            },
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::NOMINAL_APPLICATION_MAGIC) {
         let application: NominalApplicationObject = packed::decode(
             bytes,

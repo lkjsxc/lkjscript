@@ -236,7 +236,10 @@ fn object_child_digests(form: &TypeForm) -> Vec<TypeObjectDigest> {
             ok: key,
             error: value,
         } => vec![*key, *value],
-        TypeForm::Function { parameters, result } => {
+        TypeForm::Function { parameters, result }
+        | TypeForm::TaskFunction {
+            parameters, result, ..
+        } => {
             let mut values = parameters.clone();
             values.push(*result);
             values
@@ -472,6 +475,11 @@ impl FullValidator<'_> {
                         self.error("intrinsic_signature", "closed external parameters require the intrinsic inventory's empty constraint set");
                     }
                 }
+                OwnerRecord::EffectParameter(parameter) => self.require_parent_listed(
+                    *key,
+                    OwnerKey::Declaration(parameter.declaration),
+                    "effect parameter",
+                ),
                 OwnerRecord::Field(field) => self.require_parent_listed(
                     *key,
                     OwnerKey::Declaration(field.declaration),
@@ -670,10 +678,19 @@ impl FullValidator<'_> {
     }
 
     fn validate_http_route_signature(&mut self, route: &HttpRouteRecord, port: &PortRecord) {
+        let PortImplementation::Function(function) = port.implementation else {
+            return;
+        };
+        let Some((type_parameters, parameter_ids, result, effect)) =
+            self.http_route_function_contract(function)
+        else {
+            return;
+        };
         let mut types = TypeObjectInterner::default();
-        let expected_type = match crate::platform::http::semantic_http_route_function_type(
+        let expected_type = match crate::platform::http::semantic_http_route_callable_type(
             &mut types,
             route.selector.capture_count(),
+            &effect,
         ) {
             Ok(expected) => expected,
             Err(diagnostic) => {
@@ -687,14 +704,6 @@ impl FullValidator<'_> {
                 "HTTP route port type disagrees with its selector-indexed function contract",
             );
         }
-        let PortImplementation::Function(function) = port.implementation else {
-            return;
-        };
-        let Some((type_parameters, parameter_ids, result, requirements)) =
-            self.http_route_function_contract(function)
-        else {
-            return;
-        };
         let mut parameters = Vec::with_capacity(parameter_ids.len());
         for parameter in parameter_ids {
             if !self.consume_work() {
@@ -737,7 +746,7 @@ impl FullValidator<'_> {
                 );
             }
         }
-        self.validate_http_route_requirement_closure(route, &requirements);
+        self.validate_http_route_requirement_closure(route, &effect.row().requirements);
     }
 
     fn http_route_function_contract(
@@ -747,7 +756,7 @@ impl FullValidator<'_> {
         usize,
         Vec<crate::platform::semantic_id::ParameterId>,
         TypeObjectDigest,
-        Vec<RequirementReference>,
+        FunctionEffect,
     )> {
         if function.package == self.snapshot.root.package_id {
             return match self
@@ -757,13 +766,10 @@ impl FullValidator<'_> {
             {
                 Some(OwnerRecord::Declaration(record)) => match &record.payload {
                     DeclarationPayload::Function(signature) => Some((
-                        signature.type_parameters.len(),
+                        signature.type_parameters.len() + signature.effect_parameters.len(),
                         signature.parameters.clone(),
                         signature.result,
-                        match &signature.effect {
-                            FunctionEffect::Pure => Vec::new(),
-                            FunctionEffect::Task { requirements } => requirements.clone(),
-                        },
+                        signature.effect.clone(),
                     )),
                     _ => {
                         self.error(
@@ -803,13 +809,10 @@ impl FullValidator<'_> {
         match owners.get(&OwnerKey::Declaration(function.declaration)) {
             Some(PackageInterfaceRecord::Declaration(record)) => match &record.payload {
                 PackageInterfaceDeclarationPayload::Function(signature) => Some((
-                    signature.type_parameters.len(),
+                    signature.type_parameters.len() + signature.effect_parameters.len(),
                     signature.parameters.clone(),
                     signature.result,
-                    match &signature.effect {
-                        FunctionEffect::Pure => Vec::new(),
-                        FunctionEffect::Task { requirements } => requirements.clone(),
-                    },
+                    signature.effect.clone(),
                 )),
                 _ => {
                     self.error(
@@ -1051,6 +1054,22 @@ impl FullValidator<'_> {
                 }
             }
             DeclarationPayload::Function(function) => {
+                for parameter in &function.effect_parameters {
+                    self.require_local_kind(
+                        OwnerKey::EffectParameter(*parameter),
+                        &[OwnerKind::EffectParameter],
+                        "function effect parameter",
+                    );
+                    if !matches!(self.snapshot.owners.get(&OwnerKey::EffectParameter(*parameter)),
+                        Some(OwnerRecord::EffectParameter(record)) if record.declaration == declaration_id)
+                    {
+                        self.error(
+                            "kernel_effect_parameter_owner",
+                            "effect parameter belongs to another function",
+                        );
+                    }
+                }
+                self.validate_effect_row(owner, &function.effect.row());
                 for parameter in &function.parameters {
                     self.require_parameter_parent(
                         *parameter,
@@ -1064,7 +1083,11 @@ impl FullValidator<'_> {
                         "function type parameter",
                     );
                 }
-                if let FunctionEffect::Task { requirements } = &function.effect {
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = &function.effect
+                {
                     for requirement in requirements {
                         self.require_exact_kind(
                             requirement.package,
@@ -1169,6 +1192,7 @@ impl FullValidator<'_> {
 
     fn validate_type_reference(&mut self, source: OwnerKey, form: &TypeForm) {
         match form {
+            TypeForm::TaskFunction { effect, .. } => self.validate_effect_row(source, effect),
             TypeForm::TypeParameter { parameter } => {
                 self.require_local_kind(
                     OwnerKey::TypeParameter(*parameter),
@@ -1204,6 +1228,41 @@ impl FullValidator<'_> {
         }
     }
 
+    fn validate_effect_row(&mut self, source: OwnerKey, row: &super::EffectRow) {
+        if let Err(error) = row.validate() {
+            self.diagnostics.push(error);
+            return;
+        }
+        for requirement in &row.requirements {
+            if !self.consume_work() {
+                return;
+            }
+            self.require_exact_kind(
+                requirement.package,
+                OwnerKey::Requirement(requirement.requirement),
+                &[OwnerKind::Requirement],
+                "effect row requirement",
+            );
+        }
+        for parameter in &row.parameters {
+            if !self.consume_work() {
+                return;
+            }
+            if parameter.package != self.snapshot.root.package_id
+                || !matches!(self.snapshot.owners.get(&OwnerKey::EffectParameter(parameter.parameter)),
+                    Some(OwnerRecord::EffectParameter(record)) if Some(record.declaration) == self.semantic_declaration(source))
+            {
+                self.error(
+                    "kernel_effect_parameter_scope",
+                    format!(
+                        "effect parameter {}/{} is outside the exact owning function",
+                        parameter.package, parameter.parameter
+                    ),
+                );
+            }
+        }
+    }
+
     fn validate_resource_shapes(&mut self) {
         let types = self
             .snapshot
@@ -1230,7 +1289,10 @@ impl FullValidator<'_> {
                     snapshot_type_contains_resource(self.snapshot, *key)
                         || snapshot_type_contains_resource(self.snapshot, *value)
                 }
-                TypeForm::Function { parameters, result } => {
+                TypeForm::Function { parameters, result }
+                | TypeForm::TaskFunction {
+                    parameters, result, ..
+                } => {
                     parameters
                         .iter()
                         .any(|parameter| snapshot_type_contains_resource(self.snapshot, *parameter))
@@ -1472,7 +1534,11 @@ impl FullValidator<'_> {
                                     ),
                                 );
                             }
-                            let FunctionEffect::Task { requirements } = &function.effect else {
+                            let FunctionEffect::Task {
+                                effect_parameters: _,
+                                requirements,
+                            } = &function.effect
+                            else {
                                 self.error(
                                     "kernel_affine_function_resource_effect",
                                     format!(
@@ -1556,6 +1622,16 @@ impl FullValidator<'_> {
         for _ in 0..=MAXIMUM_EXPRESSION_DEPTH {
             match current {
                 OwnerKey::Declaration(declaration) => return Some(declaration),
+                OwnerKey::EffectParameter(parameter) => {
+                    return match self
+                        .snapshot
+                        .owners
+                        .get(&OwnerKey::EffectParameter(parameter))
+                    {
+                        Some(OwnerRecord::EffectParameter(record)) => Some(record.declaration),
+                        _ => None,
+                    };
+                }
                 OwnerKey::TypeParameter(parameter) => {
                     return match self
                         .snapshot
@@ -2235,6 +2311,9 @@ impl FullValidator<'_> {
             return;
         };
         let listed = match (child, parent_record) {
+            (OwnerKey::EffectParameter(id), OwnerRecord::Declaration(declaration)) => matches!(
+                &declaration.payload, DeclarationPayload::Function(function) if function.effect_parameters.contains(&id)
+            ),
             (OwnerKey::TypeParameter(id), OwnerRecord::Declaration(declaration)) => {
                 match &declaration.payload {
                     DeclarationPayload::Record {
@@ -2280,12 +2359,13 @@ impl FullValidator<'_> {
                         requirements.contains(&id)
                     }
                     DeclarationPayload::Function(function) => match &function.effect {
-                        FunctionEffect::Task { requirements } => {
-                            requirements.iter().any(|reference| {
-                                reference.package == self.snapshot.root.package_id
-                                    && reference.requirement == id
-                            })
-                        }
+                        FunctionEffect::Task {
+                            effect_parameters: _,
+                            requirements,
+                        } => requirements.iter().any(|reference| {
+                            reference.package == self.snapshot.root.package_id
+                                && reference.requirement == id
+                        }),
                         FunctionEffect::Pure => false,
                     },
                     _ => false,

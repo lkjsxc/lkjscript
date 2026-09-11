@@ -99,10 +99,13 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
    recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
    constraints are also implemented, with graph-owned list-map and function-constant families.
-   Finite-instantiation recursive nominal data is the active
-   [explicit campaign](campaigns/202609110659.md), with complete public library, persistence,
-   session, target and immutable-delivery proof required before completion. Expanding schemes
-   and polymorphic function recursion remain outside this milestone.
+   Finite-instantiation recursive nominal data completed public library, persistence, session,
+   target and immutable-delivery proof in the
+   [recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
+   at `v0.1.31`. Explicit effects and reusable task libraries are the current
+   [selected campaign](campaigns/202609111843.md); its new public workload and selected publication
+   remain distinct from maintained application behavior. Expanding nominal schemes and expanding
+   ordinary-type function recursion remain outside that milestone.
    Explicit parametric nominal data is implemented in source through the
    [completed nominal campaign](campaigns/202609100459.md), with source and local target admission recorded there.
    Richer state/resource composition, automatic lexical capture, component

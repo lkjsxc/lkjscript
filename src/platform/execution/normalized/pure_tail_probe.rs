@@ -43,7 +43,7 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
             &mut Default::default(),
             &mut Default::default(),
         )?;
-        if matches!(&owner, Some(crate::platform::kernel::OwnerRecord::Declaration(record)) if matches!(&record.payload, crate::platform::kernel::DeclarationPayload::Function(body) if matches!(&body.effect, crate::platform::kernel::FunctionEffect::Task { requirements } if requirements.is_empty())))
+        if matches!(&owner, Some(crate::platform::kernel::OwnerRecord::Declaration(record)) if matches!(&record.payload, crate::platform::kernel::DeclarationPayload::Function(body) if matches!(&body.effect, crate::platform::kernel::FunctionEffect::Task { effect_parameters: _, requirements } if requirements.is_empty())))
         {
             require(
                 !function.pure_graph,
@@ -1100,10 +1100,12 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             for instruction in Arc::make_mut(&mut code.instructions) {
                 *instruction = match instruction {
                     NormalizedInstruction::TailCall {
+                        effect_arguments,
                         function,
                         type_arguments,
                         arguments,
                     } => NormalizedInstruction::Call {
+                        effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
                         type_arguments: type_arguments.clone(),
                         arguments: *arguments,

@@ -79,6 +79,10 @@ pub(crate) fn ownership_contributions(
             OwnershipParent::Owner(OwnerKey::Module(record.module)),
             OwnershipRole::ModuleDeclaration,
         )),
+        OwnerRecord::EffectParameter(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationEffectParameter,
+        )),
         OwnerRecord::TypeParameter(record) => Some(OwnershipEntry::new(
             OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
             OwnershipRole::DeclarationTypeParameter,

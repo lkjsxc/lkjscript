@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 13 records into one compiler unit.
+//! Exact point-read lowering from normalized Graph 14 records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -286,20 +286,25 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                         };
                         let capture_count = route.selector.capture_count();
                         let mut http_types = crate::platform::kernel::TypeObjectInterner::default();
-                        let expected_function_type =
-                            crate::platform::http::semantic_http_route_function_type(
-                                &mut http_types,
-                                capture_count,
-                            )?;
+                        let read = self.canonical.read_type_object(port.function_type)?;
+                        self.work.canonical.add(read.work);
+                        let shape = read.value.ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_http_route_port_type",
+                                "HTTP route callable type is absent",
+                            )
+                        })?;
+                        let matches_shape = crate::platform::http::has_semantic_http_route_shape(
+                            &shape.form,
+                            capture_count,
+                        )?;
                         let PortImplementation::Function(function) = port.implementation else {
                             return Err(compiler_corrupt(
                                 "compiler_http_route_port_relation",
                                 "HTTP route port has the wrong component, shape, or implementation",
                             ));
                         };
-                        if port.declaration != record.component.declaration
-                            || port.function_type != expected_function_type
-                        {
+                        if port.declaration != record.component.declaration || !matches_shape {
                             return Err(compiler_corrupt(
                                 "compiler_http_route_port_relation",
                                 "HTTP route port has the wrong component or selector-indexed shape",
@@ -491,6 +496,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 let signature = self.compile_signature(
                     declaration,
                     &external.type_parameters,
+                    &[],
                     &external.parameters,
                     external.result,
                     &FunctionEffect::Pure,
@@ -504,6 +510,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 let signature = self.compile_signature(
                     declaration,
                     &function.type_parameters,
+                    &function.effect_parameters,
                     &function.parameters,
                     function.result,
                     &function.effect,
@@ -573,6 +580,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         &mut self,
         declaration: DeclarationId,
         type_parameters: &[crate::platform::semantic_id::TypeParameterId],
+        effect_parameters: &[crate::platform::semantic_id::EffectParameterId],
         parameters: &[ParameterId],
         result: TypeObjectDigest,
         effect: &FunctionEffect,
@@ -599,12 +607,17 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         }
         let task_requirements = match effect {
             FunctionEffect::Pure => Vec::new(),
-            FunctionEffect::Task { requirements } => requirements
+            FunctionEffect::Task {
+                effect_parameters: _,
+                requirements,
+            } => requirements
                 .iter()
                 .map(|reference| self.tables.requirement(*reference))
                 .collect::<Result<Vec<_>, _>>()?,
         };
         Ok(CompiledSignature {
+            effect_parameters: effect_parameters.to_vec(),
+            effect: effect.clone(),
             type_parameters: type_parameters.to_vec(),
             type_parameter_constraints,
             parameters: compiled_parameters,
@@ -1048,7 +1061,8 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             )? {
                 OwnerRecord::Declaration(record) => match record.payload {
                     DeclarationPayload::Function(signature)
-                        if signature.type_parameters.is_empty() =>
+                        if signature.type_parameters.is_empty()
+                            && signature.effect_parameters.is_empty() =>
                     {
                         (signature.parameters, signature.result)
                     }
@@ -1074,7 +1088,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 PackageInterfaceRecord::Declaration(record) => match record.payload {
                     crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
                         signature,
-                    ) if signature.type_parameters.is_empty() => {
+                    ) if signature.type_parameters.is_empty()
+                        && signature.effect_parameters.is_empty() =>
+                    {
                         (signature.parameters, signature.result)
                     }
                     _ => {
@@ -1242,6 +1258,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
             ExpressionOperation::Constant { declaration } => {
                 let function = self.unit.tables.declaration(declaration)?;
                 self.push(CompiledInstruction::Call {
+                    effect_arguments: Vec::new(),
                     function,
                     type_arguments: Vec::new(),
                     arguments: 0,
@@ -1292,6 +1309,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 }
             }
             ExpressionOperation::Call {
+                effect_arguments,
                 function,
                 type_arguments,
                 arguments,
@@ -1313,12 +1331,14 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.expression_with_use(argument, depth, use_mode)?;
                 }
                 self.push(CompiledInstruction::Call {
+                    effect_arguments,
                     function,
                     type_arguments,
                     arguments: argument_count,
                 })?;
             }
             ExpressionOperation::FunctionValue {
+                effect_arguments,
                 function,
                 type_arguments,
             } => {
@@ -1328,6 +1348,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     .map(|ty| self.unit.tables.ty(ty))
                     .collect::<Result<Vec<_>, _>>()?;
                 self.push(CompiledInstruction::FunctionValue {
+                    effect_arguments,
                     function,
                     type_arguments,
                 })?;

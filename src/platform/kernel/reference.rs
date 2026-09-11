@@ -2,7 +2,8 @@
 
 use super::id::PackageId;
 use crate::platform::semantic_id::{
-    CaseId, DeclarationId, FieldId, ModuleId, OperationId, PortId, RequirementId, TargetId,
+    CaseId, DeclarationId, EffectParameterId, FieldId, ModuleId, OperationId, PortId,
+    RequirementId, TargetId,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -65,6 +66,12 @@ exact_reference!(
     requirement,
     RequirementId,
     "lkjscript.Graph6RequirementReferenceV1"
+);
+exact_reference!(
+    EffectParameterReference,
+    parameter,
+    EffectParameterId,
+    "lkjscript.EffectParameterReferenceV1"
 );
 exact_reference!(
     PortReference,

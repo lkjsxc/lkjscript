@@ -31,10 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-9";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 9;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF09";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v9";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-10";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 10;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF10";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
+    "lkjscript.package-interface-owner-envelope.v10";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -213,6 +214,7 @@ pub struct PackageInterfaceSelection {
     package: PackageId,
     declarations: BTreeSet<DeclarationId>,
     type_parameters: BTreeSet<TypeParameterId>,
+    effect_parameters: BTreeSet<crate::platform::semantic_id::EffectParameterId>,
     fields: BTreeSet<FieldId>,
     cases: BTreeSet<CaseId>,
     operations: BTreeSet<OperationId>,
@@ -227,6 +229,7 @@ impl PackageInterfaceSelection {
             package,
             declarations: BTreeSet::new(),
             type_parameters: BTreeSet::new(),
+            effect_parameters: BTreeSet::new(),
             fields: BTreeSet::new(),
             cases: BTreeSet::new(),
             operations: BTreeSet::new(),
@@ -240,6 +243,7 @@ impl PackageInterfaceSelection {
         match owner {
             OwnerKey::Declaration(id) => self.declarations.contains(&id),
             OwnerKey::TypeParameter(id) => self.type_parameters.contains(&id),
+            OwnerKey::EffectParameter(id) => self.effect_parameters.contains(&id),
             OwnerKey::Field(id) => self.fields.contains(&id),
             OwnerKey::Case(id) => self.cases.contains(&id),
             OwnerKey::Operation(id) => self.operations.contains(&id),
@@ -301,14 +305,20 @@ impl PackageInterfaceSelection {
                 self.parameters.extend(parameters);
             }
             DeclarationPayload::Function(FunctionDeclaration {
+                effect_parameters,
                 type_parameters,
                 parameters,
                 effect,
                 ..
             }) => {
+                self.effect_parameters.extend(effect_parameters);
                 self.type_parameters.extend(type_parameters);
                 self.parameters.extend(parameters);
-                if let FunctionEffect::Task { requirements } = effect {
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = effect
+                {
                     self.requirements.extend(
                         requirements
                             .iter()
@@ -340,6 +350,20 @@ impl PackageInterfaceSelection {
         Ok(())
     }
 
+    /// Concrete requirements in callable signatures are public descriptive meaning even when
+    /// the enclosing function is pure. Selecting their records does not expose their component.
+    pub fn observe_type(&mut self, form: &TypeForm) {
+        if let TypeForm::TaskFunction { effect, .. } = form {
+            self.requirements.extend(
+                effect
+                    .requirements
+                    .iter()
+                    .filter(|reference| reference.package == self.package)
+                    .map(|reference| reference.requirement),
+            );
+        }
+    }
+
     pub fn owners(&self) -> impl Iterator<Item = OwnerKey> + '_ {
         self.declarations
             .iter()
@@ -357,6 +381,12 @@ impl PackageInterfaceSelection {
             .chain(self.parameters.iter().copied().map(OwnerKey::Parameter))
             .chain(self.requirements.iter().copied().map(OwnerKey::Requirement))
             .chain(self.ports.iter().copied().map(OwnerKey::Port))
+            .chain(
+                self.effect_parameters
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::EffectParameter),
+            )
     }
 }
 
@@ -572,8 +602,14 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
     for owner in owners.values() {
         visit(interface_owner_validation_visits(owner))?;
     }
-    validate_owner_closure(package, &owners)?;
     let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work, visit)?;
+    for object in type_objects.values() {
+        visit(1)?;
+        if let TypeForm::TaskFunction { effect, .. } = &object.form {
+            visit(effect.requirements.len() as u64)?;
+        }
+    }
+    validate_owner_closure(package, &owners, &type_objects)?;
     reachable_objects.extend(type_keys);
     Ok(PackageInterfaceValidation {
         owners,
@@ -600,7 +636,10 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                     + function.type_parameters.len()
                     + match &function.effect {
                         FunctionEffect::Pure => 0,
-                        FunctionEffect::Task { requirements } => requirements.len(),
+                        FunctionEffect::Task {
+                            effect_parameters: _,
+                            requirements,
+                        } => requirements.len(),
                     }
             }
             PackageInterfaceDeclarationPayload::External(function) => {
@@ -622,6 +661,7 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
 fn validate_owner_closure(
     package: PackageId,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
 ) -> Result<(), Diagnostic> {
     let mut expected = owners
         .iter()
@@ -724,6 +764,15 @@ fn validate_owner_closure(
                 )?;
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                for parameter in &signature.effect_parameters {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::EffectParameter(*parameter),
+                        OwnerKind::EffectParameter,
+                        Some(*declaration_id),
+                    )?;
+                }
                 require_signature_children(
                     owners,
                     &mut expected,
@@ -731,7 +780,11 @@ fn validate_owner_closure(
                     &signature.type_parameters,
                     &signature.parameters,
                 )?;
-                if let FunctionEffect::Task { requirements } = &signature.effect {
+                if let FunctionEffect::Task {
+                    effect_parameters: _,
+                    requirements,
+                } = &signature.effect
+                {
                     for requirement in requirements {
                         if requirement.package == package {
                             require_child(
@@ -769,6 +822,24 @@ fn validate_owner_closure(
                 }
             }
             PackageInterfaceDeclarationPayload::Constant { .. } => {}
+        }
+    }
+    // A public signature may describe a concrete callback requirement without publishing the
+    // component or function that owns its declaration. The type closure independently proves
+    // this descriptive edge; it does not establish a deployment grant.
+    for object in types.values() {
+        if let TypeForm::TaskFunction { effect, .. } = &object.form {
+            for requirement in &effect.requirements {
+                if requirement.package == package {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::Requirement(requirement.requirement),
+                        OwnerKind::Requirement,
+                        None,
+                    )?;
+                }
+            }
         }
     }
     let actual = owners.keys().copied().collect::<BTreeSet<_>>();
@@ -860,6 +931,7 @@ fn require_child(
     if let Some(declaration) = declaration {
         let actual = match &value.record {
             PackageInterfaceRecord::TypeParameter(record) => record.declaration,
+            PackageInterfaceRecord::EffectParameter(record) => record.declaration,
             PackageInterfaceRecord::Field(record) => record.declaration,
             PackageInterfaceRecord::Case(record) => record.declaration,
             PackageInterfaceRecord::Operation(record) => record.declaration,
@@ -943,6 +1015,37 @@ fn validate_interface_type_reference(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
 ) -> Result<(), Diagnostic> {
     match form {
+        TypeForm::TaskFunction { effect, .. } => {
+            effect.validate()?;
+            for parameter in &effect.parameters {
+                if parameter.package != package
+                    || !matches!(owners.get(&OwnerKey::EffectParameter(parameter.parameter)).map(|v| &v.record),
+                    Some(PackageInterfaceRecord::EffectParameter(record)) if Some(record.declaration) == semantic_declaration(source, owners))
+                {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "package_interface_effect_scope",
+                        "task callable row uses an effect parameter outside its exact public declaration",
+                    ));
+                }
+            }
+            for requirement in &effect.requirements {
+                if requirement.package == package
+                    && !matches!(
+                        owners
+                            .get(&OwnerKey::Requirement(requirement.requirement))
+                            .map(|v| &v.record),
+                        Some(PackageInterfaceRecord::Requirement(_))
+                    )
+                {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "package_interface_effect_requirement",
+                        "task callable row requirement is absent from its exact interface",
+                    ));
+                }
+            }
+        }
         TypeForm::TypeParameter { parameter } => {
             let key = OwnerKey::TypeParameter(*parameter);
             let Some(value) = owners.get(&key) else {
@@ -1050,9 +1153,16 @@ fn semantic_declaration(
 ) -> Option<DeclarationId> {
     match owner {
         OwnerKey::Declaration(declaration) => Some(declaration),
+        OwnerKey::EffectParameter(parameter) => {
+            match &owners.get(&OwnerKey::EffectParameter(parameter))?.record {
+                PackageInterfaceRecord::EffectParameter(record) => Some(record.declaration),
+                _ => None,
+            }
+        }
         OwnerKey::TypeParameter(parameter) => {
             match &owners.get(&OwnerKey::TypeParameter(parameter))?.record {
                 PackageInterfaceRecord::TypeParameter(record) => Some(record.declaration),
+                PackageInterfaceRecord::EffectParameter(record) => Some(record.declaration),
                 _ => None,
             }
         }

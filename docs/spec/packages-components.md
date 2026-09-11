@@ -19,15 +19,25 @@ public interface binding. The dependency's package transport carries the complet
 graph, including private implementations, and exact transitive selection required to install that binding. It is immutable transport,
 not editable source or an alternate package repository.
 
-An exported factory can return a pure function with a runtime bound prefix over its private graph
+An exported pure factory can return a pure or task function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments. Accepted Graph 13
+expressions, but transports and artifacts never contain evaluated environments or execution grants. Accepted Graph 14
 meaning rejects predecessor graph inputs. The unchanged TypeObject 10 codec, magic, digest domains,
 and bytes remain current for all pre-existing type forms. Positive nominal applications use the
 separate version-1 `LKJTAP01` envelope and its own digest domain, binding declaration and ordered
-arguments. Unchanged monomorphic typed-data layouts retain their exact identities. This cutover does
+arguments. Task callable types use their own version-1 `LKJTFN01` envelope and digest domain, binding
+the exact signature and canonical effect row; existing pure type bytes do not change. Unchanged
+monomorphic typed-data layouts retain their exact identities. This cutover does
 not rewrite operational data or add a predecessor graph reader.
+
+Function interfaces include exact ordered type/effect parameters, substituted callable signatures,
+and effect rows. A transported abstract library need not own any concrete consumer requirement:
+effect arguments retain those consumer references through invocation. Strict loading independently
+cross-checks compiled parameter ownership/order, effect arguments, nested task types, target
+signatures and port kinds against canonical owners, even in structurally valid rehashed containers.
+Prepared application identity includes target, ordered type/effect arguments and preparation origin.
+Task ports use closed task-callable types; the predecessor task-as-pure entry representation rejects.
 
 Public package interfaces retain exact-interface capability-resource types and operation parameter
 use modes. Resource interface references must resolve inside the exact dependency closure and
@@ -210,13 +220,13 @@ model. The first-party data root is local trusted-host authority, not encrypted 
 database service.
 
 Rank-one package interfaces include every type parameter's exact closed constraint set, including
-unused parameters. Graph 13 owner encoding, compiled-unit 9 signatures and package-interface-owner 9
+unused parameters. Graph 14 owner encoding, compiled-unit 10 signatures and package-interface-owner 10
 replace their predecessors explicitly. An imported `capture-safe` constraint must be discharged in
 the consumer's scope using its exact closure and nominal layouts. A returned callable can target a
 private generic graph helper retained in transported code; private helpers remain unavailable to
 ordinary public name lookup. Checksums and compiled metadata do not override canonical constraints.
-The immutable transport/container framing is unchanged. Bytecode 5 constructor instructions retain
-ordered application arguments, and Artifact 17 binds the new compiled/runtime meaning. Strict loading
+The immutable transport/container framing is unchanged. Bytecode 6 constructor instructions retain
+ordered application arguments, and Artifact 18 binds the new compiled/runtime meaning. Strict loading
 rederives parameter order, constraints, member layouts and constructor inventories from canonical
 owners, including private closure objects. Fully rehashed incompatible or incomplete inputs reject.
 Unchanged TypeObject 10 and monomorphic typed-data bytes, operational stores, queues and backups

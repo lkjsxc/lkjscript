@@ -126,8 +126,9 @@ fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
-// Properties of an applied container cover its complete type, even when the value is empty.
-// The ambient non-applied codec retains its existing rules.
+// Applied types and callable-containing containers require complete type admission,
+// including empty collections and inactive nominal cases. Checked comparable,
+// application-free types cannot contain either callable kind and keep the fast path.
 fn require_application_encoding(
     program: &dyn NormalizedValueSchema,
     root: TypeObjectDigest,
@@ -136,7 +137,7 @@ fn require_application_encoding(
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     checkpoint(control)?;
-    if program.application_free(root) {
+    if program.application_free(root) && program.comparable(root) {
         return Ok(());
     }
     fn charge(work: &mut usize, bytes: &mut usize, size: usize) -> Result<(), Diagnostic> {
@@ -230,8 +231,13 @@ fn require_application_encoding(
                     ));
                 }
             }
-            TypeForm::Function { .. }
-            | TypeForm::Secret
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => {
+                return Err(type_error(
+                    "$",
+                    "callable-containing types cannot cross JSON boundaries",
+                ));
+            }
+            TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::TypeParameter { .. }
@@ -401,6 +407,7 @@ fn from_json(
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Stream { .. }
         | TypeForm::Function { .. }
+        | TypeForm::TaskFunction { .. }
         | TypeForm::TypeParameter { .. } => Err(type_error(
             path,
             "live, callable, or unresolved generic values cannot be decoded from JSON",
@@ -643,7 +650,8 @@ fn to_json(
             TypeForm::Secret
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
-            | TypeForm::Function { .. },
+            | TypeForm::Function { .. }
+            | TypeForm::TaskFunction { .. },
         ) => Err(type_error(
             path,
             "live or callable values cannot be encoded as JSON",

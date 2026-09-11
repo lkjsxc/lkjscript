@@ -6,8 +6,10 @@ Status: normative.
 
 Pure meaning is independent of deployment, time, randomness, scheduling, network, storage,
 credentials, and process state. A pure function cannot perform a capability operation or call a
-task function. A task function has an explicit task effect containing stable requirement identities
-and aliases. Effect checking is transitive through exact calls.
+task function, including one with an empty requirement row. It may construct and return task
+descriptors without executing them. A task function has an explicit row containing stable exact
+requirement references and function-owned effect parameters. Effect checking is transitive through
+direct and indirect calls after explicit substitution.
 
 A component declares the requirements needed by its ports. Preparation proves that every task
 capability use resolves to the required interface and operation. Deployment grants bind those
@@ -17,7 +19,7 @@ authority rejects before admission.
 Compact change records author this boundary directly. `add.requirement` extends an existing component
 with one exact built-in interface, ordered admitted operations, and separately named resource
 limits. `create.function effect=task` and `set.function-contract effect=task` name an ordered exact
-set of local requirements; the latter changes the existing function contract without replacing its
+set of exact requirements and in-scope effect parameters; the latter changes the existing function contract without replacing its
 identity, parameters, or body. `expression.capability-call` names one admitted requirement and exact
 operation, while `expression.transaction` creates one lexical data-transaction scope. Request labels are
 not capabilities, and there is no ambient requirement search or unchecked IO effect.
@@ -26,6 +28,45 @@ Validation rejects pure-to-task calls, pure capability use, absent effect requir
 requirements, cross-component or foreign references, unadmitted operations, interface mismatch,
 escaping transaction bindings, nested transactions, and effect escalation before publication.
 Failed planning or apply leaves accepted authority unchanged.
+
+## Explicit effect applications and authority-free descriptors
+
+An effect parameter is descriptive meaning. It grants no authority to its declaration, descriptor,
+holder or importing library. Pure factories may be effect-parametric and return bound
+`TaskFunction` values. Named task values and calls require exact ordered ordinary type and effect
+arguments; omitted/excess/foreign arguments reject even if unused. Rows normalize as set union by
+stable identity; equal names or interfaces never merge atoms. Callable type equality compares exact
+rows and has no effect subtyping. Signature traversal substitutes task rows nested in pure callable
+types, aggregates and nominal applications. Unknown symbolic rows permit forwarding and invocation
+of equally typed callbacks, not guessed capability operations.
+
+Three checks stay separate: the target's declared resolved row, the current activation's declared
+resolved allowance, and the selected component's actual checked grants. Every nested activation
+receives its own allowance. A concrete required atom is covered by itself or a validated requirement
+with the same package, name and exact interface, a superset of required operations, and compatible
+declared limits. Symbolic inclusion requires the same exact parameter. Runtime coverage additionally
+requires the references to resolve to the same canonical grant. Shared grants cannot widen a narrow
+activation, merge row identities, reset counters or clone authority. Preparation closes HTTP, worker
+and structured-session task ports before live execution.
+
+Creation, binding and returning retain only an exact prepared target, closed ordered type/effect
+arguments and a flat capture-safe prefix. Foreign preparation, forged kind/row/target, wrong arity,
+mismatched prefixes and captured live resources reject before target execution. Descriptor copies
+hold no adapter, credential, resource, transaction or frame. Both evaluators enforce activation
+allowances independently; component-wide grant search cannot replace this check.
+
+Indirect and imported calls use the same canonical grant counters, resource provenance and active
+lexical transaction as direct calls. Nested transactions remain forbidden. A later trap,
+cancellation or exhaustion stops subsequent callbacks and emits no successful partial traversal;
+earlier effects remain visible unless the applicable transaction rolls back its staged work. An
+ordinary returned `Result` remains a value until graph control flow branches on it. No evaluator
+replays live effects or converts these runtime failures into application results.
+
+The standard's graph-owned `task-fold-left` divides an index range over the original persistent list,
+folds its left half completely, then feeds that state into its right half. `task-map` binds a mapper
+into a task fold step and appends each result. This preserves sequential input order with
+logarithmic additional traversal frames. Indexed reads keep their existing logarithmic cost; task
+tail transfer, scheduling and product resource defaults are unchanged.
 
 ## Interfaces and operations
 

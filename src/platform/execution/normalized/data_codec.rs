@@ -205,7 +205,9 @@ fn encode_value(
         (_, TypeForm::StaticText) => return Err(unsupported("StaticText")),
         (_, TypeForm::Secret) => return Err(unsupported("Secret")),
         (_, TypeForm::Stream { .. }) => return Err(unsupported("Stream")),
-        (_, TypeForm::Function { .. }) => return Err(unsupported("Function")),
+        (_, TypeForm::Function { .. } | TypeForm::TaskFunction { .. }) => {
+            return Err(unsupported("Function"));
+        }
         (_, TypeForm::TypeParameter { .. }) => {
             return Err(unsupported("unresolved type parameter"));
         }
@@ -376,7 +378,7 @@ fn decode_value(
         TypeForm::Secret => Err(unsupported("Secret")),
         TypeForm::CapabilityResource { .. } => Err(unsupported("CapabilityResource")),
         TypeForm::Stream { .. } => Err(unsupported("Stream")),
-        TypeForm::Function { .. } => Err(unsupported("Function")),
+        TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => Err(unsupported("Function")),
         TypeForm::TypeParameter { .. } => Err(unsupported("unresolved type parameter")),
         TypeForm::Option { .. } | TypeForm::Result { .. } => {
             Err(unsupported("unrepresented Option or Result"))
@@ -537,7 +539,9 @@ fn describe_layout(
             return Err(unsupported("CapabilityResource"));
         }
         TypeForm::Stream { .. } => return Err(unsupported("Stream")),
-        TypeForm::Function { .. } => return Err(unsupported("Function")),
+        TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => {
+            return Err(unsupported("Function"));
+        }
         TypeForm::TypeParameter { .. } => return Err(unsupported("unresolved type parameter")),
         TypeForm::Option { .. } | TypeForm::Result { .. } => {
             return Err(unsupported("unrepresented Option or Result"));

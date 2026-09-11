@@ -82,11 +82,14 @@ maintained program authority. The predecessor value, VM, capability, artifact, a
 deleted. Source-era project markers and predecessor artifact/store contracts reject at public
 boundaries; there is no fallback decoder.
 
-Explicit rank-1 type substitution and named pure function values are validated before preparation.
-Type parameters have distinct stable IDs, calls require exact type-argument arity, generic task
-functions reject, and changing type arguments through polymorphic recursion rejects. Function
-values contain stable named-function identity, not a runtime address or captured lexical
-environment. These checks provide language consistency, not hostile-code isolation.
+Explicit rank-one type/effect substitution and named pure/task callable values are validated before
+preparation. Type and effect parameters have distinct stable IDs and exact scopes; calls require
+complete ordered applications. Expanding ordinary-type polymorphic recursion still rejects.
+Callable descriptors contain an exact prepared target, closed arguments and a flat capture-safe
+prefix. They retain no grant, adapter, credential, live resource, transaction or frame. Task invocation
+requires both the current activation's declared allowance and actual checked component grants,
+including canonical grant identity for compatible requirement mappings. Sharing a grant does not
+widen an allowance or reset accounting. These checks do not establish hostile-code isolation.
 
 ## Current static distribution boundary
 

@@ -20,7 +20,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::Applied { .. }) {
+            contract_version: if matches!(form, TypeForm::TaskFunction { .. }) {
+                super::contract::TASK_FUNCTION_CONTRACT_VERSION
+            } else if matches!(form, TypeForm::Applied { .. }) {
                 super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
             } else {
                 TYPE_OBJECT_CONTRACT_VERSION
@@ -32,7 +34,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::Applied { .. }) {
+        let expected = if matches!(self.form, TypeForm::TaskFunction { .. }) {
+            super::contract::TASK_FUNCTION_CONTRACT_VERSION
+        } else if matches!(self.form, TypeForm::Applied { .. }) {
             super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
         } else {
             TYPE_OBJECT_CONTRACT_VERSION
@@ -62,6 +66,12 @@ impl TypeObject {
             TypeForm::Function { parameters, .. } => {
                 require_count("function parameters", parameters.len(), true)?;
             }
+            TypeForm::TaskFunction {
+                parameters, effect, ..
+            } => {
+                require_count("task function parameters", parameters.len(), true)?;
+                effect.validate()?;
+            }
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
@@ -81,6 +91,19 @@ impl TypeObject {
         Ok(())
     }
 
+    pub fn child_type_count(&self) -> usize {
+        match &self.form {
+            TypeForm::Applied { arguments, .. } => arguments.len(),
+            TypeForm::StructuralRecord { fields } => fields.len(),
+            TypeForm::List { .. } | TypeForm::Option { .. } | TypeForm::Stream { .. } => 1,
+            TypeForm::Map { .. } | TypeForm::Result { .. } => 2,
+            TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. } => {
+                parameters.len().saturating_add(1)
+            }
+            _ => 0,
+        }
+    }
+
     pub fn child_types(&self) -> Vec<TypeObjectDigest> {
         match &self.form {
             TypeForm::Applied { arguments, .. } => arguments.clone(),
@@ -95,7 +118,10 @@ impl TypeObject {
             } => {
                 vec![*key, *value]
             }
-            TypeForm::Function { parameters, result } => {
+            TypeForm::Function { parameters, result }
+            | TypeForm::TaskFunction {
+                parameters, result, ..
+            } => {
                 let mut children = parameters.clone();
                 children.push(*result);
                 children
@@ -162,6 +188,12 @@ pub enum TypeForm {
     Applied {
         declaration: DeclarationReference,
         arguments: Vec<TypeObjectDigest>,
+    },
+    /// Disjoint encoding preserves the bytes of all existing pure and nominal forms.
+    TaskFunction {
+        parameters: Vec<TypeObjectDigest>,
+        result: TypeObjectDigest,
+        effect: super::EffectRow,
     },
 }
 

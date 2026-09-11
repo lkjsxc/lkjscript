@@ -22,23 +22,22 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_833ce256ef47198ae2748278c50efed2897b14f24a64ee708c378fee2f5f7d23`; state `semantic_state_17eb44525d2da78286816f854e5b0c1433eec9896fe0f14d588670aa4260b781` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_cbefc71a18003cce8fc5c2913424d8335cf45fd603c45dd9a3f0f44c3d270cbb`; state `semantic_state_8b9cd64d0a09e50043fe812fd9f2ca1b7ec5dd86468a29c3790732e026c9e8e9` |
-| built-in standard dependency | package revision `package_revision_83dc40766a79db0fc4c7b6aceeff8a3134d07fd36234fc3a9cb2eb9018c45076`; transport `package_transport_c41a09e89199b7da9b247934d181b9745a8b8cb9b64c4e5b93fb1e8ff0991d45`; artifact manifest `artifact_manifest_d88eab83014e5386bddf7fdf4d57506d25262309ae426c7266c48bbd3b8926ff` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_7479f45092fd4138273e84f42826cbac94ad045f63e4c241b6f8ffdb4ba78f22`; state `semantic_state_b8861cbaa2da34f234e14db88ff976eacc729888b6d054b5668f6ba7e4655632` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_379aa0cdd58b497e72c617d471928096d0e17e2b49651030f20b95a041aab89e`; state `semantic_state_e392e068e22ab687415c5d1688d4e5119687fceaf37c4d14205a0e7a073dfb7f` |
+| built-in standard dependency | package revision `package_revision_2fd4187687f5d1055bfc8a54f64b93278a51dc393cc5267afb871fd328e9b824`; transport `package_transport_76acdf9341178a1d49125e3c067fed5633113d8e30ddec34339b319365a4dfcb`; artifact manifest `artifact_manifest_4b0586dbabd623f0a7532b0bf606239af23ec17ac9e2c6aad08cb34a7cd82ce3` |
 
-The standard package owns 802 live semantic owners, 136 compiler units, and 33 graph tests. Its
-current artifact has 1,629 closure objects and 493,494 bytes. `lkjournal` owns 2,040 live semantic
-owners and one exact standard dependency; its two-package artifact has 226 compiler units, 4,130
-closure objects, and 1,233,941 bytes. Its complete dependency closure runs 40 graph tests. Both
+The standard package owns 888 live semantic owners, 140 compiler units, and 33 graph tests. Its
+current artifact has 531,915 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
+dependency; its two-package artifact has 230 compiler units and 1,290,985 bytes. Its complete dependency closure runs 40 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 343,941 bytes | `7d04b75d222984d09c6ae74d73e910295e8f91c9a73c261dd5f6fb8214a942fe` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 493,494 bytes | `8a5844a6c24b5897f2f6fa147c870f546fc68e47e714834b3bb92f627cc242a8` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,233,941 bytes | `ffcfc444233bb158cb883481b891a6caa0b52b206cc26c66d5cd2f48c4ba9f5f` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 372,030 bytes | `83c053e6575b29b1fd759d225fe967a7e4d9e8c79dbf440cd515efabe93efa3a` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 531,915 bytes | `abdade8cbf2e075e6bff02895bd2babde63f41fca4dbc93db20cd0a1d3565da9` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,290,985 bytes | `025a1c732ede663d9127185ee719a7e28b73e6f8a5b0732bbedfcdecd932cecb` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -46,6 +45,15 @@ also performs a fresh public `lkjournal` build, requires byte equality with the 
 and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Parametric nominal data
+
+The [explicit-effects campaign](campaigns/202609111843.md) adds authorable rank-one effect parameters,
+exact task callable types and authority-free task descriptors through ordinary function-value,
+bind and invoke. The standard now owns graph task fold/map; maintained ports use explicit task
+types. A fresh producer/consumer workload has exercised transported pure factories returning bound
+task callbacks, recursive payloads, configuration, transaction commit/rollback, restart persistence
+and dependency replacement through a copied development executable. Its source-bound neutral probes
+separately measure both evaluators. This is engineering evidence, not public delivery: fresh full
+acceptance, exact static target gates and selected `v0.1.32` publication remain pending.
 
 The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.
@@ -80,8 +88,9 @@ evaluators carry that meaning. The standard owns function-constant over a privat
 helper; copied-product witnesses author configurable callbacks with runtime nominal environments,
 Text and nested lists. At that cutover lkjournal received only the Graph 12 and exact dependency migration.
 Existing type/data bytes and owner identities are preserved. This is a new reusable library
-capability; no generic tasks, user-defined traits, equality/serialization constraints, resource
-polymorphism or application feature was added.
+capability. That earlier capture-safe campaign added no generic tasks, user-defined traits,
+equality/serialization constraints, resource polymorphism or application feature; generic tasks
+and explicit effects are part of the current separate campaign.
 
 CAP-1–CAP-6 pass at implementation commit `7fea8924`: 26 fresh full-profile gates and nine fresh
 local musl admission classifications. The [campaign](campaigns/202609091625.md) and
@@ -185,18 +194,19 @@ adds signature-indexed inbound HTTP path captures, code-complete offline package
 constant control space for eligible pure tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
-Graph 13, TypeObject 10 plus nominal application envelope 1, validation witness 8, owner summary 8,
-validator 13, package 3, package interface 9, compiler-unit 9, bytecode 5, Artifact 17, resident
-runtime 3, function-definition projection 5, service receipt 10, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 17, authored change 14,
+Graph 14, TypeObject 10 plus nominal application envelope 1 and task-function envelope 1,
+validation witness 9, owner summary 9, validator 14, package 3, package interface 10,
+compiler-unit 10, bytecode 6, Artifact 18, resident runtime 3, function-definition projection 6,
+service receipt 10, distributed-HTTP receipt 4,
+outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 18, authored change 15,
 logical change plan 5, query 7,
-project creation 5, registry 16, CLI 30, deployment 4, HTTP adapter 3, and structured-session 1 are
+project creation 5, registry 17, CLI 31, deployment 4, HTTP adapter 3, and structured-session 1 are
 current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
 HTTP-client adapter 1 retain their independent owners.
 The recursive-data validator contract advances its nominal and session feature identities to 2,
 and the semantic-summary validator identity to 4. Graph, TypeObject and typed-data bytes retain
-their existing domains. Offline-package acceptance is receipt 5. These changes are distributed in
-v0.1.31 and do not rewrite the preceding v0.1.30 identity.
+their existing domains for unchanged meaning. Offline-package acceptance is receipt 6. The current
+effect cutover is pending public release and does not rewrite v0.1.31 or preceding identities.
 
 The contributor pair owner independently admits and runs a small command lifecycle on both routes,
 then binds one freshly executed five-owner aggregate within that same invocation. Pair receipt 1

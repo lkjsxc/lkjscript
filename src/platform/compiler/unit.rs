@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-9";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 9;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-5";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 5;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN09";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v9";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v9";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-10";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 10;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-6";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 6;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN10";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v10";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v10";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -187,6 +187,8 @@ pub struct CompiledHttpRoute {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompiledSignature {
+    pub effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
+    pub effect: crate::platform::kernel::FunctionEffect,
     pub type_parameters: Vec<TypeParameterId>,
     pub type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     pub parameters: Vec<CompiledParameter>,
@@ -268,11 +270,13 @@ pub enum CompiledInstruction {
     JumpIfFalse(u32),
     Jump(u32),
     Call {
+        effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
         arguments: u32,
     },
     FunctionValue {
+        effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
     },
@@ -459,7 +463,7 @@ impl CompilationTables {
                 CompiledText::Inline(_) => {
                     return Err(unit_corrupt(
                         "compiler_unit_text_length",
-                        "compiled inline text exceeds the Graph 13 inline bound",
+                        "compiled inline text exceeds the Graph 14 inline bound",
                     ));
                 }
                 CompiledText::Blob { bytes, .. }
@@ -791,6 +795,31 @@ fn validate_compiled_http_routes(
 
 impl CompiledSignature {
     fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
+        require_item_count(
+            "compiled effect parameters",
+            self.effect_parameters.len(),
+            true,
+        )?;
+        require_unique("compiled effect parameter", &self.effect_parameters)?;
+        let row = self.effect.row();
+        row.validate()?;
+        if matches!(
+            self.effect,
+            crate::platform::kernel::FunctionEffect::Task { .. }
+        ) != (kind == OwnerKind::TaskFunction)
+            || (kind == OwnerKind::External && !self.effect_parameters.is_empty())
+            || self
+                .task_requirements
+                .iter()
+                .map(|i| tables.requirements.get(*i as usize).copied())
+                .collect::<Option<Vec<_>>>()
+                != Some(row.requirements)
+        {
+            return Err(unit_corrupt(
+                "compiler_effect_signature",
+                "compiled callable kind, exact effect row, or requirement relocations disagree",
+            ));
+        }
         require_item_count("compiled type parameters", self.type_parameters.len(), true)?;
         if self.type_parameter_constraints.len() != self.type_parameters.len() {
             return Err(unit_error(
@@ -993,6 +1022,18 @@ impl CompiledCode {
 
 impl CompiledInstruction {
     fn validate(&self, code: &CompiledCode, tables: &CompilationTables) -> Result<(), Diagnostic> {
+        if let Self::Call {
+            effect_arguments, ..
+        }
+        | Self::FunctionValue {
+            effect_arguments, ..
+        } = self
+        {
+            require_item_count("effect arguments", effect_arguments.len(), true)?;
+            for row in effect_arguments {
+                row.validate()?;
+            }
+        }
         match self {
             Self::Text(index) | Self::StaticText(index) => {
                 require_index("text constant", *index, tables.texts.len())
@@ -1004,6 +1045,7 @@ impl CompiledInstruction {
                 require_index("jump target", *target, code.instructions.len())
             }
             Self::Call {
+                effect_arguments: _,
                 function,
                 type_arguments,
                 arguments,
@@ -1017,6 +1059,7 @@ impl CompiledInstruction {
                 Ok(())
             }
             Self::FunctionValue {
+                effect_arguments: _,
                 function,
                 type_arguments,
             } => {

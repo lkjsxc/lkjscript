@@ -90,6 +90,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
     };
     let (length, length_declaration) = find("core.list.length");
     let length_closure = |ty, elements| NormalizedValue::Function {
+        effect_arguments: Arc::from([]),
         function: length,
         type_arguments: Arc::from([ty]),
         bound_arguments: Some(Arc::new(vec![
@@ -169,6 +170,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
         .unwrap();
     let leaf = || NormalizedValue::Function {
+        effect_arguments: Arc::from([]),
         function: add,
         type_arguments: Arc::from([]),
         bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
@@ -177,6 +179,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         let mut value = leaf();
         for _ in 0..count {
             value = NormalizedValue::Function {
+                effect_arguments: Arc::from([]),
                 function: helper,
                 type_arguments: Arc::from([integer, integer, integer]),
                 bound_arguments: Some(Arc::new(vec![value, leaf()])),
@@ -339,6 +342,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "wrong-prefix",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
                     bound_arguments: Some(Arc::new(vec![NormalizedValue::Bool(true)])),
@@ -348,6 +352,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "too-long-prefix",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
                     bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(0); 3])),
@@ -357,6 +362,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "noncanonical-empty",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
                     bound_arguments: Some(Arc::new(vec![])),
@@ -366,6 +372,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "unexpected-substitution",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([integer]),
                     bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
@@ -376,6 +383,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "absent-target",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: FunctionIndex(u32::MAX, program.value_origin),
                     type_arguments: Arc::from([]),
                     bound_arguments: None,
@@ -385,6 +393,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "foreign-origin",
                 unary,
                 NormalizedValue::Function {
+                    effect_arguments: Arc::from([]),
                     function: FunctionIndex(add.0, ValueOrigin::default()),
                     type_arguments: Arc::from([]),
                     bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
@@ -486,6 +495,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
 fn aggregate_equality_cannot_skip_a_callable_after_an_unequal_prefix_or_shape() {
     let (program, _) = fixture();
     let callable = NormalizedValue::Function {
+        effect_arguments: Arc::from([]),
         function: FunctionIndex(0, program.value_origin),
         type_arguments: Arc::from([]),
         bound_arguments: None,
@@ -1317,6 +1327,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
         .unwrap();
     let foreign = NormalizedProgram::prepare(program.artifact().clone()).unwrap();
     let invalid_callback = NormalizedValue::Function {
+        effect_arguments: Arc::from([]),
         function: FunctionIndex(0, foreign.value_origin),
         type_arguments: Arc::from([]),
         bound_arguments: None,
@@ -1426,6 +1437,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     let length = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && function.parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
         .map(|(i,_)| FunctionIndex(u32::try_from(i).unwrap(), program.value_origin)).unwrap();
     let hidden = || NormalizedValue::Function {
+        effect_arguments: Arc::from([]),
         function: length,
         type_arguments: Arc::from([secret]),
         bound_arguments: Some(Arc::new(vec![NormalizedValue::list(vec![]).unwrap()])),

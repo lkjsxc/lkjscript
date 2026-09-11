@@ -8,6 +8,8 @@ mod data;
 mod data_codec;
 mod data_codec_reference;
 mod deployment;
+pub(crate) mod effect_probe;
+pub(crate) mod effect_transaction_probe;
 mod http;
 mod http_client;
 mod list;
@@ -18,6 +20,7 @@ mod prepared_types;
 pub(crate) mod pure_tail_probe;
 mod queue;
 mod reference;
+mod reference_effects;
 mod reference_schema;
 mod reference_types;
 pub(crate) use reference::{

@@ -376,7 +376,11 @@ fn append_owner_detail(
                     signature.parameters.len(),
                     Some(effect),
                 ));
-                if let FunctionEffect::Task { requirements } = &signature.effect {
+                if let FunctionEffect::Task {
+                    effect_parameters,
+                    requirements,
+                } = &signature.effect
+                {
                     for (index, requirement) in requirements.iter().enumerate() {
                         records.push(DiscoveryRecord::new(
                             "effect.requirement",
@@ -389,8 +393,28 @@ fn append_owner_detail(
                             ],
                         ));
                     }
+                    for (index, parameter) in effect_parameters.iter().enumerate() {
+                        records.push(DiscoveryRecord::new(
+                            "effect.parameter",
+                            [
+                                ("index", index.to_string()),
+                                (
+                                    "reference",
+                                    format!("{}/{}", parameter.package, parameter.parameter),
+                                ),
+                            ],
+                        ));
+                    }
                 }
                 append_type_parameters(standard, &signature.type_parameters, records)?;
+                for (index, parameter) in signature.effect_parameters.iter().enumerate() {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::EffectParameter(*parameter),
+                        index,
+                        records,
+                    )?;
+                }
                 append_parameters(standard, &signature.parameters, records)?;
                 append_type(standard, "result", signature.result, records, 0)?;
             }
@@ -424,6 +448,7 @@ fn append_owner_detail(
             }
         },
         PackageInterfaceRecord::TypeParameter(_)
+        | PackageInterfaceRecord::EffectParameter(_)
         | PackageInterfaceRecord::Field(_)
         | PackageInterfaceRecord::Case(_)
         | PackageInterfaceRecord::Operation(_)
@@ -482,6 +507,15 @@ fn append_child_detail(
         common.push(("index".to_owned(), index.to_string()));
     }
     match record {
+        PackageInterfaceRecord::EffectParameter(parameter) => {
+            common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
+            common.push(("identity".to_owned(), parameter.header.owner.to_string()));
+            common.push(("declaration".to_owned(), parameter.declaration.to_string()));
+            records.push(DiscoveryRecord {
+                operation: "effect-parameter".to_owned(),
+                fields: common,
+            });
+        }
         PackageInterfaceRecord::TypeParameter(parameter) => {
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
             common.push((
@@ -715,7 +749,7 @@ fn append_type(
         TypeForm::StructuralRecord { fields: structural } => {
             fields.push(("fields".to_owned(), structural.len().to_string()));
         }
-        TypeForm::Function { parameters, .. } => {
+        TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. } => {
             fields.push(("parameters".to_owned(), parameters.len().to_string()));
         }
         TypeForm::Unit
@@ -735,6 +769,42 @@ fn append_type(
         operation: "type".to_owned(),
         fields,
     });
+    if let TypeForm::TaskFunction { effect, .. } = &ty.form {
+        records.push(DiscoveryRecord::new(
+            "type.effect",
+            [
+                ("path", path.to_owned()),
+                ("requirements", effect.requirements.len().to_string()),
+                ("parameters", effect.parameters.len().to_string()),
+            ],
+        ));
+        for (index, requirement) in effect.requirements.iter().enumerate() {
+            records.push(DiscoveryRecord::new(
+                "type.effect-requirement",
+                [
+                    ("path", path.to_owned()),
+                    ("index", index.to_string()),
+                    (
+                        "reference",
+                        format!("{}/{}", requirement.package, requirement.requirement),
+                    ),
+                ],
+            ));
+        }
+        for (index, parameter) in effect.parameters.iter().enumerate() {
+            records.push(DiscoveryRecord::new(
+                "type.effect-parameter",
+                [
+                    ("path", path.to_owned()),
+                    ("index", index.to_string()),
+                    (
+                        "reference",
+                        format!("{}/{}", parameter.package, parameter.parameter),
+                    ),
+                ],
+            ));
+        }
+    }
     match &ty.form {
         TypeForm::Applied { arguments, .. } => {
             for (index, argument) in arguments.iter().enumerate() {
@@ -785,7 +855,10 @@ fn append_type(
                 depth + 1,
             )?;
         }
-        TypeForm::Function { parameters, result } => {
+        TypeForm::Function { parameters, result }
+        | TypeForm::TaskFunction {
+            parameters, result, ..
+        } => {
             for (index, parameter) in parameters.iter().enumerate() {
                 append_type(
                     standard,
@@ -834,6 +907,7 @@ fn owner_name(record: &PackageInterfaceRecord) -> &str {
     match record {
         PackageInterfaceRecord::Declaration(record) => record.name.as_str(),
         PackageInterfaceRecord::TypeParameter(record) => record.name.as_str(),
+        PackageInterfaceRecord::EffectParameter(record) => record.name.as_str(),
         PackageInterfaceRecord::Field(record) => record.name.as_str(),
         PackageInterfaceRecord::Case(record) => record.name.as_str(),
         PackageInterfaceRecord::Operation(record) => record.name.as_str(),
@@ -847,6 +921,9 @@ fn owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
     match record {
         PackageInterfaceRecord::Declaration(_) => None,
         PackageInterfaceRecord::TypeParameter(record) => {
+            Some(OwnerKey::Declaration(record.declaration))
+        }
+        PackageInterfaceRecord::EffectParameter(record) => {
             Some(OwnerKey::Declaration(record.declaration))
         }
         PackageInterfaceRecord::Field(record) => Some(OwnerKey::Declaration(record.declaration)),
@@ -889,6 +966,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::Result { .. } => "result",
         TypeForm::Stream { .. } => "stream",
         TypeForm::Function { .. } => "function",
+        TypeForm::TaskFunction { .. } => "task_function",
     }
 }
 

@@ -13,6 +13,9 @@ use crate::platform::semantic_id::TypeParameterId;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
+type EffectBindings =
+    BTreeMap<crate::platform::kernel::EffectParameterReference, crate::platform::kernel::EffectRow>;
+type EffectApplication = (FunctionIndex, Vec<crate::platform::kernel::EffectRow>);
 const MAXIMUM_WORK: usize = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
 
 struct Budget<'a> {
@@ -31,6 +34,23 @@ impl Budget<'_> {
         self.reserve::<usize>(3)
     }
 
+    fn cloned_effect(
+        &mut self,
+        effect: &crate::platform::kernel::FunctionEffect,
+    ) -> Result<(), Diagnostic> {
+        if let crate::platform::kernel::FunctionEffect::Task {
+            requirements,
+            effect_parameters,
+        } = effect
+        {
+            self.reserve::<crate::platform::kernel::RequirementReference>(requirements.len())?;
+            self.reserve::<crate::platform::kernel::EffectParameterReference>(
+                effect_parameters.len(),
+            )?;
+        }
+        Ok(())
+    }
+
     fn cloned_type(&mut self, object: &TypeObject) -> Result<(), Diagnostic> {
         // Charge variable storage before cloning the canonical expression of a type.
         match &object.form {
@@ -43,6 +63,17 @@ impl Budget<'_> {
             }
             TypeForm::Applied { arguments, .. } => {
                 self.reserve::<TypeObjectDigest>(arguments.len())?
+            }
+            TypeForm::TaskFunction {
+                parameters, effect, ..
+            } => {
+                self.reserve::<TypeObjectDigest>(parameters.len())?;
+                self.reserve::<crate::platform::kernel::RequirementReference>(
+                    effect.requirements.len(),
+                )?;
+                self.reserve::<crate::platform::kernel::EffectParameterReference>(
+                    effect.parameters.len(),
+                )?;
             }
             TypeForm::Function { parameters, .. } => {
                 self.reserve::<TypeObjectDigest>(parameters.len())?
@@ -106,8 +137,9 @@ pub(super) fn complete_controlled(
         bytes: 0,
         control,
     };
+    close_effect_applications(program, &mut work)?;
     for (index, function) in program.functions.iter().enumerate() {
-        if function.type_parameters.is_empty() {
+        if function.type_parameters.is_empty() && function.effect_parameters.is_empty() {
             step(&mut work)?;
             work.node::<Context>()?;
             pending.insert((
@@ -230,6 +262,38 @@ pub(super) fn complete_controlled(
 
 // Instantiation is keyed by the full canonical type. Template indexes remain stable for
 // bytecode field/case selectors; concrete indexes are appended in canonical digest order.
+// Generic signatures and intermediate effect substitutions remain useful type metadata,
+// but only a fully substituted application has a runtime nominal layout. Including an
+// intermediate here would make physical layout indices depend on substitution order.
+fn instantiated_type(
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    known: &mut BTreeMap<TypeObjectDigest, bool>,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<bool, Diagnostic> {
+    step(work)?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(missing());
+    }
+    if let Some(closed) = known.get(&ty) {
+        return Ok(*closed);
+    }
+    let object = types.get(&ty).ok_or_else(missing)?;
+    let mut closed = match &object.form {
+        TypeForm::TypeParameter { .. } => false,
+        TypeForm::TaskFunction { effect, .. } => effect.is_closed(),
+        _ => true,
+    };
+    work.reserve::<TypeObjectDigest>(object.child_type_count())?;
+    for child in object.child_types() {
+        closed &= instantiated_type(types, child, known, depth + 1, work)?;
+    }
+    work.node::<(TypeObjectDigest, bool)>()?;
+    known.insert(ty, closed);
+    Ok(closed)
+}
+
 fn complete_nominal_layouts(
     program: &mut NormalizedProgram,
     work: &mut Budget<'_>,
@@ -329,6 +393,7 @@ fn complete_nominal_layouts(
         }
     }
     let mut visited = BTreeSet::new();
+    let mut instantiated = BTreeMap::new();
     let mut derived_records = BTreeMap::new();
     let mut derived_variants = BTreeMap::new();
     while let Some(ty) = pending.pop_first() {
@@ -338,6 +403,9 @@ fn complete_nominal_layouts(
         }
         work.node::<TypeObjectDigest>()?;
         visited.insert(ty);
+        if !instantiated_type(&program.types, ty, &mut instantiated, 0, work)? {
+            continue;
+        }
         let TypeForm::Applied { arguments, .. } = &program.types.get(&ty).ok_or_else(missing)?.form
         else {
             return Err(missing());
@@ -552,9 +620,11 @@ fn property_types(
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText => {}
-            TypeForm::Function { .. } if property != Property::Equality => {}
+            TypeForm::Function { .. } | TypeForm::TaskFunction { .. }
+                if property != Property::Equality => {}
             TypeForm::Secret if property == Property::Ordinary => {}
             TypeForm::Function { .. }
+            | TypeForm::TaskFunction { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -600,6 +670,8 @@ fn property_types(
                             child(payload)?;
                         }
                     }
+                } else if matches!(object.form, TypeForm::Applied { .. }) {
+                    admitted = false;
                 } else {
                     return Err(missing());
                 }
@@ -700,6 +772,7 @@ fn calls(
             ..
         }
         | NormalizedInstruction::FunctionValue {
+            effect_arguments: _,
             function,
             type_arguments,
         } = instruction
@@ -722,6 +795,350 @@ fn missing() -> Diagnostic {
         "normalized_instantiation_scope",
         "prepared type closure has a missing exact type, function, or substitution",
     )
+}
+
+/// Effect applications have a finite exact requirement universe. Ordinary type applications
+/// remain under the existing recursive-call contract and the subsequent type worklist.
+fn close_effect_applications(
+    program: &mut NormalizedProgram,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    use super::prepare::{NormalizedCode, NormalizedEntryPoint, NormalizedFunction};
+    use crate::platform::kernel::{EffectParameterReference, EffectRow, FunctionEffect};
+    use std::sync::Arc;
+
+    struct Closing<'a, 'b> {
+        templates: Arc<[NormalizedFunction]>,
+        functions: Vec<NormalizedFunction>,
+        instances: BTreeMap<EffectApplication, FunctionIndex>,
+        pending: Vec<(EffectApplication, FunctionIndex)>,
+        types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
+        requirements:
+            BTreeMap<crate::platform::kernel::RequirementReference, super::value::RequirementIndex>,
+        work: &'a mut Budget<'b>,
+    }
+    impl Closing<'_, '_> {
+        fn rows(&mut self, rows: &[EffectRow]) -> Result<(), Diagnostic> {
+            self.work.reserve::<EffectRow>(rows.len())?;
+            for row in rows {
+                step(self.work)?;
+                self.work
+                    .reserve::<crate::platform::kernel::RequirementReference>(
+                        row.requirements.len(),
+                    )?;
+                self.work
+                    .reserve::<EffectParameterReference>(row.parameters.len())?;
+                row.validate()?;
+            }
+            Ok(())
+        }
+        fn application(
+            &mut self,
+            target: FunctionIndex,
+            rows: Vec<EffectRow>,
+        ) -> Result<FunctionIndex, Diagnostic> {
+            step(self.work)?;
+            let function = self.templates.get(target.0 as usize).ok_or_else(missing)?;
+            if function.effect_parameters.len() != rows.len()
+                || rows.iter().any(|row| !row.is_closed())
+            {
+                return Err(missing());
+            }
+            let key = (target, rows);
+            if let Some(index) = self.instances.get(&key) {
+                return Ok(*index);
+            }
+            self.work.node::<(EffectApplication, FunctionIndex)>()?;
+            self.work.reserve::<NormalizedFunction>(1)?;
+            let index = if function.effect_parameters.is_empty() {
+                target
+            } else {
+                self.work.cloned_effect(&function.effect)?;
+                let index = FunctionIndex(
+                    u32::try_from(self.functions.len()).map_err(|_| missing())?,
+                    target.1,
+                );
+                self.functions.push(function.clone());
+                index
+            };
+            self.rows(&key.1)?;
+            self.work.node::<(EffectApplication, FunctionIndex)>()?;
+            self.instances.insert(key.clone(), index);
+            self.pending.push((key, index));
+            Ok(index)
+        }
+        fn code(
+            &mut self,
+            code: &mut NormalizedCode,
+            bindings: &EffectBindings,
+        ) -> Result<(), Diagnostic> {
+            self.work
+                .reserve::<NormalizedInstruction>(code.instructions.len())?;
+            // Admit variable operand storage before Arc::make_mut can clone it.
+            for instruction in code.instructions.iter() {
+                step(self.work)?;
+                if let NormalizedInstruction::Call {
+                    effect_arguments, ..
+                }
+                | NormalizedInstruction::TailCall {
+                    effect_arguments, ..
+                }
+                | NormalizedInstruction::FunctionValue {
+                    effect_arguments, ..
+                } = instruction
+                {
+                    self.rows(effect_arguments)?;
+                }
+            }
+            for instruction in Arc::make_mut(&mut code.instructions) {
+                step(self.work)?;
+                match instruction {
+                    NormalizedInstruction::Call {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                        ..
+                    }
+                    | NormalizedInstruction::TailCall {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                        ..
+                    }
+                    | NormalizedInstruction::FunctionValue {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                    } => {
+                        self.work.reserve::<EffectRow>(effect_arguments.len())?;
+                        let rows = effect_arguments
+                            .iter()
+                            .map(|row| {
+                                row.substitute(bindings, |n| {
+                                    self.work
+                                        .reserve::<crate::platform::kernel::RequirementReference>(
+                                            n,
+                                        )?;
+                                    for _ in 0..n {
+                                        step(self.work)?;
+                                    }
+                                    Ok(())
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        *function = self.application(*function, rows)?;
+                        *effect_arguments = Arc::from([]);
+                        self.work
+                            .reserve::<TypeObjectDigest>(type_arguments.len())?;
+                        for ty in Arc::make_mut(type_arguments) {
+                            *ty = substitute_effect_type(self.types, *ty, bindings, 0, self.work)?;
+                        }
+                    }
+                    NormalizedInstruction::Record { type_arguments, .. }
+                    | NormalizedInstruction::Variant { type_arguments, .. } => {
+                        self.work
+                            .reserve::<TypeObjectDigest>(type_arguments.len())?;
+                        for ty in Arc::make_mut(type_arguments) {
+                            *ty = substitute_effect_type(self.types, *ty, bindings, 0, self.work)?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        }
+    }
+    let templates = Arc::clone(&program.functions);
+    work.reserve::<NormalizedFunction>(templates.len())?;
+    for function in templates.iter() {
+        step(work)?;
+        work.cloned_effect(&function.effect)?;
+    }
+    work.reserve::<(
+        crate::platform::kernel::RequirementReference,
+        super::value::RequirementIndex,
+    )>(program.requirements.len())?;
+    let mut closing = Closing {
+        functions: templates.to_vec(),
+        templates,
+        instances: BTreeMap::new(),
+        pending: Vec::new(),
+        types: &mut program.types,
+        requirements: program
+            .requirements
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                Ok((
+                    r.reference,
+                    super::value::RequirementIndex(u32::try_from(i).map_err(|_| missing())?),
+                ))
+            })
+            .collect::<Result<_, Diagnostic>>()?,
+        work,
+    };
+    for i in 0..closing.templates.len() {
+        if closing.templates[i].effect_parameters.is_empty() {
+            closing.application(
+                FunctionIndex(
+                    u32::try_from(i).map_err(|_| missing())?,
+                    program.value_origin,
+                ),
+                Vec::new(),
+            )?;
+        }
+    }
+    let empty = EffectBindings::new();
+    for test in program.tests.values_mut() {
+        closing.code(&mut test.actual, &empty)?;
+        closing.code(&mut test.expected, &empty)?;
+    }
+    closing
+        .work
+        .reserve::<super::prepare::NormalizedPort>(program.ports.len())?;
+    for port in Arc::make_mut(&mut program.ports) {
+        if let NormalizedEntryPoint::Code(code) | NormalizedEntryPoint::PortExpression(code, _) =
+            &mut port.entry
+        {
+            closing.code(code, &empty)?;
+        }
+    }
+    while let Some(((target, rows), index)) = closing.pending.pop() {
+        step(closing.work)?;
+        closing.work.reserve::<NormalizedFunction>(1)?;
+        closing
+            .work
+            .cloned_effect(&closing.templates[target.0 as usize].effect)?;
+        let mut function = closing.templates[target.0 as usize].clone();
+        closing
+            .work
+            .reserve::<(EffectParameterReference, EffectRow)>(rows.len())?;
+        closing.rows(&rows)?;
+        let bindings = function
+            .effect_parameters
+            .iter()
+            .zip(&rows)
+            .map(|(parameter, row)| {
+                (
+                    EffectParameterReference {
+                        package: function.declaration.package,
+                        parameter: *parameter,
+                    },
+                    row.clone(),
+                )
+            })
+            .collect::<EffectBindings>();
+        closing.work.cloned_effect(&function.effect)?;
+        let row = function.effect.row().substitute(&bindings, |n| {
+            closing
+                .work
+                .reserve::<crate::platform::kernel::RequirementReference>(n)?;
+            for _ in 0..n {
+                step(closing.work)?;
+            }
+            Ok(())
+        })?;
+        closing
+            .work
+            .reserve::<super::value::RequirementIndex>(row.requirements.len())?;
+        function.task_requirements = row
+            .requirements
+            .iter()
+            .map(|r| closing.requirements.get(r).copied().ok_or_else(missing))
+            .collect::<Result<Vec<_>, _>>()?
+            .into();
+        if matches!(function.effect, FunctionEffect::Task { .. }) {
+            function.effect = FunctionEffect::Task {
+                requirements: row.requirements,
+                effect_parameters: Vec::new(),
+            };
+        }
+        function.effect_parameters = Arc::from([]);
+        function.effect_arguments = rows.into();
+        function.result =
+            substitute_effect_type(closing.types, function.result, &bindings, 0, closing.work)?;
+        closing
+            .work
+            .reserve::<super::prepare::NormalizedParameter>(function.parameters.len())?;
+        for parameter in Arc::make_mut(&mut function.parameters) {
+            parameter.ty =
+                substitute_effect_type(closing.types, parameter.ty, &bindings, 0, closing.work)?;
+        }
+        if let NormalizedFunctionBody::Code(code) = &mut function.body {
+            closing.code(code, &bindings)?;
+        }
+        closing.functions[index.0 as usize] = function;
+    }
+    program.functions = closing.functions.into();
+    Ok(())
+}
+
+fn substitute_effect_type(
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    bindings: &EffectBindings,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<TypeObjectDigest, Diagnostic> {
+    step(work)?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(missing());
+    }
+    let object = types.get(&ty).ok_or_else(missing)?;
+    work.cloned_type(object)?;
+    let mut object = object.clone();
+    if let TypeForm::TaskFunction { effect, .. } = &mut object.form {
+        *effect = effect.substitute(bindings, |n| {
+            work.reserve::<crate::platform::kernel::RequirementReference>(n)?;
+            for _ in 0..n {
+                step(work)?;
+            }
+            Ok(())
+        })?;
+    }
+    let mut descend = |ty: &mut TypeObjectDigest| -> Result<(), Diagnostic> {
+        *ty = substitute_effect_type(types, *ty, bindings, depth + 1, work)?;
+        Ok(())
+    };
+    match &mut object.form {
+        TypeForm::Applied { arguments, .. } => {
+            for ty in arguments {
+                descend(ty)?;
+            }
+        }
+        TypeForm::StructuralRecord { fields } => {
+            for field in fields {
+                descend(&mut field.ty)?;
+            }
+        }
+        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+            descend(item)?
+        }
+        TypeForm::Map { key, value }
+        | TypeForm::Result {
+            ok: key,
+            error: value,
+        } => {
+            descend(key)?;
+            descend(value)?;
+        }
+        TypeForm::Function { parameters, result }
+        | TypeForm::TaskFunction {
+            parameters, result, ..
+        } => {
+            for ty in parameters {
+                descend(ty)?;
+            }
+            descend(result)?;
+        }
+        _ => {}
+    }
+    let (digest, _) = encode_type_object(&object)?;
+    if !types.contains_key(&digest) {
+        work.node::<(TypeObjectDigest, TypeObject)>()?;
+    }
+    types.entry(digest).or_insert(object);
+    Ok(digest)
 }
 
 fn substitute(
@@ -766,7 +1183,10 @@ fn substitute(
             descend(ok)?;
             descend(error)?;
         }
-        TypeForm::Function { parameters, result } => {
+        TypeForm::Function { parameters, result }
+        | TypeForm::TaskFunction {
+            parameters, result, ..
+        } => {
             for parameter in parameters {
                 descend(parameter)?;
             }

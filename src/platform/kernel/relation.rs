@@ -1,4 +1,4 @@
-//! Single deterministic relation extractor for Graph 13 records.
+//! Single deterministic relation extractor for Graph 14 records.
 
 use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
@@ -57,6 +57,7 @@ pub enum RelationKind {
     AnnotationOwnership,
     PackageDependency,
     VariantExhaustiveness,
+    EffectParameterUse,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -73,7 +74,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 31] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -104,6 +105,7 @@ impl RelationKind {
         Self::AnnotationOwnership,
         Self::PackageDependency,
         Self::VariantExhaustiveness,
+        Self::EffectParameterUse,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -114,6 +116,7 @@ impl RelationKind {
             Self::ExpressionParent => 4,
             Self::ExpressionRoot => 5,
             Self::TypeParameterUse => 6,
+            Self::EffectParameterUse => 31,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -153,6 +156,7 @@ impl RelationKind {
             Self::ExpressionParent => "expression_parent",
             Self::ExpressionRoot => "expression_root",
             Self::TypeParameterUse => "type_parameter_use",
+            Self::EffectParameterUse => "effect_parameter_use",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -200,7 +204,9 @@ impl RelationKind {
             | Self::ParameterOperation
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
-            Self::TypeParameterUse | Self::NamedTypeUse => PropagationClass::Type,
+            Self::EffectParameterUse | Self::TypeParameterUse | Self::NamedTypeUse => {
+                PropagationClass::Type
+            }
             Self::LocalValueReference
             | Self::ConstantReference
             | Self::NominalFieldConstruction
@@ -408,7 +414,12 @@ where
                     }
                 }
                 DeclarationPayload::Function(function) => {
-                    if let FunctionEffect::Task { requirements } = &function.effect {
+                    extract_effect_relations(source, &function.effect.row(), edges)?;
+                    if let FunctionEffect::Task {
+                        effect_parameters: _,
+                        requirements,
+                    } = &function.effect
+                    {
                         for requirement in requirements {
                             exact_edge(
                                 edges,
@@ -468,6 +479,13 @@ where
                 )?;
             }
         }
+        OwnerRecord::EffectParameter(parameter) => owner_edge(
+            edges,
+            source,
+            RelationKind::MemberDeclaration,
+            package,
+            OwnerKey::Declaration(parameter.declaration),
+        )?,
         OwnerRecord::TypeParameter(parameter) => owner_edge(
             edges,
             source,
@@ -651,6 +669,17 @@ where
         crate::platform::semantic_id::CaseId,
     ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
 {
+    if let ExpressionOperation::Call {
+        effect_arguments, ..
+    }
+    | ExpressionOperation::FunctionValue {
+        effect_arguments, ..
+    } = operation
+    {
+        for row in effect_arguments {
+            extract_effect_relations(source, row, edges)?;
+        }
+    }
     match operation {
         ExpressionOperation::Local { value } => {
             let target = match value {
@@ -824,6 +853,10 @@ where
             )
         })?;
         match &object.form {
+            TypeForm::TaskFunction { effect, .. } => {
+                extract_effect_relations(source, effect, edges)?;
+                pending.extend(object.child_types());
+            }
             TypeForm::TypeParameter { parameter } => {
                 owner_edge(
                     edges,
@@ -866,6 +899,32 @@ where
             }
             _ => pending.extend(object.child_types()),
         }
+    }
+    Ok(())
+}
+
+fn extract_effect_relations(
+    source: ExactOwnerKey,
+    row: &super::EffectRow,
+    edges: &mut RelationCollector,
+) -> Result<(), Diagnostic> {
+    for parameter in &row.parameters {
+        exact_edge(
+            edges,
+            source,
+            RelationKind::EffectParameterUse,
+            parameter.package,
+            OwnerKey::EffectParameter(parameter.parameter),
+        )?;
+    }
+    for requirement in &row.requirements {
+        exact_edge(
+            edges,
+            source,
+            RelationKind::FunctionRequirement,
+            requirement.package,
+            OwnerKey::Requirement(requirement.requirement),
+        )?;
     }
     Ok(())
 }
