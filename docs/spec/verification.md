@@ -528,7 +528,8 @@ workload inventory. Both routes and the verifier are reobserved before and after
 child and at completion. The reader revalidates the actual source aggregate through every existing
 child reader; changed obligations remain failures even after outer hashes are recomputed. Missing,
 foreign, incomplete, changed, failed, cancelled or unclean evidence cannot pass. `pair-verify` only
-rereads evidence; it runs no applications. Schema-1 single-boundary receipts retain their old meaning.
+rereads evidence; it runs no applications. Existing single-boundary receipts retain their old format
+and meaning.
 Release pairs require release manifests and an `exact-download` child boundary. Dry-run pairs are
 explicit local rehearsals with a `pre-publication` child boundary and cannot authorize publication.
 Source-full, six-owner target admission and fresh pre-publication acceptance remain independent.

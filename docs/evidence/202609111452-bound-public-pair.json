@@ -32,6 +32,15 @@
     "clippy_E": "Passed",
     "interruption_preflight_A": "12 retained failures rejected, 248.35 seconds, original released inputs; development scope only",
     "equality_mutation": "Disabling the production streaming comparison made the byte-mutation regression fail; exact source restored",
+    "full_A_failure": {
+      "source_commit": "a82badb115c5afb868a02984a1beafc16826720d",
+      "passed": 25,
+      "selected": 26,
+      "elapsed_seconds": 255.125099325,
+      "reason": "Product-surface audit rejected private schema-1 term in normative prose; wording corrected without changing policy",
+      "receipt": ".artifacts/lkjscript-dev/check/1789112976495809266-1134176-0/receipt.json",
+      "digest": "verification_c5d36d7f262d264c40c464f31ba714a1f85a7c540145169cfa832da63268aed8"
+    },
     "raw_evidence": ".artifacts/pair-202609111452"
   },
   "acceptance": {
