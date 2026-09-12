@@ -2003,6 +2003,15 @@ pub(crate) fn read_transferred_receipt(
             &root.join(&command.observation.stdout.path),
             MAXIMUM_OUTPUT_BYTES,
         )?;
+        if foreground::command_has_closed_stdout(&receipt.effects.foreground, index) {
+            // The foreground owner below binds this exact command and its structured stderr
+            // diagnostic. A deliberately closed output pipe cannot carry a stdout diagnostic.
+            require(
+                !command.expects_success && stdout.is_empty(),
+                "closed-output command reported success or retained stdout",
+            )?;
+            continue;
+        }
         let records = parse_records("transferred-output", &stdout).map_err(|errors| {
             DevError::corrupt(format!("transferred public output: {errors:?}"))
         })?;
@@ -2188,6 +2197,20 @@ pub(crate) fn encode_transferred_test_fixture(
 #[allow(clippy::unwrap_used, reason = "bounded hostile path fixtures")]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires an authentic retained offline receipt and its exact candidate/verifier"]
+    fn retained_offline_receipt_passes_current_reader() {
+        let input = |name| PathBuf::from(std::env::var_os(name).unwrap());
+        let receipt = read_transferred_receipt(
+            &input("LKJSCRIPT_OFFLINE_READER_RECEIPT"),
+            &input("LKJSCRIPT_OFFLINE_READER_CANDIDATE"),
+            &input("LKJSCRIPT_OFFLINE_READER_VERIFIER"),
+        )
+        .unwrap();
+        assert_eq!(receipt.effects.foreground.failures.len(), 16);
+        assert!(receipt.cleanup_complete);
+    }
 
     #[test]
     fn independent_producer_join_detects_changed_private_body_and_omitted_edge() {

@@ -944,6 +944,13 @@ pub(super) fn command_cwd(receipt: &ForegroundReceipt, index: usize) -> Option<&
         .map(|consumer| consumer.cwd.as_str())
 }
 
+pub(super) fn command_has_closed_stdout(receipt: &ForegroundReceipt, index: usize) -> bool {
+    receipt
+        .failures
+        .iter()
+        .any(|cell| cell.command == index && cell.label == "broken-output")
+}
+
 fn command_evidence<'a>(
     parent: &'a Receipt,
     index: usize,
