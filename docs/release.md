@@ -269,13 +269,15 @@ each named target receipt through its existing owner.
 
 ## Exact tag and immutable publication
 
-After the final implementation commit is clean, normally pushed, exactly equal to `origin/main`, and
-its hosted dry run is fresh, recheck that the intended tag and release are unused and no relevant run
-is active. Create and push only the annotated tag:
+After the exact release source is clean, normally pushed, reachable from `origin/main`, and its
+hosted dry run is fresh, recheck that the intended tag and release are unused and no relevant run
+is active. Later accepted development or reporting commits may follow that source. Use an isolated
+clone with its own `.git` directory when necessary; select the accepted release source as HEAD
+without rewinding main. Create and push only the annotated tag:
 
 ```sh
 git fetch --prune origin
-test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+git merge-base --is-ancestor HEAD origin/main
 git status --short
 release_tag="v$(cargo metadata --locked --no-deps --format-version 1 |
   jq -er '.packages[] | select(.name == "lkjscript") | .version')"
