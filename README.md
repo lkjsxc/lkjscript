@@ -134,7 +134,7 @@ selected for publication as v0.1.34; see [release state](docs/release.md) for ac
 The latest bootstrap is acquired completely before execution with this single compound invocation:
 
 ```sh
-(umask 077; installer=$(mktemp) || exit; trap 'rm -f "$installer"' 0; trap 'exit 130' INT; trap 'exit 143' TERM; curl -q --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output "$installer" https://github.com/lkjsxc/lkjscript/releases/latest/download/install.sh && sh "$installer")
+(umask 077; installer=$(mktemp) || exit; trap 'rm -f "$installer"' 0; trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; curl -q --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output "$installer" https://github.com/lkjsxc/lkjscript/releases/latest/download/install.sh && sh "$installer")
 ```
 
 The script needs `sh`, `curl`, `sha256sum`, `tar`, `mktemp`, `chmod`, `wc`, `rm`, and

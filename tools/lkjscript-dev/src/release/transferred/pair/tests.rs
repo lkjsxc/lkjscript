@@ -572,6 +572,20 @@ fn live_pair_interruptions_preserve_failures_before_fresh_recovery() {
         let receipt = result.expect("failure receipt persisted");
         assert_ne!(receipt.status, Status::FreshPassed, "{fault}");
         assert!(read(&options, &verifier).is_err(), "{fault}");
+        let required_operation = match fault {
+            "lifecycle-interrupt" | "timeout" => Some("exact-check"),
+            "output-exhaustion" => Some("exact-capabilities"),
+            "cleanup-failure" => Some("exact-status-final"),
+            "failing-child" | "child-interrupt" => Some("distributed-http"),
+            _ => None,
+        };
+        if let Some(operation) = required_operation {
+            assert!(
+                events.borrow().iter().any(|observed| observed == operation),
+                "{fault}: intended operation was not reached: {:?}",
+                receipt.failure
+            );
+        }
         if fault == "two-lifecycles-before-suite" {
             assert!(
                 receipt.routes.iter().all(|r| r
@@ -977,6 +991,12 @@ fn live_pair_receipt_fault_matrix() {
         Route::Latest
             .extraction(&options)
             .join("RELEASE-MANIFEST.json"),
+        installation::candidate(&options, Route::Exact),
+        installation::candidate(&options, Route::Latest),
+        installation::candidate(&options, Route::Exact).with_file_name("RELEASE-MANIFEST.json"),
+        installation::candidate(&options, Route::Latest).with_file_name("RELEASE-MANIFEST.json"),
+        installation::candidate(&options, Route::Exact).with_file_name("INSTALL-RECEIPT.json"),
+        installation::candidate(&options, Route::Latest).with_file_name("INSTALL-RECEIPT.json"),
     ] {
         let original = flip_first_byte(&input);
         let rejected = read(&options, &verifier);
@@ -1032,6 +1052,7 @@ fn bootstrap_acquisition_failures_never_create_a_prefix() {
         "partial",
         "wrong-length",
         "wrong-digest",
+        "wrong-executable-digest",
         "unsupported-host",
         "missing-tools",
         "duplicate-prefix",
@@ -1041,11 +1062,23 @@ fn bootstrap_acquisition_failures_never_create_a_prefix() {
             "partial" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nprintf partial > \"$2\"\nexit 18\n".to_owned(),
             "wrong-length" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nprintf short > \"$2\"\n".to_owned(),
             "wrong-digest" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nhead -c \"$FIXTURE_LENGTH\" /dev/zero > \"$2\"\n".to_owned(),
+            "wrong-executable-digest" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\ncp \"$FIXTURE_ARCHIVE\" \"$2\"\n".to_owned(),
             _ => "#!/bin/sh\nexit 99\n".to_owned(),
         };
         let curl_path = fixture.join("curl");
         fs::write(&curl_path, curl).expect("curl fixture");
         fs::set_permissions(&curl_path, fs::Permissions::from_mode(0o755)).expect("mode");
+        let tar = fixture.join("tar");
+        if mode == "wrong-executable-digest" {
+            fs::write(
+                &tar,
+                "#!/bin/sh\nhead -c \"$FIXTURE_EXECUTABLE_LENGTH\" /dev/zero\n",
+            )
+            .expect("changed extracted bytes");
+            fs::set_permissions(&tar, fs::Permissions::from_mode(0o755)).expect("mode");
+        } else if tar.exists() {
+            fs::remove_file(&tar).expect("remove extraction fixture");
+        }
         let uname = fixture.join("uname");
         if mode == "unsupported-host" {
             fs::write(&uname, "#!/bin/sh\nprintf Darwin\\n\n").expect("uname");
@@ -1073,6 +1106,11 @@ fn bootstrap_acquisition_failures_never_create_a_prefix() {
                 },
             )
             .env("TMPDIR", &tmp)
+            .env("FIXTURE_ARCHIVE", assets.join(archive::ARCHIVE_NAME))
+            .env(
+                "FIXTURE_EXECUTABLE_LENGTH",
+                members[1].bytes.len().to_string(),
+            )
             .env(
                 "FIXTURE_LENGTH",
                 fs::metadata(assets.join(archive::ARCHIVE_NAME))
@@ -1084,6 +1122,9 @@ fn bootstrap_acquisition_failures_never_create_a_prefix() {
             .output()
             .expect("unchanged generated bootstrap");
         assert!(!output.status.success(), "{mode}");
+        if mode == "wrong-executable-digest" {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("candidate SHA-256 mismatch"));
+        }
         assert!(!prefix.exists(), "{mode}");
         assert!(!root.path().join("should-not-exist").exists());
         assert_eq!(

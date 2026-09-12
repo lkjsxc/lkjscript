@@ -258,7 +258,8 @@ Dispatch a dry run against the final source commit:
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
   -f publish=false -f tag="$release_tag"
-gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,attempt,jobs
+gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,jobs
+gh api repos/lkjsxc/lkjscript/actions/runs/RUN_ID --jq '{id,run_attempt,head_sha,status,conclusion}'
 gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name release-handoff-RUN_ID-RUN_ATTEMPT \
   --dir /absolute/absent/path/hosted-handoff

@@ -705,9 +705,8 @@ fn single_options(options: &PairOptions) -> Options {
     Options {
         verify: true,
         candidate: installation::candidate(options, Route::Exact),
-        manifest: Route::Exact
-            .extraction(options)
-            .join("RELEASE-MANIFEST.json"),
+        manifest: installation::candidate(options, Route::Exact)
+            .with_file_name("RELEASE-MANIFEST.json"),
         tag: options.tag.clone(),
         commit: options.commit.clone(),
         publication: options.publication,

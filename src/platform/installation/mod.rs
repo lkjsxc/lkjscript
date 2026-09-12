@@ -423,7 +423,7 @@ impl Root {
         fs::owned(&bin)?;
         let root = match fs::directory_at(&lib, "lkjscript")? {
             Some(root) => root,
-            None if create => initialize(&lib, points)?,
+            None if create => initialize(&lib, &prefix.join("lib"), points)?,
             None => return Ok(None),
         };
         let owner = read_ownership(&root)?;
@@ -703,10 +703,13 @@ impl Root {
             })();
             sync.map_err(|mut error| { error.notes.push(format!("selection observed as {:?}; pointer replacement committed; durability uncertain", self.pointer())); error })
         })();
-        let cleanup = match fs::stat(&self.bin, &temporary)? {
-            Some(_) => fs::remove_file(&self.bin, &temporary),
-            None => Ok(()),
-        };
+        let cleanup = (|| {
+            if fs::stat(&self.bin, &temporary)?.is_some() {
+                fs::remove_file(&self.bin, &temporary)?;
+            }
+            Ok(())
+        })();
+        let cleanup = cleanup_location(cleanup, &self.prefix.join("bin").join(&temporary));
         combine_cleanup(result, cleanup)
     }
     fn validate_inventory(&self) -> Result<(), Diagnostic> {
@@ -772,6 +775,12 @@ impl Root {
         fs::sync(&self.bin)
     }
     fn clean_stage(&self, name: &str, stage: &File) -> Result<(), Diagnostic> {
+        cleanup_location(
+            self.clean_stage_contents(name, stage),
+            &self.prefix.join("lib/lkjscript").join(name),
+        )
+    }
+    fn clean_stage_contents(&self, name: &str, stage: &File) -> Result<(), Diagnostic> {
         let mut entries = fs::entries(stage, 4)?;
         entries.sort_by_key(|name| name == STAGE_MARKER);
         for entry in entries {
@@ -810,7 +819,7 @@ impl Root {
     }
 }
 
-fn initialize(lib: &File, points: &dyn Checkpoints) -> Result<File, Diagnostic> {
+fn initialize(lib: &File, lib_path: &Path, points: &dyn Checkpoints) -> Result<File, Diagnostic> {
     let id = random_id()?;
     let stage_name = format!(".lkjscript-init-{id}");
     let stage = fs::private_directory(lib, &stage_name)?;
@@ -836,8 +845,8 @@ fn initialize(lib: &File, points: &dyn Checkpoints) -> Result<File, Diagnostic> 
             Err(error) => Err(io_error(error)),
         }
     })();
-    let cleanup = if fs::stat(lib, &stage_name)?.is_some() {
-        (|| {
+    let cleanup = (|| {
+        if fs::stat(lib, &stage_name)?.is_some() {
             if fs::stat(&stage, "versions")?.is_some() {
                 fs::remove_directory(&stage, "versions")?;
             }
@@ -847,11 +856,11 @@ fn initialize(lib: &File, points: &dyn Checkpoints) -> Result<File, Diagnostic> 
                 }
             }
             fs::remove_directory(lib, &stage_name)?;
-            fs::sync(lib)
-        })()
-    } else {
+            fs::sync(lib)?;
+        }
         Ok(())
-    };
+    })();
+    let cleanup = cleanup_location(cleanup, &lib_path.join(&stage_name));
     combine_cleanup(result, cleanup)?;
     let root = fs::required_directory(lib, "lkjscript")?;
     read_ownership(&root)?;
@@ -983,6 +992,15 @@ fn id_valid(id: &str) -> bool {
 fn stage_name(name: &str) -> bool {
     name.strip_prefix(".stage-").is_some_and(id_valid)
 }
+fn cleanup_location(result: Result<(), Diagnostic>, path: &Path) -> Result<(), Diagnostic> {
+    result.map_err(|mut error| {
+        error.notes.push(format!(
+            "cleanup incomplete at {}; preserve unrelated contents and inspect only this owned stage before retry",
+            path.display()
+        ));
+        error
+    })
+}
 fn combine_cleanup<T>(
     result: Result<T, Diagnostic>,
     cleanup: Result<(), Diagnostic>,
@@ -1000,6 +1018,7 @@ fn combine_cleanup<T>(
             error
                 .notes
                 .push(format!("required cleanup also failed: {cleanup}"));
+            error.notes.extend(cleanup.notes);
             Err(error)
         }
     }

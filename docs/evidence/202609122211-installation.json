@@ -47,7 +47,21 @@
       "publish": false
     },
     "publication": "pending; no tag/control write",
-    "receipt_faults": "pending actual execution"
+    "transferred_pair": {
+      "status": "fresh-passed-local-simulated-pair",
+      "receipt_digest": "verification_ec1f923d924e846bc9499858adcf7496e6f0ffc55b39c14a7a45792104b0b9b3",
+      "aggregate_digest": "verification_b12e98548bb10bcf4dc560175791daa3432a8709670b95146abefeae0a3cac5b",
+      "small_lifecycles": 2,
+      "fresh_aggregate_owners": 5,
+      "cleanup_complete": true
+    },
+    "receipt_faults": {
+      "status": "fresh-passed-original-compatible-reader",
+      "pair_interruptions": 12,
+      "transferred_receipt_faults": 267,
+      "pair_receipt_faults": 52,
+      "healthy_fixtures_restored": true
+    }
   },
   "installation": {
     "selected_tag": "v0.1.34",
@@ -55,6 +69,21 @@
     "target_acceptance": "unrun",
     "package_acceptance": "unrun",
     "public_acceptance": "unrun",
+    "first_frozen_candidate": {
+      "source": "ca883b9b4336c191ab24f9b7b3682b78c1f44f13",
+      "full": "26 fresh passed; verification_9d5efbb05f5f542bbee800d87dcbc62de02c47e861292cc45aa86b3829044992",
+      "target": "both pinned userlands and six owners fresh passed; verification_b579d23d2bd14ac0825c5cdfdcc755ef9d768bad98af6734ea82a13ab1e9cf0c",
+      "candidate_bytes": 22604160,
+      "candidate_sha256": "46221367fcb98ef3255b5e6e5787fad4e36dc6a21b6931752b4990ac1abb84bc",
+      "archive_bytes": 10169419,
+      "archive_sha256": "e565c37de01f92eb1bd13a468b6f4bfbe489f1e1f9552a9862e3b9a88812c147",
+      "installer_sha256": "27855816a88d6ba0e40ecf1d5fa828d339aeee97cdca13f53896aa9490b755ea",
+      "package": "fresh deterministic dry-run preparation and strict three-asset verification passed",
+      "installed_routes": "fresh simulated acquisition in both pinned userlands; both installed seven-command lifecycles and two-version process-continuity/recovery passed",
+      "aggregate": "failed before child invocation: installed executable paired with extraction manifest; corrected to retained colocated manifest",
+      "fault_sensitivity": "first interruption test returned success but two intended child faults were not reached; not accepted as complete sensitivity; assertions strengthened",
+      "disposition": "retained development evidence; corrected source requires fresh acceptance"
+    },
     "format_owners": {
       "historical_integrity": "src/release_container",
       "current_production": "tools/lkjscript-dev/src/release",

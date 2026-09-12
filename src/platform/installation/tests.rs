@@ -1,7 +1,7 @@
 use super::*;
 use crate::release_container::tests::{fixture, gzip};
 use std::fs;
-use std::os::unix::fs::symlink;
+use std::os::unix::fs::{PermissionsExt, symlink};
 fn archive(root: &Path, tag: &str) -> (PathBuf, String) {
     let bytes = gzip(&fixture(tag, None));
     let path = root.join(format!("{tag}.tar.gz"));
@@ -394,11 +394,74 @@ fn native_primary_and_cleanup_failures_are_retained_without_deleting_foreign_sta
         .find(|e| e.file_name().to_string_lossy().starts_with(".stage-"))
         .unwrap()
         .path();
+    assert!(
+        error
+            .notes
+            .iter()
+            .any(|note| note.contains(stage.to_str().unwrap()))
+    );
     assert_eq!(
         fs::read(stage.join("foreign-sentinel")).unwrap(),
         b"preserve"
     );
-    assert!(install(&prefix, &archive, &digest, true).is_err());
+    let retry = install(&prefix, &archive, &digest, true).unwrap_err();
+    assert!(
+        retry
+            .notes
+            .iter()
+            .any(|note| note.contains(stage.to_str().unwrap()))
+    );
     fs::remove_file(stage.join("foreign-sentinel")).unwrap();
     install(&prefix, &archive, &digest, true).unwrap();
+}
+
+#[test]
+fn native_cleanup_lookup_failure_preserves_primary_failure_and_recovery_location() {
+    struct LookupFault {
+        point: &'static str,
+        directory: PathBuf,
+    }
+    impl Checkpoints for LookupFault {
+        fn at(&self, point: &'static str) -> Result<(), Diagnostic> {
+            if point == self.point {
+                fs::set_permissions(&self.directory, fs::Permissions::from_mode(0o000)).unwrap();
+                return Err(io_error("primary publication failure"));
+            }
+            Ok(())
+        }
+    }
+    for (point, directory) in [
+        ("before-root-publish", "lib"),
+        ("before-pointer-replace", "bin"),
+    ] {
+        let temporary = tempfile::tempdir().unwrap();
+        let prefix = temporary.path().join("prefix");
+        let (archive, digest) = archive(temporary.path(), "v0.1.34");
+        let directory = prefix.join(directory);
+        let error = install_with(
+            &prefix,
+            &archive,
+            &digest,
+            true,
+            &LookupFault {
+                point,
+                directory: directory.clone(),
+            },
+        )
+        .unwrap_err();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            error.message.contains("primary publication failure"),
+            "{point}: {error:?}"
+        );
+        assert!(
+            error
+                .notes
+                .iter()
+                .any(|note| note.contains(directory.to_str().unwrap())),
+            "{point}: {error:?}"
+        );
+        install(&prefix, &archive, &digest, true).unwrap();
+        assert_eq!(list(&prefix).unwrap().selected.as_deref(), Some("v0.1.34"));
+    }
 }
