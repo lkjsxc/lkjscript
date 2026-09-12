@@ -78,7 +78,11 @@ impl Oracle {
         }
     }
     pub(super) fn timeout(self) -> Duration {
-        Duration::from_secs(if self == Self::PureTail { 900 } else { 1200 })
+        Duration::from_secs(match self {
+            Self::PureTail => 900,
+            Self::OfflinePackages => 1800,
+            _ => 1200,
+        })
     }
     pub(super) fn read(
         self,
