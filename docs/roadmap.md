@@ -45,8 +45,9 @@ milestone and one combined release: ordinary command bundles execute once throug
 runtime with exact grants and joined cleanup. Foreground source `0b5e9827` has passed fresh
 source/target acceptance and normal main integration. Dry run `34693887632/1` exhausted its
 offline-package deadline. Corrected source `c34114fc` passed fresh full, six-owner target and package
-acceptance and is normally integrated; selected v0.1.33 now awaits matching dry run `34700198909/1`,
-then annotated-tag publication and independent public exact/latest acceptance.
+acceptance and is normally integrated. Matching dry run `34700198909/1` and its original handoff
+readers passed. Selected v0.1.33 is now in tag run `34705135744/1`; immutable publication and
+independent public exact/latest acceptance remain pending.
 The installation campaign now selects immutable Linux runtime slots, a release-owned bootstrap,
 explicit default selection and retained-manager recovery using those foreground applications.
 It carries the inherited foreground publication and an additive installation milestone; no daemon,

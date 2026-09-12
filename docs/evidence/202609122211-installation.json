@@ -1,8 +1,13 @@
 {
   "campaign": "202609122211",
-  "status": "implementation-and-acceptance-in-progress",
+  "status": "INS-1–INS-6 locally accepted and integrated; inherited publication and INS-7 pending hosted work",
   "starting_head": "21bee29a132bf25202ad056748a4324d6fde7795",
   "guidance_and_mandate_commit": "efdbb3e5",
+  "integration": {
+    "status": "normal-main-push-completed",
+    "accepted_source": "037a13483321497737a30ade6df88950bb19e0de",
+    "policy": "Permissions, unprotected main, empty branch rules/rulesets, remote ancestry and automatic release effects refreshed. Four intended implementation/reconciliation commits integrated without force or history rewriting. Later reporting edits are separate from frozen implementation evidence."
+  },
   "preserved": [
     "preexisting August 31 stash",
     "frozen foreground candidates/verifiers",
@@ -43,10 +48,36 @@
     "dry_run": {
       "run": 34700198909,
       "attempt": 1,
-      "observed": "in_progress",
+      "observed": "completed-success",
+      "completed_utc": "2026-09-12T16:06:04Z",
       "publish": false
     },
-    "publication": "pending; no tag/control write",
+    "hosted_handoff_readers": {
+      "status": "passed-original-downloaded-verifier",
+      "verifier_bytes": 26386456,
+      "verifier_sha256": "c5b0b15aeee66a915c0645d2083802f2fbfa8a569e2fab44d5685568af78c948",
+      "archive_bytes": 10003409,
+      "archive_sha256": "ca9b40fe4f7a2cc672578dc52f7ea52b14dcc21e9b53bb81dd2bdbfc059c5cd6",
+      "full_receipt_sha256": "8b4934820be2f5f2f7fa820daedf56bb70d311f69685616fe77cf203fc05ba35",
+      "target_receipt_sha256": "accbbaed1bb6c758ff5d31e1d406dd5cb3692db1a5558defd6f0dd9108731c34",
+      "transferred_receipt_digest": "verification_5b75a6db1cf2e0de52e55d4d229adb6eeb54bba73e25702cf9b73dc2e8bb112e",
+      "transferred_receipt_sha256": "0aaeb21c7f9688b2c41cdf406de601a40a1b999b3eed207e1a213c80324b29d3",
+      "transferred_artifact_id": 10301447206,
+      "transferred_artifact_sha256": "11cdd891be3facb3848edf0f12ec644d28639b3298cce33266ad934a22547c58",
+      "method": "Authenticated artifact IDs, source/run/attempt, lengths and ZIP digests; restored original absolute paths in an owned mount namespace without rewriting receipts; original full, six target and five transferred readers passed. Local re-preparation reproduced hosted archive bytes exactly.",
+      "local_reconstruction_failures": "Initial mount/mode reconstruction and cold ignored-catalog copied-lifecycle attempts failed. Recorded modes and the hosted pipeline's prior public catalog preparation were restored; subsequent original readers passed. These initial attempts are not passing evidence.",
+      "cleanup_complete": true
+    },
+    "publication": {
+      "status": "tag-pushed; hosted publication and public acceptance pending",
+      "tag_object": "9a4e1c065b7c20459e318b83e67bfd041b74e911",
+      "peeled_source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
+      "run": 34705135744,
+      "attempt": 1,
+      "created_utc": "2026-09-12T16:24:37Z",
+      "observed": "in_progress",
+      "control": "Enabled immutability, permissions, branch rules, tag absence and no active publishers rechecked. Prior v0.1.32 value 562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf compared immediately before one scoped write; new value verified; only v0.1.33 pushed. Binding retained after push. No atomic-CAS claim or setting change."
+    },
     "transferred_pair": {
       "status": "fresh-passed-local-simulated-pair",
       "receipt_digest": "verification_ec1f923d924e846bc9499858adcf7496e6f0ffc55b39c14a7a45792104b0b9b3",
@@ -65,10 +96,66 @@
   },
   "installation": {
     "selected_tag": "v0.1.34",
-    "source_acceptance": "unrun",
-    "target_acceptance": "unrun",
-    "package_acceptance": "unrun",
+    "source_acceptance": "fresh-passed: 26 full gates at 037a1348",
+    "target_acceptance": "fresh-passed: exact static-musl candidate, both pinned userlands and six owners at 037a1348",
+    "package_acceptance": "fresh-passed: deterministic preparation, strict three-asset verification and complete installed pair at 037a1348",
     "public_acceptance": "unrun",
+    "hosted_dry_run": {
+      "run": 34706128684,
+      "attempt": 1,
+      "source": "037a13483321497737a30ade6df88950bb19e0de",
+      "created_utc": "2026-09-12T16:44:02Z",
+      "observed": "in_progress",
+      "publish": false,
+      "tag": "v0.1.34",
+      "checkout": "Checkout and source identity steps completed at 2026-09-12T16:44:11Z while remote main remained 037a1348; later reporting push occurs afterward.",
+      "last_observed_job": "103586387309: Build the host verifier",
+      "scope": "Matching run dispatched after accepted main integration. No v0.1.34 tag/control write or public release exists; no concurrent tag publisher was started."
+    },
+    "final_frozen_candidate": {
+      "source": "037a13483321497737a30ade6df88950bb19e0de",
+      "verifier_bytes": 26789976,
+      "verifier_sha256": "5e27f331c1e28e94fccde39461d71af319337d5dd7fb691ef910019e80cc818b",
+      "test_harness_sha256": "afed9342fb5933278a4759ceb596db799394a7fa6d30a815537422f0df324cfe",
+      "full_receipt_digest": "verification_6c1105cb430052d88ae54a99fd68e649c69f077b6d6133974f54fdf364cc9100",
+      "full_receipt_sha256": "d7c5819fc45441a15f0d6ecf5e334186adea7bc5be374049fa93abc7a88914e1",
+      "full_seconds": 539.542,
+      "target_receipt_digest": "verification_53fcf549754d94c9ec4ddb5866f57751bfb58b1137110bcf72969e6bf94f4641",
+      "target_receipt_sha256": "2eeae84cfbaf1e131f2fa660a7aaf694adaed0b7ef9ca29af608c58a38be4a72",
+      "target_receipt_faults": 73,
+      "candidate_bytes": 22612352,
+      "candidate_sha256": "12e29f4655186d9a8eb1b6c5c049225028d0bf5f44efdb83e043c4d756d44fa3",
+      "archive_bytes": 10171675,
+      "archive_sha256": "46c4ac25f37b6ebecdc745b4bf3abec246ccc503a5c712d1769247b013005164",
+      "manifest_sha256": "94d7977ca5377201e362dda1609080fe1e812d0f53d011b96cba327af9b9d87c",
+      "installer_bytes": 3566,
+      "installer_sha256": "04afe68a208fddae53a7a6273cee1ea08b199b4e3e7423d4abcb4ee6d20813c8",
+      "package_receipt_sha256": "e5966459074f1b8ddacdeabdb5402b62d464adc9d17f253cd69651f76fd15f54",
+      "publication_mode": "declared-dry-run/unverified-publication",
+      "pair_interruptions": "12 fresh passed with intended operations reached; 76.06 seconds; healthy inputs restored",
+      "pair": {
+        "status": "fresh-passed-local-simulated-acquisition",
+        "seconds": 722.134,
+        "digest": "verification_d6cf1b16d0699323f7c67e1ec43d6c9b0f55b2af4fe8cc5c34fc25c4a9920551",
+        "sha256": "1cd54a138c5808d81881c8cc903d6c12b551dc9ceee7a3dc6a40c4411656a97d",
+        "aggregate_digest": "verification_166f935ce7e9decd6b1bdf55168dc40f5dcc2595d22a7d80e83be6279dfda08b",
+        "aggregate_sha256": "0cee09ffd7b65eb8c7e69c998a5622c7b22a0adb06c0fd3ffc44c8d0673867d3",
+        "small_lifecycles": 2,
+        "aggregate_owners": 5,
+        "two_version_process_continuity_and_recovery": "fresh-passed",
+        "cleanup_complete": true
+      },
+      "receipt_faults": {
+        "status": "fresh-passed-on-first-complete-matching-fixture",
+        "transferred": 268,
+        "transferred_seconds": 118.95,
+        "transferred_results_sha256": "5990fc33e78039f1e1a9a831a1dafa7ef9a1bd75143f0add1c0b2a4a0abb832d",
+        "pair": 77,
+        "pair_seconds": 21.20,
+        "pair_results_sha256": "8373e4414066a6f5506152880e367bca15445ff4a65b2e65338851dfac9af41a",
+        "sensitivity": "Installer/installed payload identity, omitted installation/recovery, pinned-runtime path and consistently rehashed installation/recovery children rejected; original complete receipts restored and healthy readers passed."
+      }
+    },
     "first_frozen_candidate": {
       "source": "ca883b9b4336c191ab24f9b7b3682b78c1f44f13",
       "full": "26 fresh passed; verification_9d5efbb05f5f542bbee800d87dcbc62de02c47e861292cc45aa86b3829044992",
@@ -98,12 +185,12 @@
       "bootstrap": "tools/lkjscript-dev/src/release/bootstrap"
     },
     "claims": {
-      "INS-1": "partial fresh: actual predecessor installed/listed/selected and public command authored/check/build/run outside checkout with PATH empty; stabilized candidate package pending",
-      "INS-2": "partial fresh native fixture cases and actual unmanaged-manager reporting; retained two-version candidate recovery pending",
-      "INS-3": "partial fresh native races, OS locks, substitution, I/O checkpoints, five killed-process cuts/recovery, cleanup faults, actual closed-stdout commit; stabilized source acceptance pending",
-      "INS-4": "partial fresh strict fixtures, historical producer-policy separation, actual public predecessor container; full gate pending",
-      "INS-5": "fresh negative shell acquisition tests; genuine frozen script in both pinned userlands pending",
-      "INS-6": "existing foreground expectations retained; installed candidate aggregate and held processes pending",
+      "INS-1": "fresh-passed: copied final candidate and genuine archive outside checkout; native installation, all four payloads independently byte-equal, discovery/new/check/build/project and artifact run through installed paths with acquisition tools absent from PATH",
+      "INS-2": "fresh-passed: real v0.1.32 and v0.1.34 slots, explicit selection, immutable/idempotent/conflict/corruption negatives and newer absolute-manager recovery; bundle/descriptor/graph bytes unchanged",
+      "INS-3": "fresh-passed: native races, OS locks, substitution, ten I/O checkpoints, five fresh-initialization plus eight old-default killed-process cuts/recovery, cleanup faults and committed broken-output reporting; final full gate and 12 actual pair interruptions passed",
+      "INS-4": "fresh-passed: independent strict fixtures, malformed gzip/tar/static-ELF/member identities, decompression bound, snapshot replacement, historical producer-policy separation and actual public predecessor payload equality; current producer policy remains strict",
+      "INS-5": "fresh pre-publication bootstrap routes, compound invocation and negative acquisition tests passed, including partial script and real-curl HTTP downgrade rejection; unchanged frozen script ran in both pinned userlands with asserted exact URLs and simulated moving latest; public acquisition unrun",
+      "INS-6": "fresh-passed: held old/new HTTP processes and recovery, two independent foreground bundles/data roots with existing once-only expectations through the actual installed slot; all five aggregate owners and cleanup passed",
       "INS-7": "unrun; inherited foreground delivery separately pending"
     },
     "historical_archive": {
@@ -114,6 +201,23 @@
       "manifest_sha256": "fb6f026e7c4face353dd14b9b03e316d3acfb453c8732c840ef49919ee2e7960",
       "native_admission": "fresh-passed; declared-release/unverified-publication",
       "acquisition": "exact public URL with embedded expected digest; not claimed as a completed anonymous pair"
+    },
+    "distribution_cost": {
+      "baseline_source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
+      "baseline_executable_bytes": 22223104,
+      "executable_delta_bytes": 389248,
+      "baseline_archive_bytes": 10003387,
+      "archive_delta_bytes": 168288,
+      "scope": "Whole milestone, same local pinned static-musl build and dry-run packaging; not an isolated decompressor measurement or a runtime performance claim."
+    },
+    "manual_baseline": "Fresh anonymous exact v0.1.32 archive/checksum download, integrity checks, extraction and manual executable copy; corrected new/check/build --output/run lifecycle passed. Final v0.1.34 native installation and authoring passed with empty PATH in a different prefix containing spaces. A preexisting manual bin file rejected without changing it or creating lib. The selected bootstrap reduces acquisition/installation to one compound invocation but still downloads script plus archive and requires shell acquisition utilities.",
+    "additional_boundary_observations": {
+      "old_default_crashes": "Eight additional actual SIGKILL cuts through the existing native fixture with real v0.1.32 already selected. Every old payload stayed byte-identical; the pointer remained old before replacement and new afterward, complete new slots matched independently extracted bytes, and the actual public install command recovered each prefix.",
+      "native_fixture_sha256": "122f4bb34e7d84c6d5ed25d87dc5477534e0fc83d02d42c91c2265de547ad848",
+      "compound_invocation": "Fresh simulated success using the documented complete-download compound form and unchanged frozen script. Exactly one latest script URL then its embedded exact archive URL were requested despite simulated latest moving. All payload bytes matched; spaces and literal dollar-parenthesis prefix text stayed literal.",
+      "partial_script": "Fresh rejection: curl returned 18 after writing partial script bytes; execution marker and prefix absent; owned temporaries removed.",
+      "http_downgrade": "Fresh simulated rejection with real curl 8.5.0: an owned loopback TLS response redirected to HTTP and the unchanged protocol restrictions rejected it. Only the controlled acquisition adapter supplied the local URL/CA; this is not public acquisition. TLS process joined and fixture key/certificate deleted.",
+      "nonpassing_fixture_attempts": "External redirect fixture returned HTTP 403 and was unavailable as downgrade proof. The first local assertion expected a different curl diagnostic suffix; actual retained response/diagnostic established rejection, then the matching observation check passed. No source or shipped script changed."
     },
     "limitations": [
       "only Linux x86-64/static-musl supported",

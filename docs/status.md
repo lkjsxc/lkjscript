@@ -19,13 +19,20 @@ after reaching command 470 of 492; no semantic failure was established. Correcte
 1,800 seconds, and initializes a missing derived catalog before its read-only projection test. Its
 fresh full profile passed all 26 gates; exact static target admission passed both userlands and all
 six owners, and deterministic packaging passed. It is normally integrated on main. Matching dry run
-`34700198909/1` is in progress; tag publication and public acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
+`34700198909/1` passed; its full, target, package and transferred handoffs passed the original readers.
+Annotated tag `v0.1.33` selects that source; publication run `34705135744/1` is in progress.
+Immutable publication and anonymous public acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
 separates accepted source from later reporting. This designed witness is separate from maintained adoption.
 
 The [installation campaign](campaigns/202609122211.md) adds project-independent native `runtime
 install`, `runtime list`, and `runtime select`, immutable version slots and one relative default symlink.
-Source implementation and focused fault tests are in progress toward v0.1.34; the new package, hosted
-and public bootstrap acceptance are not yet established. Selection changes no graph, artifact, grant
+Source `037a1348` passed 26 fresh full gates, both pinned userlands, all six target owners,
+73 target receipt faults and strict deterministic packaging for v0.1.34. Native installation and
+authoring work with an empty PATH. Both simulated bootstrap routes, old-runtime recovery and the
+complete five-owner installed application pair passed, followed by 12 interruption, 268 transferred
+and 77 pair receipt faults with healthy recovery. The accepted implementation is integrated on main.
+Hosted dry run `34706128684/1` is in progress at that exact source; immutable publication and
+anonymous bootstrap acceptance remain pending. Selection changes no graph, artifact, grant
 or application data and never infers compatibility or invokes another runtime as fallback.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict

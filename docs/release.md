@@ -19,8 +19,14 @@ and runtime policy only on a matching foreground-capable executable; retain nume
 and the previous executable with immutable bundles for recovery. No operational-data migration
 is part of publication. The failed original dry run `34693887632/1` reached its offline-package outer
 deadline. Corrected two-asset source `c34114fc` passed fresh full, exact six-owner target and package
-proof and is integrated; matching `34700198909/1` is running without publication. The installation
-campaign separately selects v0.1.34 and its verified third asset after the acceptance below.
+proof and is integrated. Matching dry run `34700198909/1` passed, and its downloaded handoffs
+passed the original compatible readers. Annotated v0.1.33 tag object
+`9a4e1c065b7c20459e318b83e67bfd041b74e911` selects that source; tag run `34705135744/1` is in progress.
+Its immutable publication and public pair remain pending. This inherited source retains receipt 8
+and two assets. The installation campaign separately selects v0.1.34, receipt 9 and the verified
+third asset after the acceptance below. Its accepted implementation `037a1348` is integrated;
+matching hosted dry run `34706128684/1` is in progress. The bootstrap URLs are not available until
+that publication.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
