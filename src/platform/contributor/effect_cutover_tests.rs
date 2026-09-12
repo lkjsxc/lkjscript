@@ -34,6 +34,27 @@ fn meaning_hash(mut value: serde_json::Value) -> String {
         .to_string()
 }
 
+/// Exact accepted Graph 14 input to the later iteration cutover. Historical generation
+/// inventories stay bound to this snapshot; the iteration compatibility test independently
+/// checks its transition to the maintained standard, including the retired range topology.
+pub(crate) fn standard_before_task_iteration() -> KernelSnapshot {
+    let bytes = include_bytes!("../../../tests/fixtures/graph14-before-task-iteration.lkjp");
+    let transport =
+        "package_transport_76acdf9341178a1d49125e3c067fed5633113d8e30ddec34339b319365a4dfcb"
+            .parse()
+            .unwrap();
+    let mut closure =
+        crate::platform::package_transport::source::PackageContainer::decode(bytes, transport)
+            .unwrap()
+            .admit()
+            .unwrap();
+    closure
+        .packages
+        .remove(&closure.container.root.package_revision)
+        .unwrap()
+        .snapshot
+}
+
 #[test]
 #[ignore = "one-time capture of the explicitly preserved Graph 13 baseline and reviewed Graph 14 transition"]
 fn retain_effect_transition_inventory() {
@@ -128,7 +149,7 @@ fn retain_effect_transition_inventory() {
 }
 
 #[test]
-fn maintained_effect_transition_preserves_every_owner_and_unchanged_type_byte() {
+fn frozen_effect_transition_preserves_every_owner_and_unchanged_type_byte() {
     use crate::platform::kernel::{
         OwnerKey, OwnerRecord, TypeObjectDigest, decode_type_object, encode_type_object,
     };
@@ -148,13 +169,17 @@ fn maintained_effect_transition_preserves_every_owner_and_unchanged_type_byte() 
     for project in fixture["projects"].as_array().unwrap() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(project["project"].as_str().unwrap());
         let before = std::fs::read(path.join("HEAD")).unwrap();
-        let snapshot = GraphRepository::open(&path)
-            .unwrap()
-            .view_current()
-            .unwrap()
-            .reconstruct_full_oracle()
-            .unwrap()
-            .value;
+        let snapshot = if project["project"] == "packages/standard" {
+            standard_before_task_iteration()
+        } else {
+            GraphRepository::open(&path)
+                .unwrap()
+                .view_current()
+                .unwrap()
+                .reconstruct_full_oracle()
+                .unwrap()
+                .value
+        };
         assert_eq!(
             serde_json::to_value(snapshot.root.package_id).unwrap(),
             project["observed_predecessor_root"]["package_id"]

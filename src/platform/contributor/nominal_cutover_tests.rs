@@ -35,7 +35,7 @@ fn neutral(value: &mut Value) {
 }
 
 #[test]
-fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirement() {
+fn frozen_graph13_cutover_preserves_every_predecessor_owner_type_and_retirement() {
     // The retained Graph 12 oracle stays immutable. Account only for the separately
     // enumerated Graph 14 additions and explicit task-port type replacements.
     let effects: Value = serde_json::from_str(include_str!(
@@ -66,12 +66,16 @@ fn maintained_graph13_cutover_preserves_every_predecessor_owner_type_and_retirem
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(project);
         let before = std::fs::read(path.join("HEAD")).unwrap();
         let repository = GraphRepository::open(&path).unwrap();
-        let snapshot = repository
-            .view_current()
-            .unwrap()
-            .reconstruct_full_oracle()
-            .unwrap()
-            .value;
+        let snapshot = if project == "packages/standard" {
+            super::effect_cutover_tests::standard_before_task_iteration()
+        } else {
+            repository
+                .view_current()
+                .unwrap()
+                .reconstruct_full_oracle()
+                .unwrap()
+                .value
+        };
         assert_eq!(
             serde_json::to_value(snapshot.root.repository_id).unwrap(),
             fixture["repository"]

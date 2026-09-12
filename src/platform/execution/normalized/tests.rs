@@ -86,6 +86,10 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     let schema =
         super::reference_schema::NormalizedReferenceSchema::reconstruct([&standard, &application])
             .unwrap();
+    // The historical inventory predates the explicitly verified range retirement. Current
+    // artifacts and current schemas below still prove the preserved data bytes at execution.
+    let inventory_standard =
+        crate::platform::contributor::effect_cutover_tests::standard_before_task_iteration();
     let mut nominal = 0;
     let mut nested = 0;
     for (project, type_count) in fixture["projects"]
@@ -95,7 +99,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
         .zip([85, 149])
     {
         let snapshot = if project["package"] == "pkg_10000000000000000000000000000001" {
-            &standard
+            &inventory_standard
         } else {
             &application
         };

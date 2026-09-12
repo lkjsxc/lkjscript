@@ -182,7 +182,7 @@ fn artifact_prepares_one_exact_worker_handoff_without_host_authority() {
                     use_mode: ParameterUse::Consume,
                     ..
                 },
-                NormalizedInstruction::Call {
+                NormalizedInstruction::TailCall {
                     function,
                     arguments: 2,
                     ..
