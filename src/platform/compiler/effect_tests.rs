@@ -105,11 +105,27 @@ fn replace_unit(
         let mut binding = CompilationBinding::decode(bytes, owner).unwrap();
         if binding.object.object_key() == old {
             binding.object = CompilerUnitObjectDigest::from_bytes(key.digest.bytes());
+            binding.key = unit.key;
+            binding.kind = unit.source.kind;
             *bytes = binding.encode(owner).unwrap();
             count += 1;
         }
     }
     assert_eq!(count, 1);
+    let mut old_pages = MemoryPageStore::default();
+    PersistentMap::from_root(compilation.units)
+        .copy_reachable(
+            &ObjectPageReader::new(loaded),
+            &mut old_pages,
+            &mut MapWork::default(),
+        )
+        .unwrap();
+    for (digest, _) in old_pages.objects() {
+        objects.remove(&ObjectKey::from_digest(
+            ObjectDomain::MapPage,
+            digest.bytes(),
+        ));
+    }
     compilation.units = replace_artifact_map(&mut objects, entries);
     let (digest, bytes) = compilation.encode().unwrap();
     objects.remove(&old_compilation.object_key());
@@ -141,9 +157,11 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
         "argument-erasure",
         "forged-target",
         "nested-erasure",
+        "task-as-pure",
+        "terminal-cycle",
     ] {
         let (old, original) = match fault {
-            "row-erasure" => task,
+            "row-erasure" | "task-as-pure" | "terminal-cycle" => task,
             "argument-erasure" | "forged-target" => caller,
             _ => factory,
         };
@@ -153,6 +171,31 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
             unreachable!()
         };
         match fault {
+            "task-as-pure" => {
+                signature.effect = FunctionEffect::Pure;
+                unit.source.kind = OwnerKind::PureFunction;
+                unit.key =
+                    super::super::unit::CompilationUnitKey::derive(&unit.source, unit.optimization)
+                        .unwrap();
+            }
+            "terminal-cycle" => {
+                assert!(matches!(
+                    code.instructions.last(),
+                    Some(CompiledInstruction::Return)
+                ));
+                let end = code.instructions.len() - 1;
+                // Both successors are structurally reachable with the same stack shape. The
+                // conditional back edge changes canonical terminal control despite valid hashes.
+                code.instructions.splice(
+                    end..end,
+                    [
+                        CompiledInstruction::Bool(true),
+                        CompiledInstruction::JumpIfFalse((end + 4) as u32),
+                        CompiledInstruction::Drop,
+                        CompiledInstruction::Jump(0),
+                    ],
+                );
+            }
             "parameter-order" => signature.effect_parameters.swap(0, 1),
             "parameter-ownership" => {
                 signature.effect_parameters[0] =
@@ -234,6 +277,7 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
         let expected = match fault {
             "parameter-ownership" => "artifact_runtime_owner_unexpected",
             "argument-erasure" | "forged-target" => "artifact_nominal_instruction_meaning",
+            "terminal-cycle" => "artifact_compiled_control_meaning",
             _ => "artifact_reference_declaration_payload",
         };
         assert_eq!(failure.code, expected, "{fault}: {failure:?}");
@@ -272,4 +316,34 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
     let error = load_artifact(&bytes).unwrap_err();
     assert_eq!(error.code, "artifact_runtime_owner_semantics");
     println!("effect-artifact-negative task-as-pure-port {}", error.code);
+}
+
+#[test]
+fn strict_rehashed_artifact_cannot_delete_a_pending_transaction_commit() {
+    let (snapshot, _) =
+        crate::platform::execution::normalized::tests::iteration_transaction_tests::fixture(false);
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("transaction"), &snapshot, None).unwrap();
+    let compiled = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    let linked = link_artifact(&created.repository, compiled.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&linked.artifact.bytes).unwrap();
+    let (old, mut unit) = loaded.objects.iter().filter(|(key,_)|key.domain==ObjectDomain::CompilerUnit)
+        .map(|(key,bytes)|(*key,CompilationUnit::decode(bytes,*key).unwrap()))
+        .find(|(_,unit)|matches!(&unit.payload,CompilationPayload::Function{code,..} if code.instructions.iter().any(|instruction|matches!(instruction,CompiledInstruction::CommitTransaction{..})))).unwrap();
+    let CompilationPayload::Function { code, .. } = &mut unit.payload else {
+        unreachable!()
+    };
+    let before = code.instructions.len();
+    code.instructions.retain(|instruction| {
+        !matches!(instruction, CompiledInstruction::CommitTransaction { .. })
+    });
+    assert_eq!(code.instructions.len() + 1, before);
+    let bytes = replace_unit(&loaded, old, &unit, vec![]);
+    let error = load_artifact(&bytes).unwrap_err();
+    assert_eq!(error.code, "artifact_compiled_control_meaning", "{error:?}");
 }

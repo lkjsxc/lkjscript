@@ -18,15 +18,26 @@ type EffectBindings =
 type EffectApplication = (FunctionIndex, Vec<crate::platform::kernel::EffectRow>);
 const MAXIMUM_WORK: usize = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
 
-struct Budget<'a> {
+pub(super) struct Budget<'a> {
     steps: usize,
     bytes: usize,
     control: &'a crate::platform::execution::ExecutionControl,
 }
 
-impl Budget<'_> {
-    fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
+impl<'a> Budget<'a> {
+    pub(super) fn new(control: &'a crate::platform::execution::ExecutionControl) -> Self {
+        Self {
+            steps: 0,
+            bytes: 0,
+            control,
+        }
+    }
+    pub(super) fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
         reserve_metadata(&mut self.bytes, count, std::mem::size_of::<T>())
+    }
+
+    pub(super) fn step(&mut self) -> Result<(), Diagnostic> {
+        step(self)
     }
 
     fn node<T>(&mut self) -> Result<(), Diagnostic> {
@@ -132,12 +143,13 @@ pub(super) fn complete_controlled(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
     let mut pending = BTreeSet::new();
-    let mut work = Budget {
-        steps: 0,
-        bytes: 0,
-        control,
-    };
+    let mut work = Budget::new(control);
     close_effect_applications(program, &mut work)?;
+    // Derive dispatch only after each exact effect application and its callees are closed.
+    super::prepare::derive_tail_dispatch(
+        std::sync::Arc::make_mut(&mut program.functions),
+        &mut work,
+    )?;
     for (index, function) in program.functions.iter().enumerate() {
         if function.type_parameters.is_empty() && function.effect_parameters.is_empty() {
             step(&mut work)?;

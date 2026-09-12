@@ -2,7 +2,12 @@
 use crate::pure_tail_program::Request;
 use std::collections::BTreeMap;
 
-fn response(r: &mut Request, s: &BTreeMap<String, String>, value: &str, ty: &str) -> String {
+pub(super) fn response(
+    r: &mut Request,
+    s: &BTreeMap<String, String>,
+    value: &str,
+    ty: &str,
+) -> String {
     let body = r.call(&s["json-encode"], &[ty], &[value.to_owned()]);
     let headers = r.expression("list", "item=@Header");
     let status = r.integer(200);
@@ -28,7 +33,7 @@ fn read(r: &mut Request, s: &BTreeMap<String, String>) -> String {
     r.capability("$data", &s["DataStore.get"], &[space, key])
 }
 
-fn task(
+pub(super) fn task(
     r: &mut Request,
     name: &str,
     result: &str,
@@ -82,12 +87,18 @@ fn mapped(
     result
 }
 
-fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>) {
+fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>, fold: bool) {
+    let start = r.text.len();
+    let state_type = if fold { "i64" } else { "@Numbers" };
     let input = r.local("$concrete-jobs_input");
     let values = r.field(&input, "values");
     let input = r.local("$concrete-jobs_input");
     let prefix = r.field(&input, "prefix");
-    let state = r.expression("list", "item=i64");
+    let state = if fold {
+        r.integer(0)
+    } else {
+        r.expression("list", "item=i64")
+    };
     let lo = r.integer(0);
     let input = r.local("$concrete-jobs_input");
     let values_for_length = r.field(&input, "values");
@@ -96,7 +107,7 @@ fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>) {
     task(
         r,
         "concrete-jobs",
-        "@Numbers",
+        state_type,
         "$config",
         &body,
         &[("input", "@Input")],
@@ -117,7 +128,11 @@ fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>) {
     let prefix = r.local("$concrete-range_prefix");
     let mapped = r.call("$config-job", &[], &[prefix, item]);
     let accumulated = r.local("$concrete-range_state");
-    let singleton = r.call(&s["list-append"], &["i64"], &[accumulated, mapped]);
+    let singleton = if fold {
+        r.call(&s["add"], &[], &[accumulated, mapped])
+    } else {
+        r.call(&s["list-append"], &["i64"], &[accumulated, mapped])
+    };
     let hi = r.local("$concrete-range_hi");
     let lo = r.local("$concrete-range_lo");
     let width = r.call(&s["subtract"], &[], &[hi, lo]);
@@ -146,7 +161,7 @@ fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>) {
         &[values, prefix, advanced, middle, hi],
     );
     let split = r.expression("let", &format!("body={right}"));
-    r.text.push_str(&format!("expression.binding parent={split} index=0 as=$concrete-mid name=mid type=i64 value={mid}\nexpression.binding parent={split} index=1 as=$concrete-left name=left type=@Numbers value={left}\n"));
+    r.text.push_str(&format!("expression.binding parent={split} index=0 as=$concrete-mid name=mid type=i64 value={mid}\nexpression.binding parent={split} index=1 as=$concrete-left name=left type={state_type} value={left}\n"));
     let nonempty = r.expression(
         "if",
         &format!("condition={single} when-true={singleton} when-false={split}"),
@@ -158,17 +173,25 @@ fn concrete_comparison(r: &mut Request, s: &BTreeMap<String, String>) {
     task(
         r,
         "concrete-range",
-        "@Numbers",
+        state_type,
         "$config",
         &body,
         &[
             ("values", "@Jobs"),
             ("prefix", "i64"),
-            ("state", "@Numbers"),
+            ("state", state_type),
             ("lo", "i64"),
             ("hi", "i64"),
         ],
     );
+    if fold {
+        let code = r.text.split_off(start);
+        r.text.push_str(
+            &code
+                .replace("$concrete-", "$comparison-fold-")
+                .replace("name=concrete-", "name=comparison-fold-"),
+        );
+    }
 }
 
 fn result_values(
@@ -232,6 +255,33 @@ fn result_values(
     let input = r.local("$input");
     let result = r.call("$results-jobs", &[], &[input]);
     response(r, s, &result, "@Results")
+}
+
+fn nested_map(
+    r: &mut Request,
+    s: &BTreeMap<String, String>,
+    library: &BTreeMap<String, String>,
+) -> String {
+    let callback = r.function_value("$config-job");
+    let prefix = r.local("$nested-map-job_prefix");
+    let callback = r.bind(&callback, &[prefix]);
+    let item = r.local("$nested-map-job_job");
+    let items = r.expression("list", "item=@Job");
+    r.arguments(&items, &[item]);
+    let inner = r.call(&library["task-map"], &["@Job", "i64"], &[items, callback]);
+    r.effects(&inner, &["@Config"]);
+    let zero = r.integer(0);
+    let result = r.call(&s["list-get"], &["i64"], &[inner, zero]);
+    task(
+        r,
+        "nested-map-job",
+        "i64",
+        "$config",
+        &result,
+        &[("prefix", "i64"), ("job", "@Job")],
+    );
+    let result = mapped(r, library, "$nested-map-job", "@Config", "$input");
+    response(r, s, &result, "@Numbers")
 }
 
 pub(super) fn program(
@@ -427,7 +477,8 @@ pub(super) fn program(
     let input = r.local("$input");
     let fold = r.call("$folded-jobs", &[], &[input]);
     let fold_response = response(&mut r, s, &fold, "i64");
-    concrete_comparison(&mut r, s);
+    concrete_comparison(&mut r, s, false);
+    concrete_comparison(&mut r, s, true);
     let results_response = result_values(&mut r, s, library);
     // The traversal has no enclosing transaction; each callback owns and commits its write.
     let written = mapped(&mut r, library, "$nested-job", "@Data", "$input");
@@ -476,6 +527,12 @@ pub(super) fn program(
     let body = mode(&mut r, s, "transaction", &transaction_response, &body);
     let body = mode(&mut r, s, "nested", &nested_response, &body);
     let body = mode(&mut r, s, "results", &results_response, &body);
+    let nested_map_response = nested_map(&mut r, s, library);
+    let body = mode(&mut r, s, "nested-map", &nested_map_response, &body);
+    let mut body = body;
+    for (name, response) in super::effects_iteration_program::consumer(&mut r, s, library) {
+        body = mode(&mut r, s, &name, &response, &body);
+    }
     let input = r.local(&b["parameter"]);
     let stream = r.field(&input, "body");
     let maximum = r.integer(1_048_576);

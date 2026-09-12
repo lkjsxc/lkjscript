@@ -10,7 +10,7 @@ use super::unit::{
 };
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::change::{
-    CanonicalBaseRead, CanonicalReadWork, WitnessBaseRead, WitnessReadWork,
+    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -228,6 +228,72 @@ struct UnitBuilder<'a, B: ?Sized> {
     package: PackageId,
     tables: TablesBuilder,
     work: CompilationWork,
+}
+
+/// Exact point reads needed for expression lowering. Artifact admission supplies these from its
+/// independently admitted canonical closure, without a repository or a producer's witness.
+pub(super) trait CodeRead {
+    fn code_step(&self) -> Result<(), Diagnostic> {
+        Ok(())
+    }
+    fn code_owner(&self, owner: OwnerKey)
+    -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic>;
+    fn code_type(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Result<CanonicalRead<Option<crate::platform::kernel::TypeObject>>, Diagnostic>;
+    fn code_interface(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic>;
+}
+
+impl<B: CanonicalBaseRead + ?Sized> CodeRead for B {
+    fn code_owner(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+        self.read_owner(owner)
+    }
+    fn code_type(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Result<CanonicalRead<Option<crate::platform::kernel::TypeObject>>, Diagnostic> {
+        self.read_type_object(ty)
+    }
+    fn code_interface(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        let dependency = self.read_dependency(package)?;
+        let binding = dependency.value.ok_or_else(|| {
+            compiler_corrupt(
+                "compiler_dependency_missing",
+                "exact compiler reference names an unbound dependency package",
+            )
+        })?;
+        let mut read = self.read_package_interface_owner(&binding, owner)?;
+        read.work.add(dependency.work);
+        Ok(read)
+    }
+}
+
+pub(super) fn canonical_code<B: CodeRead + ?Sized>(
+    read: &B,
+    package: PackageId,
+    tables: &CompilationTables,
+    root: ExpressionId,
+    parameters: &[ParameterId],
+) -> Result<CompiledCode, Diagnostic> {
+    let mut builder = UnitBuilder {
+        canonical: read,
+        package,
+        tables: TablesBuilder::from_tables(tables),
+        work: CompilationWork::default(),
+    };
+    builder.compile_code(root, parameters)
 }
 
 impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
@@ -753,7 +819,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             implementation,
         })
     }
+}
 
+impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
     fn compile_code(
         &mut self,
         root: ExpressionId,
@@ -774,7 +842,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         owner: OwnerKey,
         missing: &'static str,
     ) -> Result<OwnerRecord, Diagnostic> {
-        let read = self.canonical.read_owner(owner)?;
+        let read = self.canonical.code_owner(owner)?;
         self.work.canonical.add(read.work);
         let record = read.value.ok_or_else(|| {
             compiler_error(
@@ -946,17 +1014,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         package: PackageId,
         owner: OwnerKey,
     ) -> Result<PackageInterfaceRecord, Diagnostic> {
-        let dependency = self.canonical.read_dependency(package)?;
-        self.work.canonical.add(dependency.work);
-        let dependency = dependency.value.ok_or_else(|| {
-            compiler_corrupt(
-                "compiler_dependency_missing",
-                "exact compiler reference names an unbound dependency package",
-            )
-        })?;
-        let read = self
-            .canonical
-            .read_package_interface_owner(&dependency, owner)?;
+        let read = self.canonical.code_interface(package, owner)?;
         self.work.canonical.add(read.work);
         self.work.owner_records_read = self.work.owner_records_read.saturating_add(1);
         read.value.ok_or_else(|| {
@@ -1128,7 +1186,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         let Some(payload) = self.exact_case(reference)?.payload else {
             return Ok(false);
         };
-        let read = self.canonical.read_type_object(payload)?;
+        let read = self.canonical.code_type(payload)?;
         self.work.canonical.add(read.work);
         Ok(read
             .value
@@ -1145,7 +1203,7 @@ struct CodeCompiler<'a, 'b, B: ?Sized> {
     compiled: BTreeSet<ExpressionId>,
 }
 
-impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
+impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
     fn new(
         unit: &'a mut UnitBuilder<'b, B>,
         parameters: &[ParameterId],
@@ -1600,6 +1658,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
     }
 
     fn bind(&mut self, reference: LocalValueReference) -> Result<u32, Diagnostic> {
+        self.unit.canonical.code_step()?;
         if self.locals.contains_key(&reference) {
             return Err(compiler_corrupt(
                 "compiler_local_duplicate",
@@ -1632,6 +1691,7 @@ impl<'a, 'b, B: CanonicalBaseRead + ?Sized> CodeCompiler<'a, 'b, B> {
     }
 
     fn push(&mut self, instruction: CompiledInstruction) -> Result<u32, Diagnostic> {
+        self.unit.canonical.code_step()?;
         if self.instructions.len() == MAXIMUM_COMPILER_UNIT_ITEMS {
             return Err(compiler_error(
                 DiagnosticClass::Resource,
@@ -1664,6 +1724,19 @@ struct TablesBuilder {
 }
 
 impl TablesBuilder {
+    fn from_tables(tables: &CompilationTables) -> Self {
+        Self {
+            declarations: InternTable::from_values(&tables.declarations),
+            fields: InternTable::from_values(&tables.fields),
+            cases: InternTable::from_values(&tables.cases),
+            requirements: InternTable::from_values(&tables.requirements),
+            operations: InternTable::from_values(&tables.operations),
+            ports: InternTable::from_values(&tables.ports),
+            types: InternTable::from_values(&tables.types),
+            structural_names: InternTable::from_values(&tables.structural_names),
+            texts: InternTable::from_values(&tables.texts),
+        }
+    }
     fn declaration(&mut self, value: DeclarationReference) -> Result<u32, Diagnostic> {
         self.declarations.intern(value, "declaration relocations")
     }
@@ -1731,6 +1804,17 @@ impl<T> Default for InternTable<T> {
 }
 
 impl<T: Clone + Ord> InternTable<T> {
+    fn from_values(values: &[T]) -> Self {
+        Self {
+            indexes: values
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, value)| (value, index as u32))
+                .collect(),
+            values: values.to_vec(),
+        }
+    }
     fn intern(&mut self, value: T, label: &'static str) -> Result<u32, Diagnostic> {
         if let Some(index) = self.indexes.get(&value) {
             return Ok(*index);

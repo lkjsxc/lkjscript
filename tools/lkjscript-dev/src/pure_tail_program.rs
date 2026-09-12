@@ -110,7 +110,7 @@ impl Request {
         self.call(&standard["subtract"], &[], &[value, one])
     }
 
-    fn choose(&mut self, condition: &str, yes: &str, no: &str) -> String {
+    pub(crate) fn choose(&mut self, condition: &str, yes: &str, no: &str) -> String {
         self.expression(
             "if",
             &format!("condition={condition} when-true={yes} when-false={no}"),

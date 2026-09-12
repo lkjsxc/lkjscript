@@ -4,8 +4,11 @@ mod effects;
 mod effects_consumer;
 #[cfg(test)]
 mod effects_iteration;
+mod effects_iteration_evidence;
+mod effects_iteration_program;
 mod effects_program;
 mod effects_resources;
+mod effects_traversal;
 mod nominal;
 mod nominal_session;
 mod recursive;
@@ -143,7 +146,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-6".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-7".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -1753,7 +1756,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-6"
+        receipt.schema == "lkjscript-offline-packages-acceptance-7"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete

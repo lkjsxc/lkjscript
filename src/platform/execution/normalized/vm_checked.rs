@@ -131,7 +131,7 @@ impl Value {
         if !target.effect_parameters.is_empty()
             || !target.effect.row().is_closed()
             || (matches!(target.effect, crate::platform::kernel::FunctionEffect::Pure)
-                && !target.pure_graph
+                && !target.graph_function
                 && !matches!(
                     target.body,
                     super::super::prepare::NormalizedFunctionBody::External(_)
@@ -1041,7 +1041,7 @@ impl Admission<'_> {
                             matches!(
                                 callable.effect,
                                 crate::platform::kernel::FunctionEffect::Pure
-                            ) && (callable.pure_graph
+                            ) && (callable.graph_function
                                 || matches!(
                                     callable.body,
                                     super::super::prepare::NormalizedFunctionBody::External(_)

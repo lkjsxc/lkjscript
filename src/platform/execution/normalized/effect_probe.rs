@@ -23,13 +23,13 @@ use std::sync::{Arc, Mutex};
 const STACK_BYTES: usize = 2_097_152;
 type NeutralEvents = Arc<Mutex<Vec<String>>>;
 
-fn failure(message: impl Into<String>) -> Diagnostic {
+pub(super) fn failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, "effect_probe", message)
 }
-fn require(ok: bool, message: &str) -> Result<(), Diagnostic> {
+pub(super) fn require(ok: bool, message: &str) -> Result<(), Diagnostic> {
     if ok { Ok(()) } else { Err(failure(message)) }
 }
-fn execution(error: ExecutionError) -> Diagnostic {
+pub(super) fn execution(error: ExecutionError) -> Diagnostic {
     failure(format!("{}: {}", error.code, error.message))
 }
 
@@ -39,6 +39,7 @@ struct Script {
     configuration: bool,
     events: Arc<Mutex<Vec<String>>>,
     fault: &'static str,
+    iteration: Option<(i64, i64)>,
 }
 impl NormalizedCapabilityAdapter for Script {
     fn kind(&self) -> NormalizedAdapterKind {
@@ -75,18 +76,22 @@ impl NormalizedCapabilityAdapter for Script {
             return Err(bad());
         };
         let mut events = self.events.lock().map_err(|_| bad())?;
-        if events.len() >= 32_768
-            || name.as_ref()
-                != if events.len() % 2 == 0 {
-                    "scale"
-                } else {
-                    "bias"
-                }
-        {
+        let expected = if self.iteration.is_some() {
+            match events.len() {
+                0 => "stride",
+                1 => "threshold",
+                _ => "tick",
+            }
+        } else if events.len() % 2 == 0 {
+            "scale"
+        } else {
+            "bias"
+        };
+        if events.len() >= 32_768 || name.as_ref() != expected {
             return Err(bad());
         }
         events.push(name.to_string());
-        if events.len() == 3 {
+        if events.len() == if self.iteration.is_some() { 5 } else { 3 } {
             match self.fault {
                 "cancelled" => control.cancel(),
                 "callback-failure" => {
@@ -100,11 +105,19 @@ impl NormalizedCapabilityAdapter for Script {
                 _ => {}
             }
         }
-        Ok(NormalizedValue::I64(if name.as_ref() == "scale" {
-            3
-        } else {
-            5
-        }))
+        Ok(NormalizedValue::I64(
+            if let Some((stride, threshold)) = self.iteration {
+                match name.as_ref() {
+                    "stride" => stride,
+                    "threshold" => threshold,
+                    _ => 0,
+                }
+            } else if name.as_ref() == "scale" {
+                3
+            } else {
+                5
+            },
+        ))
     }
 }
 
@@ -112,6 +125,15 @@ fn grants(
     program: &NormalizedProgram,
     fault: &'static str,
     maximum: u64,
+) -> Result<(NormalizedCapabilities, NeutralEvents), Diagnostic> {
+    iteration_grants(program, fault, maximum, None)
+}
+
+pub(super) fn iteration_grants(
+    program: &NormalizedProgram,
+    fault: &'static str,
+    maximum: u64,
+    iteration: Option<(i64, i64)>,
 ) -> Result<(NormalizedCapabilities, NeutralEvents), Diagnostic> {
     let target = program
         .root_target(&Name::new("serve")?)
@@ -176,6 +198,7 @@ fn grants(
                 configuration,
                 events: Arc::clone(&events),
                 fault,
+                iteration,
             }),
         });
     }
@@ -185,7 +208,10 @@ fn grants(
     ))
 }
 
-fn select(prepared: &PreparedApplication, name: &str) -> Result<FunctionIndex, Diagnostic> {
+pub(super) fn select(
+    prepared: &PreparedApplication,
+    name: &str,
+) -> Result<FunctionIndex, Diagnostic> {
     for (index, function) in prepared.program.functions.iter().enumerate() {
         if function.declaration.package != prepared.package {
             continue;
@@ -246,10 +272,14 @@ fn invoke(
     };
     let mut policy = healthy_policy;
     if fault == "fuel" {
-        policy.instruction_steps = 1_000;
+        policy.instruction_steps = 300;
     }
     if fault == "allocation" {
-        policy.maximum_allocated_bytes = if reference { 280_000 } else { 500_000 };
+        policy.maximum_allocated_bytes = if reference {
+            schema.type_metadata_bytes
+        } else {
+            prepared.program.work.type_metadata_bytes
+        } + 50_000;
     }
     let maximum = if fault == "quota" {
         9
@@ -333,7 +363,7 @@ fn invoke(
             Default::default(),
         )?;
         let expected_output = match target {
-            "folded-jobs" => json!(expected.iter().sum::<i64>()),
+            "folded-jobs" | "comparison-fold-jobs" => json!(expected.iter().sum::<i64>()),
             "results-jobs" => json!(
                 expected
                     .iter()
@@ -350,18 +380,21 @@ fn invoke(
             events.len() == count as usize * 2,
             "neutral callback count differs",
         )?;
-        let range_frames = if count == 0 {
-            1
+        let comparison_range = matches!(target, "concrete-jobs" | "comparison-fold-jobs");
+        let control_bound = if !comparison_range {
+            8
+        } else if count == 0 {
+            9
         } else {
-            (count as u64).next_power_of_two().ilog2() as u64 + 1
+            (count as u64).next_power_of_two().ilog2() as u64 + 9
         };
         require(
             observation["maximum_call_depth"]
                 .as_u64()
-                .is_some_and(|frames| frames <= range_frames + 12),
-            "task traversal retained linear call depth",
+                .is_some_and(|frames| frames <= control_bound),
+            "task traversal exceeded its independent control bound",
         )?;
-        let mut output = json!({"value":actual,"expected_range_frames":range_frames});
+        let mut output = json!({"value":actual,"control_bound":control_bound,"comparison_range":comparison_range});
         if count == 8192 {
             // This second execution uses its own neutral grants, never a live deployment.
             let (unobserved, unobserved_events) =
@@ -416,7 +449,7 @@ fn invoke(
     } else {
         let error = result
             .err()
-            .ok_or_else(|| failure("failed traversal emitted a successful result"))?;
+            .ok_or_else(|| failure(format!("failed traversal emitted a successful result: reference={reference} fault={fault} allocated={} metadata={}", observation["allocated_bytes"], observation["type_metadata_bytes"])))?;
         let bounded_exhaustion = matches!(fault, "fuel" | "allocation");
         require(
             if bounded_exhaustion {
@@ -511,6 +544,7 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
                     observations.push(invoke(&prepared, reference, name, count, "none")?);
                 }
                 if count == 31 { observations.push(invoke(&prepared, reference, "results-jobs", count, "none")?); }
+                if [0,33,8192].contains(&count) { observations.push(invoke(&prepared,reference,"comparison-fold-jobs",count,"none")?); }
             }
         }
         for reference in [false,true] {
@@ -518,6 +552,7 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
                 observations.push(invoke(&prepared, reference, "mapped-jobs", 31, fault)?);
             }
         }
-        Ok(json!({"source_bound":true,"package":prepared.package.to_string(),"revision":prepared.revision.to_string(),"artifact":prepared.artifact_bundle.to_string(),"preparation_nanoseconds":preparation_nanoseconds,"preparation":{"type_derivation_steps":prepared.program.work.type_derivation_steps,"type_metadata_bytes":prepared.program.work.type_metadata_bytes},"observations":observations,"stack_bytes":STACK_BYTES,"maximum_call_depth_policy":64,"other_policies":"unchanged defaults","live_effects_replayed":false,"cleanup_complete":true}))
+        let iteration = super::task_iteration_probe::observe(&prepared)?;
+        Ok(json!({"source_bound":true,"package":prepared.package.to_string(),"revision":prepared.revision.to_string(),"artifact":prepared.artifact_bundle.to_string(),"preparation_nanoseconds":preparation_nanoseconds,"preparation":{"type_derivation_steps":prepared.program.work.type_derivation_steps,"type_metadata_bytes":prepared.program.work.type_metadata_bytes},"observations":observations,"iteration":iteration,"stack_bytes":STACK_BYTES,"maximum_call_depth_policy":64,"other_policies":"unchanged defaults","live_effects_replayed":false,"cleanup_complete":true}))
     }).map_err(|error| failure(error.to_string()))?.join().map_err(|_| failure("effect observation thread failed"))?
 }

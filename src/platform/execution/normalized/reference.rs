@@ -18,8 +18,8 @@ use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     BindingKind, BlobObjectDigest, CaseReference, DeclarationPayload, DeclarationReference,
     EffectParameterReference, EffectRow, ExpressionOperation, FieldReference, FieldSelector,
-    FunctionEffect, ImplementationName, KernelSnapshot, LocalValueReference, Name,
-    OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterRecord, ParameterUse,
+    FunctionDeclaration, FunctionEffect, ImplementationName, KernelSnapshot, LocalValueReference,
+    Name, OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterRecord, ParameterUse,
     PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeForm,
     TypeObjectDigest,
 };
@@ -57,6 +57,8 @@ pub struct NormalizedReferenceObservation {
     pub maximum_control_frames: usize,
     pub maximum_live_locals: usize,
     pub maximum_live_type_bindings: usize,
+    pub maximum_live_effect_bindings: usize,
+    pub maximum_live_allowances: usize,
     pub live_call_frames_after: usize,
     pub live_control_frames_after: usize,
     pub live_local_scopes_after: usize,
@@ -563,11 +565,13 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph14_reference_records_8",
+                production_tier: "graph14_reference_records_9",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
                 maximum_live_type_bindings: 0,
+                maximum_live_effect_bindings: 0,
+                maximum_live_allowances: 0,
                 live_call_frames_after: 0,
                 live_control_frames_after: 0,
                 live_local_scopes_after: 0,
@@ -665,12 +669,18 @@ struct ReferenceState<'a> {
 
 enum ReferenceStep {
     Value(CheckedValue),
-    Tail {
-        declaration: DeclarationReference,
-        types: Vec<TypeObjectDigest>,
-        effects: Vec<EffectRow>,
-        arguments: Vec<CheckedValue>,
-    },
+    Tail(Box<AdmittedGraphCall>),
+}
+
+/// One internal transition, constructed only by canonical call admission in this state.
+/// It is neither a callable value nor a reusable proof, and carries no component grant.
+struct AdmittedGraphCall {
+    declaration: DeclarationReference,
+    function: FunctionDeclaration,
+    types: BTreeMap<TypeParameterId, TypeObjectDigest>,
+    effects: super::reference_effects::Bindings,
+    allowance: Option<EffectRow>,
+    arguments: Vec<CheckedValue>,
 }
 
 impl ReferenceState<'_> {
@@ -1000,14 +1010,14 @@ impl ReferenceState<'_> {
 
     fn call_declaration(
         &mut self,
-        mut reference: DeclarationReference,
+        reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
-        mut arguments: Vec<CheckedValue>,
+        arguments: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
-        let mut type_arguments = self.resolve_type_arguments(type_arguments)?;
-        let mut effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
+        let type_arguments = self.resolve_type_arguments(type_arguments)?;
+        let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -1018,30 +1028,16 @@ impl ReferenceState<'_> {
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.call_depth);
         let previous_package = self.active_package;
-        let mut tail = false;
+        self.active_package = reference.package;
+        let mut step =
+            self.call_activation(reference, &type_arguments, &effect_arguments, arguments);
         let result = loop {
-            self.active_package = reference.package;
-            match self.call_activation(
-                reference,
-                &type_arguments,
-                &effect_arguments,
-                arguments,
-                tail,
-            ) {
+            match step {
                 Ok(ReferenceStep::Value(value)) => break Ok(value),
-                Ok(ReferenceStep::Tail {
-                    declaration,
-                    types,
-                    effects,
-                    arguments: outgoing,
-                }) => {
-                    // call_activation and all lexical evaluation have returned. No activation,
-                    // lexical map, substitution scope or native return address survives transfer.
-                    reference = declaration;
-                    type_arguments = types;
-                    effect_arguments = effects;
-                    arguments = outgoing;
-                    tail = true;
+                Ok(ReferenceStep::Tail(target)) => {
+                    // The outgoing canonical scope admitted this exact application. All its
+                    // lexical/native frames have unwound; never reauthorize against an ancestor.
+                    step = self.enter_graph_call(*target, true);
                 }
                 Err(error) => break Err(error),
             }
@@ -1057,107 +1053,23 @@ impl ReferenceState<'_> {
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
         arguments: Vec<CheckedValue>,
-        tail: bool,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.control.check()?;
-        self.charge_allocation(
-            (arguments.len()
-                * (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()))
-                as u64,
-        )?;
-        self.observation.calls = self.observation.calls.saturating_add(1);
         (|| {
             let declaration = self.declaration(reference)?;
-            if tail
-                && !matches!(&declaration.payload, DeclarationPayload::Function(function) if matches!(function.effect, FunctionEffect::Pure))
-            {
-                return Err(reference_type_error(
-                    "tail transfer requires an exact canonical pure graph function",
-                ));
-            }
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
-                    let constraints =
-                        self.type_parameter_constraints(reference, &function.type_parameters)?;
-                    if constraints
-                        .iter()
-                        .zip(type_arguments)
-                        .any(|(constraint, ty)| {
-                            *constraint
-                                == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                                && !self.schema.capture_safe_types.contains(ty)
-                        })
-                    {
-                        return Err(reference_type_error(
-                            "canonical callable type arguments fail capture-safe constraints",
-                        ));
-                    }
-                    let effect_scope = self.effect_bindings(
+                    let target = self.admit_graph_call(
                         reference,
-                        &function.effect_parameters,
+                        function,
+                        type_arguments,
                         effect_arguments,
+                        arguments,
                     )?;
-                    let declared = self.declared_row(&function.effect)?;
-                    let row = self.close_row(&declared, &effect_scope)?;
-                    if !matches!(function.effect, FunctionEffect::Pure) {
-                        self.admit_task_row(&row)?;
-                    }
-                    let parameters = self.parameters(reference.package, &function.parameters)?;
-                    self.validate_call_resources(&parameters, &arguments)?;
-                    if type_arguments.len() != function.type_parameters.len() {
-                        Err(reference_type_error(
-                            "function type-argument count disagrees with its exact signature",
-                        ))
-                    } else if arguments.len() != function.parameters.len() {
-                        Err(reference_type_error(
-                            "function argument count disagrees with canonical parameters",
-                        ))
-                    } else {
-                        let type_scope = function
-                            .type_parameters
-                            .iter()
-                            .copied()
-                            .zip(type_arguments.iter().copied())
-                            .collect::<BTreeMap<_, _>>();
-                        if type_scope.len() != type_arguments.len() {
-                            Err(reference_type_error(
-                                "function type parameters are not unique",
-                            ))
-                        } else {
-                            let mut locals: BTreeMap<_, _> = function
-                                .parameters
-                                .into_iter()
-                                .zip(arguments)
-                                .map(|(parameter, value)| {
-                                    (LocalValueReference::FunctionParameter(parameter), value)
-                                })
-                                .collect();
-                            self.type_scopes.push(type_scope);
-                            self.effect_scopes.push(effect_scope);
-                            self.allowances.push(
-                                (!matches!(function.effect, FunctionEffect::Pure)).then_some(row),
-                            );
-                            self.local_counts.push(locals.len());
-                            self.observe_locals(&locals);
-                            if tail {
-                                self.observation.tail_transfers =
-                                    self.observation.tail_transfers.saturating_add(1);
-                            }
-                            let result = if matches!(function.effect, FunctionEffect::Pure) {
-                                self.evaluate_tail(function.body, &mut locals)
-                            } else {
-                                self.evaluate(function.body, &mut locals)
-                                    .map(ReferenceStep::Value)
-                            };
-                            self.local_counts.pop();
-                            self.type_scopes.pop();
-                            self.effect_scopes.pop();
-                            self.allowances.pop();
-                            result
-                        }
-                    }
+                    self.enter_graph_call(target, false)
                 }
                 DeclarationPayload::External(external) => {
+                    self.count_call(arguments.len())?;
                     let parameters = self.parameters(reference.package, &external.parameters)?;
                     self.validate_call_resources(&parameters, &arguments)?;
                     if type_arguments.len() != external.type_parameters.len()
@@ -1211,6 +1123,7 @@ impl ReferenceState<'_> {
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
+                    self.count_call(arguments.len())?;
                     if !type_arguments.is_empty() {
                         Err(reference_type_error(
                             "constant call received type arguments",
@@ -1231,6 +1144,122 @@ impl ReferenceState<'_> {
                 )),
             }
         })()
+    }
+
+    fn count_call(&mut self, arguments: usize) -> Result<(), ExecutionError> {
+        let bytes = arguments
+            .checked_mul(
+                std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>(),
+            )
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_allocation",
+                    "call allocation overflowed",
+                )
+            })?;
+        self.charge_allocation(bytes as u64)?;
+        self.observation.calls = self.observation.calls.saturating_add(1);
+        Ok(())
+    }
+
+    fn admit_graph_call(
+        &mut self,
+        declaration: DeclarationReference,
+        function: FunctionDeclaration,
+        types: &[TypeObjectDigest],
+        effects: &[EffectRow],
+        arguments: Vec<CheckedValue>,
+    ) -> Result<AdmittedGraphCall, ExecutionError> {
+        self.control.check()?;
+        if arguments.len() != function.parameters.len()
+            || types.len() != function.type_parameters.len()
+            || effects.len() != function.effect_parameters.len()
+        {
+            return Err(reference_type_error(
+                "call application disagrees with its exact canonical signature",
+            ));
+        }
+        let constraints =
+            self.type_parameter_constraints(declaration, &function.type_parameters)?;
+        if constraints.iter().zip(types).any(|(constraint, ty)| {
+            *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                && !self.schema.capture_safe_types.contains(ty)
+        }) {
+            return Err(reference_type_error(
+                "canonical callable type arguments fail capture-safe constraints",
+            ));
+        }
+        let effect_scope =
+            self.effect_bindings(declaration, &function.effect_parameters, effects)?;
+        let declared = self.declared_row(&function.effect)?;
+        let row = self.close_row(&declared, &effect_scope)?;
+        let allowance = if matches!(function.effect, FunctionEffect::Pure) {
+            None
+        } else {
+            // This must execute before the outgoing allowance is popped, even for empty rows.
+            self.admit_task_row(&row)?;
+            Some(row)
+        };
+        let parameters = self.parameters(declaration.package, &function.parameters)?;
+        self.validate_call_resources(&parameters, &arguments)?;
+        let types = function
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(types.iter().copied())
+            .collect::<BTreeMap<_, _>>();
+        if types.len() != function.type_parameters.len() {
+            return Err(reference_type_error(
+                "function type parameters are not unique",
+            ));
+        }
+        Ok(AdmittedGraphCall {
+            declaration,
+            function,
+            types,
+            effects: effect_scope,
+            allowance,
+            arguments,
+        })
+    }
+
+    fn enter_graph_call(
+        &mut self,
+        target: AdmittedGraphCall,
+        tail: bool,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        self.count_call(target.arguments.len())?;
+        let mut locals = target
+            .function
+            .parameters
+            .into_iter()
+            .zip(target.arguments)
+            .map(|(parameter, value)| (LocalValueReference::FunctionParameter(parameter), value))
+            .collect::<BTreeMap<_, _>>();
+        self.control.check()?;
+        self.active_package = target.declaration.package;
+        self.type_scopes.push(target.types);
+        self.effect_scopes.push(target.effects);
+        self.allowances.push(target.allowance);
+        self.observation.maximum_live_effect_bindings = self
+            .observation
+            .maximum_live_effect_bindings
+            .max(self.effect_scopes.iter().map(BTreeMap::len).sum());
+        self.observation.maximum_live_allowances = self
+            .observation
+            .maximum_live_allowances
+            .max(self.allowances.len());
+        self.local_counts.push(locals.len());
+        self.observe_locals(&locals);
+        if tail {
+            self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
+        }
+        let result = self.evaluate_tail(target.function.body, &mut locals);
+        self.local_counts.pop();
+        self.type_scopes.pop();
+        self.effect_scopes.pop();
+        self.allowances.pop();
+        result
     }
 
     fn validate_call_resources(
@@ -1431,27 +1460,14 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         let callable = self.declaration(declaration)?;
-        if let DeclarationPayload::Function(function) = callable.payload
-            && matches!(function.effect, FunctionEffect::Pure)
-        {
+        if let DeclarationPayload::Function(function) = callable.payload {
             let types = self.resolve_type_arguments(types)?;
             let effects = self.resolve_effect_arguments(effect_arguments)?;
-            if arguments.len() != function.parameters.len()
-                || types.len() != function.type_parameters.len()
-                || effects.len() != function.effect_parameters.len()
-            {
-                return Err(reference_type_error(
-                    "tail call argument count disagrees with its canonical signature",
-                ));
-            }
-            let parameters = self.parameters(declaration.package, &function.parameters)?;
-            self.validate_call_resources(&parameters, &arguments)?;
-            Ok(ReferenceStep::Tail {
-                declaration,
-                types,
-                effects,
-                arguments,
-            })
+            let target =
+                self.admit_graph_call(declaration, function, &types, &effects, arguments)?;
+            self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
+            self.control.check()?;
+            Ok(ReferenceStep::Tail(Box::new(target)))
         } else {
             self.call_declaration(declaration, types, effect_arguments, arguments)
                 .map(ReferenceStep::Value)

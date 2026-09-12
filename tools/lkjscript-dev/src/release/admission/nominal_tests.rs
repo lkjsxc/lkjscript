@@ -121,6 +121,18 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/recursive/persisted_bytes_sha256",
                 "/recursive/resources",
                 "/recursive/transaction_cancellation",
+                "/effects/iteration",
+                "/effects/iteration/rounds/0",
+                "/effects/iteration/rounds/3",
+                "/effects/iteration/rounds/8",
+                "/effects/iteration/rounds/9",
+                "/effects/resources/iteration/rows",
+                "/effects/resources/iteration/authority",
+                "/effects/resources/iteration/rows/4/events",
+                "/effects/resources/iteration/rows/4/work/maximum_live_locals",
+                "/effects/resources/iteration/rows/24/work/maximum_live_effect_bindings",
+                "/effects/public_rejections",
+                "/effects/definitions",
                 "/observations/artifact-nominal-changed-body-exact",
                 "/observations/artifact-nominal-reordered-arguments-exact",
                 "/observations/artifact-nominal-replaced-template-case-bound-exact",
@@ -206,7 +218,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        57,
+        69,
         "complete nominal and recursive target fault inventory"
     );
     scratch.close().expect("owned log cleanup");

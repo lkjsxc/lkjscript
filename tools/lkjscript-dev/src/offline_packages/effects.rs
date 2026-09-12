@@ -32,6 +32,7 @@ pub(crate) struct EffectReceipt {
     pub public_rejections: Vec<String>,
     pub resources: Value,
     pub cancellation: Value,
+    pub iteration: Value,
 }
 
 fn transaction_cancellation(
@@ -304,6 +305,116 @@ fn definition(
     )
 }
 
+fn reject_iteration_requests(
+    context: &mut Context,
+    consumer: &Package,
+    bindings: &BTreeMap<String, String>,
+    library: &BTreeMap<String, String>,
+) -> Result<(), DevError> {
+    for (label, code) in [
+        ("iteration-result", "kernel_type_argument"),
+        ("iteration-effect-missing", "kernel_effect_argument_count"),
+        ("iteration-effect-wrong", "kernel_type_argument"),
+        ("iteration-pure", "kernel_type_pure_task_call"),
+    ] {
+        let mut r = crate::pure_tail_program::Request::default();
+        let output = if label == "iteration-result" {
+            "bool"
+        } else {
+            "i64"
+        };
+        r.text.push_str(&format!("type.application as=@Transition declaration={}\ntype.argument parent=@Transition index=0 type=unit\ntype.argument parent=@Transition index=1 type={output}\neffect.row as=@Row\n",library["iteration-step"]));
+        if label == "iteration-effect-wrong" {
+            r.text.push_str(&format!(
+                "effect.requirement parent=@Row index=0 requirement={}\n",
+                reference(consumer, "$config")?
+            ));
+        }
+        let value = if output == "bool" {
+            r.expression("bool", "value=true")
+        } else {
+            r.integer(0)
+        };
+        let done = r.expression(
+            "variant",
+            &format!("case={} payload={value}", library["iteration-done"]),
+        );
+        r.types(&done, &["unit", output]);
+        r.text.push_str(&format!("create.function as=$step module={} name=step-{label} visibility=private result=@Transition effect=task body={done}\nadd.parameter as=$state function=$step name=state type=unit\n",bindings["module"]));
+        let initial = r.expression("unit", "");
+        let step = r.function_value("$step");
+        let call = r.call(&library["task-iterate"], &["unit", "i64"], &[initial, step]);
+        if label != "iteration-effect-missing" {
+            r.effects(&call, &["@Row"]);
+        }
+        let kind = if label == "iteration-pure" {
+            "pure"
+        } else {
+            "task"
+        };
+        r.text.push_str(&format!("create.function as=$bad module={} name=bad-{label} visibility=private result=i64 effect={kind} body={call}\n",bindings["module"]));
+        if label == "iteration-effect-wrong" {
+            r.text.push_str(&format!(
+                "effect.requirement parent=$bad index=0 requirement={}\n",
+                reference(consumer, "$config")?
+            ));
+        }
+        let request = context
+            .evidence
+            .join(format!("effect-rejection-{label}.lkjc"));
+        fs::write(
+            &request,
+            format!("request base={}\n{}", consumer.revision, r.text),
+        )?;
+        context.reject(
+            consumer,
+            &[
+                "change",
+                "plan",
+                "--input-file",
+                &request.display().to_string(),
+            ],
+            code,
+        )?;
+        context
+            .receipt
+            .effects
+            .public_rejections
+            .push(format!("{label}:{code}"));
+        if label == "iteration-pure" {
+            let valid = r.text.replace("effect=pure", "effect=task");
+            let planned = context.cli(
+                Some(&consumer.path),
+                &[
+                    "change",
+                    "plan",
+                    "--input",
+                    &format!("request base={}\n{valid}", consumer.revision),
+                ],
+                true,
+            )?;
+            context.reject(
+                consumer,
+                &[
+                    "change",
+                    "apply",
+                    "--input-file",
+                    &request.display().to_string(),
+                    "--plan",
+                    &field(&planned, "plan", "token")?,
+                ],
+                "change_request_commitment_mismatch",
+            )?;
+            context
+                .receipt
+                .effects
+                .public_rejections
+                .push("iteration-pure-apply:change_request_commitment_mismatch".into());
+        }
+    }
+    Ok(())
+}
+
 fn interface(
     context: &mut Context,
     consumer: &Package,
@@ -369,6 +480,14 @@ fn interface(
         "$configure-task-E",
         "$task-map-E",
         "$task-fold-left-E",
+        "$task-iterate",
+        "$iteration-step",
+        "$iteration-State",
+        "$iteration-Output",
+        "$iteration-continue",
+        "$iteration-done",
+        "$make-iteration",
+        "$make-iteration-E",
     ] {
         require(
             owners.contains(&reference(library, symbol)?),
@@ -399,8 +518,22 @@ fn interface(
             .any(|r| r.operation == "type.effect-parameter"),
         "nested task signature omitted its symbolic row",
     )?;
+    let family = context.cli(
+        Some(&consumer.path),
+        &[
+            "package",
+            "dependency",
+            "inspect",
+            "owner",
+            "variant",
+            &library.symbols["$iteration-step"],
+            "--package-revision",
+            &library.logical,
+        ],
+        true,
+    )?;
     Ok(
-        json!({"package_revision":library.logical,"pages":pages,"owners":owners,"factory":records_json(&detail)}),
+        json!({"package_revision":library.logical,"pages":pages,"owners":owners,"factory":records_json(&detail),"iteration_family":records_json(&family)}),
     )
 }
 
@@ -420,16 +553,38 @@ fn duplicate_map_output(standard: &BTreeMap<String, String>, library: &Package) 
     let twice = r.call(&standard["list-append"], &["@Output"], &[once, twice]);
     let body = r.expression("let", &format!("body={twice}"));
     r.text.push_str(&format!("expression.binding parent={body} index=0 as=$mapped name=mapped type=@Output value={mapped}\nreplace.body function={} body={body}\n",library.symbols["$task-map-step"]));
+    // The revised exact dependency also changes the data-dependent witness: its pure factory
+    // extends the configured threshold by one stride while preserving its public contract.
+    r.text.push_str(&format!(
+        "effect.row as=@FactoryRow\neffect.parameter parent=@FactoryRow index=0 parameter={}/{}\n",
+        library.id, library.symbols["$make-iteration-E"]
+    ));
+    let function = r.function_value(&format!(
+        "{}/{}",
+        library.id, library.symbols["$iteration-advance"]
+    ));
+    r.effects(&function, &["@FactoryRow"]);
+    let stride = r.local(&library.symbols["$make-iteration_stride"]);
+    let threshold = r.local(&library.symbols["$make-iteration_threshold"]);
+    let extra = r.local(&library.symbols["$make-iteration_stride"]);
+    let threshold = r.call(&standard["add"], &[], &[threshold, extra]);
+    let observe = r.local(&library.symbols["$make-iteration_observe"]);
+    let body = r.bind(&function, &[stride, threshold, observe]);
+    r.text.push_str(&format!(
+        "replace.body function={} body={body}\n",
+        library.symbols["$make-iteration"]
+    ));
     r.text
 }
 
-fn discover(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
+pub(super) fn discover(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     for name in [
         "add",
         "subtract",
         "multiply",
         "divide",
         "i64-equal",
+        "less",
         "list-get",
         "list-length",
         "list-append",
@@ -555,6 +710,11 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                 "wrong-row:kernel_type_root",
                 "wrong-row-apply:change_request_commitment_mismatch",
                 "empty-task-pure:kernel_type_pure_task_call",
+                "iteration-result:kernel_type_argument",
+                "iteration-effect-missing:kernel_effect_argument_count",
+                "iteration-effect-wrong:kernel_type_argument",
+                "iteration-pure:kernel_type_pure_task_call",
+                "iteration-pure-apply:change_request_commitment_mismatch",
             ],
         "public effect argument, row, or empty-task negatives are absent",
     )?;
@@ -588,10 +748,10 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         }
     }
     require(
-        receipt.definitions.len() == 4,
+        receipt.definitions.len() == 6,
         "complete effect definitions and interface observations are missing",
     )?;
-    for definition in &receipt.definitions[..3] {
+    for definition in &receipt.definitions[..5] {
         require(
             definition["revision"] == receipt.library_revision
                 && definition["pages"]
@@ -611,10 +771,10 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             "effect parameter inspection is incomplete",
         )?;
     }
-    let imported = &receipt.definitions[3];
+    let imported = &receipt.definitions[5];
     require(
         imported["pages"].as_u64().is_some_and(|n| n > 1)
-            && imported["owners"].as_array().is_some_and(|v| v.len() == 27),
+            && imported["owners"].as_array().is_some_and(|v| v.len() == 49),
         "effect public interface pagination is incomplete",
     )?;
     require(
@@ -624,6 +784,35 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                 .any(|r| r["operation"] == "type.effect-parameter")
         }),
         "nominal factory task row is absent from inspection",
+    )?;
+    let family = imported["iteration_family"]
+        .as_array()
+        .ok_or_else(|| DevError::corrupt("ordinary iteration family inspection absent"))?;
+    let parameters = family
+        .iter()
+        .filter(|r| r["operation"] == "type-parameter")
+        .collect::<Vec<_>>();
+    let cases = family
+        .iter()
+        .filter(|r| r["operation"] == "case")
+        .collect::<Vec<_>>();
+    require(
+        parameters.len() == 2
+            && parameters[0]["fields"]["index"] == "0"
+            && parameters[0]["fields"]["name"] == "State"
+            && parameters[1]["fields"]["index"] == "1"
+            && parameters[1]["fields"]["name"] == "Output"
+            && parameters
+                .iter()
+                .all(|r| r["fields"]["constraint"] == "none")
+            && cases.len() == 2
+            && cases
+                .iter()
+                .any(|r| r["fields"]["name"] == "continue" && r["fields"]["payload"] == "true")
+            && cases
+                .iter()
+                .any(|r| r["fields"]["name"] == "done" && r["fields"]["payload"] == "true"),
+        "iteration nominal parameters, cases or ordinary constraints changed",
     )?;
     require(
         receipt.rounds.len() == 4,
@@ -662,7 +851,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
     let initial = receipt.rounds[0]["observations"]
         .as_array()
         .ok_or_else(|| DevError::corrupt("initial effect values absent"))?;
-    require(initial.len() == 24, "effect traversal cases missing")?;
+    require(initial.len() == 25, "effect traversal cases missing")?;
     for (index, count) in [0_i64, 1, 31, 32, 33, 4097, 8192].into_iter().enumerate() {
         let values = (1..=count).map(job).collect::<Vec<_>>();
         let expected = (1..=count).map(|n| n * 3 + 12).collect::<Vec<_>>();
@@ -715,6 +904,12 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         "ordinary returned error cases stopped task traversal",
     )?;
     require(
+        initial[24]["request"]["mode"] == "nested-map"
+            && initial[24]["status"] == 200
+            && initial[24]["result"] == json!([21, 15, 24]),
+        "nested task maps changed callback values or order",
+    )?;
+    require(
         receipt.rounds[1]["observations"][0]["result"] == 109
             && receipt.rounds[1]["observations"]
                 .as_array()
@@ -723,14 +918,23 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
     )?;
     let successor = &receipt.rounds[2]["observations"];
     require(
-        successor.as_array().is_some_and(|r| r.len() == 3)
+        successor.as_array().is_some_and(|r| r.len() == 4)
             && successor[0]["result"] == json!([21, 21, 15, 15, 24, 24, 15, 15, 27, 27])
             && successor[1]["result"] == 102
-            && successor[2]["result"] == 109,
+            && successor[2]["result"] == 109
+            && successor[3]["request"]["mode"] == "iterate"
+            && successor[3]["result"] == json!({"position":4,"total":6})
+            && successor[3]["status"] == 200,
         "exact dependency replacement result differs",
     )?;
     require(
-        receipt.rounds[3]["observations"][0]["result"] == json!([21, 15, 24, 15, 27]),
+        receipt.rounds[3]["observations"][0]["result"] == json!([21, 15, 24, 15, 27])
+            && receipt.rounds[3]["observations"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 2)
+            && receipt.rounds[3]["observations"][1]["request"]["mode"] == "iterate"
+            && receipt.rounds[3]["observations"][1]["result"] == json!({"position":3,"total":3})
+            && receipt.rounds[3]["observations"][1]["status"] == 200,
         "self-consistent old bundle recovery differs",
     )?;
     require(
@@ -788,6 +992,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         "old output was accepted for a new effect source",
     )?;
     super::effects_resources::validate(parent, root)?;
+    super::effects_iteration_evidence::validate(parent, root)?;
     Ok(())
 }
 
@@ -826,6 +1031,8 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         ("pure_function", "$configure-task"),
         ("task_function", "$task-map"),
         ("task_function", "$task-fold-left"),
+        ("task_function", "$task-iterate"),
+        ("pure_function", "$make-iteration"),
     ] {
         let observed = definition(context, &library, kind, symbol)?;
         context.receipt.effects.definitions.push(observed);
@@ -839,6 +1046,17 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         "job",
         "job-item",
         "job-children",
+        "task-iterate",
+        "iteration-step",
+        "iteration-continue",
+        "iteration-done",
+        "make-iteration",
+        "iteration-state",
+        "iteration-state-cursor",
+        "iteration-state-sum",
+        "iteration-output",
+        "iteration-output-position",
+        "iteration-output-total",
     ]
     .into_iter()
     .map(|name| Ok((name.to_owned(), reference(&library, &format!("${name}"))?)))
@@ -953,6 +1171,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     let observed = interface(context, &consumer, &library)?;
     context.receipt.effects.definitions.push(observed);
     reject_bad_effect_requests(context, &consumer, &bindings, &names)?;
+    reject_iteration_requests(context, &consumer, &bindings, &names)?;
     let library_recovery = context.root.join("effect-library-recovery");
     fs::rename(&library.path, &library_recovery)?;
     context.cli(Some(&consumer.path), &["check"], true)?;
@@ -985,7 +1204,6 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     )
     .map_err(|error| DevError::corrupt(error.to_string()))?;
     context.receipt.effects.artifact_bindings.push(bound);
-    resources(context, &consumer)?;
     let mut descriptor: Value = serde_json::from_slice(&process::read_bounded(
         &consumer.path.join("service.deployment.json"),
         MAXIMUM_OUTPUT_BYTES,
@@ -993,8 +1211,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     descriptor["artifact"] = json!("application.lkja");
     descriptor["listen"] = json!("127.0.0.1:0");
     descriptor["http"]["maximum_request_body_bytes"] = json!(1_048_576);
-    descriptor["configuration"] =
-        json!({"scale":{"kind":"i64","value":3},"bias":{"kind":"i64","value":5}});
+    descriptor["configuration"] = json!({"scale":{"kind":"i64","value":3},"bias":{"kind":"i64","value":5},"stride":{"kind":"i64","value":1},"threshold":{"kind":"i64","value":3},"tick":{"kind":"i64","value":0}});
     let grants = descriptor["grants"]
         .as_array_mut()
         .ok_or_else(|| DevError::corrupt("HTTP grants missing"))?;
@@ -1023,6 +1240,8 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.effects.consumer_package = consumer.id.clone();
     context.receipt.effects.consumer_revision = consumer.revision.clone();
     context.receipt.effects.producers_removed = !library.path.exists();
+    super::effects_iteration_evidence::public(context, &standalone)?;
+    resources(context, &consumer)?;
     let before_execution = crate::authority::observe_graph_authority(&consumer.path)?;
     let round = crate::stateful_http::recursive_round(
         &context.binary,
@@ -1080,6 +1299,13 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
             observations.push(request(address, "read", 0, vec![], Some(json!(109)))?);
             observations.push(request(address, "results", 7, [3,1,4,1,5].into_iter().map(job).collect(),
                 Some(json!([{"case":"ok","value":21},{"case":"error","value":15},{"case":"ok","value":24},{"case":"error","value":15},{"case":"ok","value":27}])))?);
+            observations.push(request(
+                address,
+                "nested-map",
+                7,
+                [3, 1, 4].into_iter().map(job).collect(),
+                Some(json!([21, 15, 24])),
+            )?);
             Ok(json!(observations))
         },
     )?;
@@ -1175,7 +1401,14 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
                     [3, 1, 4, 1, 5].into_iter().map(job).collect(),
                     Some(json!(102))
                 )?,
-                request(address, "read", 0, vec![], Some(json!(109)))?
+                request(address, "read", 0, vec![], Some(json!(109)))?,
+                request(
+                    address,
+                    "iterate",
+                    0,
+                    vec![],
+                    Some(json!({"position":4,"total":6}))
+                )?
             ]))
         },
     )?;
@@ -1206,13 +1439,22 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         &context.evidence,
         "effects-old-supported",
         |address| {
-            Ok(json!([request(
-                address,
-                "map",
-                7,
-                [3, 1, 4, 1, 5].into_iter().map(job).collect(),
-                Some(json!([21, 15, 24, 15, 27]))
-            )?]))
+            Ok(json!([
+                request(
+                    address,
+                    "map",
+                    7,
+                    [3, 1, 4, 1, 5].into_iter().map(job).collect(),
+                    Some(json!([21, 15, 24, 15, 27]))
+                )?,
+                request(
+                    address,
+                    "iterate",
+                    0,
+                    vec![],
+                    Some(json!({"position":3,"total":3}))
+                )?
+            ]))
         },
     );
     fs::write(

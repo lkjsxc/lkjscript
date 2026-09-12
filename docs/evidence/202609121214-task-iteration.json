@@ -1,0 +1,142 @@
+{
+  "schema": "lkjscript-task-iteration-evidence-1",
+  "campaign": "202609121214",
+  "status": "targeted implementation accepted; fresh full and exact target acceptance pending",
+  "start": {
+    "branch": "main",
+    "commit": "5ae31821295f6f754437d54dad35c4caca54cc35",
+    "archive_commit": "f385b7b60ad22257fcc46d09e83b34e8952caca0",
+    "initial_mandate_sha256": "7bd7194eed457192b42327aaebc74ae9f5bfbf712ceca8b7e4f26f4d0553befe",
+    "guidance": "supplied complete AGENTS.md already matches; no material revision",
+    "preserved": "August 31 stash, predecessor release source, operational data and prior recovery artifacts"
+  },
+  "implementation": {
+    "commit": null,
+    "tested_commit": null,
+    "integration": null,
+    "containing_record": "Final source and report-only containing identities are recorded after execution; no self hash.",
+    "behavior": "Constant additional control space for terminal pure/task graph calls in both evaluators; outgoing allowance admission precedes replacement; invocation resources and lexical transactions retain their owners.",
+    "correction": "Strict loading additionally compares canonical code, including evaluation order and transaction continuations, before deriving tail eligibility.",
+    "encoding": "Graph 14, TypeObject 10, ordinary data, compiler bytecode and supported Artifact 18 bytes unchanged; offline receipt 7 now requires iteration; pure-tail receipt 6 preserved.",
+    "artifact_root": ".artifacts/iteration-202609121214/"
+  },
+  "library": {
+    "standard_revision": "rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591",
+    "package_revision": "405b01a5c2183af37f0403758a8e7d1fe2a8913158fddb5914f8450a7a62da53",
+    "iteration_step": "decl_c5280177d67cdfa0d332897c67c58083",
+    "continue_case": "case_d3e8d4a1736bcd4061ccb1f94dab16ea",
+    "done_case": "case_8baab27124d86663a4792b4ab1386d8e",
+    "task_iterate": "decl_c6bb5c007e5696436ff13fc896b228ff",
+    "preserved_fold": "decl_c7b4ee8af3e96b5b496a8671495db914",
+    "preserved_map": "decl_67acd7c4f17c4fb92c31177e09d66da8",
+    "removed_range": "decl_9c1bee161778ae38964d679c1f65e366",
+    "sequential_loop": "decl_643af710bf5a5e2f6d7dac11b98804f2",
+    "unrelated_standard_owner_records_byte_identical": 832,
+    "application_owner_records_byte_identical": 2040,
+    "application_revision": "rev_3b95593b73b56d791c5b7b12a4fd4d96adc02102e7c87104a09550a1eee69c62"
+  },
+  "targeted": {
+    "public_attempt": "public-07 (driver compile failure retained as public-07.log; successful execution public-07b.log)",
+    "public_receipt_sha256": "6a4d7ddc5b33615e91f685cb4537061d9e07c2269d0a567dfaf7dcbfef07a2da",
+    "candidate_sha256": "4c17182f47ee02606747e36cf8061c86b0263a20b0ffeef9466c83f0168efba5",
+    "verifier_sha256": "f7cae58c21d3fce95c3fe9a16557b78b00f40688921b3da53027c5a1ddb4d58f",
+    "profile": "debug; targeted evidence, not full acceptance or matched release timing",
+    "public_seconds": 210.82,
+    "default_iteration_updates": 8193,
+    "callbacks": 8194,
+    "result": {
+      "position": 8193,
+      "total": 33558528
+    },
+    "neutral_traversal_rows": 62,
+    "neutral_iteration_rows": 40,
+    "neutral_outgoing_authority_failures": 2,
+    "rehashed_child_faults": 12,
+    "child_fault_receipt_sha256": "66ba04cc455dbf5060fd101743dce4e934505d99b921491b3c06d41fb527c00b",
+    "compiler_tests": 33,
+    "new_iteration_tests": 6,
+    "terminal_analysis_tests": 3,
+    "clippy": "clippy-04 fresh passed"
+  },
+  "control": {
+    "fixed_nominal_state": {
+      "production": {
+        "frames": 3,
+        "locals": 9,
+        "type_bindings": 2,
+        "allowances": 3,
+        "cumulative_allocated_bytes": 23719645
+      },
+      "reference": {
+        "frames": 3,
+        "locals": 7,
+        "type_bindings": 2,
+        "effect_bindings": 2,
+        "allowances": 3,
+        "cumulative_allocated_bytes": 21377131
+      },
+      "capture_admission_visits": 6,
+      "internal_descendant_rescans": 0,
+      "preparation_steps": 13506,
+      "preparation_metadata_bytes": 511397
+    },
+    "fold_at_8192": {
+      "expected_result": 100773888,
+      "ordered_configuration_events": 16384,
+      "sequential_frames": 4,
+      "comparison_range_frames": 16,
+      "production_allocated_bytes": [
+        29817344,
+        35778112
+      ],
+      "reference_allocated_bytes": [
+        21790812,
+        20051546
+      ],
+      "scope": "Equivalent scalar outputs and ordered neutral effects. The reference sequential allocation cell is unfavorable and retained; these are cumulative charges, not live memory."
+    }
+  },
+  "baseline": {
+    "release_source": "67baaf0b081842e0e2e3745e8d5503e22cc791e4",
+    "candidate_sha256": "532a95178f069c3011c7d4342187adbf29db160a1475f525957ba0f48c0b490b",
+    "verifier_sha256": "299880a2f212f468bb93697c8d1a16da2ec7774b4078208ba0535e328ce78419",
+    "plain_public_artifact_sha256": "d46a88bc96c203ed4fd33d4066b4ed48251e6eb2d9d4efcaac0ca57b580a1ba6",
+    "plain_public_receipt_sha256": "f6494b6143ff6ab68e085b944cfe940ae760a746470e2b324977207501e15b03",
+    "frame_64": "Plain task frames grow and exhaust at 128/4097/8192; candidate stays at one/two frames.",
+    "default_public": "Identical predecessor-authored artifact fails normalized_call_depth at 4097/8192; candidate returns complete sums.",
+    "matched_release_measurement": null
+  },
+  "faults": {
+    "source_archive_sha256": "9f7aae6ce5f7735d06d2d0c112b37f71b791f16cee6e218c1a4b4b07fb211931",
+    "vm_binary_sha256": "7eaf1eb2211f8354e6e4df9559998330bce232f3859a5bd9e1fcb392da04bfa0",
+    "reference_binary_sha256": "d5c9bdd474b3796ba4b006a56a353ffd6051a691f0453acb2b02d2521125c27e",
+    "authority": "Both isolated outgoing-allowance faults fail the broad-ancestor/narrow-helper and shared-grant operation tests; forbidden second event observed.",
+    "control": "Test-only restored ordinary calls hit 64 frames while canonical terminal evaluation succeeds.",
+    "published_fault_code": false
+  },
+  "acceptance": {
+    "full": null,
+    "target_build": null,
+    "target_admission": null,
+    "target_receipt_faults": null
+  },
+  "inherited_release": {
+    "source": "67baaf0b081842e0e2e3745e8d5503e22cc791e4",
+    "tag": "v0.1.32",
+    "tag_object": "562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf",
+    "dry_run": "34626667719/1 authenticated original full/target/package/prepublication rereads",
+    "publication_run": "34671245722/1",
+    "last_observed_utc": "2026-09-12T04:41:03Z",
+    "state": "build/package job 103492873519 in progress; release absent; public pair pending"
+  },
+  "disposition": {
+    "new_increment_publication": "intentionally deferred",
+    "next_trigger": "first subsequently accepted user-visible composition milestone building on task iteration, or verified compatibility/correctness need requiring public recovery",
+    "deployment": "not selected",
+    "limitations": [
+      "No constant payload memory, cumulative allocation, IO speed or termination promise.",
+      "Existing effect, capability, affine signature, operational admission and cancellation policies remain.",
+      "Debug comparison timings are diagnostic; matched release samples and fresh full/target proof remain due."
+    ]
+  }
+}

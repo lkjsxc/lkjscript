@@ -5,7 +5,7 @@ Status: normative.
 ## Independent correctness mechanisms
 
 Explicit effects extend the existing offline-package owner, without another public aggregate child.
-Receipt 6 requires the separately authored transported task library, a pure effect-parametric bound
+Receipt 7 requires the separately authored transported task library, a pure effect-parametric bound
 factory, parametric/recursive payloads, complete paginated definitions and interfaces, distinct
 consumer configuration/data rows, reviewed contract/dependency changes, and exact source/artifact
 binding. The transferred reader independently requires complete results at lengths 0, 1, 31, 32,
@@ -18,11 +18,32 @@ reference execution, never live-effect replay. Both record preparation, executio
 observation cost, callback traces, frame high-water, allocation, indexed-list work and cleanup.
 An equivalent concrete task range traversal supplies the comparison. A 64-frame test policy and
 2 MiB thread stack admit the largest case; normal work/allocation defaults remain unchanged except
-explicit stopping probes selecting 1,000 execution steps or 500,000 production / 280,000 reference
-allocated bytes, including each evaluator's preparation-metadata admission. Quota, callback
+explicit stopping probes selecting 300 execution steps or each evaluator's admitted preparation
+metadata plus 50,000 allocated bytes. The latter admits active traversal before exhaustion despite
+different finite prepared-program sizes. Quota, callback
 failure, cancellation and malformed results must stop subsequent work, emit no successful partial
 result, clean up owned state and preserve an old input alias. Live cancellation separately stops
 after one staged callback and requires rollback observed through a fresh public restart.
+
+Task iteration extends this same receipt with a pure factory returning an imported private bound
+step, a nominal cursor/sum state, and a distinct nominal position/total output. Runtime configuration
+supplies positive stride and a nonnegative stop threshold. Default-policy public cases include
+4,097 and 8,193 updates, immediate completion, an odd threshold with stride two, invalid stride,
+checked overflow, repeated ordered writes, commit, later-failure rollback, separately committed
+partial visibility and restart readback. The final stopping callback is required. Complete function
+definitions and the ordinary variant's two ordered unconstrained parameters and payload cases are
+inspected through revision-bound public projections. Invalid result/effect applications and pure
+task use reject; an invalid apply preserves authority.
+
+Both neutral evaluators run the same newly authored iteration meaning on a 2 MiB stack with a
+64-frame test policy. Required frames, live locals, substitutions and allowances have fixed bounds;
+capture-admission visits remain six and internal descendant rescans remain zero across lengths.
+One selected timing cell has one warm-up and three samples with its observation sink disabled.
+Quotas, malformed adapter results, cancellation, callback failure and work/allocation exhaustion
+stop the exact prefix and return no partial value. The typed offline reader requires these child
+observations even if enclosing file/receipt hashes are recomputed. Pure-tail receipt 6 remains
+independently required. The maintained fold/map require a constant control bound; a concrete range
+traversal remains solely as the labeled comparison fixture.
 
 Kernel tests compare rows against an independent finite-bitset model, including multiple parameters,
 recursive forwarding/permutation/union and exact coverage. Raw evaluator tests require both task
@@ -58,7 +79,7 @@ secret or callable state must reject during strict artifact loading and deployme
 before readiness. This complements public request rejection and the copied live session witness.
 
 Persistent-list acceptance extends the existing `pure-tail`, `offline-packages`, public CLI, and
-source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 6. Transferred
+source-bound evaluator owners. Receipt contracts are pure-tail 6 and offline-packages 7. Transferred
 receipts must bind the exact candidate/verifier, retained requests/projections and outputs, fixed
 mapping sequences, physical-work bounds, callback order, budget/cancellation recovery, producer
 removal, transactional mapped wire/data values, and cleanup. The pure-tail invocation retains its

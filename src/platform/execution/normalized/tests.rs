@@ -3,6 +3,18 @@
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "iteration_tests.rs"]
+mod iteration_tests;
+
+#[path = "iteration_resource_tests.rs"]
+mod iteration_resource_tests;
+
+#[path = "iteration_transaction_tests.rs"]
+pub(crate) mod iteration_transaction_tests;
+
+#[path = "iteration_compatibility_tests.rs"]
+mod iteration_compatibility_tests;
+
 #[path = "effect_tests.rs"]
 pub(crate) mod effect_tests;
 
@@ -4013,7 +4025,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
     assert!(observation.collection_items >= 2);
-    assert_eq!(observation.production_tier, "graph14_dense_bytecode_9");
+    assert_eq!(observation.production_tier, "graph14_dense_bytecode_10");
 }
 
 #[test]
@@ -4311,7 +4323,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph14_reference_records_8"
+        "graph14_reference_records_9"
     );
 
     let test = declaration_named(&snapshot, "caller_test");
@@ -4479,7 +4491,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
     ] {
         let mut faulty = program.clone();
         let function = &mut Arc::make_mut(&mut faulty.functions)[caller_index.0 as usize];
-        function.pure_graph = pure;
+        function.graph_function = pure;
         let NormalizedFunctionBody::Code(code) = &mut function.body else {
             panic!("graph code")
         };
@@ -4490,7 +4502,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         assert_eq!(error.code, expected);
     }
     let mut impure = program.clone();
-    Arc::make_mut(&mut impure.functions)[callee_index.0 as usize].pure_graph = false;
+    Arc::make_mut(&mut impure.functions)[callee_index.0 as usize].graph_function = false;
     assert_eq!(
         NormalizedVm::new(&impure, NormalizedRunPolicy::default())
             .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
@@ -4649,14 +4661,17 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
     let mut program = prepare_snapshot(&snapshot);
     let caller = declaration_named(&snapshot, "caller");
     let caller_index = program.function(caller).expect("task caller");
-    assert!(!program.functions[caller_index.0 as usize].pure_graph);
+    assert!(program.functions[caller_index.0 as usize].graph_function);
     let callee = program
         .functions
         .iter()
-        .position(|function| function.pure_graph && function.parameter_count == 0)
+        .position(|function| {
+            function.graph_function
+                && matches!(function.effect, FunctionEffect::Pure)
+                && function.parameter_count == 0
+        })
         .expect("pure graph callee");
     let task = &mut Arc::make_mut(&mut program.functions)[caller_index.0 as usize];
-    task.pure_graph = true; // Safe malformed prepared-code fault, never accepted authority.
     let NormalizedFunctionBody::Code(code) = &mut task.body else {
         panic!("task code")
     };

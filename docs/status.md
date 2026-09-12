@@ -22,22 +22,22 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_7479f45092fd4138273e84f42826cbac94ad045f63e4c241b6f8ffdb4ba78f22`; state `semantic_state_b8861cbaa2da34f234e14db88ff976eacc729888b6d054b5668f6ba7e4655632` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_379aa0cdd58b497e72c617d471928096d0e17e2b49651030f20b95a041aab89e`; state `semantic_state_e392e068e22ab687415c5d1688d4e5119687fceaf37c4d14205a0e7a073dfb7f` |
-| built-in standard dependency | package revision `package_revision_2fd4187687f5d1055bfc8a54f64b93278a51dc393cc5267afb871fd328e9b824`; transport `package_transport_76acdf9341178a1d49125e3c067fed5633113d8e30ddec34339b319365a4dfcb`; artifact manifest `artifact_manifest_4b0586dbabd623f0a7532b0bf606239af23ec17ac9e2c6aad08cb34a7cd82ce3` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`; state `semantic_state_fc21c9bd9445929ccc57cc2e48fa2ac657a57fc0ee450a0316a611bb88386066` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_3b95593b73b56d791c5b7b12a4fd4d96adc02102e7c87104a09550a1eee69c62`; state `semantic_state_e623257fa3ef83d8cc25c3e2a79b5d0ec5de3c9f38a1a55058292efd4be3f952` |
+| built-in standard dependency | package revision `package_revision_405b01a5c2183af37f0403758a8e7d1fe2a8913158fddb5914f8450a7a62da53`; transport `package_transport_e1d2ccc42f9fe8055c5b9ea853683f7243f15c2a03f432d7146f11d6c5b7726b`; artifact manifest `artifact_manifest_9c4f7216ae569098bb0c9b70960629cbd5c5a387f717afc578af426688db3b21` |
 
-The standard package owns 888 live semantic owners, 140 compiler units, and 33 graph tests. Its
-current artifact has 531,915 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
-dependency; its two-package artifact has 230 compiler units and 1,290,985 bytes. Its complete dependency closure runs 40 graph tests. Both
+The standard package owns 888 live semantic owners, 142 compiler units, and 33 graph tests. Its
+current artifact has 537,736 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
+dependency; its two-package artifact has 232 compiler units and 1,296,806 bytes. Its complete dependency closure runs 40 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 372,030 bytes | `83c053e6575b29b1fd759d225fe967a7e4d9e8c79dbf440cd515efabe93efa3a` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 531,915 bytes | `abdade8cbf2e075e6bff02895bd2babde63f41fca4dbc93db20cd0a1d3565da9` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,290,985 bytes | `025a1c732ede663d9127185ee719a7e28b73e6f8a5b0732bbedfcdecd932cecb` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 389,537 bytes | `7949278731fa2a9b860f79391df781c5c9550a7d08933d080f098e47a705a79b` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 537,736 bytes | `bd0bba1b6c363fa8d39f10dbed2288a4ba82ea603dcd58cdd44d94d7b49eedd4` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,296,806 bytes | `1941459005944b1b9c27657544e39d31fa3c4c30bc63b7bf8ddee1e6e2554db1` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -52,8 +52,17 @@ bind and invoke. The standard now owns graph task fold/map; maintained ports use
 types. A fresh producer/consumer workload has exercised transported pure factories returning bound
 task callbacks, recursive payloads, configuration, transaction commit/rollback, restart persistence
 and dependency replacement through a copied development executable. Its source-bound neutral probes
-separately measure both evaluators. This is engineering evidence, not public delivery: fresh full
-acceptance, exact static target gates and selected `v0.1.32` publication remain pending.
+separately measure both evaluators. EFF-1–EFF-6 passed fresh full and exact static target acceptance
+at `67baaf0b`; the successful hosted dry-run handoffs have been authenticated with their original
+verifier. Selected `v0.1.32` publication is proceeding independently from that exact source under
+tag run `34671245722/1`. Public acceptance remains due; dry-run success is not public delivery.
+
+The [task-iteration campaign](campaigns/202609121214.md) generalizes graph task tail transfer in
+both evaluators and adds ordinary `iteration-step`/`task-iterate` library meaning. Maintained
+fold/map preserve their public contracts through sequential task iteration. Targeted public and
+neutral observations pass, including a default-policy 8,193-update data-dependent state machine;
+source full and exact target acceptance remain due. Its separate publication is intentionally
+deferred to the next accepted composition milestone or verified public recovery need.
 
 The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.

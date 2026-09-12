@@ -113,6 +113,13 @@ impl NormalizedResourceScope {
         Self::with_id_and_limit(id, MAXIMUM_TASK_RESOURCES)
     }
 
+    #[cfg(test)]
+    pub(super) fn with_test_limit(maximum_entries: usize) -> Self {
+        let mut scope = Self::new().expect("owned test resource scope");
+        scope.maximum_entries = maximum_entries;
+        scope
+    }
+
     fn with_id_and_limit(id: NormalizedResourceScopeId, maximum_entries: usize) -> Self {
         Self {
             id,

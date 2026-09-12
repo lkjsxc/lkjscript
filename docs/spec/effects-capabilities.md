@@ -62,11 +62,28 @@ earlier effects remain visible unless the applicable transaction rolls back its 
 ordinary returned `Result` remains a value until graph control flow branches on it. No evaluator
 replays live effects or converts these runtime failures into application results.
 
-The standard's graph-owned `task-fold-left` divides an index range over the original persistent list,
-folds its left half completely, then feeds that state into its right half. `task-map` binds a mapper
-into a task fold step and appends each result. This preserves sequential input order with
-logarithmic additional traversal frames. Indexed reads keep their existing logarithmic cost; task
-tail transfer, scheduling and product resource defaults are unchanged.
+The standard's graph-owned `task-fold-left` uses a private sequential index/state tail loop over
+the original persistent list. `task-map` binds a mapper into a task fold step and appends each
+result. Each input invokes its callback once in order; empty input invokes none. Traversal uses
+constant additional control space. Indexed reads and persistent append retain their existing
+costs; cumulative allocations, payload retention and operation quotas are not refunded.
+
+The public nominal `iteration-step<State,Output>` has ordered unconstrained type parameters and
+stable `continue(State)` and `done(Output)` cases. The graph function
+`task-iterate<State,Output;E>(State, TaskFunction(State)->iteration-step<State,Output> ! E)->Output ! E`
+invokes its callback once, returns the `done` payload, or tail-calls itself with the `continue`
+payload and the same checked callback. Immediate completion invokes once. State and output need
+no capture-safe constraint; ordinary transient callable-containing states retain their existing
+containment, equality and durability restrictions. Case names add no special encoding or effects.
+There is no iteration-count argument, scheduler, implicit yielding or exception-to-result
+conversion. Runtime failure/cancellation/exhaustion stops later callbacks; a returned `Result`
+remains ordinary data. Earlier effects keep possible visibility, and an enclosing transaction
+rolls back staged effects under its original lexical owner.
+
+Task tail admission checks the outgoing activation's row and actual canonical grant mapping
+before its scopes disappear, including aliases with distinct operation allowances. The canonical
+reference evaluator passes an internal admitted target/application/argument handoff to its
+trampoline; that single-transition object is neither a callable value nor transferable authority.
 
 ## Interfaces and operations
 

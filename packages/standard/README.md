@@ -21,12 +21,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_7479f45092fd4138273e84f42826cbac94ad045f63e4c241b6f8ffdb4ba78f22`;
-- package revision: `package_revision_2fd4187687f5d1055bfc8a54f64b93278a51dc393cc5267afb871fd328e9b824`;
-- package transport: `package_transport_76acdf9341178a1d49125e3c067fed5633113d8e30ddec34339b319365a4dfcb`;
-- artifact manifest: `artifact_manifest_4b0586dbabd623f0a7532b0bf606239af23ec17ac9e2c6aad08cb34a7cd82ce3`;
-- artifact bundle: `artifact_bundle_f14c91536eccb835ba8f7ecf8bf54f6ecabde8b75d146e1e6fc03cba0516c462`;
-- 888 live semantic owners, 140 compiler units, and 33 graph tests.
+- semantic revision: `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`;
+- package revision: `package_revision_405b01a5c2183af37f0403758a8e7d1fe2a8913158fddb5914f8450a7a62da53`;
+- package transport: `package_transport_e1d2ccc42f9fe8055c5b9ea853683f7243f15c2a03f432d7146f11d6c5b7726b`;
+- artifact manifest: `artifact_manifest_9c4f7216ae569098bb0c9b70960629cbd5c5a387f717afc578af426688db3b21`;
+- artifact bundle: `artifact_bundle_7181b443e4eab81ed216543c306d572053adb5227b0d31870a2a2f58ec995809`;
+- 888 live semantic owners, 142 compiler units, and 33 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -70,14 +70,23 @@ existing list types, encodings, callback eligibility, and default execution limi
 
 `task-fold-left<Item,State;E>(List<Item>, State, TaskFunction(State,Item)->State ! E)->State ! E`
 and `task-map<Input,Output;E>(List<Input>, TaskFunction(Input)->Output ! E)->List<Output> ! E`
-are graph-owned tasks. The private range fold divides the original list's index range, completes
-the left half, and threads its state through the right half. Map binds its mapper into a private
+are graph-owned tasks. The private sequential fold advances an index and state over the original
+persistent list. Map binds its mapper into a private
 task step and uses persistent append. Every callback runs once in input order; empty input invokes
-none. Additional traversal control space is logarithmic, while indexed reads retain their existing
+none. Additional traversal control space is constant, while indexed reads retain their existing
 cost. The library holds no grants and declares no concrete consumer requirements. Caller allowances,
 component bindings, canonical grant counters and lexical transactions remain invocation boundaries.
 The fresh transported configuration/data workload is recorded separately from maintained application
 behavior in the [effect campaign](../../docs/campaigns/202609111843.md).
+
+`iteration-step<State,Output>` is the ordinary public nominal variant `continue(State) | done(Output)`.
+`task-iterate<State,Output;E>(State, TaskFunction(State)->iteration-step<State,Output> ! E)->Output ! E`
+invokes the callback once per decision, continuing with its next state or returning its output.
+Immediate completion invokes once. State and output are unconstrained ordinary types. The function
+has no implicit iteration limit, scheduler or exception conversion; execution budgets and effect
+admission still apply. Its implementation and the fold loop use ordinary task tail calls in both
+evaluators, with invocation resources and ancestor transaction continuations preserved. Fresh
+transported adoption is tracked by the [task iteration campaign](../../docs/campaigns/202609121214.md).
 
 `function-compose<A,B,C>(outer: Function(B)->C, inner: Function(A)->B) -> Function(A)->C`
 uses `bind` over its private generic graph helper. Four maintained graph tests fix composition

@@ -36,8 +36,10 @@ maintained service/worker and both pinned userlands. The
 [recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11) binds their
 exact source, candidate, publication, and independent download boundaries.
 The bound-public-pair tooling change revises future public acceptance to two independent small
-route lifecycles plus one within-pair full suite. It selects no new release; the next accepted
-user-visible language milestone must supply the first hosted public-pair observation. Further
+route lifecycles plus one within-pair full suite. Its first hosted observation belongs to the
+selected exact-source effect-library release, EFF-7, now running as `34671245722/1`. Task iteration
+is a separate engineering/integration campaign whose publication is deferred to the first next
+accepted user-visible composition milestone or verified public recovery need. Further
 infrastructure work needs a newly measured bottleneck.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 

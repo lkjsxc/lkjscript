@@ -2,6 +2,32 @@
 
 Measurements are observations, not promises.
 
+## Task iteration, 2026-09-12
+
+The [task-iteration evidence](evidence/202609121214-task-iteration.json) separates the identical
+predecessor-authored plain task program from the new library. Under a 64-frame test policy the
+predecessor's frames grow with the plain chain and exhaust; the new terminal chain keeps at most
+two frames through 8,192 calls. A copied predecessor-authored HTTP artifact likewise fails at the
+unchanged default frame policy for 4,097 and 8,192 calls, while the candidate returns the complete
+independently predicted sums. Initial debug/release observations are retained as diagnostic cells,
+not a matched timing comparison.
+
+The targeted nominal iteration fixture executes 8,193 updates and its final stopping callback.
+Production/reference peaks are 3/3 frames, 9/7 local slots, 2/2 type bindings and 3/3 allowances;
+reference additionally peaks at two effect bindings. Each admits six captured values and performs
+zero internal descendant rescans throughout the geometric cases. Cumulative charged allocation
+at the large cell is 23,719,645 / 21,377,131 bytes. Prepared-program work is 13,506 steps and 511,397
+metadata bytes; neither figure grows with the runtime threshold of this fixed program.
+
+At 8,192 items the migrated fold and the labeled concrete range-fold comparison both return
+100,773,888 with the same 16,384 ordered configuration events. Both evaluators use four frames for
+the sequential fold versus sixteen for the range fixture. Production charged allocations are
+29,817,344 versus 35,778,112 bytes; reference allocations are 21,790,812 versus 20,051,546 bytes.
+The unfavorable reference allocation result is retained: generic application accounting and
+cumulative allocation are separate from live control space. These are source-bound neutral debug
+observations, distinct from final source/target acceptance and the selected release-profile timing
+samples. They establish no IO speed ratio or constant payload/total-allocation bound.
+
 ## Parametric nominal preparation and forwarding
 
 The [nominal evidence](evidence/202609100459-parametric-nominal-data.json) binds source `0851b635`

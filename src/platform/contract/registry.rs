@@ -3659,7 +3659,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "normalized_call_depth",
             DiagnosticClass::Resource,
             "Non-tail execution exceeded admitted live call frames.",
-            "Reduce pending non-tail recursion or express the loop with pure graph tail calls.",
+            "Reduce pending non-tail recursion or express the loop with graph function tail calls.",
         ),
         diagnostic(
             "normalized_value_admission",
@@ -3884,6 +3884,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the linked nominal closure before retrying; no partial artifact is admitted.",
         ),
         diagnostic(
+            "artifact_compiled_control_meaning",
+            DiagnosticClass::Corrupt,
+            "Compiled evaluation order, operands, locals or continuations differ from canonical expressions.",
+            "Rebuild the exact accepted source and replace the derived artifact; do not alter canonical meaning to match corrupted code.",
+        ),
+        diagnostic(
+            "artifact_compiled_control_owner",
+            DiagnosticClass::Corrupt,
+            "Compiled code has no matching canonical expression owner.",
+            "Reacquire the complete exact package closure and rebuild its artifact.",
+        ),
+        diagnostic(
+            "artifact_compiled_control_work",
+            DiagnosticClass::Resource,
+            "Canonical instruction admission exceeded the bounded validation work policy.",
+            "Reduce the executable closure or investigate malformed derived input before retrying admission.",
+        ),
+        diagnostic(
             "kernel_type_work",
             DiagnosticClass::Resource,
             "Type validation exhausted its separate finite work admission.",
@@ -3959,7 +3977,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "normalized_reference_call_depth",
             DiagnosticClass::Resource,
             "Canonical non-tail execution exceeded admitted live call frames.",
-            "Reduce pending non-tail recursion or express the loop with pure graph tail calls.",
+            "Reduce pending non-tail recursion or express the loop with graph function tail calls.",
         ),
         diagnostic(
             "normalized_instruction_steps",

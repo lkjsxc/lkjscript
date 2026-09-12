@@ -196,8 +196,8 @@ pub struct NormalizedFunction {
     pub effect: FunctionEffect,
     pub effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
     pub declaration: DeclarationReference,
-    /// Derived from the exact canonical declaration, never from an empty requirement list.
-    pub pure_graph: bool,
+    /// Exact canonical graph-function kind, distinct from purity and from code entry wrappers.
+    pub graph_function: bool,
     pub type_parameters: Arc<[TypeParameterId]>,
     pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub parameter_count: u32,
@@ -413,7 +413,7 @@ impl NormalizedProgram {
             types: &types,
             requirements: &requirements,
         };
-        let mut functions = prepare_functions(
+        let functions = prepare_functions(
             &artifact,
             &units,
             &indexes,
@@ -423,7 +423,6 @@ impl NormalizedProgram {
             &mut work,
         )?;
         validate_resource_call_graph(&functions)?;
-        derive_tail_dispatch(&mut functions)?;
         let (components, ports) = prepare_components(
             &artifact,
             &units,
@@ -1197,7 +1196,7 @@ fn prepare_functions(
                 "prepared callable has no exact canonical declaration",
             ));
         };
-        let pure_graph = match (&canonical.payload, &unit.payload) {
+        let graph_function = match (&canonical.payload, &unit.payload) {
             (DeclarationPayload::Function(function), CompilationPayload::Function { .. }) => {
                 let canonical_requirements = match &function.effect {
                     FunctionEffect::Pure => Vec::new(),
@@ -1233,7 +1232,7 @@ fn prepare_functions(
                         "compiled function signature disagrees with exact canonical authority",
                     ));
                 }
-                matches!(function.effect, FunctionEffect::Pure)
+                true
             }
             (DeclarationPayload::External(_), CompilationPayload::External { .. })
             | (DeclarationPayload::Constant { .. }, CompilationPayload::Constant { .. }) => false,
@@ -1257,7 +1256,7 @@ fn prepare_functions(
             effect,
             effect_arguments: Arc::from([]),
             declaration: *declaration,
-            pure_graph,
+            graph_function,
             type_parameters: type_parameters.into(),
             type_parameter_constraints: type_parameter_constraints.into(),
             parameter_count,
@@ -1272,30 +1271,45 @@ fn prepare_functions(
 
 /// Reverse only unconditional edges, starting at returns. Each instruction and edge is
 /// visited at most once; cycles have no terminal seed and can never become certified.
-fn terminal_continuations(code: &[NormalizedInstruction]) -> Result<Vec<bool>, Diagnostic> {
-    let mut predecessors = vec![Vec::new(); code.len()];
+fn terminal_continuations(
+    code: &[NormalizedInstruction],
+    work: &mut super::prepared_types::Budget<'_>,
+) -> Result<Vec<bool>, Diagnostic> {
+    work.step()?;
+    work.reserve::<Option<usize>>(code.len())?;
+    work.reserve::<Option<usize>>(code.len())?;
+    work.reserve::<bool>(code.len())?;
+    // Dense predecessor links avoid hidden Vec growth for many one-edge destinations.
+    // Every instruction has at most one outgoing unconditional edge and one queue entry.
+    work.reserve::<usize>(code.len())?;
+    let mut predecessors = vec![None; code.len()];
+    let mut next_predecessor = vec![None; code.len()];
     let mut terminal = vec![false; code.len()];
-    let mut pending = Vec::new();
+    let mut pending = Vec::with_capacity(code.len());
     for (index, instruction) in code.iter().enumerate() {
+        work.step()?;
         match instruction {
             NormalizedInstruction::Return => {
                 terminal[index] = true;
                 pending.push(index);
             }
             NormalizedInstruction::Jump(target) => {
-                let edges = predecessors.get_mut(*target as usize).ok_or_else(|| {
+                let first = predecessors.get_mut(*target as usize).ok_or_else(|| {
                     runtime_corrupt(
                         "normalized_tail_destination",
                         "tail analysis encountered a foreign jump destination",
                     )
                 })?;
-                edges.push(index);
+                next_predecessor[index] = first.replace(index);
             }
             _ => {}
         }
     }
     while let Some(target) = pending.pop() {
-        for &index in &predecessors[target] {
+        work.step()?;
+        let mut predecessor = predecessors[target];
+        while let Some(index) = predecessor {
+            predecessor = next_predecessor[index];
             if !terminal[index] {
                 terminal[index] = true;
                 pending.push(index);
@@ -1305,20 +1319,32 @@ fn terminal_continuations(code: &[NormalizedInstruction]) -> Result<Vec<bool>, D
     Ok(terminal)
 }
 
-fn derive_tail_dispatch(functions: &mut [NormalizedFunction]) -> Result<(), Diagnostic> {
-    let pure = functions
-        .iter()
-        .map(|function| function.pure_graph)
-        .collect::<Vec<_>>();
-    for function in functions.iter_mut().filter(|function| function.pure_graph) {
+pub(super) fn derive_tail_dispatch(
+    functions: &mut [NormalizedFunction],
+    work: &mut super::prepared_types::Budget<'_>,
+) -> Result<(), Diagnostic> {
+    work.reserve::<bool>(functions.len())?;
+    let mut graph = Vec::with_capacity(functions.len());
+    for function in functions.iter() {
+        work.step()?;
+        graph.push(function.graph_function);
+    }
+    for function in functions
+        .iter_mut()
+        .filter(|function| function.graph_function)
+    {
         let NormalizedFunctionBody::Code(code) = &mut function.body else {
             return Err(runtime_corrupt(
                 "normalized_tail_kind",
-                "pure graph function has no graph code",
+                "canonical graph function has no graph code",
             ));
         };
-        let terminal = terminal_continuations(&code.instructions)?;
+        let terminal = terminal_continuations(&code.instructions, work)?;
+        if Arc::strong_count(&code.instructions) > 1 {
+            work.reserve::<NormalizedInstruction>(code.instructions.len())?;
+        }
         for (index, instruction) in Arc::make_mut(&mut code.instructions).iter_mut().enumerate() {
+            work.step()?;
             if !terminal.get(index + 1).copied().unwrap_or(false) {
                 continue;
             }
@@ -1328,7 +1354,7 @@ fn derive_tail_dispatch(functions: &mut [NormalizedFunction]) -> Result<(), Diag
                     function,
                     type_arguments,
                     arguments,
-                } if pure.get(function.0 as usize).copied() == Some(true) => {
+                } if graph.get(function.0 as usize).copied() == Some(true) => {
                     NormalizedInstruction::TailCall {
                         effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
@@ -2787,7 +2813,17 @@ fn runtime_error(
 
 #[cfg(test)]
 mod tail_analysis_tests {
-    use super::{NormalizedInstruction as I, terminal_continuations};
+    use super::NormalizedInstruction as I;
+
+    fn terminal_continuations(
+        code: &[I],
+    ) -> Result<Vec<bool>, crate::platform::diagnostic::Diagnostic> {
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        super::terminal_continuations(
+            code,
+            &mut super::super::prepared_types::Budget::new(&control),
+        )
+    }
 
     #[test]
     fn terminal_only_analysis_rejects_cycles_decisions_pending_work_and_foreign_edges() {
@@ -2822,6 +2858,22 @@ mod tail_analysis_tests {
         assert!(
             terminal_continuations(&code)
                 .is_ok_and(|terminal| terminal.into_iter().all(|value| value))
+        );
+    }
+
+    #[test]
+    fn terminal_analysis_checks_cancellation_before_metadata_allocation() {
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        control.cancel();
+        let error = super::terminal_continuations(
+            &[I::Return],
+            &mut super::super::prepared_types::Budget::new(&control),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "execution_cancelled");
+        assert_eq!(
+            error.class,
+            crate::platform::diagnostic::DiagnosticClass::Cancelled
         );
     }
 }

@@ -36,6 +36,10 @@ and effect rows. A transported abstract library need not own any concrete consum
 effect arguments retain those consumer references through invocation. Strict loading independently
 cross-checks compiled parameter ownership/order, effect arguments, nested task types, target
 signatures and port kinds against canonical owners, even in structurally valid rehashed containers.
+It also reconstructs canonical code under the existing validation work bound and compares ordered
+instructions, operands, locals and all return/transaction continuations before runtime tail
+derivation. A compiled control-flow change is corruption even when its references, stack merges
+and enclosing hashes are valid. Valid unchanged Artifact 18 bytes remain supported.
 Prepared application identity includes target, ordered type/effect arguments and preparation origin.
 Task ports use closed task-callable types; the predecessor task-as-pure entry representation rejects.
 
@@ -191,7 +195,7 @@ bytecode, artifact, or package-interface forms before normalized execution.
 Binding bytecode preserves callee-first evaluation and interleaves each argument with its capture
 admission before the next expression. Strict preparation rejects missing, reordered, or leaked
 capture preparation and prefixes exceeding the canonical child bound. Both evaluators resolve
-exact pure targets and substitutions independently. Their immutable flat prefixes retain no caller
+exact graph targets and substitutions independently. Their immutable flat prefixes retain no caller
 activation, and eligible tail invocation transfers to the ultimate graph target.
 
 ## Preparation, execution, and deployment

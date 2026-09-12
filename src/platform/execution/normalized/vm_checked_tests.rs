@@ -165,7 +165,11 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         .find(|(_, function)| {
             function.type_parameters.len() == 3
                 && function.parameters.len() == 3
-                && function.pure_graph
+                && function.graph_function
+                && matches!(
+                    function.effect,
+                    crate::platform::kernel::FunctionEffect::Pure
+                )
         })
         .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
         .unwrap();

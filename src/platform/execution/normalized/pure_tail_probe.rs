@@ -46,21 +46,12 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         if matches!(&owner, Some(crate::platform::kernel::OwnerRecord::Declaration(record)) if matches!(&record.payload, crate::platform::kernel::DeclarationPayload::Function(body) if matches!(&body.effect, crate::platform::kernel::FunctionEffect::Task { effect_parameters: _, requirements } if requirements.is_empty())))
         {
             require(
-                !function.pure_graph,
+                matches!(
+                    function.effect,
+                    crate::platform::kernel::FunctionEffect::Task { .. }
+                ),
                 "empty task requirements incorrectly imply purity",
             )?;
-            if let NormalizedFunctionBody::Code(code) = &function.body {
-                require(
-                    !code.instructions.iter().any(|instruction| {
-                        matches!(
-                            instruction,
-                            NormalizedInstruction::TailCall { .. }
-                                | NormalizedInstruction::TailInvoke { .. }
-                        )
-                    }),
-                    "task body acquired tail eligibility",
-                )?;
-            }
             empty_tasks += 1;
         }
     }

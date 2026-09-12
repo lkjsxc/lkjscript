@@ -70,6 +70,7 @@ pub struct NormalizedRunObservation {
     pub maximum_control_frames: usize,
     pub maximum_live_locals: usize,
     pub maximum_live_type_bindings: usize,
+    pub maximum_live_allowances: usize,
     pub maximum_live_transactions: usize,
     pub live_call_frames_after: usize,
     pub live_locals_after: usize,
@@ -369,11 +370,12 @@ impl<'a> NormalizedVm<'a> {
                 collection_items: 0,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
-                production_tier: "graph14_dense_bytecode_9",
+                production_tier: "graph14_dense_bytecode_10",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
                 maximum_live_type_bindings: 0,
+                maximum_live_allowances: 0,
                 maximum_live_transactions: 0,
                 live_call_frames_after: 0,
                 live_locals_after: 0,
@@ -850,12 +852,11 @@ impl Machine<'_> {
                     let callee = self.pop()?;
                     let (function, type_arguments, arguments) =
                         self.prepare_invocation(callee, arguments)?;
-                    self.validate_tail_caller()?;
                     let tail = self
                         .program
                         .functions
                         .get(function.0 as usize)
-                        .is_some_and(|function| function.pure_graph);
+                        .is_some_and(|function| function.graph_function);
                     self.dispatch_call(function, type_arguments, arguments, tail)?;
                 }
                 NormalizedInstruction::Record {
@@ -1325,10 +1326,10 @@ impl Machine<'_> {
         self.validate_call_resources(function, &arguments)?;
         if tail {
             self.validate_tail_caller()?;
-            if !function.pure_graph {
+            if !function.graph_function {
                 return Err(runtime_error(
                     "normalized_tail_callee",
-                    "tail transfer requires an exact pure graph callee",
+                    "tail transfer requires an exact canonical graph callee",
                 ));
             }
         }
@@ -1455,11 +1456,6 @@ impl Machine<'_> {
                 )
             })?;
         self.charge_allocation(locals_bytes)?;
-        // Arguments and concrete substitutions are complete; the previous continuation is
-        // already the last frame's caller and the validated operand base is unchanged.
-        if tail {
-            self.frames.pop();
-        }
         let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
         for (index, argument) in arguments.into_iter().enumerate() {
             locals[index] = Some(argument);
@@ -1471,6 +1467,12 @@ impl Machine<'_> {
                 "normalized frame generation counter overflowed",
             )
         })?;
+        // Admission and allocation are complete while the outgoing context still exists.
+        // The surviving caller already owns the original return continuation and stack base.
+        self.control.check()?;
+        if tail {
+            self.frames.pop();
+        }
         self.frames.push(Frame {
             id,
             function,
@@ -1482,6 +1484,10 @@ impl Machine<'_> {
         });
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.frames.len());
+        self.observation.maximum_live_allowances = self
+            .observation
+            .maximum_live_allowances
+            .max(self.frames.len());
         self.observation.maximum_control_frames = self
             .observation
             .maximum_control_frames
@@ -1508,11 +1514,11 @@ impl Machine<'_> {
         if !frame
             .function
             .and_then(|function| self.program.functions.get(function.0 as usize))
-            .is_some_and(|function| function.pure_graph)
+            .is_some_and(|function| function.graph_function)
         {
             return Err(runtime_error(
                 "normalized_tail_caller",
-                "tail transfer requires an exact pure graph caller",
+                "tail transfer requires an exact canonical graph caller",
             ));
         }
         if self.stack.len() != frame.stack_base {
@@ -1530,6 +1536,20 @@ impl Machine<'_> {
                 "normalized_transaction_leak",
                 "tail transfer cannot discard an owned transaction",
             ));
+        }
+        // A task's unused affine locals are descriptors into the invocation-owned table.
+        // Dropping them performs no external operation and refunds no admission capacity.
+        let pure = frame
+            .function
+            .and_then(|index| self.program.functions.get(index.0 as usize))
+            .is_some_and(|function| {
+                matches!(
+                    function.effect,
+                    crate::platform::kernel::FunctionEffect::Pure
+                )
+            });
+        if !pure {
+            return Ok(());
         }
         for value in self
             .frames

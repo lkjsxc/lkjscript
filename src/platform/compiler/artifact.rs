@@ -45,6 +45,9 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "artifact_code.rs"]
+mod code_admission;
+
 pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-18";
 pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-18";
 pub const ARTIFACT_CONTRACT_VERSION: u16 = 18;
@@ -2215,6 +2218,14 @@ fn trace_object_closure(
         &types,
     )?;
     validate_nominal_instruction_inventory(&units, &reference_owners, &runtime_owners)?;
+    code_admission::validate(
+        manifest,
+        &units,
+        &reference_owners,
+        &runtime_owners,
+        &interfaces,
+        &types,
+    )?;
     validate_artifact_session_relations(manifest, &units, &runtime_owners, &interfaces, &types)?;
     for (digest, expected_length) in blobs {
         let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());

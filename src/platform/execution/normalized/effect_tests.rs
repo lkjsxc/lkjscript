@@ -950,6 +950,12 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
 }
 
 fn task_input_fixture() -> (KernelSnapshot, DeclarationReference, TypeObjectDigest) {
+    task_input_fixture_dispatch(false)
+}
+
+fn task_input_fixture_dispatch(
+    direct: bool,
+) -> (KernelSnapshot, DeclarationReference, TypeObjectDigest) {
     let mut snapshot = library_composition();
     let package = snapshot.root.package_id;
     let callback = declaration_named(&snapshot, "consumer-task");
@@ -986,22 +992,31 @@ fn task_input_fixture() -> (KernelSnapshot, DeclarationReference, TypeObjectDige
         }),
     );
     let mut serial = 1000;
-    let callee = put_expression(
-        &mut snapshot,
-        &mut serial,
-        ExpressionOperation::Local {
-            value: LocalValueReference::FunctionParameter(parameter),
-        },
-    );
+    let callee = (!direct).then(|| {
+        put_expression(
+            &mut snapshot,
+            &mut serial,
+            ExpressionOperation::Local {
+                value: LocalValueReference::FunctionParameter(parameter),
+            },
+        )
+    });
     let argument = put_expression(&mut snapshot, &mut serial, ExpressionOperation::Unit {});
-    let body = put_expression(
-        &mut snapshot,
-        &mut serial,
+    let operation = if let Some(callee) = callee {
         ExpressionOperation::Invoke {
             callee,
             arguments: vec![argument],
-        },
-    );
+        }
+    } else {
+        let prefix = put_expression(&mut snapshot, &mut serial, ExpressionOperation::Unit {});
+        ExpressionOperation::Call {
+            function: callback,
+            type_arguments: vec![],
+            effect_arguments: vec![],
+            arguments: vec![prefix, argument],
+        }
+    };
+    let body = put_expression(&mut snapshot, &mut serial, operation);
     snapshot.owners.insert(
         OwnerKey::Declaration(accept),
         OwnerRecord::Declaration(DeclarationRecord {
@@ -1388,8 +1403,14 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
 
 #[test]
 fn a_shared_canonical_grant_does_not_widen_the_declared_operation_allowance() {
+    for direct in [false, true] {
+        shared_grant_allowance(direct);
+    }
+}
+
+fn shared_grant_allowance(direct: bool) {
     use crate::platform::semantic_id::{OperationId, RequirementId};
-    let (mut snapshot, accept, _) = task_input_fixture();
+    let (mut snapshot, accept, _) = task_input_fixture_dispatch(direct);
     let wide = match &snapshot.owners[&OwnerKey::Declaration(accept.declaration)] {
         OwnerRecord::Declaration(owner) => match &owner.payload {
             DeclarationPayload::Function(f) => f.effect.row().requirements[0],
@@ -1755,7 +1776,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
     let index = program.function(accept).unwrap();
     let target = &mut Arc::make_mut(&mut program.functions)[index.0 as usize];
     target.effect = FunctionEffect::Pure;
-    target.pure_graph = true;
+    target.graph_function = true;
     let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
         .invoke(accept, vec![value], None, &ExecutionControl::uncancelled())
         .unwrap_err();

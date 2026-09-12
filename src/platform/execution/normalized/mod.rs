@@ -23,6 +23,7 @@ mod reference;
 mod reference_effects;
 mod reference_schema;
 mod reference_types;
+mod task_iteration_probe;
 pub(crate) use reference::{
     NormalizedReferenceBinding, NormalizedReferenceOwnerRead, NormalizedReferenceRead,
     NormalizedReferenceReadWork,

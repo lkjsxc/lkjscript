@@ -36,11 +36,14 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         .as_array()
         .ok_or_else(|| DevError::corrupt("effect measurements absent"))?;
     require(
-        rows.len() == 56,
+        rows.len() == 62,
         "effect success, boundary, comparison, or stopping observations are missing",
     )?;
     let mut expected_cases = std::collections::BTreeSet::new();
     for tier in ["production", "reference"] {
+        for count in [0, 33, 8192] {
+            expected_cases.insert((tier, "comparison-fold-jobs", count, "none"));
+        }
         expected_cases.insert((tier, "results-jobs", 31, "none"));
         for count in [0_i64, 1, 31, 32, 33, 4097, 8192] {
             for target in ["mapped-jobs", "folded-jobs", "concrete-jobs"] {
@@ -91,14 +94,13 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             "effect runtime retained state after termination",
         )?;
         require(
-            row["instruction_steps_policy"] == if case == "fuel" { 1_000 } else { 10_000_000 }
+            row["instruction_steps_policy"] == if case == "fuel" { 300 } else { 10_000_000 }
                 && row["allocated_bytes_policy"]
                     == if case == "allocation" {
-                        if tier == "reference" {
-                            280_000
-                        } else {
-                            500_000
-                        }
+                        work["type_metadata_bytes"]
+                            .as_u64()
+                            .ok_or_else(|| DevError::corrupt("allocation metadata base missing"))?
+                            + 50_000
                     } else {
                         268_435_456
                     },
@@ -131,7 +133,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         if case == "none" {
             let expected = (1..=count).map(|n| n * 3 + 12).collect::<Vec<_>>();
             let output = match target {
-                "folded-jobs" => json!(expected.iter().sum::<i64>()),
+                "folded-jobs" | "comparison-fold-jobs" => json!(expected.iter().sum::<i64>()),
                 "results-jobs" => json!(
                     expected
                         .iter()
@@ -140,19 +142,23 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                 ),
                 _ => json!(expected),
             };
-            let range_frames = if count == 0 {
-                1
+            let comparison_range = matches!(target, "concrete-jobs" | "comparison-fold-jobs");
+            let control_bound = if !comparison_range {
+                8
+            } else if count == 0 {
+                9
             } else {
-                (count as u64).next_power_of_two().ilog2() as u64 + 1
+                (count as u64).next_power_of_two().ilog2() as u64 + 9
             };
             require(
                 row["output"]["value"] == output
-                    && row["output"]["expected_range_frames"] == range_frames
+                    && row["output"]["control_bound"] == control_bound
+                    && row["output"]["comparison_range"] == comparison_range
                     && work["capability_calls"] == calls
                     && work["maximum_call_depth"]
                         .as_u64()
-                        .is_some_and(|depth| depth <= range_frames + 12),
-                "effect complete output, canonical grant count, or logarithmic traversal control bound differs",
+                        .is_some_and(|depth| depth <= control_bound),
+                "effect complete output, canonical grant count, or traversal control bound differs",
             )?;
             if count == 8192 {
                 require(

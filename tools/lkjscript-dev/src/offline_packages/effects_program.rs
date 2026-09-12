@@ -2,14 +2,14 @@
 use crate::pure_tail_program::Request;
 use std::collections::BTreeMap;
 
-fn parameters(r: &mut Request, name: &str, types: &[&str]) {
+pub(super) fn parameters(r: &mut Request, name: &str, types: &[&str]) {
     for ty in types {
         r.text.push_str(&format!("add.type-parameter as=${name}-{ty} declaration=${name} name={ty}\ntype.parameter as=@{name}-{ty} parameter=${name}-{ty}\n"));
     }
     r.text.push_str(&format!("add.effect-parameter as=${name}-E declaration=${name} name=E\neffect.row as=@{name}-E\neffect.parameter parent=@{name}-E index=0 parameter=${name}-E\n"));
 }
 
-fn task(
+pub(super) fn task(
     r: &mut Request,
     name: &str,
     public: bool,
@@ -26,124 +26,23 @@ fn task(
     }
 }
 
-fn call(r: &mut Request, target: &str, types: &[&str], row: &str, args: &[String]) -> String {
+pub(super) fn call(
+    r: &mut Request,
+    target: &str,
+    types: &[&str],
+    row: &str,
+    args: &[String],
+) -> String {
     let value = r.call(target, types, args);
     r.effects(&value, &[row]);
     value
 }
 
-/// Sequential range subdivision over one persistent list. No prefixes or slices are built.
+/// Graph-owned sequential traversal and data-dependent task iteration.
 pub(super) fn standard(standard: &BTreeMap<String, String>) -> String {
     let mut r = Request::default();
-    for name in ["task-fold-left", "task-fold-left-range"] {
-        parameters(&mut r, name, &["Item", "State"]);
-        r.text.push_str(&format!("type.list as=@{name}-items item=@{name}-Item\ntype.task-function as=@{name}-step result=@{name}-State effect=@{name}-E\ntype.argument parent=@{name}-step index=0 type=@{name}-State\ntype.argument parent=@{name}-step index=1 type=@{name}-Item\n"));
-    }
-    let items = r.local("$task-fold-left_items");
-    let state = r.local("$task-fold-left_state");
-    let step = r.local("$task-fold-left_step");
-    let lo = r.integer(0);
-    let source = r.local("$task-fold-left_items");
-    let hi = r.call(
-        &standard["list-length"],
-        &["@task-fold-left-Item"],
-        &[source],
-    );
-    let body = call(
-        &mut r,
-        "$task-fold-left-range",
-        &["@task-fold-left-Item", "@task-fold-left-State"],
-        "@task-fold-left-E",
-        &[items, state, step, lo, hi],
-    );
-    task(
-        &mut r,
-        "task-fold-left",
-        true,
-        "@task-fold-left-State",
-        &body,
-        &[
-            ("items", "@task-fold-left-items"),
-            ("state", "@task-fold-left-State"),
-            ("step", "@task-fold-left-step"),
-        ],
-    );
-
-    let lo = r.local("$task-fold-left-range_lo");
-    let hi = r.local("$task-fold-left-range_hi");
-    let empty = r.call(&standard["i64-equal"], &[], &[lo, hi]);
-    let state = r.local("$task-fold-left-range_state");
-    let lo = r.local("$task-fold-left-range_lo");
-    let hi = r.local("$task-fold-left-range_hi");
-    let length = r.call(&standard["subtract"], &[], &[hi, lo]);
-    let one = r.integer(1);
-    let single = r.call(&standard["i64-equal"], &[], &[length, one]);
-    let step = r.local("$task-fold-left-range_step");
-    let initial = r.local("$task-fold-left-range_state");
-    let items = r.local("$task-fold-left-range_items");
-    let lo = r.local("$task-fold-left-range_lo");
-    let item = r.call(
-        &standard["list-get"],
-        &["@task-fold-left-range-Item"],
-        &[items, lo],
-    );
-    let singleton = r.invoke(&step, &[initial, item]);
-
-    let lo = r.local("$task-fold-left-range_lo");
-    let hi = r.local("$task-fold-left-range_hi");
-    let width = r.call(&standard["subtract"], &[], &[hi, lo]);
-    let two = r.integer(2);
-    let half = r.call(&standard["divide"], &[], &[width, two]);
-    let lo = r.local("$task-fold-left-range_lo");
-    let mid = r.call(&standard["add"], &[], &[lo, half]);
-    let items = r.local("$task-fold-left-range_items");
-    let initial = r.local("$task-fold-left-range_state");
-    let step = r.local("$task-fold-left-range_step");
-    let lo = r.local("$task-fold-left-range_lo");
-    let middle = r.local("$range-mid");
-    let left = call(
-        &mut r,
-        "$task-fold-left-range",
-        &["@task-fold-left-range-Item", "@task-fold-left-range-State"],
-        "@task-fold-left-range-E",
-        &[items, initial, step, lo, middle],
-    );
-    let items = r.local("$task-fold-left-range_items");
-    let advanced = r.local("$range-left");
-    let step = r.local("$task-fold-left-range_step");
-    let middle = r.local("$range-mid");
-    let hi = r.local("$task-fold-left-range_hi");
-    let right = call(
-        &mut r,
-        "$task-fold-left-range",
-        &["@task-fold-left-range-Item", "@task-fold-left-range-State"],
-        "@task-fold-left-range-E",
-        &[items, advanced, step, middle, hi],
-    );
-    let split = r.expression("let", &format!("body={right}"));
-    r.text.push_str(&format!("expression.binding parent={split} index=0 as=$range-mid name=mid type=i64 value={mid}\nexpression.binding parent={split} index=1 as=$range-left name=left type=@task-fold-left-range-State value={left}\n"));
-    let nonempty = r.expression(
-        "if",
-        &format!("condition={single} when-true={singleton} when-false={split}"),
-    );
-    let body = r.expression(
-        "if",
-        &format!("condition={empty} when-true={state} when-false={nonempty}"),
-    );
-    task(
-        &mut r,
-        "task-fold-left-range",
-        false,
-        "@task-fold-left-range-State",
-        &body,
-        &[
-            ("items", "@task-fold-left-range-items"),
-            ("state", "@task-fold-left-range-State"),
-            ("step", "@task-fold-left-range-step"),
-            ("lo", "i64"),
-            ("hi", "i64"),
-        ],
-    );
+    super::effects_traversal::fold(&mut r, standard, None);
+    super::effects_traversal::iteration(&mut r);
 
     for name in ["task-map", "task-map-step"] {
         parameters(&mut r, name, &["Input", "Output"]);
@@ -225,5 +124,7 @@ pub(super) fn library(standard_names: &BTreeMap<String, String>) -> String {
     // The traversal builder uses its own symbols; prefixes preserve their exact disjoint scope.
     let traversal = standard(standard_names).replace("$e", "$traversal-e");
     r.text.push_str(&traversal);
+    r.text
+        .push_str(&super::effects_iteration_program::producer(standard_names));
     r.text
 }
