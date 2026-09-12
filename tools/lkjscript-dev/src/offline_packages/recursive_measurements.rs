@@ -224,6 +224,7 @@ fn recursive_monomorphic_predecessor_cost_comparison() {
                 )
                 .unwrap(),
                 copied_candidate_sha256: digest,
+                pinned_runtime_path: original.canonicalize().unwrap().display().to_string(),
                 isolated_root: isolated.path().display().to_string(),
                 evidence_root: root.display().to_string(),
                 environment_names: vec!["LANG".into()],

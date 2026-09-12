@@ -12,7 +12,7 @@ candidate and ran their small lifecycles; one fresh suite was bound within that 
 the first hosted pair are closed in the [iteration reconciliation](campaigns/202609121214.md).
 
 The [foreground campaign](campaigns/202609121842.md) selects one combined task-iteration and
-foreground-command release. Current offline-package receipt 8 requires the foreground child
+foreground-command release. Current offline-package receipt 9 requires the foreground child
 at source, target, transferred and public acceptance. Existing exact-source dry-run, annotated-tag,
 immutability control and public-pair gates still apply. A descriptor may omit command execution
 and runtime policy only on a matching foreground-capable executable; retain numeric descriptors
@@ -233,6 +233,8 @@ are untouched. See the [public installation commands](../README.md#download-and-
 Each pair additionally installs immutable public v0.1.32, checks exact/idempotent selection and manager
 recovery, and holds two independent HTTP starter bundles alive through a default change. The original
 foreground owner still supplies the independent arithmetic, once-only counter and cleanup expectations.
+Its artifact invocations use the exact installed runtime path; authoring uses its isolated copy.
+Receipt 9 binds that path and digest; historical receipt 8 remains with the frozen two-asset owner.
 No effects are replayed for a reference comparison. Retained binaries, receipts, descriptors and
 artifacts remain bound; generated authoring projects and owned live processes are cleaned.
 

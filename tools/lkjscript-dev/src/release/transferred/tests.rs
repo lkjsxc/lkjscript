@@ -379,6 +379,7 @@ fn live_receipt_fault_matrix() {
                 "/status",
                 "/candidate_sha256",
                 "/copied_candidate_sha256",
+                "/pinned_runtime_path",
                 "/commands/0/command/0",
                 "/verifier_sha256",
                 "/evidence_root",

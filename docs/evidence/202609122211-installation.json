@@ -84,6 +84,13 @@
       "fault_sensitivity": "first interruption test returned success but two intended child faults were not reached; not accepted as complete sensitivity; assertions strengthened",
       "disposition": "retained development evidence; corrected source requires fresh acceptance"
     },
+    "corrected_handoff_feedback": {
+      "source": "9bca4c5f2f7e13cd83d733d3a5a4b04894477889",
+      "package_source": "ca883b9b4336c191ab24f9b7b3682b78c1f44f13",
+      "status": "12 interruption cases passed with intended operations reached; development input, not final source acceptance",
+      "owned_cleanup": "complete; retained immutable installed fixture slots remain as evidence"
+    },
+    "foreground_runtime_binding": "receipt 9 binds the supplied absolute runtime path; artifact cells, signals and broken output invoke that exact path; copied public authoring and all independent expectations retained",
     "format_owners": {
       "historical_integrity": "src/release_container",
       "current_production": "tools/lkjscript-dev/src/release",

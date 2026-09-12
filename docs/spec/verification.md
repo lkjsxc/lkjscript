@@ -322,12 +322,16 @@ requires exact byte equality with the generated maintained files.
 ## Command lifecycle requirements
 
 Foreground acceptance extends the existing offline-package effect child, required by current
-offline-package receipt 8 and all current target/transferred/public-pair readers. It freshly authors
+offline-package receipt 9 and all current target/transferred/public-pair readers. It freshly authors
 an exported task-iteration helper, a pure factory returning a bound callback, and two Command
 consumers with recursive nominal reports through the copied candidate. Both consumer and producer
 authoring paths are unavailable during execution; only the single executable, exact bundles,
 descriptors and disposable operational roots are required. Unrelated working directories and an
-environment containing only `LANG` exclude Cargo, source assets and runtime lookup.
+environment containing only `LANG` exclude Cargo, source assets and runtime lookup. Artifact
+commands invoke the exact supplied absolute runtime, whose path and digest the reader independently
+binds. Thus the installed pair's two foreground consumers execute through one immutable installed
+slot. Authoring continues through the isolated copied candidate. Historical receipt 8 and its copied
+foreground invocations remain with the frozen foreground release owner.
 
 Independent arithmetic requires positions 0, 1, 257 and 8193, with sums N(N-1)/2; the last is
 33,558,528. A persistent counter increases once per command. The complete small-case ordered

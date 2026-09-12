@@ -505,7 +505,7 @@ fn failure(
     ];
     let records = if let Some(terminate) = signal {
         let specification = process::ProcessSpec {
-            command: std::iter::once(context.binary.display().to_string())
+            command: std::iter::once(context.receipt.pinned_runtime_path.clone())
                 .chain(arguments.iter().map(|s| (*s).to_owned()))
                 .collect(),
             cwd: consumer.cwd.clone(),
@@ -811,7 +811,7 @@ fn broken_output(context: &mut Context, consumer: &Consumer) -> Result<(), DevEr
     let command = context.receipt.commands.len();
     let spec = process::ProcessSpec {
         command: vec![
-            context.binary.display().to_string(),
+            context.receipt.pinned_runtime_path.clone(),
             "run".into(),
             "--deployment".into(),
             consumer
@@ -972,10 +972,7 @@ fn command_evidence<'a>(
         command.cwd == consumer.cwd
             && command.command
                 == vec![
-                    Path::new(&parent.isolated_root)
-                        .join("lkjscript")
-                        .display()
-                        .to_string(),
+                    parent.pinned_runtime_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     Path::new(&consumer.bundle)
@@ -1253,10 +1250,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                 && command.cwd == receipt.consumers[cell.consumer].cwd
                 && command.command
                     == vec![
-                        Path::new(&parent.isolated_root)
-                            .join("lkjscript")
-                            .display()
-                            .to_string(),
+                        parent.pinned_runtime_path.clone(),
                         "run".into(),
                         "--deployment".into(),
                         Path::new(&receipt.consumers[cell.consumer].bundle)

@@ -47,6 +47,7 @@ pub(crate) struct Receipt {
     pub candidate_sha256: String,
     pub verifier_sha256: String,
     pub copied_candidate_sha256: String,
+    pub pinned_runtime_path: String,
     pub isolated_root: String,
     pub evidence_root: String,
     pub environment_names: Vec<String>,
@@ -148,10 +149,11 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-8".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-9".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
+            pinned_runtime_path: binary.display().to_string(),
             verifier_sha256,
             isolated_root: isolated.path().display().to_string(),
             evidence_root: output.display().to_string(),
@@ -307,7 +309,14 @@ impl Context {
         passes: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
         let index = self.receipt.commands.len();
-        let mut command = vec![self.binary.display().to_string()];
+        let executable = if project.is_none() && arguments.starts_with(&["run", "--deployment"]) {
+            // Author through the isolated copy; invoke artifacts through the exact supplied runtime.
+            // At the installed pair boundary this is the immutable installed executable itself.
+            self.receipt.pinned_runtime_path.clone()
+        } else {
+            self.binary.display().to_string()
+        };
+        let mut command = vec![executable];
         if let Some(project) = project {
             command.extend(["--project".to_owned(), project.display().to_string()]);
         }
@@ -1768,7 +1777,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-8"
+        receipt.schema == "lkjscript-offline-packages-acceptance-9"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1776,6 +1785,7 @@ pub(crate) fn read_transferred_receipt(
             && receipt.evidence_root == root.display().to_string()
             && receipt.environment_names == ["LANG"]
             && receipt.candidate_sha256 == digest_file(candidate, MAXIMUM_EXECUTABLE_BYTES)?
+            && Path::new(&receipt.pinned_runtime_path) == candidate.canonicalize()?
             && receipt.verifier_sha256 == digest_file(verifier, MAXIMUM_EXECUTABLE_BYTES)?
             && receipt.copied_candidate_sha256 == receipt.candidate_sha256,
         "offline receipt does not bind the exact transferred candidate, verifier, and cleanup",
@@ -1976,7 +1986,13 @@ pub(crate) fn read_transferred_receipt(
                 == foreground::command_cwd(&receipt.effects.foreground, index)
                     .unwrap_or(&receipt.isolated_root)
                 && command.command.first().is_some_and(|binary| {
-                    Path::new(binary) == Path::new(&receipt.isolated_root).join("lkjscript")
+                    if command.command.get(1).is_some_and(|v| v == "run")
+                        && command.command.get(2).is_some_and(|v| v == "--deployment")
+                    {
+                        binary == &receipt.pinned_runtime_path
+                    } else {
+                        Path::new(binary) == Path::new(&receipt.isolated_root).join("lkjscript")
+                    }
                 }),
             "offline command consulted a foreign executable or checkout",
         )?;

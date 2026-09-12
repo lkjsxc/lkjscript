@@ -34,6 +34,7 @@ fn context() -> Context {
             )
             .unwrap(),
             copied_candidate_sha256: digest,
+            pinned_runtime_path: root.join("lkjscript").display().to_string(),
             isolated_root: root.display().to_string(),
             evidence_root: evidence.display().to_string(),
             environment_names: vec!["LANG".into()],
