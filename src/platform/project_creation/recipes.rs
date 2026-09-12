@@ -11,7 +11,8 @@ use crate::platform::change::{
     ModuleSelector,
 };
 use crate::platform::deployment::{
-    encode_deployment, starter_http_deployment, starter_nostr_relay_deployment,
+    encode_deployment, starter_command_deployment, starter_http_deployment,
+    starter_nostr_relay_deployment,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -102,7 +103,10 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
         ],
         transports: vec![standard.transport()],
         template: ProjectTemplate::Command,
-        auxiliary: None,
+        auxiliary: Some(ProjectAuxiliary {
+            descriptor: encode_deployment(&starter_command_deployment())?,
+            descriptor_path: super::STARTER_COMMAND_DESCRIPTOR_PATH,
+        }),
     })
 }
 
@@ -222,7 +226,10 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
         ],
         transports: vec![standard.transport()],
         template: ProjectTemplate::Http,
-        auxiliary: Some(ProjectAuxiliary { descriptor }),
+        auxiliary: Some(ProjectAuxiliary {
+            descriptor,
+            descriptor_path: super::STARTER_HTTP_DESCRIPTOR_PATH,
+        }),
     })
 }
 
@@ -436,7 +443,10 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
         ],
         transports: vec![standard.transport()],
         template: ProjectTemplate::NostrRelayInfo,
-        auxiliary: Some(ProjectAuxiliary { descriptor }),
+        auxiliary: Some(ProjectAuxiliary {
+            descriptor,
+            descriptor_path: super::STARTER_HTTP_DESCRIPTOR_PATH,
+        }),
     })
 }
 

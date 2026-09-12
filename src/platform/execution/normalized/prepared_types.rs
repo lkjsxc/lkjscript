@@ -17,6 +17,8 @@ type EffectBindings =
     BTreeMap<crate::platform::kernel::EffectParameterReference, crate::platform::kernel::EffectRow>;
 type EffectApplication = (FunctionIndex, Vec<crate::platform::kernel::EffectRow>);
 const MAXIMUM_WORK: usize = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+// Finite preparation storage, independent of invocation-lifetime allocation accounting.
+const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 pub(super) struct Budget<'a> {
     steps: usize,
@@ -117,9 +119,7 @@ fn reserve_metadata(bytes: &mut usize, count: usize, size: usize) -> Result<(), 
     *bytes = count
         .checked_mul(size)
         .and_then(|added| bytes.checked_add(added))
-        .filter(|total| {
-            *total as u64 <= super::vm::NormalizedRunPolicy::default().maximum_allocated_bytes
-        })
+        .filter(|total| *total <= MAXIMUM_METADATA_BYTES)
         .ok_or_else(|| {
             Diagnostic::new(
                 DiagnosticClass::Resource,
@@ -1232,8 +1232,7 @@ mod tests {
             step(&mut budget).unwrap_err().code,
             "normalized_instantiation_work"
         );
-        let maximum =
-            super::super::vm::NormalizedRunPolicy::default().maximum_allocated_bytes as usize;
+        let maximum = super::MAXIMUM_METADATA_BYTES;
         let mut bytes = maximum - 32;
         reserve_metadata(&mut bytes, 1, 32).unwrap();
         assert_eq!(bytes, maximum);

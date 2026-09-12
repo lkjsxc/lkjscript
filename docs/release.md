@@ -5,13 +5,22 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.31`, release `386791231`, is the current supported release, from source
-`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. Dry run `34549698169/1` and tag run
-`34557393945/1` passed. The latter's retained full receipt records 26 fresh gates, and its
-six-owner target, pre-publication, exact-download and latest-download receipts have been reread
-with the original verifier at their original isolated paths. Both public routes freshly executed
-all five owners under the previous policy. This distributes finite recursive nominal data;
-see the [predecessor reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11).
+Immutable `v0.1.32`, release `387465958`, is the last verified supported release, from source
+`67baaf0b081842e0e2e3745e8d5503e22cc791e4`. Dry run `34626667719/1` and tag run
+`34671245722/1` passed. Both anonymous public routes independently acquired and admitted the
+candidate and ran their small lifecycles; one fresh suite was bound within that pair. EFF-7 and
+the first hosted pair are closed in the [iteration reconciliation](campaigns/202609121214.md).
+
+The [foreground campaign](campaigns/202609121842.md) selects one combined task-iteration and
+foreground-command release. Current offline-package receipt 8 requires the foreground child
+at source, target, transferred and public acceptance. Existing exact-source dry-run, annotated-tag,
+immutability control and public-pair gates still apply. A descriptor may omit command execution
+and runtime policy only on a matching foreground-capable executable; retain numeric descriptors
+and the previous executable with immutable bundles for recovery. No operational-data migration
+is part of publication.
+
+Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
+`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
 
 The previous immutable `v0.1.30`, release `386193815`, remains preserved. Annotated tag
 `b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects source

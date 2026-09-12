@@ -101,7 +101,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-17";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 17;
-pub const CLI_CONTRACT_VERSION: u16 = 31;
+pub const CLI_CONTRACT_VERSION: u16 = 32;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1262,6 +1262,7 @@ pub enum ProjectRequirement {
     Destination,
     Required,
     DescriptorBound,
+    ProjectOrDescriptor,
 }
 
 impl ProjectRequirement {
@@ -1271,6 +1272,7 @@ impl ProjectRequirement {
             Self::Destination => "destination",
             Self::Required => "required",
             Self::DescriptorBound => "descriptor_bound",
+            Self::ProjectOrDescriptor => "project_or_descriptor",
         }
     }
 }
@@ -1443,11 +1445,11 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Run,
-            "Run a pure command target through production and independent execution with constant control space for pure graph tail calls and bounded per-tier peak call frames and tail-transfer observations.",
-            "run TARGET [--arguments JSON]",
+            "Run a pure project target differentially, or run one exact pure/task Command artifact once through production with deployment grants and joined cleanup.",
+            "run TARGET [--arguments JSON] | run --deployment PATH [--arguments JSON]",
             (ControlModel::RunRequest, ControlModel::RunResult),
-            AuthorityEffect::None,
-            ProjectRequirement::Required,
+            AuthorityEffect::ExternalRuntime,
+            ProjectRequirement::ProjectOrDescriptor,
             BudgetProfile::Runtime,
         ),
         runtime_operation(
@@ -2088,6 +2090,42 @@ const fn package_source_diagnostic(code: &'static str) -> DiagnosticDescriptor {
 
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
+        diagnostic(
+            "deployment_policy_required",
+            DiagnosticClass::Source,
+            "A resident or private runner descriptor omitted execution or runtime policy.",
+            "Supply complete numeric policies; omission is reserved for foreground Command execution.",
+        ),
+        diagnostic(
+            "deployment_command_runner",
+            DiagnosticClass::Source,
+            "Foreground deployment selection names a runner other than Command.",
+            "Select an exact Command artifact target; no invocation or live adapter was prepared.",
+        ),
+        diagnostic(
+            "foreground_cleanup",
+            DiagnosticClass::Infrastructure,
+            "Foreground execution could not complete required owned cleanup.",
+            "Inspect retained primary failure and cleanup notes; earlier effects may be visible, so do not automatically retry.",
+        ),
+        diagnostic(
+            "foreground_signal",
+            DiagnosticClass::Infrastructure,
+            "The process could not register its foreground termination owner.",
+            "Correct the process environment before invocation; no live adapters have been prepared.",
+        ),
+        diagnostic(
+            "foreground_preparation_join",
+            DiagnosticClass::Infrastructure,
+            "Foreground preparation could not join its owning runtime task.",
+            "Retain the diagnostic and inspect process cleanup before starting another invocation.",
+        ),
+        diagnostic(
+            "foreground_observation",
+            DiagnosticClass::Infrastructure,
+            "A completed foreground execution could not encode its bounded observations.",
+            "Earlier effects may be visible; retain the failure and do not automatically retry.",
+        ),
         diagnostic(
             "package_source_owner_contract",
             DiagnosticClass::Source,
@@ -3994,8 +4032,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_tail_caller",
             DiagnosticClass::Infrastructure,
-            "Attempted transfer lacks an exact pure graph caller.",
-            "Retain the exact artifact identity and use a verified executable; task frames cannot transfer.",
+            "Attempted transfer lacks an exact admitted graph caller.",
+            "Retain the exact artifact identity and use a verified executable; pure and task transfers preserve their checked continuation owners.",
         ),
         diagnostic(
             "execution_cancelled",
@@ -4006,7 +4044,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_tail_callee",
             DiagnosticClass::Infrastructure,
-            "Attempted transfer lacks an exact pure graph callee.",
+            "Attempted transfer lacks an exact admitted graph callee.",
             "Retain the exact artifact identity and use a verified executable.",
         ),
         diagnostic(
@@ -6212,6 +6250,18 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Diagnostics => {
+            records.push(compact_record(
+                "diagnostic.field",
+                &[
+                    ("record", "diagnostic".to_owned()),
+                    ("field", "notes".to_owned()),
+                    ("scalar", "bounded-json-array-of-strings".to_owned()),
+                    (
+                        "meaning",
+                        "primary-failure-preserving visibility and cleanup evidence".to_owned(),
+                    ),
+                ],
+            )?);
             for descriptor in diagnostic_descriptors() {
                 records.push(compact_record(
                     "diagnostic",
@@ -6257,6 +6307,78 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Runners => {
+            let codec = crate::platform::json::JsonLimits::default();
+            records.push(compact_record(
+                "execution.foreground-limits",
+                &[
+                    (
+                        "single-allocation-bytes",
+                        super::super::execution::normalized::MAXIMUM_VALUE_ALLOCATION_BYTES
+                            .to_string(),
+                    ),
+                    (
+                        "raw-admission-items",
+                        super::super::execution::normalized::MAXIMUM_ADMISSION_ITEMS.to_string(),
+                    ),
+                    ("json-bytes", codec.maximum_bytes.to_string()),
+                    ("json-depth", codec.maximum_depth.to_string()),
+                    ("json-items", codec.maximum_items.to_string()),
+                    (
+                        "frontier",
+                        "current-representation-not-permanent-language-semantics".to_owned(),
+                    ),
+                    (
+                        "grants",
+                        "exact-canonical-cumulative-maximum-calls-remains-enforced".to_owned(),
+                    ),
+                ],
+            )?);
+            records.push(compact_record("execution.foreground", &[
+                ("selector", "run --deployment PATH [--arguments JSON]".to_owned()),
+                ("runner", "command".to_owned()),
+                ("entry", "closed-pure-or-task-including-empty-row".to_owned()),
+                ("execution-mode", "production".to_owned()),
+                ("verification", "not-performed".to_owned()),
+                ("invocations", "1".to_owned()),
+                ("preflight", "exact-artifact-target-component-grants-and-directional-codecs-before-secrets-adapters".to_owned()),
+                ("success", "typed-result-encoded-and-owned-work-joined-and-adapters-closed".to_owned()),
+                ("cancellation", "SIGINT-SIGTERM-completion-first-on-ready-tie-then-joined-cancellation".to_owned()),
+                ("failure", "nonzero-no-automatic-retry-possibly-visible-effects-and-cleanup-notes".to_owned()),
+                ("project-route", "pure-differential-existing-bounded-defaults".to_owned()),
+            ])?);
+            for (field, scalar) in [
+                ("target", "name"),
+                ("artifact", "artifact-bundle-digest"),
+                ("repository", "repository-id"),
+                ("package", "package-id"),
+                ("revision", "revision-id"),
+                ("semantic-state", "semantic-state-digest"),
+                ("execution-mode", "production"),
+                ("verification", "not-performed"),
+                ("execution-profile", "trusted-foreground|bounded"),
+                ("instruction-limit", "positive-integer|absent"),
+                ("allocation-limit", "positive-integer|absent"),
+                ("collection-limit", "positive-integer|absent"),
+                ("capability-call-limit", "positive-integer|absent"),
+                ("call-depth-limit", "positive-integer"),
+                ("value-stack-limit", "positive-integer"),
+                ("deadline-milliseconds", "positive-integer|absent"),
+                ("counter-semantics", "saturated-u64-is-lower-bound"),
+                ("preparation-nanoseconds", "nonnegative-integer"),
+                ("invocation-nanoseconds", "nonnegative-integer"),
+                ("production-observation", "json-object"),
+                ("cleanup", "json-object"),
+                ("value", "typed-json"),
+            ] {
+                records.push(compact_record(
+                    "execution.foreground-field",
+                    &[
+                        ("record", "execution".to_owned()),
+                        ("field", field.to_owned()),
+                        ("scalar", scalar.to_owned()),
+                    ],
+                )?);
+            }
             for kind in RunnerKind::ALL {
                 records.push(compact_record(
                     "runner.kind",
@@ -6268,7 +6390,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 &[
                     (
                         "authority",
-                        "derived-from-exact-pure-graph-meaning".to_owned(),
+                        "derived-from-exact-pure-or-task-graph-meaning".to_owned(),
                     ),
                     (
                         "contexts",
@@ -6276,16 +6398,16 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "callees",
-                        "direct-or-invoke-exact-pure-graph-function".to_owned(),
+                        "direct-or-invoke-exact-pure-or-task-graph-function".to_owned(),
                     ),
                     (
                         "space",
                         "constant-live-control-space-per-tail-chain".to_owned(),
                     ),
-                    ("budgets", "cumulative-unchanged".to_owned()),
+                    ("budgets", "selected-policy-and-canonical-grants".to_owned()),
                     (
                         "tasks",
-                        "ordinary-frames-including-empty-requirements".to_owned(),
+                        "terminal-transfer-preserves-allowances-resources-transactions".to_owned(),
                     ),
                 ],
             )?);
@@ -6514,6 +6636,17 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Deployment => {
+            records.push(compact_record("deployment.foreground-policy", &[
+                ("execution-omitted", "trusted-no-cumulative-instruction-allocation-collection-capability-quota".to_owned()),
+                ("runtime-omitted", "no-deadline-default-bounded-cleanup-grace".to_owned()),
+                ("execution-runtime-null", "reject".to_owned()),
+                ("resident-execution-runtime", "required-complete-numeric-objects".to_owned()),
+                ("explicit-execution-cumulative-defaults", "allocated-bytes=268435456,collection-items=1000000,capability-calls=100000".to_owned()),
+                ("topology", "listen-http-session-worker-required-null".to_owned()),
+                ("remaining-limits", "call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant".to_owned()),
+                ("frontier", "current-representation-and-admission-not-permanent-language-ceilings".to_owned()),
+                ("recovery", "retain-matching-executable-and-immutable-bundle-no-data-migration".to_owned()),
+            ])?);
             records.push(compact_record(
                 "deployment.schema",
                 &[

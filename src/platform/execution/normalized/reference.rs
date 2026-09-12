@@ -653,7 +653,7 @@ struct ReferenceState<'a> {
     capabilities: Option<&'a NormalizedCapabilities>,
     resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
-    remaining_expressions: u64,
+    remaining_expressions: Option<u64>,
     call_depth: usize,
     control_frames: usize,
     local_counts: Vec<usize>,
@@ -1512,13 +1512,15 @@ impl ReferenceState<'_> {
         expression: ExpressionId,
     ) -> Result<ExpressionOperation, ExecutionError> {
         self.control.check()?;
-        if self.remaining_expressions == 0 {
+        if self.remaining_expressions == Some(0) {
             return Err(reference_resource(
                 "normalized_reference_expression_steps",
                 "reference execution exhausted its expression-step budget",
             ));
         }
-        self.remaining_expressions -= 1;
+        if let Some(remaining) = &mut self.remaining_expressions {
+            *remaining -= 1;
+        }
         self.observation.expressions = self.observation.expressions.saturating_add(1);
         match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => Ok(record.operation),
@@ -2559,7 +2561,11 @@ impl ReferenceState<'_> {
         &mut self,
         requirement: RequirementReference,
     ) -> Result<(), ExecutionError> {
-        if self.observation.capability_calls >= self.policy.maximum_capability_calls {
+        if self
+            .policy
+            .maximum_capability_calls
+            .is_some_and(|maximum| self.observation.capability_calls >= maximum)
+        {
             return Err(reference_resource(
                 "normalized_reference_capability_calls",
                 "reference execution exhausted its capability-call budget",
@@ -2571,63 +2577,53 @@ impl ReferenceState<'_> {
         let maximum = capabilities.maximum_calls_exact(requirement)?;
         let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
         let calls = self.calls_by_requirement.entry(canonical).or_default();
-        if *calls >= maximum {
-            return Err(reference_resource(
-                "normalized_reference_grant_calls",
-                "reference execution exhausted one deployment-grant call bound",
-            ));
-        }
-        *calls = calls.saturating_add(1);
+        *calls = crate::platform::execution::cumulative_charge(
+            *calls,
+            1,
+            Some(maximum),
+            "normalized_reference_grant_calls",
+            "reference execution exhausted one deployment-grant call bound",
+        )?;
         self.observation.capability_calls = self.observation.capability_calls.saturating_add(1);
         Ok(())
     }
 
     fn charge_items(&mut self, items: usize, item_bytes: usize) -> Result<(), ExecutionError> {
-        let items = items as u64;
-        let next = self
-            .observation
-            .collection_items
-            .checked_add(items)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_collection_items",
-                    "reference collection-item accounting overflowed",
-                )
-            })?;
-        if next > self.policy.maximum_collection_items {
+        if items as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
             return Err(reference_resource(
                 "normalized_reference_collection_items",
-                "reference execution exhausted its collection-item budget",
+                "one container exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = next;
-        let bytes = items.checked_mul(item_bytes as u64).ok_or_else(|| {
-            reference_resource(
-                "normalized_reference_allocation",
-                "reference collection allocation overflowed",
-            )
-        })?;
+        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            items as u64,
+            self.policy.maximum_collection_items,
+            "normalized_reference_collection_items",
+            "execution exhausted its collection-item budget",
+        )?;
+        let bytes = super::value::collection_storage_bytes(
+            items as u64,
+            item_bytes as u64,
+            "normalized_reference_allocation",
+        )?;
         self.charge_allocation(bytes)
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        let next = self
-            .observation
-            .allocated_bytes
-            .checked_add(bytes)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_allocation",
-                    "reference allocation accounting overflowed",
-                )
-            })?;
-        if next > self.policy.maximum_allocated_bytes {
+        if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
             return Err(reference_resource(
                 "normalized_reference_allocation",
-                "reference execution exhausted its allocation budget",
+                "one allocation exceeds finite value storage",
             ));
         }
-        self.observation.allocated_bytes = next;
+        self.observation.allocated_bytes = crate::platform::execution::cumulative_charge(
+            self.observation.allocated_bytes,
+            bytes,
+            self.policy.maximum_allocated_bytes,
+            "normalized_reference_allocation",
+            "execution exhausted its allocation budget",
+        )?;
         if bytes != 0 {
             self.observation.allocation_charges =
                 self.observation.allocation_charges.saturating_add(1);
@@ -2637,23 +2633,19 @@ impl ReferenceState<'_> {
 
     fn charge_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
         let (bytes, items) = reference_value_cost(value)?;
-        let next = self
-            .observation
-            .collection_items
-            .checked_add(items)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_collection_items",
-                    "reference external value item accounting overflowed",
-                )
-            })?;
-        if next > self.policy.maximum_collection_items {
+        if items > super::value::MAXIMUM_ADMISSION_ITEMS {
             return Err(reference_resource(
                 "normalized_reference_collection_items",
-                "reference external value exceeds its collection-item budget",
+                "one external value exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = next;
+        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            items,
+            self.policy.maximum_collection_items,
+            "normalized_reference_collection_items",
+            "external value exceeds the collection-item budget",
+        )?;
         self.charge_allocation(bytes)
     }
 
@@ -3785,12 +3777,12 @@ fn reference_map_key_bytes(key: &NormalizedMapKey) -> u64 {
 }
 
 fn validate_reference_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.instruction_steps == 0
+    if policy.instruction_steps == Some(0)
         || policy.maximum_call_depth == 0
         || policy.maximum_value_stack == 0
-        || policy.maximum_allocated_bytes == 0
-        || policy.maximum_collection_items == 0
-        || policy.maximum_capability_calls == 0
+        || policy.maximum_allocated_bytes == Some(0)
+        || policy.maximum_collection_items == Some(0)
+        || policy.maximum_capability_calls == Some(0)
     {
         return Err(reference_resource(
             "normalized_reference_policy",

@@ -23,6 +23,24 @@ and preflights adapters, computes redacted descriptor digests, and only then per
 listener/worker admission. A failure closes already-created adapters and emits no ready event or
 application work. Artifacts contain none of these deployment facts.
 
+Foreground `run --deployment` uses this same descriptor and loader. Only this route permits
+omitting `execution` and `runtime`; explicit null rejects. The raw schema preserves omission
+until route validation. Resident routes require both complete numeric objects. Command topology
+requires null listener, HTTP, session and worker fields. Other field requirements are unchanged.
+Exact Command runner, full component requirements, grant/interface mapping, bounded arguments
+and every result-type encoding branch are admitted read-only before named secrets or live
+adapters. Partial adapter preparation closes earlier owners on failure.
+
+Absent execution selects trusted foreground work without cumulative instruction, allocated-byte,
+collection-item or invocation capability-call quotas. Explicit execution retains its instruction,
+depth and stack values and the existing cumulative 256 MiB/1,000,000-item/100,000-call defaults.
+Absent runtime removes only this route's invocation deadline; shutdown and cancellation grace
+remain finite. Explicit runtime preserves its supplied deadline and cleanup policy. Neither
+policy supplies capabilities, alters per-grant maxima, removes finite preparation/codec or
+representation admission, nor creates a hostile-code sandbox. Older executables reject newly
+omitted fields: retain matching executables and immutable bundles for recovery. No graph, type,
+artifact or operational-data encoding change or migration follows from this syntax evolution.
+
 An interactive descriptor must provide the complete session limit record and no HTTP or worker
 record. Preparation reconstructs the canonical relational port, checks each positive limit against
 its global ceiling, checks cross-field stream/frame/message/mailbox/transition and lifetime

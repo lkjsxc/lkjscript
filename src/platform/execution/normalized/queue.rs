@@ -75,12 +75,11 @@ pub(crate) struct NormalizedDurableQueueAdapter {
 }
 
 impl NormalizedDurableQueueAdapter {
-    pub(crate) fn prepare(
+    pub(crate) fn admit(
         program: &NormalizedProgram,
         requirement: &NormalizedRequirement,
         kind: NormalizedAdapterKind,
-        engine: DurableQueueEngine,
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<impl FnOnce(DurableQueueEngine) -> Self, Diagnostic> {
         if kind != NormalizedAdapterKind::DurableQueueData {
             return Err(queue_diagnostic(
                 "normalized_queue_adapter_kind",
@@ -230,7 +229,7 @@ impl NormalizedDurableQueueAdapter {
             }
         }
         let exact_operations = operations.keys().copied().collect();
-        Ok(Self {
+        Ok(move |engine| Self {
             kind,
             interface: requirement.interface,
             operations,

@@ -33,6 +33,7 @@ pub(crate) struct EffectReceipt {
     pub resources: Value,
     pub cancellation: Value,
     pub iteration: Value,
+    pub foreground: super::foreground::ForegroundReceipt,
 }
 
 fn transaction_cancellation(
@@ -537,7 +538,10 @@ fn interface(
     )
 }
 
-fn duplicate_map_output(standard: &BTreeMap<String, String>, library: &Package) -> String {
+pub(super) fn duplicate_map_output(
+    standard: &BTreeMap<String, String>,
+    library: &Package,
+) -> String {
     let mut r = crate::pure_tail_program::Request::default();
     r.text.push_str(&format!(
         "type.parameter as=@Output parameter={}\n",
@@ -595,6 +599,7 @@ pub(super) fn discover(context: &mut Context, standard: &mut Package) -> Result<
         "data-encode",
         "data-decode-or",
         "text-equal",
+        "text-concat",
         "Configuration",
         "ByteStream",
         "DataStore",
@@ -993,10 +998,14 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
     )?;
     super::effects_resources::validate(parent, root)?;
     super::effects_iteration_evidence::validate(parent, root)?;
+    super::foreground::validate(parent, root)?;
     Ok(())
 }
 
-pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
+pub(super) fn prepare_library(
+    context: &mut Context,
+    standard: &mut Package,
+) -> Result<(Package, BTreeMap<String, String>), DevError> {
     discover(context, standard)?;
     // A previous offline workload may have removed its source copy; exporting is acquisition only.
     if !standard.container.exists() {
@@ -1061,6 +1070,12 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     .into_iter()
     .map(|name| Ok((name.to_owned(), reference(&library, &format!("${name}"))?)))
     .collect::<Result<BTreeMap<_, _>, DevError>>()?;
+    Ok((library, names))
+}
+
+pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
+    let (mut library, names) = prepare_library(context, standard)?;
+    let mut foreground = super::foreground::prepare(context, standard, &library, &names)?;
     let path = context.root.join("effect-consumer");
     let created = context.cli(
         None,
@@ -1174,6 +1189,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     reject_iteration_requests(context, &consumer, &bindings, &names)?;
     let library_recovery = context.root.join("effect-library-recovery");
     fs::rename(&library.path, &library_recovery)?;
+    super::foreground::initial(context, &foreground)?;
     context.cli(Some(&consumer.path), &["check"], true)?;
     context.export(&mut consumer)?;
     let standalone = context.root.join("effect-standalone");
@@ -1338,10 +1354,12 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.apply(&mut library, &replacement)?;
     context.cli(Some(&library.path), &["check"], true)?;
     context.export(&mut library)?;
+    super::foreground::replace(context, &mut foreground, &library)?;
     context.stage(&consumer, &library)?;
     context.apply(&mut consumer, &binding("replace", &library))?;
     let second_recovery = context.root.join("effect-library-successor-recovery");
     fs::rename(&library.path, &second_recovery)?;
+    super::foreground::recovery(context, &mut foreground)?;
     context.cli(Some(&consumer.path), &["check"], true)?;
     context.export(&mut consumer)?;
     let successor = standalone.join("successor.lkja");

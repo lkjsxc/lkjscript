@@ -17,6 +17,7 @@ type Application = (
     Vec<crate::platform::kernel::EffectRow>,
 );
 type Calls = VecDeque<Application>;
+const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 struct Closure<'a> {
     snapshots: BTreeMap<PackageId, &'a KernelSnapshot>,
@@ -31,9 +32,7 @@ fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError
     *allocated = count
         .checked_mul(std::mem::size_of::<T>())
         .and_then(|bytes| allocated.checked_add(bytes))
-        .filter(|bytes| {
-            *bytes as u64 <= super::vm::NormalizedRunPolicy::default().maximum_allocated_bytes
-        })
+        .filter(|bytes| *bytes <= MAXIMUM_METADATA_BYTES)
         .ok_or_else(|| {
             ExecutionError::resource(
                 "reference_instantiation_storage",

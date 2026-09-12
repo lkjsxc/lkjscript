@@ -252,6 +252,36 @@ fn author_transported_task_library_through_public_change() {
 
 #[test]
 #[ignore = "requires frozen candidate and absent evidence path; retains disposable projects for diagnosis"]
+fn copied_task_library_foreground_iteration() {
+    let mut context = context();
+    let mut standard = standard(&mut context);
+    let result = (|| -> Result<(), DevError> {
+        let (mut library, names) = super::effects::prepare_library(&mut context, &mut standard)?;
+        let mut consumers = super::foreground::prepare(&mut context, &standard, &library, &names)?;
+        let recovery = context.root.join("foreground-library-recovery");
+        fs::rename(&library.path, &recovery)?;
+        super::foreground::initial(&mut context, &consumers)?;
+        fs::rename(&recovery, &library.path)?;
+        let request = super::effects::duplicate_map_output(&standard.symbols, &library);
+        context.apply(&mut library, &request)?;
+        context.cli(Some(&library.path), &["check"], true)?;
+        context.export(&mut library)?;
+        super::foreground::replace(&mut context, &mut consumers, &library)?;
+        fs::rename(&library.path, &recovery)?;
+        super::foreground::recovery(&mut context, &mut consumers)?;
+        super::foreground::validate(&context.receipt, &context.evidence)
+    })();
+    context.receipt.failure = result.as_ref().err().map(ToString::to_string);
+    fs::write(
+        context.evidence.join("iteration.json"),
+        serde_json::to_vec_pretty(&context.receipt).unwrap(),
+    )
+    .unwrap();
+    result.unwrap();
+}
+
+#[test]
+#[ignore = "requires frozen candidate and absent evidence path; retains disposable projects for diagnosis"]
 fn copied_task_library_http_iteration() {
     let mut context = context();
     let mut standard = standard(&mut context);

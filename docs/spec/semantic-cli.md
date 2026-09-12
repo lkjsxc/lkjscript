@@ -67,6 +67,9 @@ Failed creation removes only its own stage and never changes an existing destina
 application with an exact built-in standard dependency, application module, private function,
 component, port, target `main`, and graph-owned test. The implementation calls an exact public
 standard declaration and deterministically returns text `"hello"`.
+It atomically includes `command.deployment.json` and an empty `generated/` directory. The
+descriptor selects `main` from `generated/application.lkja`, has no grants or listener, and
+omits execution/runtime policies. Its next actions include check, build and foreground run.
 
 `http` creates one exact-standard-dependent HTTP application. Typed meaning owns private pure
 `response-text` and `status-code` functions, a task handler with the normative structural HTTP
@@ -79,8 +82,8 @@ Before its one visibility rename, HTTP creation also synchronizes a strict deplo
 `service.deployment.json` and an empty `generated/` directory. The descriptor names
 `generated/application.lkja`, `serve`, `127.0.0.1:0`, and one byte-stream grant. It is separate
 mutable operator authority and is not part of semantic state. Creation returns its descriptor,
-recommended artifact output, target, runner, listener, and ordered next-action records. Minimal and
-command creation do not report a deployment.
+recommended artifact output, target, runner, listener, and ordered next-action records. Command
+creation reports `listener=none`; minimal creation reports no deployment.
 
 `nostr-relay-info` creates an exact-standard-dependent HTTP application with the existing inbound
 byte-stream requirement and one `HttpClient` requirement. Its graph-owned `GET /relay-info` route
@@ -322,8 +325,8 @@ meaning, with complete definition/interface pagination and exact relation/impact
 `set.port-contract port=PORT type=TYPE` replaces a port's exact callable contract in the same reviewed
 candidate as its implementation and dependent edits. Effect/signature changes require complete
 candidate validation; body-only local certification does not authorize them. Omitted effect arguments
-preserve previous request meaning only for zero effect arity. Pure `run` remains pure-only; live task
-execution uses the existing checked component targets.
+preserve previous request meaning only for zero effect arity. Project `run TARGET` remains
+pure-only; foreground `run --deployment` uses exact artifact Command ports and checked grants.
 
 The public exact-dependency and topology slice is:
 
@@ -481,13 +484,16 @@ artifact and preserves existing data. Build does not alter accepted authority.
 
 ```text
 run TARGET [--arguments JSON]
+run --deployment PATH [--arguments JSON]
 ```
 
 Pure `run` execution records include `production-peak-call-frames`,
 `reference-peak-call-frames`, `production-tail-transfers`, and `reference-tail-transfers` as
 bounded unsigned integer scalars. Discovery's runners section describes their units, bounds, and
 the derived pure-tail guarantee. Eligible pure graph calls retain constant control space under
-the existing budgets; task bodies and pending non-tail work retain ordinary call admission.
+the existing budgets. Eligible terminal task calls also replace their control activation while
+preserving exact allowances, grants, resources and transaction continuations; pending non-tail
+work retains ordinary call admission.
 Fuel, allocation, cancellation, and argument order remain binding. Failed execution emits a
 diagnostic without a successful value record or semantic `HEAD` change.
 
@@ -508,6 +514,34 @@ entry, executes once in the normalized VM and once in the canonical reference in
 rejects disagreement. It emits the typed result plus bounded production/reference observations.
 Effectful or non-command targets receive an exact unsupported/grants-required diagnostic; effects
 are not duplicated. Run never advances authority.
+
+The deployment form selects only the descriptor's exact artifact Command target, with a closed
+pure or task function-backed port. It rejects positional targets, `--project`, duplicate/unknown
+options and other runners before deployment setup, and never discovers a project. Arguments
+default to `[]`. Strict artifact/descriptor, exact component/grant, directional input/output codec
+eligibility and typed argument admission precede secret loading or adapter construction. All
+branches of nominal result types must support output encoding, including unselected branches.
+Intrinsic Option/Result boundary forms remain unsupported.
+
+Deployment execution invokes production exactly once for either callable kind and reports
+`execution-mode=production` and `verification=not-performed`. Application error variants remain
+ordinary typed returned values. Success is staged within the existing response bounds until
+encoding, joining invocation work and adapter shutdown succeed. Errors after task admission
+conservatively disclose possibly visible earlier effects and cleanup evidence without automatic
+retry or implicit whole-command rollback. SIGINT/SIGTERM select joined cancellation; when
+completion and cancellation are already ready, completion wins. Once cancellation is selected,
+later completion cannot turn that outcome into success.
+
+Omitted execution policy selects the named trusted foreground profile: no cumulative instruction,
+allocation, collection-work or invocation capability-call quota. Omitted runtime policy supplies
+no invocation deadline, while cancellation and bounded cleanup grace remain. Supplied complete
+numeric objects retain their legacy bounded meaning, including cumulative defaults of 256 MiB,
+1,000,000 collection items and 100,000 invocation capability calls. Structural call/stack,
+single-value/container, preparation/codec and adapter limits and canonical per-grant quotas
+remain binding. Saturated observation counters are lower bounds; real storage arithmetic and
+explicit quota overflow still reject. Project differential execution and resident policies retain
+their bounded defaults. An installed executable runs independent bundles in separate processes;
+`.lkja` files require that runtime and do not embed it.
 
 ## Serve and worker
 

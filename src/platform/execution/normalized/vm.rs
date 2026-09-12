@@ -29,23 +29,37 @@ mod checked_intrinsics;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
-    pub instruction_steps: u64,
+    pub instruction_steps: Option<u64>,
     pub maximum_call_depth: usize,
     pub maximum_value_stack: usize,
-    pub maximum_allocated_bytes: u64,
-    pub maximum_collection_items: u64,
-    pub maximum_capability_calls: u64,
+    pub maximum_allocated_bytes: Option<u64>,
+    pub maximum_collection_items: Option<u64>,
+    pub maximum_capability_calls: Option<u64>,
 }
 
 impl Default for NormalizedRunPolicy {
     fn default() -> Self {
         Self {
-            instruction_steps: 10_000_000,
+            instruction_steps: Some(10_000_000),
             maximum_call_depth: 4_096,
             maximum_value_stack: 1_000_000,
-            maximum_allocated_bytes: 256 * 1024 * 1024,
-            maximum_collection_items: 1_000_000,
-            maximum_capability_calls: 100_000,
+            maximum_allocated_bytes: Some(256 * 1024 * 1024),
+            maximum_collection_items: Some(1_000_000),
+            maximum_capability_calls: Some(100_000),
+        }
+    }
+}
+
+impl NormalizedRunPolicy {
+    /// Trusted foreground execution has no cumulative work quotas. Structural limits,
+    /// cancellation, admission and exact deployment-grant accounting remain independent.
+    pub fn foreground() -> Self {
+        Self {
+            instruction_steps: None,
+            maximum_allocated_bytes: None,
+            maximum_collection_items: None,
+            maximum_capability_calls: None,
+            ..Self::default()
         }
     }
 }
@@ -504,7 +518,7 @@ struct Machine<'a> {
     capabilities: Option<&'a NormalizedCapabilities>,
     resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
-    remaining_steps: u64,
+    remaining_steps: Option<u64>,
     stack: Vec<CheckedValue>,
     frames: Vec<Frame>,
     next_frame: u64,
@@ -647,13 +661,15 @@ impl Machine<'_> {
     fn run(&mut self) -> Result<CheckedValue, ExecutionError> {
         loop {
             self.control.check()?;
-            if self.remaining_steps == 0 {
+            if self.remaining_steps == Some(0) {
                 return Err(resource_error(
                     "normalized_instruction_steps",
                     "normalized execution exhausted its instruction-step budget",
                 ));
             }
-            self.remaining_steps -= 1;
+            if let Some(remaining) = &mut self.remaining_steps {
+                *remaining -= 1;
+            }
             self.observation.instructions = self.observation.instructions.saturating_add(1);
             let instruction = {
                 let frame = self.current_frame_mut()?;
@@ -795,6 +811,8 @@ impl Machine<'_> {
                         resources: self.resources,
                         control: self.control,
                         policy: self.policy,
+                        admission_bytes: 0,
+                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocation_charges: &mut self.observation.allocation_charges,
@@ -822,6 +840,8 @@ impl Machine<'_> {
                         resources: self.resources,
                         control: self.control,
                         policy: self.policy,
+                        admission_bytes: 0,
+                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocation_charges: &mut self.observation.allocation_charges,
@@ -839,6 +859,8 @@ impl Machine<'_> {
                         resources: self.resources,
                         control: self.control,
                         policy: self.policy,
+                        admission_bytes: 0,
+                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocation_charges: &mut self.observation.allocation_charges,
@@ -936,6 +958,10 @@ impl Machine<'_> {
                         )
                     })?;
                     let values = self.pop_many(count)?;
+                    self.charge_collection(
+                        entries as usize,
+                        std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
+                    )?;
                     let mut map = BTreeMap::new();
                     let mut key_bytes = 0_u64;
                     let mut values = values.into_iter();
@@ -950,7 +976,19 @@ impl Machine<'_> {
                                 "verified map has an incomplete pair",
                             )
                         })?;
-                        key_bytes = key_bytes.saturating_add(map_key_bytes(&key));
+                        key_bytes =
+                            key_bytes.checked_add(map_key_bytes(&key)).ok_or_else(|| {
+                                resource_error(
+                                    "normalized_allocation",
+                                    "map key storage size overflowed",
+                                )
+                            })?;
+                        if key_bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+                            return Err(resource_error(
+                                "normalized_allocation",
+                                "map key storage exceeds finite value admission",
+                            ));
+                        }
                         if map.insert(key, value).is_some() {
                             return Err(trap_error(
                                 "normalized_map_duplicate_key",
@@ -958,10 +996,6 @@ impl Machine<'_> {
                             ));
                         }
                     }
-                    self.charge_collection(
-                        map.len(),
-                        std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                    )?;
                     self.charge_allocation(key_bytes)?;
                     let value =
                         CheckedValue::map(self.program, map, &mut self.observation.value_work)?;
@@ -1686,7 +1720,11 @@ impl Machine<'_> {
         &mut self,
         requirement: RequirementIndex,
     ) -> Result<(), ExecutionError> {
-        if self.observation.capability_calls >= self.policy.maximum_capability_calls {
+        if self
+            .policy
+            .maximum_capability_calls
+            .is_some_and(|maximum| self.observation.capability_calls >= maximum)
+        {
             return Err(resource_error(
                 "normalized_capability_calls",
                 "normalized execution exhausted its capability-call budget",
@@ -1696,63 +1734,53 @@ impl Machine<'_> {
         let maximum = capabilities.maximum_calls(requirement)?;
         let canonical = capabilities.canonical_requirement(requirement)?;
         let calls = self.calls_by_requirement.entry(canonical).or_default();
-        if *calls >= maximum {
-            return Err(resource_error(
-                "normalized_grant_calls",
-                "normalized execution exhausted one deployment-grant call bound",
-            ));
-        }
-        *calls = calls.saturating_add(1);
+        *calls = crate::platform::execution::cumulative_charge(
+            *calls,
+            1,
+            Some(maximum),
+            "normalized_grant_calls",
+            "normalized execution exhausted one deployment-grant call bound",
+        )?;
         self.observation.capability_calls = self.observation.capability_calls.saturating_add(1);
         Ok(())
     }
 
     fn charge_collection(&mut self, items: usize, item_bytes: usize) -> Result<(), ExecutionError> {
-        let items = items as u64;
-        let next = self
-            .observation
-            .collection_items
-            .checked_add(items)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_collection_items",
-                    "normalized collection-item accounting overflowed",
-                )
-            })?;
-        if next > self.policy.maximum_collection_items {
+        if items as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
             return Err(resource_error(
                 "normalized_collection_items",
-                "normalized execution exhausted its collection-item budget",
+                "one container exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = next;
-        let bytes = items.checked_mul(item_bytes as u64).ok_or_else(|| {
-            resource_error(
-                "normalized_allocation",
-                "normalized collection allocation overflowed",
-            )
-        })?;
+        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            items as u64,
+            self.policy.maximum_collection_items,
+            "normalized_collection_items",
+            "execution exhausted its collection-item budget",
+        )?;
+        let bytes = super::value::collection_storage_bytes(
+            items as u64,
+            item_bytes as u64,
+            "normalized_allocation",
+        )?;
         self.charge_allocation(bytes)
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        let next = self
-            .observation
-            .allocated_bytes
-            .checked_add(bytes)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_allocation",
-                    "normalized allocation accounting overflowed",
-                )
-            })?;
-        if next > self.policy.maximum_allocated_bytes {
+        if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
             return Err(resource_error(
                 "normalized_allocation",
-                "normalized execution exhausted its allocation budget",
+                "one allocation exceeds finite value storage",
             ));
         }
-        self.observation.allocated_bytes = next;
+        self.observation.allocated_bytes = crate::platform::execution::cumulative_charge(
+            self.observation.allocated_bytes,
+            bytes,
+            self.policy.maximum_allocated_bytes,
+            "normalized_allocation",
+            "execution exhausted its allocation budget",
+        )?;
         if bytes != 0 {
             self.observation.allocation_charges =
                 self.observation.allocation_charges.saturating_add(1);
@@ -1762,23 +1790,19 @@ impl Machine<'_> {
 
     fn charge_external_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
         let (bytes, items) = value_cost(value)?;
-        let next_items = self
-            .observation
-            .collection_items
-            .checked_add(items)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_collection_items",
-                    "external value item accounting overflowed",
-                )
-            })?;
-        if next_items > self.policy.maximum_collection_items {
+        if items > super::value::MAXIMUM_ADMISSION_ITEMS {
             return Err(resource_error(
                 "normalized_collection_items",
-                "external value exceeds the normalized collection-item budget",
+                "one external value exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = next_items;
+        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            items,
+            self.policy.maximum_collection_items,
+            "normalized_collection_items",
+            "external value exceeds the collection-item budget",
+        )?;
         self.charge_allocation(bytes)
     }
 
@@ -2855,12 +2879,12 @@ fn i64_pair(arguments: Vec<NormalizedValue>) -> Result<(i64, i64), ExecutionErro
 }
 
 fn validate_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.instruction_steps == 0
+    if policy.instruction_steps == Some(0)
         || policy.maximum_call_depth == 0
         || policy.maximum_value_stack == 0
-        || policy.maximum_allocated_bytes == 0
-        || policy.maximum_collection_items == 0
-        || policy.maximum_capability_calls == 0
+        || policy.maximum_allocated_bytes == Some(0)
+        || policy.maximum_collection_items == Some(0)
+        || policy.maximum_capability_calls == Some(0)
     {
         return Err(resource_error(
             "normalized_run_policy",

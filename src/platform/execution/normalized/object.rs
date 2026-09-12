@@ -63,13 +63,12 @@ pub(crate) struct NormalizedObjectStorageAdapter {
 }
 
 impl NormalizedObjectStorageAdapter {
-    pub(crate) fn prepare(
+    pub(crate) fn admit(
         program: &NormalizedProgram,
         requirement: &NormalizedRequirement,
         kind: NormalizedAdapterKind,
         stream_requirements: &[RequirementReference],
-        engine: ObjectEngine,
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<impl FnOnce(ObjectEngine) -> Self, Diagnostic> {
         if !matches!(
             kind,
             NormalizedAdapterKind::ObjectMemory
@@ -164,7 +163,7 @@ impl NormalizedObjectStorageAdapter {
             }
         }
         let exact_operations = operations.keys().copied().collect();
-        Ok(Self {
+        Ok(move |engine| Self {
             kind,
             interface: requirement.interface,
             operations,

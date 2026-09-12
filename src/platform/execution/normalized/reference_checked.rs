@@ -285,7 +285,9 @@ impl ReferenceState<'_> {
         )?;
         let list = super::super::list::List::from_items(
             items.into_iter().map(Value::release).collect(),
-            self.policy.maximum_collection_items,
+            self.policy
+                .maximum_collection_items
+                .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64),
             &mut |charge| self.reserve_list(charge),
         )?;
         Ok(Value {
@@ -297,22 +299,13 @@ impl ReferenceState<'_> {
 
     fn reserve_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let slots = self
-            .observation
-            .collection_items
-            .checked_add(charge.slots)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_collection_items",
-                    "list slot accounting overflowed",
-                )
-            })?;
-        if slots > self.policy.maximum_collection_items {
-            return Err(reference_resource(
-                "normalized_reference_collection_items",
-                "list storage exceeds collection items",
-            ));
-        }
+        let slots = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            charge.slots,
+            self.policy.maximum_collection_items,
+            "normalized_reference_collection_items",
+            "list storage exceeds collection items",
+        )?;
         self.observation.collection_items = slots;
         self.charge_allocation(charge.bytes)
     }
@@ -464,7 +457,9 @@ impl ReferenceState<'_> {
         };
         let output = items.append(
             child.release(),
-            self.policy.maximum_collection_items,
+            self.policy
+                .maximum_collection_items
+                .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64),
             &mut |charge| self.reserve_list(charge),
         )?;
         Ok(Value {
@@ -568,6 +563,8 @@ impl ReferenceState<'_> {
         input: bool,
     ) -> Result<Ownership, ExecutionError> {
         let mut ownership = None;
+        let mut admission_bytes = 0_u64;
+        let mut admission_items = 0_u64;
         let mut capture_types = BTreeSet::new();
         while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
             visits.pop()
@@ -646,7 +643,7 @@ impl ReferenceState<'_> {
                             ));
                         }
                     };
-                    self.charge_allocation(length as u64)?;
+                    self.charge_admission_bytes(&mut admission_bytes, length as u64)?;
                 }
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
                     match node {
@@ -657,6 +654,8 @@ impl ReferenceState<'_> {
                             let definition = schema.records.get(layout.0 as usize).filter(|record| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
                             .ok_or_else(|| reject("raw record has a foreign nominal identity or shape; decode against the selected program"))?;
                             self.charge_admission_children(
+                                &mut admission_items,
+                                &mut admission_bytes,
                                 fields.len(),
                                 std::mem::size_of::<NormalizedValue>(),
                             )?;
@@ -686,6 +685,8 @@ impl ReferenceState<'_> {
                                 (None, None) => {}
                                 (Some(ty), Some(payload)) => {
                                     self.charge_admission_children(
+                                        &mut admission_items,
+                                        &mut admission_bytes,
                                         1,
                                         std::mem::size_of::<NormalizedValue>(),
                                     )?;
@@ -730,6 +731,8 @@ impl ReferenceState<'_> {
                         ));
                     }
                     self.charge_admission_children(
+                        &mut admission_items,
+                        &mut admission_bytes,
                         fields.len(),
                         std::mem::size_of::<(Name, NormalizedValue)>(),
                     )?;
@@ -739,7 +742,10 @@ impl ReferenceState<'_> {
                                 "raw record fields are foreign or noncanonical; supply the exact ordered names",
                             ));
                         }
-                        self.charge_allocation(name.as_str().len() as u64)?;
+                        self.charge_admission_bytes(
+                            &mut admission_bytes,
+                            name.as_str().len() as u64,
+                        )?;
                         visits.push((
                             child,
                             field.ty,
@@ -757,10 +763,12 @@ impl ReferenceState<'_> {
                         ));
                     };
                     self.charge_admission_children(
+                        &mut admission_items,
+                        &mut admission_bytes,
                         items.len(),
                         std::mem::size_of::<NormalizedValue>(),
                     )?;
-                    self.charge_allocation(items.metadata_bytes()?)?;
+                    self.charge_admission_bytes(&mut admission_bytes, items.metadata_bytes()?)?;
                     for child in items.iter().rev() {
                         self.control.check()?;
                         visits.push((
@@ -780,7 +788,12 @@ impl ReferenceState<'_> {
                         ));
                     };
                     if let Some(child) = child.as_deref() {
-                        self.charge_admission_children(1, std::mem::size_of::<NormalizedValue>())?;
+                        self.charge_admission_children(
+                            &mut admission_items,
+                            &mut admission_bytes,
+                            1,
+                            std::mem::size_of::<NormalizedValue>(),
+                        )?;
                         visits.push((
                             child,
                             *item,
@@ -797,7 +810,12 @@ impl ReferenceState<'_> {
                             "raw result type received another value; supply its exact result case",
                         ));
                     };
-                    self.charge_admission_children(1, std::mem::size_of::<NormalizedValue>())?;
+                    self.charge_admission_children(
+                        &mut admission_items,
+                        &mut admission_bytes,
+                        1,
+                        std::mem::size_of::<NormalizedValue>(),
+                    )?;
                     visits.push((
                         value,
                         if *success { *ok } else { *error },
@@ -815,6 +833,8 @@ impl ReferenceState<'_> {
                         return Err(reject("raw map type received another value; supply a map"));
                     };
                     self.charge_admission_children(
+                        &mut admission_items,
+                        &mut admission_bytes,
                         entries.len(),
                         std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
                     )?;
@@ -844,7 +864,10 @@ impl ReferenceState<'_> {
                                 "raw map key has a foreign type; supply exact primitive keys",
                             ));
                         }
-                        self.charge_allocation(reference_map_key_bytes(key))?;
+                        self.charge_admission_bytes(
+                            &mut admission_bytes,
+                            reference_map_key_bytes(key),
+                        )?;
                         visits.push((
                             child,
                             *value,
@@ -986,10 +1009,13 @@ impl ReferenceState<'_> {
                     }
                     if let Some(prefix) = bound_arguments {
                         self.charge_admission_children(
+                            &mut admission_items,
+                            &mut admission_bytes,
                             prefix.len(),
                             std::mem::size_of::<NormalizedValue>(),
                         )?;
-                        self.charge_allocation(
+                        self.charge_admission_bytes(
+                            &mut admission_bytes,
                             (std::mem::size_of::<Vec<NormalizedValue>>()
                                 + 2 * std::mem::size_of::<usize>())
                                 as u64,
@@ -1023,7 +1049,8 @@ impl ReferenceState<'_> {
                 "raw boundary cannot acquire affine ownership; use an authorized exact capability result",
             ));
         }
-        self.charge_allocation(
+        self.charge_admission_bytes(
+            &mut admission_bytes,
             (std::mem::size_of::<Value>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         Ok(ownership)
@@ -1056,13 +1083,53 @@ impl ReferenceState<'_> {
 
     fn charge_admission_children(
         &mut self,
+        admission_items: &mut u64,
+        admission_bytes: &mut u64,
         count: usize,
         payload_bytes: usize,
     ) -> Result<(), ExecutionError> {
+        *admission_items = crate::platform::execution::cumulative_charge(
+            *admission_items,
+            count as u64,
+            Some(super::super::value::MAXIMUM_ADMISSION_ITEMS),
+            "normalized_reference_collection_items",
+            "single raw admission exceeds finite collection items",
+        )?;
+        let bytes = payload_bytes
+            .checked_add(std::mem::size_of::<ReferenceVisit<'_>>())
+            .and_then(|unit| count.checked_mul(unit))
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_allocation",
+                    "raw admission storage size overflowed",
+                )
+            })?;
+        *admission_bytes = crate::platform::execution::cumulative_charge(
+            *admission_bytes,
+            bytes as u64,
+            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            "normalized_reference_allocation",
+            "single raw admission exceeds finite storage",
+        )?;
         self.charge_items(
             count,
             payload_bytes + std::mem::size_of::<ReferenceVisit<'_>>(),
         )
+    }
+
+    fn charge_admission_bytes(
+        &mut self,
+        total: &mut u64,
+        bytes: u64,
+    ) -> Result<(), ExecutionError> {
+        *total = crate::platform::execution::cumulative_charge(
+            *total,
+            bytes,
+            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            "normalized_reference_allocation",
+            "single raw admission exceeds finite storage",
+        )?;
+        self.charge_allocation(bytes)
     }
 
     pub(super) fn admit_call_arguments(

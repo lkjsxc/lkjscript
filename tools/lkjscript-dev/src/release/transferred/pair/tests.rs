@@ -810,6 +810,8 @@ fn live_pair_receipt_fault_matrix() {
         "/recursive/results/retained",
         "/recursive/session/messages",
         "/recursive/transaction_cancellation",
+        "/effects/foreground/cells",
+        "/effects/foreground/failures",
     ] {
         let mut child_fault = child_value.clone();
         let value = child_fault

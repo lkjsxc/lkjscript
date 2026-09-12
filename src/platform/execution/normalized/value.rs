@@ -6,6 +6,24 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+// Current finite value/admission representation, independent of invocation-lifetime quotas.
+pub(crate) const MAXIMUM_VALUE_ALLOCATION_BYTES: u64 = 256 * 1024 * 1024;
+pub(crate) const MAXIMUM_ADMISSION_ITEMS: u64 = 1_000_000;
+
+/// Actual storage arithmetic is checked even when cumulative allocation has no quota.
+pub(super) fn collection_storage_bytes(
+    items: u64,
+    item_bytes: u64,
+    code: &'static str,
+) -> Result<u64, crate::platform::execution::ExecutionError> {
+    items.checked_mul(item_bytes).ok_or_else(|| {
+        crate::platform::execution::ExecutionError::resource(
+            code,
+            "collection allocation size overflowed",
+        )
+    })
+}
+
 /// Neutral process-local origin for raw dense identities, never an affine certificate.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ValueOrigin(u64);

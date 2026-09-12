@@ -11,8 +11,9 @@ use lkjscript::platform::contract::{
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     Diagnostic, PreparedDeployment, PublicOperation, ShutdownReceipt, execute_build,
-    execute_capabilities, execute_change, execute_check, execute_data, execute_inspect,
-    execute_new, execute_package_builtin, execute_query, execute_run, execute_status,
+    execute_capabilities, execute_change, execute_check, execute_data, execute_foreground_run,
+    execute_inspect, execute_new, execute_package_builtin, execute_query, execute_run,
+    execute_status, parse_foreground_run,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -299,7 +300,96 @@ fn compact_build(arguments: Vec<String>) -> ExitCode {
 }
 
 fn compact_run(arguments: Vec<String>) -> ExitCode {
+    if arguments.iter().any(|argument| argument == "--deployment") {
+        return foreground_run(&arguments);
+    }
     compact_finite("run", execute_run(arguments))
+}
+
+fn foreground_run(arguments: &[String]) -> ExitCode {
+    let options = match parse_foreground_run(arguments) {
+        Ok(options) => options,
+        Err(error) => return write_compact_failure("run", &error),
+    };
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return write_compact_failure(
+                "run",
+                &Diagnostic::new(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                    "runtime_initialize",
+                    format!("foreground runtime could not initialize: {error}"),
+                ),
+            );
+        }
+    };
+    let outcome = runtime.block_on(async {
+        let mut signals = ForegroundTermination::register()?;
+        execute_foreground_run(options, signals.wait()).await
+    });
+    match outcome {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(mut error) => {
+                error.notes.push("invocation and cleanup completed; earlier effects may be visible and automatic retry is not safe".to_owned());
+                // The output stream is broken. Preserve bounded failure evidence on stderr.
+                if let Ok(mut bytes) = serde_json::to_vec(&error) {
+                    bytes.push(b'\n');
+                    let _ = std::io::stderr().lock().write_all(&bytes);
+                }
+                ExitCode::from(exit_for(&error))
+            }
+        },
+        Err(error) => write_compact_failure("run", &error),
+    }
+}
+
+#[cfg(unix)]
+struct ForegroundTermination {
+    interrupt: tokio::signal::unix::Signal,
+    terminate: tokio::signal::unix::Signal,
+}
+
+#[cfg(unix)]
+impl ForegroundTermination {
+    fn register() -> Result<Self, Diagnostic> {
+        use tokio::signal::unix::{SignalKind, signal};
+        let failure = |error| {
+            Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "foreground_signal",
+                format!("termination handling could not be registered: {error}"),
+            )
+        };
+        Ok(Self {
+            interrupt: signal(SignalKind::interrupt()).map_err(failure)?,
+            terminate: signal(SignalKind::terminate()).map_err(failure)?,
+        })
+    }
+
+    async fn wait(&mut self) {
+        tokio::select! {
+            _ = self.interrupt.recv() => {},
+            _ = self.terminate.recv() => {},
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct ForegroundTermination;
+
+#[cfg(not(unix))]
+impl ForegroundTermination {
+    fn register() -> Result<Self, Diagnostic> {
+        Err(cli_error(
+            "foreground termination handling is not admitted on this platform",
+        ))
+    }
+    async fn wait(&mut self) {}
 }
 
 fn compact_package_builtin(arguments: Vec<String>) -> ExitCode {
@@ -388,6 +478,13 @@ fn write_compact_failures(command: &str, diagnostics: &[Diagnostic]) -> ExitCode
                 fields.push(("path", location.path.clone()));
                 fields.push(("line", location.line.to_string()));
                 fields.push(("column", location.column.to_string()));
+            }
+            if !error.notes.is_empty() {
+                fields.push((
+                    "notes",
+                    serde_json::to_string(&error.notes)
+                        .map_err(|_| cli_error("diagnostic notes could not be encoded"))?,
+                ));
             }
             let borrowed = fields
                 .iter()

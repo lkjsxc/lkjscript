@@ -64,6 +64,25 @@ impl Default for RunPolicy {
     }
 }
 
+/// Precharge a cumulative quota, or observe work without imposing a lifetime limit.
+/// Unbounded observations saturate: a value of u64::MAX is a lower bound, never
+/// an exact count. Storage-size arithmetic must be checked separately before growth.
+pub(crate) fn cumulative_charge(
+    current: u64,
+    additional: u64,
+    maximum: Option<u64>,
+    code: &'static str,
+    message: &'static str,
+) -> Result<u64, ExecutionError> {
+    match maximum {
+        Some(maximum) => current
+            .checked_add(additional)
+            .filter(|next| *next <= maximum)
+            .ok_or_else(|| ExecutionError::resource(code, message)),
+        None => Ok(current.saturating_add(additional)),
+    }
+}
+
 /// Runtime-owned cancellation and deadline state. It is never representable as a language value
 /// and therefore cannot cross a durable boundary.
 #[derive(Clone, Debug)]
@@ -144,5 +163,30 @@ impl ExecutionControl {
 impl Default for ExecutionControl {
     fn default() -> Self {
         Self::uncancelled()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cumulative_quota_overflow_and_unbounded_telemetry_are_distinct() {
+        for maximum in [None, Some(u64::MAX)] {
+            assert_eq!(
+                cumulative_charge(u64::MAX - 1, 1, maximum, "quota", "exhausted").ok(),
+                Some(u64::MAX)
+            );
+        }
+        assert_eq!(
+            cumulative_charge(u64::MAX, 1, None, "quota", "exhausted").ok(),
+            Some(u64::MAX)
+        );
+        assert!(cumulative_charge(u64::MAX, 1, Some(u64::MAX), "quota", "exhausted").is_err());
+        assert_eq!(
+            cumulative_charge(4, 1, Some(5), "quota", "exhausted").ok(),
+            Some(5)
+        );
+        assert!(cumulative_charge(5, 1, Some(5), "quota", "exhausted").is_err());
     }
 }

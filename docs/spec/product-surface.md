@@ -14,9 +14,10 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
-The active source snapshot and immutable public latest are product 0.1.28. Its release-source commit
-is `221beca0df7b31dbf10c9b22fe35c6db3af1b903`; independent exact-version and latest-download acceptance
-are recorded in the [public milestone evidence](../evidence/202609092050-capture-safe-public-milestone.json).
+The last verified immutable public release is product 0.1.32, from source
+`67baaf0b081842e0e2e3745e8d5503e22cc791e4`; exact/latest public-pair acceptance is recorded in
+the [iteration predecessor reconciliation](../campaigns/202609121214.md). The current
+[foreground campaign](../campaigns/202609121842.md) selects a combined iteration/foreground release.
 A source package version alone does not imply a tag or public release. Older tags, releases, assets,
 and metadata continue to identify their original snapshots.
 
@@ -44,6 +45,14 @@ Deployment descriptors are strict unversioned operator policy. Removed version-d
 fields are unknown input and reject during bounded decoding before artifact, secret, adapter, or
 listener access. Ready, stopped, and failure events preserve exact deployment/artifact observations,
 diagnostics, receipts, and cleanup evidence without a subsystem version field.
+
+Foreground `run --deployment` has no project discovery and returns production-only execution,
+effective policy, typed result and completed cleanup records. An installed executable can execute
+multiple runtime-dependent application bundles in separate processes. A bundle does not embed
+the runtime, and this contract supplies no daemon, installer or automatic runtime selection.
+Command policy omissions have deliberate meanings; explicit null rejects. Older executables
+reject descriptors omitting their formerly required policy fields. Retain the matching executable,
+immutable bundle and descriptor for recovery; executable updates do not migrate operational data.
 
 Current public release metadata contains product name/version plus exact source, target, toolchain,
 candidate, linkage, notice, archive, checksum, and integrity evidence. Private first-party handoffs

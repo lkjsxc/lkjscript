@@ -23,7 +23,8 @@ const READ_CHUNK_BYTES: usize = 64 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const CONTROL_NONE: u8 = 0;
 const CONTROL_INTERRUPT: u8 = 1;
-const CONTROL_KILL: u8 = 2;
+const CONTROL_TERMINATE: u8 = 2;
+const CONTROL_KILL: u8 = 3;
 const APPROVED_ENVIRONMENT: &[&str] = &[
     "AR",
     "CARGO_BUILD_JOBS",
@@ -93,6 +94,11 @@ impl ProcessControl {
         self.requested.fetch_max(CONTROL_KILL, Ordering::AcqRel);
     }
 
+    pub(crate) fn terminate(&self) {
+        self.requested
+            .fetch_max(CONTROL_TERMINATE, Ordering::AcqRel);
+    }
+
     fn requested(&self) -> u8 {
         self.requested.load(Ordering::Acquire)
     }
@@ -152,6 +158,13 @@ pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObse
     run_configured(specification, repository, None, None, false)
 }
 
+pub(crate) fn run_closed_stdout(
+    specification: &ProcessSpec,
+    repository: &Path,
+) -> ProcessObservation {
+    run_configured_output(specification, repository, None, None, true, true)
+}
+
 pub(crate) fn run_controlled(
     specification: &ProcessSpec,
     repository: &Path,
@@ -191,6 +204,24 @@ fn run_configured(
     stdin_file: Option<(&Path, u64)>,
     supervise_descendants: bool,
 ) -> ProcessObservation {
+    run_configured_output(
+        specification,
+        repository,
+        control,
+        stdin_file,
+        supervise_descendants,
+        false,
+    )
+}
+
+fn run_configured_output(
+    specification: &ProcessSpec,
+    repository: &Path,
+    control: Option<&ProcessControl>,
+    stdin_file: Option<(&Path, u64)>,
+    supervise_descendants: bool,
+    close_stdout: bool,
+) -> ProcessObservation {
     let started = Instant::now();
     match run_inner(
         specification,
@@ -199,6 +230,7 @@ fn run_configured(
         control,
         stdin_file,
         supervise_descendants,
+        close_stdout,
     ) {
         Ok(observation) => observation,
         Err(error) => infrastructure_observation(specification, repository, started, error),
@@ -213,6 +245,7 @@ fn run_inner(
     control: Option<&ProcessControl>,
     stdin_file: Option<(&Path, u64)>,
     supervise_descendants: bool,
+    close_stdout: bool,
 ) -> Result<ProcessObservation, DevError> {
     if specification.command.is_empty() {
         return Err(DevError::infrastructure("child command is empty"));
@@ -264,6 +297,12 @@ fn run_inner(
         .stdout
         .take()
         .ok_or_else(|| DevError::infrastructure("child stdout pipe is unavailable"))?;
+    let stdout: Box<dyn Read + Send> = if close_stdout {
+        drop(stdout);
+        Box::new(std::io::empty())
+    } else {
+        Box::new(stdout)
+    };
     let stderr = child
         .stderr
         .take()
@@ -347,8 +386,13 @@ fn run_inner(
                         ))
                     })?;
                 }
-                let _ = kill_process_group(process_group, Signal::INT);
-                sent_control = CONTROL_INTERRUPT;
+                let signal = if requested == CONTROL_TERMINATE {
+                    Signal::TERM
+                } else {
+                    Signal::INT
+                };
+                let _ = kill_process_group(process_group, signal);
+                sent_control = requested;
             }
         }
         if started.elapsed() >= specification.timeout {
@@ -446,6 +490,7 @@ fn run_inner(
     _control: Option<&ProcessControl>,
     _stdin_file: Option<(&Path, u64)>,
     _supervise_descendants: bool,
+    _close_stdout: bool,
 ) -> Result<ProcessObservation, DevError> {
     Err(DevError::infrastructure(
         "bounded process execution requires Linux process-group signaling",

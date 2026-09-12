@@ -123,10 +123,15 @@ Equal authority, dependencies, compiler contracts, and options produce equal byt
 
 ## Execution and service separation
 
-Normalized graph tests and pure command targets execute through both production bytecode and an
+Normalized graph tests and project-mode pure command targets execute through both production bytecode and an
 implementation-disjoint canonical reference interpreter. Both read the same exact accepted
 revision and artifact closure. A disagreement is failure. Live external effects are never
 duplicated to obtain a differential result.
+
+Foreground `run --deployment PATH` selects only the exact artifact Command target. Pure and task
+ports each execute once through production, with `verification=not-performed`. This route never
+opens graph authority, invokes a reference reader, or retries application effects. Its operator
+descriptor cannot replace the accepted target, exact types, requirement closure or grant identity.
 
 `serve` and `worker` consume an explicitly selected immutable artifact bundle and external
 deployment descriptors. Standalone preparation does not open editable graph authority or advance

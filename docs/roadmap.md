@@ -40,10 +40,11 @@ within-pair full suite. Its first hosted observation passed in effect-library re
 run `34671245722/1`: both route lifecycles and the single aggregate were fresh, with latest's
 aggregate observation bound within the pair. EFF-7 is complete at frozen source `67baaf0b`.
 Task iteration separately passed engineering, source/target acceptance and main integration at
-`3f25c3a7`. Its publication is deferred to the first subsequently accepted user-visible composition
-milestone building on iteration, or a verified compatibility/correctness need requiring public
-recovery. At the next capability campaign, explicitly decide whether the accumulated iteration and
-capability form the release; an unnamed future abstraction cannot defer it again. Further
+`3f25c3a7`. The [foreground campaign](campaigns/202609121842.md) now selects that named composition
+milestone and one combined release: ordinary command bundles execute once through an installed
+runtime with exact grants and joined cleanup. Its delivery gates remain explicit campaign work.
+After delivery, reassess installation and explicit runtime selection using these independent
+foreground applications; no installer, daemon or upgrade automation is selected here. Further
 infrastructure work needs a newly measured bottleneck.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 

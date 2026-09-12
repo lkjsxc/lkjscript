@@ -8,8 +8,9 @@ use self::recipes::{command_recipe, http_recipe, minimal_recipe, nostr_relay_inf
 use super::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget};
 use super::control::{LogicalChangePlan, encode_logical_change_plan, normalize_change_request};
 use super::deployment::{
-    STARTER_HTTP_ARTIFACT_DIRECTORY, STARTER_HTTP_ARTIFACT_PATH, STARTER_HTTP_DESCRIPTOR_PATH,
-    STARTER_HTTP_LISTENER, STARTER_HTTP_TARGET,
+    STARTER_COMMAND_DESCRIPTOR_PATH, STARTER_COMMAND_TARGET, STARTER_HTTP_ARTIFACT_DIRECTORY,
+    STARTER_HTTP_ARTIFACT_PATH, STARTER_HTTP_DESCRIPTOR_PATH, STARTER_HTTP_LISTENER,
+    STARTER_HTTP_TARGET,
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
@@ -85,13 +86,13 @@ impl ProjectTemplate {
     }
 
     pub(crate) const fn emits_deployment(self) -> bool {
-        matches!(self, Self::Http | Self::NostrRelayInfo)
+        matches!(self, Self::Command | Self::Http | Self::NostrRelayInfo)
     }
 
     pub(crate) const fn recommended_artifact_output(self) -> Option<&'static str> {
         match self {
-            Self::Http | Self::NostrRelayInfo => Some(STARTER_HTTP_ARTIFACT_PATH),
-            Self::Minimal | Self::Command => None,
+            Self::Command | Self::Http | Self::NostrRelayInfo => Some(STARTER_HTTP_ARTIFACT_PATH),
+            Self::Minimal => None,
         }
     }
 }
@@ -102,7 +103,7 @@ pub struct CreatedDeployment {
     pub recommended_artifact_output: PathBuf,
     pub target: &'static str,
     pub runner: &'static str,
-    pub configured_listener: &'static str,
+    pub configured_listener: Option<&'static str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,6 +156,7 @@ struct ProjectRecipe {
 
 struct ProjectAuxiliary {
     descriptor: Vec<u8>,
+    descriptor_path: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -277,13 +279,24 @@ where
         ));
     }
     reconcile_auxiliary(&destination, recipe.auxiliary.as_ref())?;
-    let deployment = recipe.auxiliary.as_ref().map(|_| CreatedDeployment {
-        descriptor: destination.join(STARTER_HTTP_DESCRIPTOR_PATH),
-        recommended_artifact_output: destination.join(STARTER_HTTP_ARTIFACT_PATH),
-        target: STARTER_HTTP_TARGET,
-        runner: "http",
-        configured_listener: STARTER_HTTP_LISTENER,
-    });
+    let deployment = recipe
+        .auxiliary
+        .as_ref()
+        .map(|auxiliary| CreatedDeployment {
+            descriptor: destination.join(auxiliary.descriptor_path),
+            recommended_artifact_output: destination.join(STARTER_HTTP_ARTIFACT_PATH),
+            target: if template == ProjectTemplate::Command {
+                STARTER_COMMAND_TARGET
+            } else {
+                STARTER_HTTP_TARGET
+            },
+            runner: template.runner(),
+            configured_listener: if template == ProjectTemplate::Command {
+                None
+            } else {
+                Some(STARTER_HTTP_LISTENER)
+            },
+        });
     Ok(ProjectCreation {
         project: destination,
         package_name,
@@ -407,7 +420,7 @@ where
     F: FnMut(CreationPoint, &Path, &Path) -> Result<(), Diagnostic>,
 {
     hook(CreationPoint::BeforeDescriptor, private, destination)?;
-    let descriptor = private.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    let descriptor = private.join(auxiliary.descriptor_path);
     let mut output = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -438,7 +451,7 @@ fn reconcile_auxiliary(
     let Some(auxiliary) = auxiliary else {
         return Ok(());
     };
-    let descriptor = destination.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    let descriptor = destination.join(auxiliary.descriptor_path);
     let metadata = fs::symlink_metadata(&descriptor)
         .map_err(|error| auxiliary_io("new_destination_reconcile", &descriptor, error))?;
     if metadata.file_type().is_symlink()
@@ -483,11 +496,11 @@ fn auxiliary_io(code: &'static str, path: &Path, error: std::io::Error) -> Diagn
 }
 
 fn validate_auxiliary_inventory(auxiliary: Option<&ProjectAuxiliary>) -> Result<(), Diagnostic> {
-    let Some(_) = auxiliary else {
+    let Some(auxiliary) = auxiliary else {
         return Ok(());
     };
     for (path, label) in [
-        (STARTER_HTTP_DESCRIPTOR_PATH, "starter descriptor"),
+        (auxiliary.descriptor_path, "starter descriptor"),
         (STARTER_HTTP_ARTIFACT_DIRECTORY, "generated directory"),
         (STARTER_HTTP_ARTIFACT_PATH, "recommended artifact"),
     ] {
@@ -507,8 +520,8 @@ fn validate_auxiliary_inventory(auxiliary: Option<&ProjectAuxiliary>) -> Result<
     }
     if Path::new(STARTER_HTTP_ARTIFACT_PATH).parent()
         != Some(Path::new(STARTER_HTTP_ARTIFACT_DIRECTORY))
-        || STARTER_HTTP_DESCRIPTOR_PATH == STARTER_HTTP_ARTIFACT_DIRECTORY
-        || STARTER_HTTP_DESCRIPTOR_PATH == STARTER_HTTP_ARTIFACT_PATH
+        || auxiliary.descriptor_path == STARTER_HTTP_ARTIFACT_DIRECTORY
+        || auxiliary.descriptor_path == STARTER_HTTP_ARTIFACT_PATH
     {
         return Err(creation_error(
             DiagnosticClass::Corrupt,
@@ -957,37 +970,43 @@ mod tests {
 
     #[test]
     fn auxiliary_failure_removes_every_owned_private_path() {
-        let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
-        let destination = temporary.path().join("http");
-        let error = create_project_with_hook(
-            &destination,
-            "http",
-            ProjectTemplate::Http,
-            |point, _, _| {
-                if point == CreationPoint::BeforeDescriptor {
-                    Err(creation_error(
-                        DiagnosticClass::Infrastructure,
-                        "test_auxiliary_failure",
-                        "injected auxiliary failure",
-                    ))
-                } else {
-                    Ok(())
-                }
-            },
-        )
-        .expect_err("injected failure");
-        assert_eq!(error.code, "test_auxiliary_failure");
-        assert!(!destination.exists());
-        let private = fs::read_dir(temporary.path())
-            .expect("parent")
-            .filter_map(Result::ok)
-            .filter(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".lkjscript-")
-            })
-            .count();
-        assert_eq!(private, 0);
+        for template in [ProjectTemplate::Http, ProjectTemplate::Command] {
+            for failure_point in [
+                CreationPoint::GraphPublished,
+                CreationPoint::BeforeDescriptor,
+                CreationPoint::DescriptorPublished,
+                CreationPoint::GeneratedDirectoryPublished,
+                CreationPoint::BeforeVisibility,
+            ] {
+                let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
+                let destination = temporary.path().join("http");
+                let error =
+                    create_project_with_hook(&destination, "http", template, |point, _, _| {
+                        if point == failure_point {
+                            Err(creation_error(
+                                DiagnosticClass::Infrastructure,
+                                "test_auxiliary_failure",
+                                "injected auxiliary failure",
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .expect_err("injected failure");
+                assert_eq!(error.code, "test_auxiliary_failure");
+                assert!(!destination.exists());
+                let private = fs::read_dir(temporary.path())
+                    .expect("parent")
+                    .filter_map(Result::ok)
+                    .filter(|entry| {
+                        entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".lkjscript-")
+                    })
+                    .count();
+                assert_eq!(private, 0);
+            }
+        }
     }
 }

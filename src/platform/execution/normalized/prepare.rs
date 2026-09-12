@@ -355,6 +355,7 @@ pub struct NormalizedProgram {
 }
 
 impl NormalizedProgram {
+    #[cfg(test)]
     pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
         Self::prepare_with_control(
             artifact,

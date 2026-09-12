@@ -492,6 +492,8 @@ pub(super) struct Admission<'a> {
     pub allocated: &'a mut u64,
     pub allocation_charges: &'a mut u64,
     pub items: &'a mut u64,
+    pub admission_bytes: u64,
+    pub admission_items: u64,
 }
 
 type Bindings = BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>;
@@ -1341,16 +1343,20 @@ impl Admission<'_> {
     }
 
     fn allocate(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        let next = self
-            .allocated
-            .checked_add(bytes)
-            .filter(|value| *value <= self.policy.maximum_allocated_bytes)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_allocation",
-                    "value admission exceeds cumulative allocated bytes; reduce the input",
-                )
-            })?;
+        self.admission_bytes = crate::platform::execution::cumulative_charge(
+            self.admission_bytes,
+            bytes,
+            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            "normalized_allocation",
+            "single raw admission exceeds finite storage",
+        )?;
+        let next = crate::platform::execution::cumulative_charge(
+            *self.allocated,
+            bytes,
+            self.policy.maximum_allocated_bytes,
+            "normalized_allocation",
+            "value admission exceeds cumulative allocated bytes; reduce the input",
+        )?;
         *self.allocated = next;
         if bytes != 0 {
             *self.allocation_charges = self.allocation_charges.saturating_add(1);
@@ -1359,16 +1365,20 @@ impl Admission<'_> {
     }
 
     fn collection(&mut self, count: usize) -> Result<(), ExecutionError> {
-        let next = self
-            .items
-            .checked_add(count as u64)
-            .filter(|value| *value <= self.policy.maximum_collection_items)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_collection_items",
-                    "value admission exceeds aggregate collection items; reduce the input",
-                )
-            })?;
+        self.admission_items = crate::platform::execution::cumulative_charge(
+            self.admission_items,
+            count as u64,
+            Some(super::super::value::MAXIMUM_ADMISSION_ITEMS),
+            "normalized_collection_items",
+            "single raw admission exceeds finite collection items",
+        )?;
+        let next = crate::platform::execution::cumulative_charge(
+            *self.items,
+            count as u64,
+            self.policy.maximum_collection_items,
+            "normalized_collection_items",
+            "value admission exceeds aggregate collection items; reduce the input",
+        )?;
         *self.items = next;
         // Raw payload storage and both bounded traversal worklists are charged before growth.
         let unit = std::mem::size_of::<NormalizedValue>()

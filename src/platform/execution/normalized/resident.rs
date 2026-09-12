@@ -8,7 +8,8 @@ use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
 use crate::platform::runtime::{
-    ResidentKernel, ResidentLimits, ResidentObservation, ResidentPermitObservation, ShutdownReceipt,
+    InvocationTiming, ResidentKernel, ResidentLimits, ResidentObservation,
+    ResidentPermitObservation, ShutdownReceipt,
 };
 use std::sync::Arc;
 
@@ -28,6 +29,7 @@ pub(crate) struct NormalizedResidentDeployment {
     target: NormalizedTarget,
     policy: NormalizedRunPolicy,
     kernel: ResidentKernel,
+    timing: InvocationTiming,
 }
 
 impl NormalizedResidentDeployment {
@@ -70,11 +72,21 @@ impl NormalizedResidentDeployment {
             target,
             policy,
             kernel: ResidentKernel::new(limits)?,
+            timing: InvocationTiming::Resident,
         })
     }
 
     pub(crate) fn target(&self) -> &NormalizedTarget {
         &self.target
+    }
+
+    pub(crate) fn foreground(mut self, deadline: Option<std::time::Duration>) -> Self {
+        self.timing = InvocationTiming::Foreground { deadline };
+        self
+    }
+
+    pub(crate) fn cancel(&self) {
+        self.kernel.cancel();
     }
 
     pub(crate) fn deployment(&self) -> &NormalizedPreparedDeployment {
@@ -116,7 +128,7 @@ impl NormalizedResidentDeployment {
         let policy = self.policy;
         let receipt = self
             .kernel
-            .invoke(move |control| {
+            .invoke_timed(self.timing, move |control| {
                 NormalizedVm::new(&program, policy).invoke_target_scoped(
                     &target,
                     arguments,
@@ -148,7 +160,7 @@ impl NormalizedResidentDeployment {
         let policy = self.policy;
         let receipt = self
             .kernel
-            .invoke(move |control| {
+            .invoke_timed(self.timing, move |control| {
                 NormalizedVm::new(&program, policy).invoke_port_scoped(
                     component,
                     port,

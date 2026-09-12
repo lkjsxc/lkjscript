@@ -205,12 +205,12 @@ fn invoke(
         ..Default::default()
     };
     if fault == "fuel" {
-        policy.instruction_steps = 2_000;
+        policy.instruction_steps = Some(2_000);
     }
     // These source-bound stress budgets include preparation metadata and admit several callbacks.
     if fault == "allocation" {
         policy.maximum_allocated_bytes =
-            prepared.program.work.type_metadata_bytes.max(1_000_000) + 200_000;
+            Some(prepared.program.work.type_metadata_bytes.max(1_000_000) + 200_000);
     }
     let (capabilities, events) = iteration_grants(
         &prepared.program,

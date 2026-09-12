@@ -455,8 +455,8 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 unary,
                 nested(8),
                 super::super::NormalizedRunPolicy {
-                    maximum_allocated_bytes: bytes,
-                    maximum_collection_items: items,
+                    maximum_allocated_bytes: Some(bytes),
+                    maximum_collection_items: Some(items),
                     ..Default::default()
                 },
                 &control,
@@ -1011,7 +1011,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
     for reference in [false, true] {
         let control = ExecutionControl::uncancelled();
         let policy = super::super::NormalizedRunPolicy {
-            maximum_collection_items: 8,
+            maximum_collection_items: Some(8),
             ..Default::default()
         };
         assert_eq!(
@@ -1034,7 +1034,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
                 integer,
                 list(8),
                 super::super::NormalizedRunPolicy {
-                    maximum_allocated_bytes: limit,
+                    maximum_allocated_bytes: Some(limit),
                     ..policy
                 },
                 &control,
@@ -1534,7 +1534,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
                 safe_list,
                 good(),
                 super::super::NormalizedRunPolicy {
-                    maximum_allocated_bytes: bytes,
+                    maximum_allocated_bytes: Some(bytes),
                     ..Default::default()
                 },
                 &control,

@@ -337,7 +337,8 @@ use super::reference::{
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
 use super::runner::{
-    NormalizedCommandPolicy, run_effectful_command, run_graph_tests, run_pure_command,
+    NormalizedCommandPolicy, prepare_command_invocation, run_foreground_command, run_graph_tests,
+    run_pure_command,
 };
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
@@ -2342,6 +2343,7 @@ impl NormalizedCapabilityTransaction for UnitTransaction {
 #[derive(Default)]
 struct TransactionStats {
     malformed_result: std::sync::atomic::AtomicBool,
+    fail_shutdown: std::sync::atomic::AtomicBool,
     begins: AtomicU64,
     calls: AtomicU64,
     commits: AtomicU64,
@@ -2413,6 +2415,13 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
 
     fn shutdown(&self) -> Result<(), ExecutionError> {
         self.stats.shutdowns.fetch_add(1, Ordering::Relaxed);
+        if self.stats.fail_shutdown.load(Ordering::Relaxed) {
+            return Err(ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "foreground_test_shutdown",
+                "injected adapter shutdown failure",
+            ));
+        }
         Ok(())
     }
 }
@@ -2464,6 +2473,21 @@ fn bind_fixture_capability(
     program: &NormalizedProgram,
     maximum_calls: u64,
 ) -> (NormalizedCapabilities, Arc<AtomicU64>) {
+    let (grant, calls) = fixture_capability_grant(program, maximum_calls);
+    let component = program
+        .root_target(&Name::new("command").unwrap())
+        .unwrap()
+        .component;
+    (
+        NormalizedCapabilities::bind(program, component, vec![grant]).expect("exact fixture grant"),
+        calls,
+    )
+}
+
+fn fixture_capability_grant(
+    program: &NormalizedProgram,
+    maximum_calls: u64,
+) -> (NormalizedCapabilityGrant, Arc<AtomicU64>) {
     let target = program
         .root_target(&Name::new("command").unwrap())
         .expect("fixture target");
@@ -2489,11 +2513,7 @@ fn bind_fixture_capability(
             calls: Arc::clone(&calls),
         }),
     };
-    (
-        NormalizedCapabilities::bind(program, target.component, vec![grant])
-            .expect("exact fixture grant"),
-        calls,
-    )
+    (grant, calls)
 }
 
 fn bind_tracking_capability(
@@ -2791,6 +2811,78 @@ fn admit_runtime_type(program: &mut NormalizedProgram, form: TypeForm) -> TypeOb
         assert_eq!(previous, object);
     }
     digest
+}
+
+#[test]
+fn foreground_json_preflight_checks_unselected_branches_and_direction() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let mut program = prepare_snapshot(&snapshot);
+    let unit = admit_runtime_type(&mut program, TypeForm::Unit);
+    let option = admit_runtime_type(&mut program, TypeForm::Option { item: unit });
+    let declaration = program.variants[0].declaration;
+    let variant = admit_runtime_type(&mut program, TypeForm::Named { declaration });
+    let value = decode_typed(
+        &program,
+        br#"{"case":"Ready"}"#,
+        variant,
+        JsonLimits::default(),
+    )
+    .unwrap();
+    let layout = program.variant_instances[&variant].0 as usize;
+    let cases = &mut Arc::make_mut(&mut program.variants)[layout].cases;
+    // An unselected payload must fail the same eligibility owner used by actual encoding.
+    let mut unsupported = cases[0].clone();
+    unsupported.name = Name::new("Unsupported").unwrap();
+    unsupported.payload = Some(option);
+    *cases = cases
+        .iter()
+        .cloned()
+        .chain([unsupported])
+        .collect::<Vec<_>>()
+        .into();
+    for decoding in [false, true] {
+        assert_eq!(
+            super::codec::require_json_encoding(
+                &program,
+                variant,
+                decoding,
+                JsonLimits::default(),
+                &ExecutionControl::uncancelled()
+            )
+            .unwrap_err()
+            .code,
+            "normalized_json_type"
+        );
+    }
+    assert_eq!(
+        encode_typed(&program, &value, variant, JsonLimits::default())
+            .unwrap_err()
+            .code,
+        "normalized_json_type"
+    );
+    let static_text = admit_runtime_type(&mut program, TypeForm::StaticText);
+    assert!(
+        super::codec::require_json_encoding(
+            &program,
+            static_text,
+            false,
+            JsonLimits::default(),
+            &ExecutionControl::uncancelled()
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        super::codec::require_json_encoding(
+            &program,
+            static_text,
+            true,
+            JsonLimits::default(),
+            &ExecutionControl::uncancelled()
+        )
+        .unwrap_err()
+        .code,
+        "normalized_json_type"
+    );
 }
 
 #[test]
@@ -3616,8 +3708,8 @@ async fn normalized_http_patterns_bind_raw_captures_to_vm_parameters() {
     assert_eq!(application.resident().deployment().live_streams(), 0);
 }
 
-#[test]
-fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
+#[tokio::test]
+async fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
     let snapshot = wall_clock_command_snapshot();
     let (_temporary, repository, program) = prepare_repository(&snapshot);
     let target_name = Name::new("command").unwrap();
@@ -3706,23 +3798,33 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
         deployment.observation().semantic_state,
         program.root_semantic_state
     );
-    let receipt = run_effectful_command(
-        &view,
+    let invocation = prepare_command_invocation(
         &program,
         deployment.target(),
         b"[]",
-        deployment.capabilities(),
-        NormalizedCommandPolicy::default(),
+        JsonLimits::default(),
         &ExecutionControl::uncancelled(),
     )
-    .expect("one exact normalized wall-clock execution");
+    .unwrap();
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::new(program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::foreground(),
+    )
+    .unwrap()
+    .foreground(None);
+    let receipt = run_foreground_command(resident, invocation, std::future::pending())
+        .await
+        .expect("one exact normalized wall-clock execution");
     let milliseconds = std::str::from_utf8(&receipt.result_json)
         .expect("wall-clock JSON UTF-8")
         .parse::<i64>()
         .expect("wall-clock JSON integer");
     assert!(milliseconds > 0);
     assert_eq!(receipt.production.capability_calls, 1);
-    assert_eq!(receipt.verification, "production_only_live_effects");
+    assert_eq!(receipt.shutdown.remaining_tasks, 0);
+    assert!(receipt.shutdown.cleanup_failures.is_empty());
 }
 
 #[test]
@@ -3861,8 +3963,8 @@ fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
     assert_eq!(deployment.live_streams(), 0);
 }
 
-#[test]
-fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
+#[tokio::test]
+async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     let snapshot = pure_command_snapshot();
     let (_temporary, repository, program) = prepare_repository(&snapshot);
     let view = repository
@@ -3904,74 +4006,61 @@ fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     assert_eq!(tests.revision, Some(view.revision()));
     assert_eq!(tests.passed, 1);
 
-    let (capabilities, calls) = bind_fixture_capability(&program, 1);
-    let effectful = run_effectful_command(
-        &view,
-        &program,
-        &Name::new("command").unwrap(),
-        b"[]",
-        &capabilities,
-        NormalizedCommandPolicy::default(),
-        &control,
-    )
-    .expect("effectful command runs once through production");
-    assert_eq!(effectful.revision, Some(view.revision()));
-    assert_eq!(effectful.result_json, b"null");
-    assert_eq!(effectful.production.capability_calls, 1);
-    assert_eq!(effectful.verification, "production_only_live_effects");
-    assert_eq!(calls.load(Ordering::Relaxed), 1);
-
-    let pure_target = program
-        .root_target(&Name::new("pure").unwrap())
-        .expect("pure fixture target");
-    let pure_capabilities =
-        NormalizedCapabilities::bind(&program, pure_target.component, Vec::new())
-            .expect("empty grants bind the pure component");
-    assert_eq!(
-        run_effectful_command(
-            &view,
+    // Artifact foreground execution shares the public production/lifecycle owner and has no
+    // repository reader dependency. Pure authoring above retains independent revision evidence.
+    let (grant, calls) = fixture_capability_grant(&program, 1);
+    for (name, grants) in [("command", vec![grant]), ("pure", vec![])] {
+        let name = Name::new(name).unwrap();
+        let invocation =
+            prepare_command_invocation(&program, &name, b"[]", JsonLimits::default(), &control)
+                .unwrap();
+        let deployment = NormalizedPreparedDeployment::prepare_exact_for_test(
             &program,
-            &Name::new("command").unwrap(),
-            b"[]",
-            &pure_capabilities,
-            NormalizedCommandPolicy::default(),
-            &control,
+            name,
+            grants,
+            NormalizedDeploymentResourcePolicy::default(),
         )
-        .expect_err("grants for another component must reject")
-        .code,
-        "normalized_runner_grant_component"
+        .unwrap();
+        let resident = NormalizedResidentDeployment::prepare(
+            Arc::new(program.clone()),
+            deployment,
+            ResidentLimits::default(),
+            NormalizedRunPolicy::foreground(),
+        )
+        .unwrap()
+        .foreground(None);
+        let receipt = run_foreground_command(resident, invocation, std::future::pending())
+            .await
+            .unwrap();
+        assert_eq!(receipt.result_json, b"null");
+        assert_eq!(receipt.shutdown.remaining_tasks, 0);
+        assert!(receipt.shutdown.cleanup_failures.is_empty());
+    }
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    let (grant, calls) = fixture_capability_grant(&program, 1);
+    assert!(
+        NormalizedPreparedDeployment::prepare_exact_for_test(
+            &program,
+            Name::new("pure").unwrap(),
+            vec![grant],
+            NormalizedDeploymentResourcePolicy::default()
+        )
+        .is_err()
     );
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
     assert_eq!(
-        run_effectful_command(
-            &view,
+        run_pure_command(
+            &WrongRevisionReader(&view),
             &program,
             &Name::new("pure").unwrap(),
             b"[]",
-            &pure_capabilities,
             NormalizedCommandPolicy::default(),
-            &control,
+            &control
         )
-        .expect_err("pure targets require differential execution")
-        .code,
-        "normalized_runner_pure_target"
-    );
-
-    let (stale_capabilities, stale_calls) = bind_fixture_capability(&program, 1);
-    assert_eq!(
-        run_effectful_command(
-            &WrongRevisionReader(&view),
-            &program,
-            &Name::new("command").unwrap(),
-            b"[]",
-            &stale_capabilities,
-            NormalizedCommandPolicy::default(),
-            &control,
-        )
-        .expect_err("foreign revision binding must reject before production effects")
+        .unwrap_err()
         .code,
         "normalized_reference_authority_binding"
     );
-    assert_eq!(stale_calls.load(Ordering::Relaxed), 0);
 }
 
 #[test]
@@ -4177,7 +4266,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     let step_limited = NormalizedVm::new(
         &program,
         NormalizedRunPolicy {
-            instruction_steps: 1,
+            instruction_steps: Some(1),
             ..NormalizedRunPolicy::default()
         },
     )
@@ -4193,7 +4282,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     let allocation_limited = NormalizedVm::new(
         &program,
         NormalizedRunPolicy {
-            maximum_allocated_bytes: 1,
+            maximum_allocated_bytes: Some(1),
             ..NormalizedRunPolicy::default()
         },
     )
@@ -4528,7 +4617,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
     let error = NormalizedVm::new(
         &cyclic,
         NormalizedRunPolicy {
-            instruction_steps: 1000,
+            instruction_steps: Some(1000),
             ..Default::default()
         },
     )
@@ -4973,6 +5062,167 @@ fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
 }
 
 #[test]
+fn foreground_storage_overflow_remains_distinct_from_saturated_work() {
+    assert_eq!(
+        crate::platform::execution::cumulative_charge(u64::MAX, 1, None, "quota", "quota").unwrap(),
+        u64::MAX
+    );
+    assert_eq!(
+        super::value::collection_storage_bytes(32, 64, "storage").unwrap(),
+        2048
+    );
+    assert_eq!(
+        super::value::collection_storage_bytes(0, u64::MAX, "storage").unwrap(),
+        0
+    );
+    let error = super::value::collection_storage_bytes(2, u64::MAX, "storage").unwrap_err();
+    assert_eq!(error.code, "storage");
+    assert_eq!(error.class, ExecutionFailureClass::Resource);
+}
+
+#[test]
+fn foreground_optional_quotas_preserve_independent_grants_and_cancellation_in_both_evaluators() {
+    let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
+    let program = prepare_snapshot(&snapshot);
+    let caller = declaration_named(&snapshot, "caller");
+    for reference in [false, true] {
+        let run = |policy, maximum_calls, control: &ExecutionControl| {
+            let (capabilities, calls) = bind_fixture_capability(&program, maximum_calls);
+            let result = if reference {
+                NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                    .invoke(caller, vec![], Some(&capabilities), control)
+                    .map(|(value, _)| value)
+            } else {
+                NormalizedVm::new(&program, policy)
+                    .invoke(caller, vec![], Some(&capabilities), control)
+                    .map(|(value, _)| value)
+            };
+            (result, calls.load(Ordering::Relaxed))
+        };
+        let control = ExecutionControl::uncancelled();
+        let bounded = run(NormalizedRunPolicy::default(), 2, &control);
+        let trusted = run(NormalizedRunPolicy::foreground(), 2, &control);
+        assert_eq!(bounded.0.unwrap(), trusted.0.unwrap());
+        assert_eq!((bounded.1, trusted.1), (1, 1));
+        for dimension in 0..4 {
+            let mut policy = NormalizedRunPolicy::foreground();
+            match dimension {
+                0 => policy.instruction_steps = Some(1),
+                1 => policy.maximum_allocated_bytes = Some(1),
+                2 => policy.maximum_collection_items = Some(1),
+                _ => policy.maximum_capability_calls = Some(1),
+            }
+            let (failure, calls) = run(policy, 2, &control);
+            let error = failure.unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Resource);
+            assert!(
+                error.code.ends_with(
+                    [
+                        "steps",
+                        "allocation",
+                        "collection_items",
+                        "capability_calls"
+                    ][dimension]
+                ),
+                "{reference} {dimension}: {error:?}"
+            );
+            assert_eq!(
+                calls, 0,
+                "transaction admission spends the first capability call before the adapter operation"
+            );
+        }
+        let (failure, calls) = run(NormalizedRunPolicy::foreground(), 1, &control);
+        assert!(failure.unwrap_err().code.contains("grant"));
+        assert_eq!(
+            calls, 0,
+            "transaction admission spends the first grant call; unbounded policy cannot refund it"
+        );
+        let (failure, calls) = run(
+            NormalizedRunPolicy::foreground(),
+            2,
+            &ExecutionControl::cancel_after_checks(1),
+        );
+        assert_eq!(failure.unwrap_err().code, "execution_cancelled");
+        assert_eq!(calls, 0);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn foreground_lifecycle_keeps_primary_failure_and_joins_shutdown_once() {
+    for fail_call in [false, true] {
+        for fail_shutdown in [false, true] {
+            let snapshot = transaction_call_snapshot(ExternalVisibility::Possible);
+            let program = Arc::new(prepare_snapshot(&snapshot));
+            let (grant, stats) = tracking_grant(&program, 3, fail_call);
+            stats.fail_shutdown.store(fail_shutdown, Ordering::Relaxed);
+            let target = Name::new("command").unwrap();
+            let invocation = prepare_command_invocation(
+                &program,
+                &target,
+                b"[]",
+                JsonLimits::default(),
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+            let deployment = NormalizedPreparedDeployment::prepare_exact_for_test(
+                &program,
+                target,
+                vec![grant],
+                NormalizedDeploymentResourcePolicy::default(),
+            )
+            .unwrap();
+            let resident = NormalizedResidentDeployment::prepare(
+                program,
+                deployment,
+                ResidentLimits::default(),
+                NormalizedRunPolicy::foreground(),
+            )
+            .unwrap()
+            .foreground(None);
+            let observer = resident.clone();
+            let result = run_foreground_command(resident, invocation, std::future::pending()).await;
+            assert_eq!(stats.shutdowns.load(Ordering::Relaxed), 1);
+            assert_eq!(
+                (
+                    observer.observe().active,
+                    observer.observe().queued,
+                    observer.observe().admitted
+                ),
+                (0, 0, 1)
+            );
+            if fail_call || fail_shutdown {
+                let error = result.unwrap_err();
+                assert_eq!(
+                    error.code,
+                    if fail_call {
+                        "normalized_test_possible_visibility"
+                    } else {
+                        "foreground_cleanup"
+                    }
+                );
+                assert!(error.notes.iter().any(|note| note.contains("visible")));
+                assert_eq!(
+                    error
+                        .notes
+                        .iter()
+                        .any(|note| note.contains("foreground_test_shutdown")),
+                    fail_shutdown
+                );
+            } else {
+                let receipt = result.unwrap();
+                assert_eq!(receipt.shutdown.remaining_tasks, 0);
+                assert!(receipt.shutdown.cleanup_failures.is_empty());
+            }
+            assert_eq!(stats.commits.load(Ordering::Relaxed), u64::from(!fail_call));
+            assert_eq!(
+                stats.rollbacks.load(Ordering::Relaxed),
+                u64::from(fail_call)
+            );
+        }
+    }
+}
+
+#[test]
 fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let program = prepare_snapshot(&snapshot);
@@ -4994,7 +5244,7 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     let collection = NormalizedVm::new(
         &program,
         NormalizedRunPolicy {
-            maximum_collection_items: 1,
+            maximum_collection_items: Some(1),
             ..NormalizedRunPolicy::default()
         },
     )
@@ -5005,7 +5255,7 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     let capability = NormalizedVm::new(
         &program,
         NormalizedRunPolicy {
-            maximum_capability_calls: 1,
+            maximum_capability_calls: Some(1),
             ..NormalizedRunPolicy::default()
         },
     )

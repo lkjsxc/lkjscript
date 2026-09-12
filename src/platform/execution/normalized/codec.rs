@@ -14,6 +14,8 @@ use serde_json::{Map, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+const MAXIMUM_TYPE_ADMISSION_BYTES: usize = 256 * 1024 * 1024;
+
 #[cfg(test)]
 pub fn decode_typed(
     program: &dyn NormalizedValueSchema,
@@ -52,7 +54,7 @@ pub(crate) fn decode_value_with_control(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    require_application_encoding(program, ty, true, limits, control)?;
+    require_json_encoding(program, ty, true, limits, control)?;
     from_json(program, value, ty, limits, "$", 0, control)
 }
 
@@ -111,7 +113,7 @@ pub(crate) fn encode_value_with_control(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<JsonValue, Diagnostic> {
-    require_application_encoding(program, ty, false, limits, control)?;
+    require_json_encoding(program, ty, false, limits, control)?;
     let mut state = EncodeState {
         limits,
         items: 0,
@@ -126,20 +128,54 @@ fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
-// Applied types and callable-containing containers require complete type admission,
-// including empty collections and inactive nominal cases. Checked comparable,
-// application-free types cannot contain either callable kind and keep the fast path.
-fn require_application_encoding(
+/// The same directional form admission used by value conversion and complete type preflight.
+/// Nominal layouts are traversed by exact instantiated type identity, including inactive cases.
+fn json_form<'a>(
+    program: &'a dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+    decoding: bool,
+    path: &str,
+) -> Result<&'a TypeForm, Diagnostic> {
+    let form = type_form(program, ty)?;
+    match form {
+        TypeForm::Secret
+        | TypeForm::Stream { .. }
+        | TypeForm::CapabilityResource { .. }
+        | TypeForm::Function { .. }
+        | TypeForm::TaskFunction { .. }
+        | TypeForm::TypeParameter { .. }
+        | TypeForm::Option { .. }
+        | TypeForm::Result { .. } => Err(type_error(
+            path,
+            "live, callable, unresolved, intrinsic Option and Result types cannot cross JSON boundaries",
+        )),
+        TypeForm::StaticText if decoding => Err(type_error(
+            path,
+            "static text must originate in accepted meaning and cannot be decoded from JSON",
+        )),
+        TypeForm::Map { key, .. }
+            if !matches!(
+                type_form(program, *key)?,
+                TypeForm::Bool
+                    | TypeForm::I64
+                    | TypeForm::Bytes
+                    | TypeForm::Text
+                    | TypeForm::StaticText
+            ) =>
+        {
+            Err(type_error(path, "map key type is not orderable"))
+        }
+        _ => Ok(form),
+    }
+}
+
+pub(super) fn require_json_encoding(
     program: &dyn NormalizedValueSchema,
     root: TypeObjectDigest,
     decoding: bool,
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    checkpoint(control)?;
-    if program.application_free(root) && program.comparable(root) {
-        return Ok(());
-    }
     fn charge(work: &mut usize, bytes: &mut usize, size: usize) -> Result<(), Diagnostic> {
         *work = work
             .checked_add(1)
@@ -153,53 +189,40 @@ fn require_application_encoding(
             })?;
         *bytes = bytes
             .checked_add(size)
-            .filter(|count| {
-                *count as u64 <= super::vm::NormalizedRunPolicy::default().maximum_allocated_bytes
-            })
+            .filter(|count| *count <= MAXIMUM_TYPE_ADMISSION_BYTES)
             .ok_or_else(|| {
                 json_error(
                     DiagnosticClass::Resource,
                     "normalized_json_type_storage",
-                    "JSON type eligibility exhausted the existing allocation limit",
+                    "JSON type eligibility exhausted finite admission storage",
                 )
             })?;
         Ok(())
     }
-    let mut pending = vec![(root, false, 0usize)];
+    let mut pending = vec![(root, 0usize)];
     let mut seen = BTreeSet::new();
     let mut work = 0usize;
-    let mut bytes = std::mem::size_of::<(TypeObjectDigest, bool, usize)>();
-    while let Some((ty, strict, depth)) = pending.pop() {
+    let mut bytes = std::mem::size_of::<(TypeObjectDigest, usize)>();
+    while let Some((ty, depth)) = pending.pop() {
         checkpoint(control)?;
-        work = work
-            .checked_add(1)
-            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                json_error(
-                    DiagnosticClass::Resource,
-                    "normalized_json_type_work",
-                    "JSON type eligibility exhausted validation work",
-                )
-            })?;
-        require_depth(limits, "$", depth)?;
-        if seen.contains(&(ty, strict)) {
+        if seen.contains(&ty) {
             continue;
         }
+        require_depth(limits, "$", depth)?;
         charge(
             &mut work,
             &mut bytes,
-            std::mem::size_of::<(TypeObjectDigest, bool)>() + 3 * std::mem::size_of::<usize>(),
+            std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>(),
         )?;
-        seen.insert((ty, strict));
-        let form = type_form(program, ty)?;
-        let strict = strict || matches!(form, TypeForm::Applied { .. });
+        seen.insert(ty);
+        let form = json_form(program, ty, decoding, "$")?;
         let mut push = |ty| -> Result<(), Diagnostic> {
             charge(
                 &mut work,
                 &mut bytes,
-                std::mem::size_of::<(TypeObjectDigest, bool, usize)>(),
+                std::mem::size_of::<(TypeObjectDigest, usize)>(),
             )?;
-            pending.push((ty, strict, depth + 1));
+            pending.push((ty, depth + 1));
             Ok(())
         };
         match form {
@@ -231,31 +254,6 @@ fn require_application_encoding(
                     ));
                 }
             }
-            TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => {
-                return Err(type_error(
-                    "$",
-                    "callable-containing types cannot cross JSON boundaries",
-                ));
-            }
-            TypeForm::Secret
-            | TypeForm::Stream { .. }
-            | TypeForm::CapabilityResource { .. }
-            | TypeForm::TypeParameter { .. }
-            | TypeForm::Option { .. }
-            | TypeForm::Result { .. }
-                if strict =>
-            {
-                return Err(type_error(
-                    "$",
-                    "nominal application contains a type unsupported by JSON",
-                ));
-            }
-            TypeForm::StaticText if strict && decoding => {
-                return Err(type_error(
-                    "$",
-                    "nominal StaticText cannot originate in JSON",
-                ));
-            }
             TypeForm::StructuralRecord { fields } => {
                 for field in fields {
                     push(field.ty)?;
@@ -283,7 +281,7 @@ fn from_json(
 ) -> Result<NormalizedValue, Diagnostic> {
     checkpoint(control)?;
     require_depth(limits, path, depth)?;
-    let form = type_form(program, ty)?;
+    let form = json_form(program, ty, true, path)?;
     match form {
         TypeForm::Unit if value.is_null() => Ok(NormalizedValue::Unit),
         TypeForm::Unit => Err(type_error(path, "expected null for Unit")),
@@ -529,7 +527,7 @@ fn to_json(
     depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
     state.require_depth(path, depth)?;
-    let form = type_form(program, ty)?;
+    let form = json_form(program, ty, false, path)?;
     match (value, form) {
         (NormalizedValue::Unit, TypeForm::Unit) => Ok(JsonValue::Null),
         (NormalizedValue::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),

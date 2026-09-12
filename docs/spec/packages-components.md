@@ -132,8 +132,10 @@ has no universal port and instead owns a nonempty finite set of stable route own
 one exact method and one typed exact-path or whole-segment pattern selector to a component-owned
 HTTP port. A pattern's capture names and order index the backing function's trailing unrestricted
 `Text` parameters. Public `create.target` accepts exactly
-`command`, `http`, or `interactive`; `run` accepts only a pure command target, while `serve` accepts
-exact HTTP or interactive topology. The full route contract is specified in
+`command`, `http`, or `interactive`. Project `run TARGET` accepts only a pure command target and
+retains differential verification. `run --deployment PATH` accepts a pure or task Command port,
+including an empty-row task, and executes production once with the selected component's complete
+exact grant closure. `serve` accepts exact HTTP or interactive topology. The full route contract is specified in
 [Signature-indexed inbound HTTP route topology](http-route-topology.md).
 Tests are graph-owned actual/expected expressions with exact comparison policy. Task functions may
 name exact requirements; artifact linking retains their exact requirement owner closure without

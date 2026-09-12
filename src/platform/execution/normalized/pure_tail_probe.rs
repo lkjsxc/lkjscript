@@ -487,8 +487,8 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             (items, bytes - 1, false),
         ] {
             let bounded = NormalizedRunPolicy {
-                maximum_collection_items: slot_limit,
-                maximum_allocated_bytes: byte_limit,
+                maximum_collection_items: Some(slot_limit),
+                maximum_allocated_bytes: Some(byte_limit),
                 ..policy
             };
             let (result, mut observed) = invocation(
@@ -658,8 +658,8 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     raw_list(vec![NormalizedValue::I64(1); 256])?,
                 ],
                 NormalizedRunPolicy {
-                    maximum_allocated_bytes: byte_limit,
-                    maximum_collection_items: item_limit,
+                    maximum_allocated_bytes: Some(byte_limit),
+                    maximum_collection_items: Some(item_limit),
                     ..policy
                 },
                 u64::MAX,
@@ -745,7 +745,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 "sum",
                 vec![raw_list(vec![NormalizedValue::I64(1); count])?],
                 NormalizedRunPolicy {
-                    maximum_collection_items: 8,
+                    maximum_collection_items: Some(8),
                     ..policy
                 },
                 u64::MAX,
@@ -871,7 +871,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             "forever",
             vec![],
             NormalizedRunPolicy {
-                instruction_steps: 1000,
+                instruction_steps: Some(1000),
                 ..policy
             },
             u64::MAX,
@@ -942,7 +942,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 "allocate",
                 vec![NormalizedValue::I64(16)],
                 NormalizedRunPolicy {
-                    maximum_allocated_bytes: limit,
+                    maximum_allocated_bytes: Some(limit),
                     ..policy
                 },
                 u64::MAX,

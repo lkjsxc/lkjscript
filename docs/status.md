@@ -6,6 +6,13 @@ public guides live under [generated](generated), including the
 
 ## Current authority and maintained consumers
 
+The active [foreground campaign](campaigns/202609121842.md) implements public
+`run --deployment PATH [--arguments JSON]` for exact artifact Command targets. A copied candidate
+has passed pure starters and fresh transported task-library consumers after their authoring paths
+were removed, including persistent once-only counters and dependency replacement/recovery.
+Source/full/target and selected combined public-release acceptance remain pending until the
+campaign records their exact receipts. This designed witness is separate from maintained adoption.
+
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
 and private staging/locking state. Accepted meaning is the exact revision and immutable object
@@ -66,10 +73,9 @@ fold/map preserve their public contracts through sequential task iteration. ITER
 integrated source `3f25c3a7`: 26 fresh full gates, separate exact musl build/admission with both
 pinned userlands and all six behavioral owners, and 69 rejected receipt faults with healthy
 recovery. Public and neutral observations include a default-policy 8,193-update data-dependent
-state machine. Its separate publication is intentionally deferred to the first subsequently
-accepted user-visible composition milestone building on iteration, or a verified compatibility/
-correctness need requiring public recovery. The next capability campaign must explicitly decide
-the combined release; published `v0.1.32` contains the predecessor effect library.
+state machine. Its named composition trigger is selected by the foreground campaign, which must
+complete the combined release; published `v0.1.32` still contains the predecessor effect library
+until that delivery is verified.
 
 The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.

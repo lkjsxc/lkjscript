@@ -140,6 +140,12 @@ pub(crate) struct ResidentKernel {
     inner: Arc<ResidentKernelInner>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum InvocationTiming {
+    Resident,
+    Foreground { deadline: Option<Duration> },
+}
+
 struct ResidentKernelInner {
     limits: ResidentLimits,
     accepting: AtomicBool,
@@ -255,8 +261,22 @@ impl ResidentKernel {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn invoke<T, F>(
         &self,
+        operation: F,
+    ) -> Result<ResidentKernelReceipt<T>, ExecutionError>
+    where
+        T: Send + 'static,
+        F: FnOnce(ExecutionControl) -> Result<T, ExecutionError> + Send + 'static,
+    {
+        self.invoke_timed(InvocationTiming::Resident, operation)
+            .await
+    }
+
+    pub(crate) async fn invoke_timed<T, F>(
+        &self,
+        timing: InvocationTiming,
         operation: F,
     ) -> Result<ResidentKernelReceipt<T>, ExecutionError>
     where
@@ -348,9 +368,16 @@ impl ResidentKernel {
                     "resident task identity domain was exhausted",
                 )
             })?;
-        let deadline_duration =
-            Duration::from_millis(self.inner.limits.request_deadline_milliseconds);
-        let control = ExecutionControl::with_deadline(Instant::now() + deadline_duration);
+        let deadline_duration = match timing {
+            InvocationTiming::Resident => Some(Duration::from_millis(
+                self.inner.limits.request_deadline_milliseconds,
+            )),
+            InvocationTiming::Foreground { deadline } => deadline,
+        };
+        let control = match deadline_duration {
+            Some(duration) => ExecutionControl::with_deadline(Instant::now() + duration),
+            None => ExecutionControl::uncancelled(),
+        };
         lock_unpoisoned(&self.inner.controls).insert(task_id, control.clone());
         let active = self.inner.active.fetch_add(1, Ordering::AcqRel) + 1;
         update_maximum(&self.inner.counters.maximum_active, active);
@@ -371,18 +398,30 @@ impl ResidentKernel {
             inner.record_outcome(&outcome);
             outcome
         });
-        let outcome = match tokio::time::timeout(deadline_duration, &mut task).await {
+        let awaited = match deadline_duration {
+            Some(duration) => tokio::time::timeout(duration, &mut task).await,
+            None => Ok((&mut task).await),
+        };
+        let outcome = match awaited {
             Ok(outcome) => join_outcome(outcome),
             Err(_) => {
                 control.cancel();
                 let cancellation_grace =
                     Duration::from_millis(self.inner.limits.cancellation_grace_milliseconds);
-                match tokio::time::timeout(cancellation_grace, &mut task).await {
+                let joined = match tokio::time::timeout(cancellation_grace, &mut task).await {
                     Ok(outcome) => join_outcome(outcome),
                     Err(_) => Err(ExecutionError::new(
                         ExecutionFailureClass::Infrastructure,
                         "resident_cancellation_stalled",
                         "cancelled execution did not close within its cancellation grace",
+                    )),
+                };
+                match timing {
+                    InvocationTiming::Resident => joined,
+                    InvocationTiming::Foreground { .. } => Err(ExecutionError::new(
+                        ExecutionFailureClass::Cancelled,
+                        "execution_deadline",
+                        "foreground execution exceeded its explicit operational deadline",
                     )),
                 }
             }
@@ -448,6 +487,12 @@ impl ResidentKernel {
             remaining_tasks,
             cleanup_failures,
             elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+        }
+    }
+
+    pub(crate) fn cancel(&self) {
+        for control in lock_unpoisoned(&self.inner.controls).values() {
+            control.cancel();
         }
     }
 }

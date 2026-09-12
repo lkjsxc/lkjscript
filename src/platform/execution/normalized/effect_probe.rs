@@ -272,14 +272,16 @@ fn invoke(
     };
     let mut policy = healthy_policy;
     if fault == "fuel" {
-        policy.instruction_steps = 300;
+        policy.instruction_steps = Some(300);
     }
     if fault == "allocation" {
-        policy.maximum_allocated_bytes = if reference {
-            schema.type_metadata_bytes
-        } else {
-            prepared.program.work.type_metadata_bytes
-        } + 50_000;
+        policy.maximum_allocated_bytes = Some(
+            if reference {
+                schema.type_metadata_bytes
+            } else {
+                prepared.program.work.type_metadata_bytes
+            } + 50_000,
+        );
     }
     let maximum = if fault == "quota" {
         9

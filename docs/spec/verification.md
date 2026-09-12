@@ -125,8 +125,10 @@ Its callable identities, signatures, nominal layouts, generic type arguments, ta
 blob reads are canonical-derived, not selected from compiler units or production resolver tables.
 Fault sensitivity removes compiled callable/layout/type/target tables while canonical evaluation
 continues, and omits a compiled test to require inventory disagreement instead of an empty pass.
-Every pure command and graph-owned test used for acceptance requires production/reference equality
-before comparing the expected value. Skipped, unavailable, cancelled, exhausted, or unrun work is
+Every project-mode pure command and graph-owned test used for acceptance requires production/reference equality
+before comparing the expected value. Foreground deployment commands execute production exactly once;
+their arithmetic, ordered effects, persistent execution counters and cleanup are checked against
+independent expectations. Separate neutral adapters retain both-evaluator proof. Skipped, unavailable, cancelled, exhausted, or unrun work is
 not a pass. Live effects are not duplicated for differential evidence.
 
 Pure tail execution additionally requires `lkjscript-dev pure-tail --binary PATH
@@ -318,6 +320,34 @@ embedded executable assets. Product verification exports both package transport 
 requires exact byte equality with the generated maintained files.
 
 ## Command lifecycle requirements
+
+Foreground acceptance extends the existing offline-package effect child, required by current
+offline-package receipt 8 and all current target/transferred/public-pair readers. It freshly authors
+an exported task-iteration helper, a pure factory returning a bound callback, and two Command
+consumers with recursive nominal reports through the copied candidate. Both consumer and producer
+authoring paths are unavailable during execution; only the single executable, exact bundles,
+descriptors and disposable operational roots are required. Unrelated working directories and an
+environment containing only `LANG` exclude Cargo, source assets and runtime lookup.
+
+Independent arithmetic requires positions 0, 1, 257 and 8193, with sums N(N-1)/2; the last is
+33,558,528. A persistent counter increases once per command. The complete small-case ordered
+trace and the first 258 positions for the larger case are retained; this keeps the existing
+4,096-mutation transaction admission finite. A reviewed dependency replacement extends the
+callback threshold by one; the original immutable bundle must remain executable.
+
+The fixed scalar empty-row loop uses 44+32N production instructions. Calibration at N=0 and
+1000 selected and froze N=312499, exceeding 10M instructions without capabilities or a growing
+collection. Trusted execution must complete it. Both evaluators separately distinguish all four
+optional cumulative quotas with small limits, exact grant exhaustion, cancellation and overflow
+probes. Supplied execution objects keep the legacy cumulative defaults; resident/project defaults
+remain bounded. Observation saturation never supplies grant credit or licenses storage overflow.
+
+Negative public cells require argument/output-type admission before secrets, exact component
+grants for pure and empty-row ports, transaction rollback, committed effects followed by trap,
+explicit fuel/deadline, SIGINT/SIGTERM, late oversized output, and a broken output stream. Cleanup
+faults must preserve the primary error, zero owned work and once-only adapter shutdown observations.
+Current child readers require these cells and their command/output/artifact bindings; omitted,
+substituted or consistently rehashed false observations cannot certify foreground acceptance.
 
 A release executable copied to an isolated directory must complete:
 

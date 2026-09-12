@@ -1,7 +1,7 @@
-//! Repository-bound command and graph-owned test runners for normalized Graph 10 artifacts.
+//! Artifact foreground commands, repository differential commands and graph-owned test runners.
 
 use super::capability::NormalizedCapabilities;
-use super::codec::{decode_value_with_control, encode_typed_with_control};
+use super::codec::{decode_value_with_control, encode_typed_with_control, require_json_encoding};
 use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
@@ -17,6 +17,7 @@ use crate::platform::kernel::{ComparisonPolicy, Name, OwnerKey, TypeForm, TypeOb
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::RepositoryView;
 use crate::platform::semantic_id::RevisionId;
+use futures_util::FutureExt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedCommandReceipt {
@@ -26,16 +27,6 @@ pub struct NormalizedCommandReceipt {
     pub production: NormalizedRunObservation,
     pub reference: NormalizedReferenceObservation,
     pub differential: &'static str,
-}
-
-#[cfg(test)]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NormalizedEffectfulCommandReceipt {
-    pub target: Name,
-    pub revision: Option<RevisionId>,
-    pub result_json: Vec<u8>,
-    pub production: NormalizedRunObservation,
-    pub verification: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -54,11 +45,12 @@ pub struct NormalizedTestReceipt {
     pub differential: &'static str,
 }
 
-struct PreparedCommandInvocation<'a> {
-    task: bool,
-    target: &'a NormalizedTarget,
-    arguments: Vec<NormalizedValue>,
-    result_type: TypeObjectDigest,
+pub(crate) struct PreparedCommandInvocation {
+    artifact_manifest: crate::platform::compiler::ArtifactManifestDigest,
+    pub(crate) task: bool,
+    pub(crate) target: NormalizedTarget,
+    pub(crate) arguments: Vec<NormalizedValue>,
+    pub(crate) result_type: TypeObjectDigest,
 }
 
 impl NormalizedReferenceRead for RepositoryView {
@@ -178,71 +170,113 @@ pub fn run_pure_command(
     })
 }
 
-/// Runs one effectful command-like target exactly once through the production tier.
-///
-/// The authority/artifact binding and complete deployment grant set are checked before execution.
-/// The reference tier is intentionally not invoked against live effects.
-#[cfg(test)]
-pub fn run_effectful_command(
-    authority: &dyn NormalizedReferenceRead,
-    program: &NormalizedProgram,
-    target_name: &Name,
-    arguments_json: &[u8],
-    capabilities: &NormalizedCapabilities,
-    policy: NormalizedCommandPolicy,
-    control: &ExecutionControl,
-) -> Result<NormalizedEffectfulCommandReceipt, Diagnostic> {
-    let authority_binding = authority.binding().map_err(execution_diagnostic)?;
-    validate_authority_binding(program, authority_binding)?;
-    let invocation =
-        prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
-    let _component = program
-        .components
-        .get(invocation.target.component.0 as usize)
-        .ok_or_else(|| {
-            runner_error(
-                DiagnosticClass::Corrupt,
-                "normalized_runner_component",
-                "selected target component escaped the prepared runtime table",
-            )
-        })?;
-    if !invocation.task {
-        return Err(runner_error(
-            DiagnosticClass::Source,
-            "normalized_runner_pure_target",
-            "pure target must use differential command execution",
-        ));
-    }
-    if capabilities.component() != invocation.target.component {
-        return Err(runner_error(
-            DiagnosticClass::Capability,
-            "normalized_runner_grant_component",
-            "deployment grants are bound to another exact component",
-        ));
-    }
+#[derive(Debug)]
+pub(crate) struct NormalizedForegroundReceipt {
+    pub result_json: Vec<u8>,
+    pub production: NormalizedRunObservation,
+    pub invocation_nanoseconds: u64,
+    pub shutdown: crate::platform::runtime::ShutdownReceipt,
+}
 
-    let production = NormalizedVm::new(program, policy.execution)
-        .invoke_root_target(
-            target_name,
-            invocation.arguments,
-            Some(capabilities),
-            control,
-        )
-        .map_err(execution_diagnostic)?;
-    let result_json = encode_typed_with_control(
-        program,
-        &production.0,
-        invocation.result_type,
-        policy.json,
-        control,
-    )?;
-    Ok(NormalizedEffectfulCommandReceipt {
-        target: target_name.clone(),
-        revision: authority_binding.revision,
+async fn foreground_outcome<T>(
+    mut running: std::pin::Pin<&mut impl std::future::Future<Output = T>>,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Option<T> {
+    tokio::select! {
+        biased;
+        result = running.as_mut() => Some(result),
+        () = cancellation => running.now_or_never(),
+    }
+}
+
+/// One production invocation under the common runtime/resource/adapter lifecycle.
+pub(crate) async fn run_foreground_command(
+    resident: super::resident::NormalizedResidentDeployment,
+    invocation: PreparedCommandInvocation,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Result<NormalizedForegroundReceipt, Diagnostic> {
+    let admitted = invocation.target == *resident.target()
+        && invocation.artifact_manifest == resident.program().artifact().manifest_digest
+        && invocation.target.runner == RunnerKind::Command;
+    let outcome = if !admitted {
+        Err(runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_runner_grant_component",
+            "foreground preflight and prepared deployment select different exact command bindings",
+        ))
+    } else {
+        let running = resident.invoke(invocation.arguments);
+        tokio::pin!(running);
+        match foreground_outcome(running.as_mut(), cancellation).await {
+            Some(outcome) => outcome.map_err(execution_diagnostic),
+            None => {
+                resident.cancel();
+                let grace = std::time::Duration::from_millis(
+                    resident.limits().cancellation_grace_milliseconds,
+                );
+                let joined = tokio::time::timeout(grace, &mut running).await;
+                let mut error = runner_error(
+                    DiagnosticClass::Cancelled,
+                    "execution_cancelled",
+                    "foreground execution was cancelled by its owning process",
+                );
+                if joined.is_err() {
+                    error
+                        .notes
+                        .push("invocation did not join within cancellation grace".to_owned());
+                }
+                Err(error)
+            }
+        }
+    };
+    let encoded = outcome.and_then(|receipt| {
+        let bytes = encode_typed_with_control(
+            resident.program(),
+            &receipt.value,
+            invocation.result_type,
+            JsonLimits::default(),
+            &ExecutionControl::uncancelled(),
+        )?;
+        Ok((bytes, receipt))
+    });
+    let shutdown = resident.shutdown().await;
+    let mut result = encoded.map(|(result_json, receipt)| NormalizedForegroundReceipt {
         result_json,
-        production: production.1,
-        verification: "production_only_live_effects",
-    })
+        production: receipt.execution,
+        invocation_nanoseconds: receipt.execution_nanoseconds,
+        shutdown: shutdown.clone(),
+    });
+    if (shutdown.remaining_tasks != 0 || !shutdown.cleanup_failures.is_empty()) && result.is_ok() {
+        result = Err(runner_error(
+            DiagnosticClass::Infrastructure,
+            "foreground_cleanup",
+            "foreground cleanup did not complete successfully",
+        ));
+    }
+    if let Err(error) = &mut result {
+        error.notes.push(format!(
+            "foreground cleanup: admission-stopped={} remaining-owned-tasks={} failures={}",
+            shutdown.admission_stopped,
+            shutdown.remaining_tasks,
+            shutdown.cleanup_failures.len()
+        ));
+        if invocation.task && resident.observe().admitted != 0 {
+            crate::platform::deployment::foreground_visibility(error);
+        }
+        if shutdown.remaining_tasks != 0 {
+            error.notes.push(format!(
+                "{} owned tasks remain after shutdown",
+                shutdown.remaining_tasks
+            ));
+        }
+        for failure in &shutdown.cleanup_failures {
+            error.notes.push(format!(
+                "adapter cleanup failed with safe code '{}'",
+                failure.code
+            ));
+        }
+    }
+    result
 }
 
 /// Runs each independently inventoried canonical graph test through dense and canonical execution.
@@ -335,13 +369,13 @@ pub fn run_graph_tests(
     Ok(receipt)
 }
 
-fn prepare_command_invocation<'a>(
-    program: &'a NormalizedProgram,
+pub(crate) fn prepare_command_invocation(
+    program: &NormalizedProgram,
     target_name: &Name,
     arguments_json: &[u8],
     json_limits: JsonLimits,
     control: &ExecutionControl,
-) -> Result<PreparedCommandInvocation<'a>, Diagnostic> {
+) -> Result<PreparedCommandInvocation, Diagnostic> {
     let target = program.root_target(target_name).ok_or_else(|| {
         runner_error(
             DiagnosticClass::Source,
@@ -381,6 +415,7 @@ fn prepare_command_invocation<'a>(
         ));
     }
     let (parameter_types, result_type, task) = function_type(program, port.function_type)?;
+    require_json_encoding(program, result_type, false, json_limits, control)?;
     let arguments = decode_strict(arguments_json, json_limits)?;
     let arguments = arguments.as_array().ok_or_else(|| {
         runner_error(
@@ -406,7 +441,8 @@ fn prepare_command_invocation<'a>(
         .map(|(value, ty)| decode_value_with_control(program, value, ty, json_limits, control))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(PreparedCommandInvocation {
-        target,
+        artifact_manifest: program.artifact().manifest_digest,
+        target: target.clone(),
         arguments,
         result_type,
         task,
@@ -453,7 +489,7 @@ fn validate_authority_binding(
     Ok(())
 }
 
-fn execution_diagnostic(error: ExecutionError) -> Diagnostic {
+pub(crate) fn execution_diagnostic(error: ExecutionError) -> Diagnostic {
     let class = match error.class {
         ExecutionFailureClass::Trap => DiagnosticClass::Semantic,
         ExecutionFailureClass::Capability | ExecutionFailureClass::PossibleVisibility => {
@@ -491,4 +527,31 @@ fn runner_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod foreground_race_tests {
+    #[tokio::test]
+    async fn foreground_completion_ready_at_signal_selection_wins() {
+        let completed = std::cell::Cell::new(false);
+        let running = std::future::poll_fn(|_| {
+            if completed.get() {
+                std::task::Poll::Ready(7)
+            } else {
+                std::task::Poll::Pending
+            }
+        });
+        tokio::pin!(running);
+        let result = super::foreground_outcome(running.as_mut(), async {
+            completed.set(true);
+        })
+        .await;
+        assert_eq!(result, Some(7));
+        let running = std::future::pending::<u8>();
+        tokio::pin!(running);
+        assert_eq!(
+            super::foreground_outcome(running.as_mut(), std::future::ready(())).await,
+            None
+        );
+    }
 }

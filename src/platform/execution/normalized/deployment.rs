@@ -289,9 +289,11 @@ impl NormalizedPreparedDeployment {
             Path::new("."),
             runtime,
             false,
+            &crate::platform::execution::ExecutionControl::uncancelled(),
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_with_host(
         program: &NormalizedProgram,
         target: Name,
@@ -300,6 +302,7 @@ impl NormalizedPreparedDeployment {
         secrets: &SecretCatalog,
         deployment_directory: &Path,
         runtime: Handle,
+        control: &crate::platform::execution::ExecutionControl,
     ) -> Result<Self, Diagnostic> {
         Self::prepare_inner(
             program,
@@ -310,6 +313,7 @@ impl NormalizedPreparedDeployment {
             deployment_directory,
             runtime,
             true,
+            control,
         )
     }
 
@@ -323,9 +327,11 @@ impl NormalizedPreparedDeployment {
         deployment_directory: &Path,
         runtime: Handle,
         enforce_standard_interfaces: bool,
+        control: &crate::platform::execution::ExecutionControl,
     ) -> Result<Self, Diagnostic> {
         let mut prepared_adapters: Vec<Arc<dyn NormalizedCapabilityAdapter>> = Vec::new();
         let prepared: Result<Self, Diagnostic> = (|| {
+            control.check().map_err(execution_diagnostic)?;
             if grants.len() > MAXIMUM_NORMALIZED_DEPLOYMENT_GRANTS {
                 return Err(deployment_error(
                     DiagnosticClass::Resource,
@@ -402,8 +408,10 @@ impl NormalizedPreparedDeployment {
                     )
                 })?;
                 let adapter_kind = grant.adapter.kind();
+                control.check().map_err(execution_diagnostic)?;
                 let adapter = prepare_adapter(adapter_preparation, requirement, &grant.adapter)?;
                 prepared_adapters.push(Arc::clone(&adapter));
+                control.check().map_err(execution_diagnostic)?;
                 let required_operations = exact_operations(program, requirement)?;
                 if adapter.operations() != &required_operations {
                     return Err(deployment_error(
@@ -558,19 +566,43 @@ fn prepare_adapter(
     requirement: &NormalizedRequirement,
     descriptor: &NormalizedAdapterDescriptor,
 ) -> Result<Arc<dyn NormalizedCapabilityAdapter>, Diagnostic> {
-    let AdapterPreparation {
-        program,
-        secrets,
-        deployment_directory,
-        runtime,
-        enforce_standard_interface,
-        stream_requirements,
-    } = preparation;
+    adapter(
+        preparation.program,
+        requirement,
+        descriptor,
+        preparation.stream_requirements,
+        Some(preparation),
+    )?
+    .ok_or_else(|| {
+        deployment_error(
+            DiagnosticClass::Infrastructure,
+            "normalized_deployment_adapter",
+            "live adapter preparation returned admission only",
+        )
+    })
+}
+
+pub(crate) fn admit_deployment_adapter(
+    program: &NormalizedProgram,
+    requirement: &NormalizedRequirement,
+    descriptor: &NormalizedAdapterDescriptor,
+    stream_requirements: &[RequirementReference],
+) -> Result<(), Diagnostic> {
+    adapter(program, requirement, descriptor, stream_requirements, None).map(|_| ())
+}
+
+fn adapter(
+    program: &NormalizedProgram,
+    requirement: &NormalizedRequirement,
+    descriptor: &NormalizedAdapterDescriptor,
+    stream_requirements: &[RequirementReference],
+    preparation: Option<AdapterPreparation<'_>>,
+) -> Result<Option<Arc<dyn NormalizedCapabilityAdapter>>, Diagnostic> {
     let interface = requirement.interface;
-    if enforce_standard_interface {
+    if preparation.is_none_or(|host| host.enforce_standard_interface) {
         require_standard_interface(interface, descriptor.kind())?;
     }
-    match descriptor {
+    let adapter: Result<Arc<dyn NormalizedCapabilityAdapter>, Diagnostic> = match descriptor {
         NormalizedAdapterDescriptor::Configuration { values } => {
             let mut selected = BTreeMap::new();
             for operation in requirement_operations(program, requirement)? {
@@ -586,6 +618,9 @@ fn prepare_adapter(
                 validate_signature(program, operation, &[ExpectedType::StaticText], result)?;
                 selected.insert(operation.reference, kind);
             }
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedConfigurationAdapter::new_selected(
                 interface,
                 selected,
@@ -595,6 +630,9 @@ fn prepare_adapter(
         NormalizedAdapterDescriptor::WallClock => {
             let operation = require_operation(program, requirement, "utc-milliseconds")?;
             validate_signature(program, operation, &[], ExpectedType::I64)?;
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedSecurityAdapter::wall_clock(
                 interface,
                 operation.reference,
@@ -608,6 +646,9 @@ fn prepare_adapter(
                 &[ExpectedType::I64],
                 ExpectedType::Bytes,
             )?;
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedSecurityAdapter::secure_random(
                 interface,
                 operation.reference,
@@ -616,6 +657,9 @@ fn prepare_adapter(
         NormalizedAdapterDescriptor::Identifier => {
             let operation = require_operation(program, requirement, "uuid-v4")?;
             validate_signature(program, operation, &[], ExpectedType::Text)?;
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedSecurityAdapter::identifier(
                 interface,
                 operation.reference,
@@ -656,6 +700,9 @@ fn prepare_adapter(
                 };
                 selected.insert(operation.reference, kind);
             }
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedPasswordHashAdapter::new_selected(
                 interface,
                 selected,
@@ -673,6 +720,9 @@ fn prepare_adapter(
                 &[ExpectedType::Bytes],
                 ExpectedType::Bool,
             )?;
+            let Some(AdapterPreparation { secrets, .. }) = preparation else {
+                return Ok(None);
+            };
             Ok(Arc::new(NormalizedSecretVerifierAdapter::new(
                 interface,
                 operation.reference,
@@ -715,6 +765,9 @@ fn prepare_adapter(
                 };
                 selected.insert(operation.reference, kind);
             }
+            if preparation.is_none() {
+                return Ok(None);
+            }
             Ok(Arc::new(NormalizedByteStreamAdapter::new_selected(
                 requirement.reference,
                 interface,
@@ -734,6 +787,12 @@ fn prepare_adapter(
                 &[ExpectedType::HttpHeaders],
                 ExpectedType::HttpResponse,
             )?;
+            let Some(AdapterPreparation {
+                secrets, runtime, ..
+            }) = preparation
+            else {
+                return Ok(None);
+            };
             let named_root_pem = match trust {
                 HttpClientTrust::WebpkiRoots => None,
                 HttpClientTrust::NamedPemRoot { secret } => Some(secrets.require(secret)?.text()?),
@@ -757,37 +816,56 @@ fn prepare_adapter(
             namespace,
             limits,
         } => {
+            let admit = NormalizedDataAdapter::admit(program, requirement)?;
+            let Some(AdapterPreparation {
+                deployment_directory,
+                ..
+            }) = preparation
+            else {
+                return Ok(None);
+            };
             let root = resolve_relative_directory(deployment_directory, root, "data root")?;
             let store = DataStore::open(&root, namespace.clone(), limits.clone())?;
-            let adapter = NormalizedDataAdapter::prepare(program, requirement, store)?;
+            let adapter = admit(store);
             finish_preflight(&adapter, adapter.preflight())?;
             Ok(Arc::new(adapter))
         }
         NormalizedAdapterDescriptor::ObjectMemory { prefix, limits } => {
-            let engine = ObjectEngine::in_memory(runtime.clone(), prefix.clone(), limits.clone())?;
-            Ok(Arc::new(NormalizedObjectStorageAdapter::prepare(
+            let admit = NormalizedObjectStorageAdapter::admit(
                 program,
                 requirement,
                 NormalizedAdapterKind::ObjectMemory,
                 stream_requirements,
-                engine,
-            )?))
+            )?;
+            let Some(AdapterPreparation { runtime, .. }) = preparation else {
+                return Ok(None);
+            };
+            let engine = ObjectEngine::in_memory(runtime.clone(), prefix.clone(), limits.clone())?;
+            Ok(Arc::new(admit(engine)))
         }
         NormalizedAdapterDescriptor::ObjectLocal {
             root,
             prefix,
             limits,
         } => {
-            let root = resolve_relative_directory(deployment_directory, root, "object root")?;
-            let engine =
-                ObjectEngine::local(runtime.clone(), &root, prefix.clone(), limits.clone())?;
-            Ok(Arc::new(NormalizedObjectStorageAdapter::prepare(
+            let admit = NormalizedObjectStorageAdapter::admit(
                 program,
                 requirement,
                 NormalizedAdapterKind::ObjectLocal,
                 stream_requirements,
-                engine,
-            )?))
+            )?;
+            let Some(AdapterPreparation {
+                deployment_directory,
+                runtime,
+                ..
+            }) = preparation
+            else {
+                return Ok(None);
+            };
+            let root = resolve_relative_directory(deployment_directory, root, "object root")?;
+            let engine =
+                ObjectEngine::local(runtime.clone(), &root, prefix.clone(), limits.clone())?;
+            Ok(Arc::new(admit(engine)))
         }
         NormalizedAdapterDescriptor::ObjectS3 {
             endpoint,
@@ -800,6 +878,18 @@ fn prepare_adapter(
             secret_key_secret,
             limits,
         } => {
+            let admit = NormalizedObjectStorageAdapter::admit(
+                program,
+                requirement,
+                NormalizedAdapterKind::ObjectS3,
+                stream_requirements,
+            )?;
+            let Some(AdapterPreparation {
+                secrets, runtime, ..
+            }) = preparation
+            else {
+                return Ok(None);
+            };
             let access_key = secrets.require(access_key_secret)?.text()?.to_owned();
             let secret_key = secrets.require(secret_key_secret)?.text()?.to_owned();
             let engine = ObjectEngine::s3(
@@ -815,13 +905,7 @@ fn prepare_adapter(
                 },
                 limits.clone(),
             )?;
-            Ok(Arc::new(NormalizedObjectStorageAdapter::prepare(
-                program,
-                requirement,
-                NormalizedAdapterKind::ObjectS3,
-                stream_requirements,
-                engine,
-            )?))
+            Ok(Arc::new(admit(engine)))
         }
         NormalizedAdapterDescriptor::DurableQueueData {
             root,
@@ -829,19 +913,27 @@ fn prepare_adapter(
             data_limits,
             limits,
         } => {
-            let root = resolve_relative_directory(deployment_directory, root, "queue data root")?;
-            let store = DataStore::open(&root, namespace.clone(), data_limits.clone())?;
-            let engine = DurableQueueEngine::data(store, limits.clone())?;
-            let adapter = NormalizedDurableQueueAdapter::prepare(
+            let admit = NormalizedDurableQueueAdapter::admit(
                 program,
                 requirement,
                 NormalizedAdapterKind::DurableQueueData,
-                engine,
             )?;
+            let Some(AdapterPreparation {
+                deployment_directory,
+                ..
+            }) = preparation
+            else {
+                return Ok(None);
+            };
+            let root = resolve_relative_directory(deployment_directory, root, "queue data root")?;
+            let store = DataStore::open(&root, namespace.clone(), data_limits.clone())?;
+            let engine = DurableQueueEngine::data(store, limits.clone())?;
+            let adapter = admit(engine);
             finish_preflight(&adapter, adapter.preflight())?;
             Ok(Arc::new(adapter))
         }
-    }
+    };
+    adapter.map(Some)
 }
 
 fn finish_preflight(

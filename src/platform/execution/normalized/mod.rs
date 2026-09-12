@@ -41,22 +41,26 @@ mod value_schema;
 mod vm;
 mod worker;
 
+pub(crate) use value::{MAXIMUM_ADMISSION_ITEMS, MAXIMUM_VALUE_ALLOCATION_BYTES};
+
 pub(crate) use capability::{
     CAPABILITY_GRANT_CONTRACT_VERSION, NormalizedGrantAuthorityRevision, NormalizedGrantLimit,
     NormalizedSharingDomain,
 };
 pub(crate) use deployment::{
     NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
-    NormalizedPreparedDeployment,
+    NormalizedPreparedDeployment, admit_deployment_adapter,
 };
 pub(crate) use http::NormalizedHttpApplication;
 pub(crate) use prepare::NormalizedProgram;
 pub(crate) use resident::NormalizedResidentDeployment;
 pub(crate) use runner::{
-    NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt, run_graph_tests,
-    run_pure_command,
+    NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt,
+    PreparedCommandInvocation, execution_diagnostic, prepare_command_invocation,
+    run_foreground_command, run_graph_tests, run_pure_command,
 };
 pub(crate) use session::NormalizedSessionApplication;
+pub(crate) use vm::NormalizedRunObservation;
 pub(crate) use vm::NormalizedRunPolicy;
 pub(crate) use worker::NormalizedWorkerApplication;
 #[cfg(test)]

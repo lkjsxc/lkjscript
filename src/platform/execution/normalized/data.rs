@@ -68,11 +68,10 @@ pub(crate) struct NormalizedDataAdapter {
 }
 
 impl NormalizedDataAdapter {
-    pub(crate) fn prepare(
+    pub(crate) fn admit(
         program: &NormalizedProgram,
         requirement: &NormalizedRequirement,
-        store: DataStore,
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<impl FnOnce(DataStore) -> Self, Diagnostic> {
         require_standard_interface(requirement.interface)?;
         let mut operations = BTreeMap::new();
         let mut key_part = None;
@@ -296,7 +295,7 @@ impl NormalizedDataAdapter {
             scan_page: require_codec(scan_page, "data scan page")?,
         };
         let exact_operations = operations.keys().copied().collect();
-        Ok(Self {
+        Ok(move |store| Self {
             interface: requirement.interface,
             operations,
             exact_operations,

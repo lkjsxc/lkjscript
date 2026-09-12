@@ -23,6 +23,179 @@ const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
 const EXECUTABLE_BUSY_ATTEMPTS: usize = 12;
 const EXECUTABLE_BUSY_DELAY: Duration = Duration::from_millis(50);
 
+#[test]
+fn foreground_starters_run_from_two_bundles_after_authoring_checkouts_are_removed() {
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &executable);
+    for name in ["first", "second"] {
+        let project = temporary.path().join(format!("author-{name}"));
+        let created = compact_success_at(
+            &executable,
+            temporary.path(),
+            &["new", path(&project), "--template", "command"],
+        );
+        let deployment = compact_record(&created, "deployment");
+        assert_eq!(compact_field(deployment, "listener"), Some("none"));
+        assert_eq!(compact_field(deployment, "target"), Some("main"));
+        let descriptor_path = project.join("command.deployment.json");
+        let descriptor: Value =
+            serde_json::from_slice(&std::fs::read(&descriptor_path).unwrap()).unwrap();
+        assert!(descriptor.get("runtime").is_none() && descriptor.get("execution").is_none());
+        assert_eq!(descriptor["artifact"], "generated/application.lkja");
+        assert_eq!(descriptor["grants"], serde_json::json!([]));
+        compact_success_at(
+            &executable,
+            temporary.path(),
+            &["--project", path(&project), "check"],
+        );
+        let authoring = compact_success_at(
+            &executable,
+            temporary.path(),
+            &["--project", path(&project), "run", "main"],
+        );
+        assert_eq!(
+            compact_field(compact_record(&authoring, "execution"), "differential"),
+            Some("equal")
+        );
+        let bundle = temporary.path().join(format!("bundle-{name}"));
+        std::fs::create_dir(&bundle).unwrap();
+        std::fs::create_dir(bundle.join("generated")).unwrap();
+        compact_success_at(
+            &executable,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "build",
+                "--output",
+                path(&bundle.join("generated/application.lkja")),
+            ],
+        );
+        std::fs::copy(descriptor_path, bundle.join("command.deployment.json")).unwrap();
+        std::fs::remove_dir_all(&project).unwrap();
+        let cwd = temporary.path().join(format!("unrelated-{name}"));
+        std::fs::create_dir(&cwd).unwrap();
+        let result = compact_success_at(
+            &executable,
+            &cwd,
+            &[
+                "run",
+                "--deployment",
+                path(&bundle.join("command.deployment.json")),
+            ],
+        );
+        assert!(
+            !result
+                .iter()
+                .any(|record| matches!(record.operation.as_str(), "cache" | "compiler"))
+        );
+        let execution = compact_record(&result, "execution");
+        for (key, expected) in [
+            ("value", "\"hello\""),
+            ("execution-mode", "production"),
+            ("verification", "not-performed"),
+            ("execution-profile", "trusted-foreground"),
+            ("instruction-limit", "absent"),
+            ("allocation-limit", "absent"),
+            ("collection-limit", "absent"),
+            ("capability-call-limit", "absent"),
+            ("deadline-milliseconds", "absent"),
+        ] {
+            assert_eq!(compact_field(execution, key), Some(expected), "{key}");
+        }
+        assert!(compact_field(execution, "differential").is_none());
+        let production: Value =
+            serde_json::from_str(compact_field(execution, "production-observation").unwrap())
+                .unwrap();
+        assert_eq!(production["capability_calls"], 0);
+        assert_eq!(production["live_handles_after"], 0);
+        let cleanup: Value =
+            serde_json::from_str(compact_field(execution, "cleanup").unwrap()).unwrap();
+        assert_eq!(cleanup["remaining_tasks"], 0);
+        assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
+        assert!(!project.exists());
+    }
+}
+
+#[test]
+fn foreground_grammar_rejects_conflicts_before_any_project_or_deployment_read() {
+    let temporary = tempfile::tempdir().unwrap();
+    for arguments in [
+        vec!["run", "main", "--deployment", "absent"],
+        vec![
+            "--project",
+            "absent-project",
+            "run",
+            "--deployment",
+            "absent",
+        ],
+        vec![
+            "run",
+            "--deployment",
+            "absent",
+            "--project",
+            "absent-project",
+        ],
+        vec!["run", "--deployment", "absent", "--deployment", "other"],
+        vec![
+            "run",
+            "--deployment",
+            "absent",
+            "--arguments",
+            "[]",
+            "--arguments",
+            "[]",
+        ],
+        vec!["run", "--deployment", "absent", "--unknown", "x"],
+        vec!["run", "--deployment"],
+    ] {
+        let rejected = compact_failure_output(command_at(&binary(), temporary.path(), &arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("cli_usage")
+        );
+    }
+    assert_eq!(std::fs::read_dir(temporary.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn foreground_rejects_http_before_loading_a_named_secret_or_opening_a_listener() {
+    let temporary = tempfile::tempdir().unwrap();
+    let project = temporary.path().join("service");
+    let executable = binary();
+    compact_success_at(
+        &executable,
+        temporary.path(),
+        &["new", path(&project), "--template", "http"],
+    );
+    compact_success_at(
+        &executable,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "build",
+            "--output",
+            path(&project.join("generated/application.lkja")),
+        ],
+    );
+    let path_descriptor = project.join("service.deployment.json");
+    let mut descriptor: Value =
+        serde_json::from_slice(&std::fs::read(&path_descriptor).unwrap()).unwrap();
+    descriptor["secrets"] = serde_json::json!([{"name":"must-not-load","variable":"LKJSCRIPT_FOREGROUND_ABSENT_SECRET"}]);
+    std::fs::write(&path_descriptor, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    let failure = compact_failure_output(command_at(
+        &executable,
+        temporary.path(),
+        &["run", "--deployment", path(&path_descriptor)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&failure, "diagnostic"), "code"),
+        Some("deployment_command_runner")
+    );
+}
+
 fn binary() -> PathBuf {
     let Some(candidate) = env::var_os(RELEASE_CANDIDATE_ENVIRONMENT) else {
         return PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"));

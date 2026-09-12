@@ -12,7 +12,6 @@ use super::data::{
     MAXIMUM_DATA_TRANSACTION_MUTATIONS, MAXIMUM_DATA_VALUE_BYTES,
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::RunPolicy;
 use super::execution::normalized::{
     NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
     NormalizedGrantAuthorityRevision, NormalizedGrantLimit, NormalizedHttpApplication,
@@ -20,6 +19,7 @@ use super::execution::normalized::{
     NormalizedRunPolicy, NormalizedSessionApplication, NormalizedSharingDomain,
     NormalizedWorkerApplication,
 };
+use super::execution::{ExecutionControl, RunPolicy};
 use super::http::{
     HttpDispatchObservation, HttpLimits, HttpRequest, HttpResponse, HttpServerReceipt,
     MAXIMUM_HTTP_BODY_BYTES, MAXIMUM_HTTP_HEADER_BYTES, MAXIMUM_HTTP_HEADERS,
@@ -73,6 +73,8 @@ pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
+pub(crate) const STARTER_COMMAND_DESCRIPTOR_PATH: &str = "command.deployment.json";
+pub(crate) const STARTER_COMMAND_TARGET: &str = "main";
 pub(crate) const STARTER_HTTP_ARTIFACT_PATH: &str = "generated/application.lkja";
 pub(crate) const STARTER_HTTP_ARTIFACT_DIRECTORY: &str = "generated";
 pub(crate) const STARTER_HTTP_TARGET: &str = "serve";
@@ -114,8 +116,10 @@ pub struct DeploymentDescriptor {
     pub artifact: String,
     pub target: String,
     pub listen: Option<String>,
-    pub runtime: ResidentLimits,
-    pub execution: RunPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<ResidentLimits>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<RunPolicy>,
     pub http: Option<HttpLimits>,
     pub session: Option<SessionLimits>,
     pub worker: Option<WorkerLimits>,
@@ -263,7 +267,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         None,
     ),
-    schema_field(
+    optional_schema_field(
         "deployment.runtime",
         "object",
         None,
@@ -271,7 +275,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         Some("runtime"),
     ),
-    schema_field(
+    optional_schema_field(
         "deployment.execution",
         "object",
         None,
@@ -1339,21 +1343,39 @@ pub(crate) const DEPLOYMENT_ADAPTER_SCHEMAS: &[DeploymentAdapterSchema] = &[
     },
 ];
 
+pub(crate) fn starter_command_deployment() -> DeploymentDescriptor {
+    DeploymentDescriptor {
+        contract_version: DEPLOYMENT_CONTRACT_VERSION,
+        artifact: STARTER_HTTP_ARTIFACT_PATH.to_owned(),
+        target: STARTER_COMMAND_TARGET.to_owned(),
+        listen: None,
+        runtime: None,
+        execution: None,
+        http: None,
+        session: None,
+        worker: None,
+        streams: StreamLimits::default(),
+        configuration: BTreeMap::new(),
+        secrets: Vec::new(),
+        grants: Vec::new(),
+    }
+}
+
 pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnostic> {
     let descriptor = DeploymentDescriptor {
         contract_version: DEPLOYMENT_CONTRACT_VERSION,
         artifact: STARTER_HTTP_ARTIFACT_PATH.to_owned(),
         target: STARTER_HTTP_TARGET.to_owned(),
         listen: Some(STARTER_HTTP_LISTENER.to_owned()),
-        runtime: ResidentLimits {
+        runtime: Some(ResidentLimits {
             maximum_concurrent_tasks: 16,
             maximum_queued_tasks: 64,
             request_deadline_milliseconds: 30_000,
             shutdown_grace_milliseconds: 30_000,
             cancellation_grace_milliseconds: 5_000,
             ..ResidentLimits::default()
-        },
-        execution: RunPolicy::default(),
+        }),
+        execution: Some(RunPolicy::default()),
         http: Some(HttpLimits {
             maximum_request_body_bytes: 8 * 1024 * 1024,
             maximum_response_body_bytes: 4 * 1024 * 1024,
@@ -1476,39 +1498,136 @@ impl std::fmt::Debug for PreparedDeployment {
     }
 }
 
-impl PreparedDeployment {
-    pub fn load(path: &Path, runtime: Handle) -> Result<Self, Diagnostic> {
+/// Read-only admission owns no live adapters and never reads named secrets.
+struct AdmittedDeployment {
+    descriptor: DeploymentDescriptor,
+    program: Arc<NormalizedProgram>,
+    artifact_digest: String,
+    directory: PathBuf,
+}
+
+impl AdmittedDeployment {
+    fn load(path: &Path, control: &ExecutionControl) -> Result<Self, Diagnostic> {
+        let checkpoint = || {
+            control
+                .check()
+                .map_err(super::execution::normalized::execution_diagnostic)
+        };
+        checkpoint()?;
         let descriptor_bytes = read_bounded(
             path,
             MAXIMUM_DEPLOYMENT_BYTES as u64,
             "deployment descriptor",
         )?;
         let descriptor = decode_deployment(&descriptor_bytes)?;
-        let directory = path.parent().unwrap_or_else(|| Path::new("."));
-        let artifact_path = resolve_relative(directory, &descriptor.artifact, "artifact")?;
+        let directory = path.parent().unwrap_or_else(|| Path::new(".")).to_owned();
+        let artifact_path = resolve_relative(&directory, &descriptor.artifact, "artifact")?;
+        checkpoint()?;
         let artifact_bytes = read_bounded(
             &artifact_path,
             MAXIMUM_ARTIFACT_BUNDLE_BYTES,
             "component artifact",
         )?;
         let artifact = load_artifact(&artifact_bytes)?;
+        checkpoint()?;
         let artifact_digest = artifact.bundle_digest.to_string();
-        let program = Arc::new(NormalizedProgram::prepare(artifact)?);
-
-        // Resolve target, runner, exact requirements, adapter kinds, and grant closure before
-        // reading any named secret from the process environment.
+        let program = Arc::new(NormalizedProgram::prepare_with_control(artifact, control)?);
         validate_program_descriptor(&descriptor, &program)?;
-        let secrets = SecretCatalog::from_environment(&descriptor.secrets)?;
-        Self::prepare(
+        checkpoint()?;
+        Ok(Self {
             descriptor,
             program,
             artifact_digest,
             directory,
-            runtime,
-            secrets,
-        )
+        })
     }
 
+    fn prepare(
+        self,
+        runtime: Handle,
+        control: &ExecutionControl,
+    ) -> Result<PreparedDeployment, Diagnostic> {
+        control
+            .check()
+            .map_err(super::execution::normalized::execution_diagnostic)?;
+        let secrets = SecretCatalog::from_environment(&self.descriptor.secrets)?;
+        control
+            .check()
+            .map_err(super::execution::normalized::execution_diagnostic)?;
+        PreparedDeployment::prepare(
+            self.descriptor,
+            self.program,
+            self.artifact_digest,
+            &self.directory,
+            runtime,
+            secrets,
+            control,
+        )
+    }
+}
+
+pub(crate) struct ForegroundCommandReceipt {
+    pub deployment: DeploymentObservation,
+    pub repository: String,
+    pub package: String,
+    pub revision: String,
+    pub semantic_state: String,
+    pub result_json: Vec<u8>,
+    pub production: super::execution::normalized::NormalizedRunObservation,
+    pub policy: NormalizedRunPolicy,
+    pub deadline_milliseconds: Option<u64>,
+    pub invocation_nanoseconds: u64,
+    pub shutdown: ShutdownReceipt,
+}
+
+impl PreparedDeployment {
+    pub fn load(path: &Path, runtime: Handle) -> Result<Self, Diagnostic> {
+        let control = ExecutionControl::uncancelled();
+        let admitted = AdmittedDeployment::load(path, &control)?;
+        if admitted.descriptor.runtime.is_none() || admitted.descriptor.execution.is_none() {
+            return Err(missing_resident_policy());
+        }
+        admitted.prepare(runtime, &control)
+    }
+
+    pub(crate) fn load_foreground(
+        path: &Path,
+        arguments: &[u8],
+        runtime: Handle,
+        control: &ExecutionControl,
+    ) -> Result<
+        (
+            Self,
+            super::execution::normalized::PreparedCommandInvocation,
+        ),
+        Diagnostic,
+    > {
+        // Bound the argument container before acquiring or preparing any artifact resources.
+        super::json::decode_strict(arguments, super::json::JsonLimits::default())?;
+        let admitted = AdmittedDeployment::load(path, control)?;
+        let name = Name::new(admitted.descriptor.target.clone())?;
+        if admitted
+            .program
+            .root_target(&name)
+            .is_none_or(|target| target.runner != RunnerKind::Command)
+        {
+            return Err(deployment_error(
+                "deployment_command_runner",
+                "foreground run requires an exact Command target",
+            ));
+        }
+        let invocation = super::execution::normalized::prepare_command_invocation(
+            &admitted.program,
+            &name,
+            arguments,
+            super::json::JsonLimits::default(),
+            control,
+        )?;
+        let prepared = admitted.prepare(runtime, control)?;
+        Ok((prepared, invocation))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn prepare(
         descriptor: DeploymentDescriptor,
         program: Arc<NormalizedProgram>,
@@ -1516,6 +1635,7 @@ impl PreparedDeployment {
         deployment_directory: &Path,
         runtime: Handle,
         secrets: SecretCatalog,
+        control: &ExecutionControl,
     ) -> Result<Self, Diagnostic> {
         let target_name = Name::new(descriptor.target.clone())?;
         let target = program.root_target(&target_name).cloned().ok_or_else(|| {
@@ -1597,6 +1717,7 @@ impl PreparedDeployment {
             &secrets,
             deployment_directory,
             runtime,
+            control,
         )?;
         let observation = DeploymentObservation {
             contract_version: DEPLOYMENT_CONTRACT_VERSION,
@@ -1628,9 +1749,84 @@ impl PreparedDeployment {
         NormalizedResidentDeployment::prepare(
             Arc::clone(&self.program),
             self.deployment.clone(),
-            self.descriptor.runtime.clone(),
-            normalized_run_policy(self.descriptor.execution),
+            self.descriptor
+                .runtime
+                .clone()
+                .ok_or_else(missing_resident_policy)?,
+            normalized_run_policy(
+                self.descriptor
+                    .execution
+                    .ok_or_else(missing_resident_policy)?,
+            ),
         )
+    }
+
+    pub(crate) fn close_uninvoked(&self, error: &mut Diagnostic) {
+        for failure in self.deployment.capabilities().shutdown() {
+            error.notes.push(format!(
+                "adapter cleanup failed with safe code '{}'",
+                failure.code
+            ));
+        }
+    }
+
+    pub(crate) async fn run_foreground(
+        self,
+        invocation: super::execution::normalized::PreparedCommandInvocation,
+        cancellation: impl std::future::Future<Output = ()>,
+    ) -> Result<ForegroundCommandReceipt, Diagnostic> {
+        let policy = self
+            .descriptor
+            .execution
+            .map(normalized_run_policy)
+            .unwrap_or_else(NormalizedRunPolicy::foreground);
+        let deadline_milliseconds = self
+            .descriptor
+            .runtime
+            .as_ref()
+            .map(|limits| limits.request_deadline_milliseconds);
+        let limits = self
+            .descriptor
+            .runtime
+            .clone()
+            .unwrap_or_else(|| ResidentLimits {
+                maximum_concurrent_tasks: 1,
+                maximum_queued_tasks: 0,
+                ..ResidentLimits::default()
+            });
+        let resident = match NormalizedResidentDeployment::prepare(
+            Arc::clone(&self.program),
+            self.deployment.clone(),
+            limits,
+            policy,
+        ) {
+            Ok(resident) => {
+                resident.foreground(deadline_milliseconds.map(std::time::Duration::from_millis))
+            }
+            Err(mut error) => {
+                self.close_uninvoked(&mut error);
+                return Err(error);
+            }
+        };
+        let receipt = super::execution::normalized::run_foreground_command(
+            resident,
+            invocation,
+            cancellation,
+        )
+        .await?;
+        Ok(ForegroundCommandReceipt {
+            deployment: self.observation,
+            repository: self.program.root_repository.to_string(),
+            package: self.program.root_package.to_string(),
+            revision: self.program.root_revision.to_string(),
+            semantic_state: self.program.root_semantic_state.to_string(),
+            result_json: receipt.result_json,
+            production: receipt.production,
+            policy,
+            deadline_milliseconds,
+            invocation_nanoseconds: receipt.invocation_nanoseconds,
+            shutdown: receipt.shutdown,
+        })
     }
 
     pub fn http_application(&self) -> Result<PreparedHttpApplication, Diagnostic> {
@@ -1662,6 +1858,13 @@ impl PreparedDeployment {
         })?;
         NormalizedSessionApplication::new(self.resident()?, limits).map(PreparedSessionApplication)
     }
+}
+
+pub(crate) fn foreground_visibility(error: &mut Diagnostic) {
+    error.notes.push(
+        "earlier application effects may already be visible; automatic retry is not safe"
+            .to_owned(),
+    );
 }
 
 #[derive(Clone)]
@@ -1790,7 +1993,15 @@ fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
         .filter_map(|field| field.path.strip_prefix("deployment."))
         .filter(|field| !field.contains('.'))
         .collect::<BTreeSet<_>>();
-    if root.keys().map(String::as_str).collect::<BTreeSet<_>>() != expected_root {
+    let supplied = root.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    if !supplied.is_subset(&expected_root)
+        || expected_root
+            .difference(&supplied)
+            .any(|key| !matches!(*key, "execution" | "runtime"))
+        || ["execution", "runtime"]
+            .iter()
+            .any(|key| root.get(*key).is_some_and(serde_json::Value::is_null))
+    {
         return Err(deployment_error(
             "deployment_json",
             "deployment descriptor has a missing, duplicate, or unknown top-level field",
@@ -1874,12 +2085,23 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
             "listener descriptor is empty, excessive, or contains NUL",
         ));
     }
-    descriptor.runtime.validate()?;
+    if let Some(runtime) = &descriptor.runtime {
+        runtime.validate()?;
+    }
     descriptor.streams.validate()?;
-    if descriptor.execution.instruction_fuel == 0
-        || descriptor.execution.maximum_call_depth == 0
-        || descriptor.execution.maximum_value_stack == 0
+    if (descriptor.listen.is_some()
+        || descriptor.http.is_some()
+        || descriptor.session.is_some()
+        || descriptor.worker.is_some())
+        && (descriptor.runtime.is_none() || descriptor.execution.is_none())
     {
+        return Err(missing_resident_policy());
+    }
+    if descriptor.execution.is_some_and(|execution| {
+        execution.instruction_fuel == 0
+            || execution.maximum_call_depth == 0
+            || execution.maximum_value_stack == 0
+    }) {
         return Err(deployment_error(
             "deployment_execution_limit",
             "execution fuel, call depth, and value stack limits must be positive",
@@ -1892,7 +2114,13 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
         session.validate()?;
     }
     if let Some(worker) = &descriptor.worker {
-        worker.validate(descriptor.runtime.maximum_concurrent_tasks)?;
+        worker.validate(
+            descriptor
+                .runtime
+                .as_ref()
+                .ok_or_else(missing_resident_policy)?
+                .maximum_concurrent_tasks,
+        )?;
     }
     ConfigurationStore::observe_values(&descriptor.configuration)?;
     if descriptor.secrets.len() > MAXIMUM_DEPLOYMENT_GRANTS {
@@ -2075,6 +2303,17 @@ fn validate_program_descriptor(
         .iter()
         .map(|grant| (grant.requirement.as_str(), grant))
         .collect::<BTreeMap<_, _>>();
+    let stream_requirements = component
+        .requirements
+        .iter()
+        .filter_map(|index| program.requirements.get(index.0 as usize))
+        .filter(|requirement| {
+            supplied
+                .get(requirement.name.as_str())
+                .is_some_and(|grant| matches!(grant.adapter, AdapterDescriptor::ByteStream))
+        })
+        .map(|requirement| requirement.reference)
+        .collect::<Vec<_>>();
     for requirement_index in component.requirements.iter().copied() {
         let requirement = program
             .requirements
@@ -2094,7 +2333,12 @@ fn validate_program_descriptor(
                 ),
             )
         })?;
-        validate_exact_adapter_interface(requirement.interface, &grant.adapter)?;
+        super::execution::normalized::admit_deployment_adapter(
+            program,
+            requirement,
+            &normalized_adapter(&grant.adapter, &descriptor.configuration),
+            &stream_requirements,
+        )?;
     }
     if supplied.len() != component.requirements.len() {
         let required = component
@@ -2116,44 +2360,15 @@ fn validate_program_descriptor(
     Ok(())
 }
 
-fn validate_exact_adapter_interface(
-    interface: super::kernel::DeclarationReference,
-    adapter: &AdapterDescriptor,
-) -> Result<(), Diagnostic> {
-    const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
-    let declaration = match adapter {
-        AdapterDescriptor::Configuration => "decl_def8eec5eed34e86eda0df7ee7bb4883",
-        AdapterDescriptor::WallClock => "decl_8d99ab2f1d59391e1e21c17cc8757731",
-        AdapterDescriptor::SecureRandom => "decl_2ad39598d2945149fff8b841fe8b253e",
-        AdapterDescriptor::Identifier => "decl_92bb73b52bc3654abcbde47513873f42",
-        AdapterDescriptor::PasswordHash { .. } => "decl_375bc0a9f5214e8a27ede17a14e79f67",
-        AdapterDescriptor::SecretVerifier { .. } => "decl_172ae7f44000b32243d75a92e6733e50",
-        AdapterDescriptor::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
-        AdapterDescriptor::HttpClient { .. } => "decl_f1084ba5dca02ba338140747d0ea9d46",
-        AdapterDescriptor::Data { .. } => "decl_640e96fa57dee1c09557eb4bc7b53398",
-        AdapterDescriptor::ObjectMemory { .. }
-        | AdapterDescriptor::ObjectLocal { .. }
-        | AdapterDescriptor::ObjectS3 { .. } => "decl_ac421d578f44958595e92fa9f5fb1d43",
-        AdapterDescriptor::DurableQueueData { .. } => "decl_20a0ef729beda0abf0e743cd7e1126de",
-    };
-    if interface.package.to_string() != STANDARD_PACKAGE
-        || interface.declaration.to_string() != declaration
-    {
-        return Err(deployment_error(
-            "deployment_adapter_interface",
-            format!(
-                "{} adapter requires its exact maintained standard interface",
-                adapter.kind()
-            ),
-        ));
-    }
-    Ok(())
-}
-
 fn validate_runner_descriptor(
     descriptor: &DeploymentDescriptor,
     runner: RunnerKind,
 ) -> Result<(), Diagnostic> {
+    if runner != RunnerKind::Command
+        && (descriptor.runtime.is_none() || descriptor.execution.is_none())
+    {
+        return Err(missing_resident_policy());
+    }
     match runner {
         RunnerKind::Http => {
             if descriptor.listen.is_none() || descriptor.http.is_none() {
@@ -2310,11 +2525,18 @@ fn normalized_adapter(
 
 fn normalized_run_policy(policy: RunPolicy) -> NormalizedRunPolicy {
     NormalizedRunPolicy {
-        instruction_steps: policy.instruction_fuel,
+        instruction_steps: Some(policy.instruction_fuel),
         maximum_call_depth: policy.maximum_call_depth,
         maximum_value_stack: policy.maximum_value_stack,
         ..NormalizedRunPolicy::default()
     }
+}
+
+fn missing_resident_policy() -> Diagnostic {
+    deployment_error(
+        "deployment_policy_required",
+        "resident and private runner routes require complete execution and runtime objects",
+    )
 }
 
 fn resolve_relative(root: &Path, value: &str, label: &str) -> Result<PathBuf, Diagnostic> {
@@ -2582,20 +2804,112 @@ mod tests {
     }
 
     #[test]
+    fn foreground_policy_omission_is_distinct_from_null_and_resident_policy() {
+        let starter = starter_command_deployment();
+        let encoded = encode_deployment(&starter).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+        assert!(value.get("execution").is_none() && value.get("runtime").is_none());
+        let decoded = decode_deployment(&encoded).unwrap();
+        assert!(decoded.execution.is_none() && decoded.runtime.is_none());
+        for field in ["execution", "runtime"] {
+            let mut invalid = value.clone();
+            invalid[field] = serde_json::Value::Null;
+            assert_eq!(
+                decode_deployment(&serde_json::to_vec(&invalid).unwrap())
+                    .unwrap_err()
+                    .code,
+                "deployment_json"
+            );
+            let mut resident = serde_json::to_value(starter_http_deployment().unwrap()).unwrap();
+            resident.as_object_mut().unwrap().remove(field);
+            assert_eq!(
+                decode_deployment(&serde_json::to_vec(&resident).unwrap())
+                    .unwrap_err()
+                    .code,
+                "deployment_policy_required"
+            );
+        }
+        let bounded = RunPolicy::default();
+        let normalized = normalized_run_policy(bounded);
+        assert_eq!(normalized.instruction_steps, Some(bounded.instruction_fuel));
+        assert_eq!(normalized.maximum_allocated_bytes, Some(256 * 1024 * 1024));
+        assert_eq!(normalized.maximum_collection_items, Some(1_000_000));
+        assert_eq!(normalized.maximum_capability_calls, Some(100_000));
+        assert_eq!(normalized.maximum_call_depth, bounded.maximum_call_depth);
+        assert_eq!(normalized.maximum_value_stack, bounded.maximum_value_stack);
+    }
+
+    #[test]
     fn starter_http_descriptor_is_strict_loopback_only_and_fresh() {
         let first = starter_http_deployment().expect("first starter deployment");
         let second = starter_http_deployment().expect("second starter deployment");
         assert_eq!(first.artifact, STARTER_HTTP_ARTIFACT_PATH);
         assert_eq!(first.target, STARTER_HTTP_TARGET);
         assert_eq!(first.listen.as_deref(), Some(STARTER_HTTP_LISTENER));
-        assert_eq!(first.runtime.maximum_concurrent_tasks, 16);
-        assert_eq!(first.runtime.maximum_queued_tasks, 64);
-        assert_eq!(first.runtime.request_deadline_milliseconds, 30_000);
-        assert_eq!(first.runtime.shutdown_grace_milliseconds, 30_000);
-        assert_eq!(first.runtime.cancellation_grace_milliseconds, 5_000);
-        assert_eq!(first.execution.instruction_fuel, 10_000_000);
-        assert_eq!(first.execution.maximum_call_depth, 4_096);
-        assert_eq!(first.execution.maximum_value_stack, 1_000_000);
+        assert_eq!(
+            first
+                .runtime
+                .as_ref()
+                .expect("explicit starter policy")
+                .maximum_concurrent_tasks,
+            16
+        );
+        assert_eq!(
+            first
+                .runtime
+                .as_ref()
+                .expect("explicit starter policy")
+                .maximum_queued_tasks,
+            64
+        );
+        assert_eq!(
+            first
+                .runtime
+                .as_ref()
+                .expect("explicit starter policy")
+                .request_deadline_milliseconds,
+            30_000
+        );
+        assert_eq!(
+            first
+                .runtime
+                .as_ref()
+                .expect("explicit starter policy")
+                .shutdown_grace_milliseconds,
+            30_000
+        );
+        assert_eq!(
+            first
+                .runtime
+                .as_ref()
+                .expect("explicit starter policy")
+                .cancellation_grace_milliseconds,
+            5_000
+        );
+        assert_eq!(
+            first
+                .execution
+                .as_ref()
+                .expect("explicit starter policy")
+                .instruction_fuel,
+            10_000_000
+        );
+        assert_eq!(
+            first
+                .execution
+                .as_ref()
+                .expect("explicit starter policy")
+                .maximum_call_depth,
+            4_096
+        );
+        assert_eq!(
+            first
+                .execution
+                .as_ref()
+                .expect("explicit starter policy")
+                .maximum_value_stack,
+            1_000_000
+        );
         let http = first.http.as_ref().expect("HTTP limits");
         assert_eq!(http.maximum_request_body_bytes, 8 * 1024 * 1024);
         assert_eq!(http.maximum_response_body_bytes, 4 * 1024 * 1024);

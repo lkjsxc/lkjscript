@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.31 executable provides offline command, signature-indexed inbound HTTP, structured
+The supported v0.1.32 executable provides offline command, signature-indexed inbound HTTP, structured
 interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
 lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
 accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
@@ -14,14 +14,20 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Immutable `v0.1.31` adds finite recursive nominal data to explicit parametric records and variants.
-Freshly authored recursive trees compose with offline packages, retained functions, typed persistence
-and concrete session state. Independent exact-version and latest downloads each passed all five
-behavioral owners. The [recursive delivery reconciliation](docs/campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
-binds the source, target, immutable publication and both download boundaries.
+Immutable `v0.1.32` adds ordinary effect-polymorphic task libraries, retained callbacks and recursive
+nominal payload composition. Its independent exact/latest downloads passed both small lifecycles
+and the bound public suite. The [delivery reconciliation](docs/campaigns/202609121214.md) binds
+the source, target, immutable publication and both download boundaries.
+
+Current source adds foreground artifact commands and selects their combined release with task
+iteration. `run --deployment PATH` runs a pure or task Command entry once, using exact operator
+grants, and closes its owned work before success. Omitted command policies mean no cumulative
+instruction/allocation/collection/capability-call quota and no implicit deadline. Structural,
+codec, adapter and per-grant limits remain enforced. Project `run TARGET` remains a bounded pure
+differential route. See the [foreground campaign](docs/campaigns/202609121842.md) for delivery status.
 
 The supported release selects exact source commit
-`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. The release includes public exact
+`67baaf0b081842e0e2e3745e8d5503e22cc791e4`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -94,12 +100,12 @@ runtime environments; unconstrained parameters, secrets, streams, and resources 
 capture-safe subset. The capture-safe cutover used Graph 12 while preserving monomorphic TypeObject
 10 bytes and persisted typed-data layouts; the nominal cutover advances graph admission to Graph 13
 and retains the maintained application's semantic owners.
-The current source extends that foundation with explicit effect parameters, authority-free task
+The supported v0.1.32 release extends that foundation with explicit effect parameters, authority-free task
 function values and graph-owned `task-fold-left` / `task-map`. A pure factory can return a bound task
 callback; an offline generic library invokes it under the consumer's exact allowance and checked
 grants. Graph 14 adds a distinct task-callable envelope while preserving unchanged pure/type/data
 bytes. The [effect campaign](docs/campaigns/202609111843.md) tracks its independent public workload,
-maintained cutover and selected publication separately from the supported v0.1.31 release.
+maintained cutover and completed v0.1.32 publication.
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
 maintained-consumer cutover. The [public milestone evidence](docs/evidence/202609092050-capture-safe-public-milestone.json)
@@ -138,10 +144,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.31` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.31) owns the immutable
+[`v0.1.32` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.32) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.31/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.31/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.32/lkjscript-x86_64-unknown-linux-musl.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.32/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -176,13 +182,52 @@ cd /tmp/lkjscript-demo
 
 The final command returns the typed text value `"hello"`. The command recipe owns one application
 module, a private pure implementation, a component and port, target `main`, one graph-owned test,
-and an exact dependency on the built-in standard package. It contains typed meaning authority only
-and does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
+and an exact dependency on the built-in standard package. The accepted graph owns program meaning;
+the separate `command.deployment.json` auxiliary file supplies operator choices. Creation does not
+read source assets from the checkout, Cargo, the network, or an external template. Use `--template minimal`
 for an empty dependency-free package.
+
+### Foreground bundles from one installed runtime
+
+With a foreground-capable executable, this complete disposable example creates two bundles,
+removes their authoring checkouts, and runs each from an unrelated directory:
+
+```sh
+lkj_runtime="/absolute/path/to/lkjscript"
+foreground_demo=$(mktemp -d)
+"$lkj_runtime" capabilities deployment
+for app in alpha beta; do
+  "$lkj_runtime" new "$foreground_demo/author-$app" --template command
+  "$lkj_runtime" --project "$foreground_demo/author-$app" check
+  mkdir -p "$foreground_demo/$app/generated" "$foreground_demo/cwd-$app"
+  "$lkj_runtime" --project "$foreground_demo/author-$app" build \
+    --output "$foreground_demo/$app/generated/application.lkja"
+  cp "$foreground_demo/author-$app/command.deployment.json" "$foreground_demo/$app/"
+  rm -r "$foreground_demo/author-$app"
+  (cd "$foreground_demo/cwd-$app" && "$lkj_runtime" run \
+    --deployment "$foreground_demo/$app/command.deployment.json")
+done
+```
+
+Each returns typed `"hello"`, `execution-mode=production`, `verification=not-performed` and
+completed cleanup. The starter needs no grants or budget editing. Authors can edit its ordinary
+graph into a task with existing change operations. Its descriptor then grants the entire selected
+component explicitly, with artifact-relative data roots; two descriptors may independently bind
+`alpha/data` and `beta/data` while using the same installed executable. The package acceptance
+witness does this with imported task callbacks and persistent execution counters.
+
+The `.lkja` file is a dependency-complete runtime-dependent bundle; it does not embed an executable
+runtime. Separate processes have independent invocation/deployment owners. Supplied complete
+`execution` objects retain instruction fuel plus cumulative defaults of 256 MiB allocation,
+1,000,000 collection items and 100,000 capability calls. Omission removes those lifetime quotas
+only on foreground commands. Call depth/value stack, finite value and codec admission, list
+representation, adapter limits and exact per-grant quotas remain. SIGINT/SIGTERM cancel and join;
+a failure after invocation starts may leave earlier effects visible and is unsafe to retry blindly.
+Keep the previous executable and immutable bundles for recovery; no operational data is migrated.
 
 ### HTTP application from the public binary
 
-The immutable v0.1.31 download above exposes this complete workflow from the same copied executable:
+The immutable v0.1.32 download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -221,7 +266,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.31 download can create the complete closed NIP-11 information slice:
+The immutable v0.1.32 download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -250,7 +295,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.31 download exposes the complete first-party boundary and topology authoring
+The immutable v0.1.32 download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -262,7 +307,7 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.31`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.32`.
 
 Public compact change records can add an exact staged built-in dependency,
 components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
@@ -380,7 +425,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.31 executable can obtain one complete admitted local neighborhood
+The public v0.1.32 executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -395,7 +440,7 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-The public v0.1.31 executable can project one complete accepted local function definition through
+The public v0.1.32 executable can project one complete accepted local function definition through
 stateless pages:
 
 ```sh

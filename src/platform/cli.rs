@@ -313,7 +313,10 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
                 ),
                 ("target", deployment.target.to_owned()),
                 ("runner", deployment.runner.to_owned()),
-                ("listener", deployment.configured_listener.to_owned()),
+                (
+                    "listener",
+                    deployment.configured_listener.unwrap_or("none").to_owned(),
+                ),
             ],
         )?;
     }
@@ -399,8 +402,24 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             "next",
             &[
                 ("order", serve_order.to_owned()),
-                ("kind", "serve".to_owned()),
-                ("operation", "serve".to_owned()),
+                (
+                    "kind",
+                    if created.template == ProjectTemplate::Command {
+                        "run"
+                    } else {
+                        "serve"
+                    }
+                    .to_owned(),
+                ),
+                (
+                    "operation",
+                    if created.template == ProjectTemplate::Command {
+                        "run"
+                    } else {
+                        "serve"
+                    }
+                    .to_owned(),
+                ),
                 ("deployment", deployment.descriptor.display().to_string()),
             ],
         )?;
@@ -496,6 +515,188 @@ fn maximum_artifact_output_bytes() -> Result<usize, Diagnostic> {
                 "artifact output limit is not representable on this platform",
             )
         })
+}
+
+pub struct ForegroundRunOptions {
+    descriptor: PathBuf,
+    arguments: Vec<u8>,
+}
+
+/// This grammar is resolved before project discovery, runtime setup or deployment reads.
+pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions, Diagnostic> {
+    if arguments.first().map(String::as_str) != Some("run") {
+        return Err(usage_error(
+            "run --deployment cannot select --project or a positional target",
+        ));
+    }
+    ensure_options(&arguments[1..], &["--deployment", "--arguments"], &[])?;
+    let descriptor = required_option(&arguments[1..], "--deployment")?;
+    if descriptor.is_empty() || descriptor.len() > 4096 || descriptor.contains('\0') {
+        return Err(usage_error(
+            "--deployment requires a bounded descriptor path",
+        ));
+    }
+    let arguments =
+        option_value(&arguments[1..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
+    let value =
+        super::json::decode_strict(arguments.as_bytes(), super::json::JsonLimits::default())?;
+    if !value.is_array() {
+        return Err(usage_error("--arguments must be one JSON array"));
+    }
+    Ok(ForegroundRunOptions {
+        descriptor: PathBuf::from(descriptor),
+        arguments: arguments.into_bytes(),
+    })
+}
+
+pub async fn execute_foreground_run(
+    options: ForegroundRunOptions,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Result<Vec<u8>, Diagnostic> {
+    use super::deployment::{PreparedDeployment, foreground_visibility};
+    let started = std::time::Instant::now();
+    let control = ExecutionControl::uncancelled();
+    let preparation_control = control.clone();
+    let runtime = tokio::runtime::Handle::current();
+    let mut preparing = tokio::task::spawn_blocking(move || {
+        PreparedDeployment::load_foreground(
+            &options.descriptor,
+            &options.arguments,
+            runtime,
+            &preparation_control,
+        )
+    });
+    tokio::pin!(cancellation);
+    let (prepared, invocation) = tokio::select! {
+        biased;
+        result = &mut preparing => result.map_err(foreground_join_error)??,
+        () = &mut cancellation => {
+            control.cancel();
+            // Preparation is finite and checks this control. Join it and close a completed
+            // prepared owner even when cancellation races with its final admission check.
+            let joined = preparing.await.map_err(foreground_join_error)?;
+            let mut error = Diagnostic::new(DiagnosticClass::Cancelled, "execution_cancelled",
+                "foreground preparation was cancelled before invocation");
+            match joined {
+                Ok((prepared, _)) => prepared.close_uninvoked(&mut error),
+                Err(failure) => error.notes.extend(failure.notes),
+            }
+            return Err(error);
+        }
+    };
+    let preparation_nanoseconds = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+    let receipt = prepared.run_foreground(invocation, cancellation).await?;
+    let result = (|| {
+        let result = String::from_utf8(receipt.result_json).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "run_result_utf8",
+                "typed foreground result is not UTF-8 JSON",
+            )
+        })?;
+        let observation = serde_json::to_string(&receipt.production).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "foreground_observation",
+                "production observation could not be encoded",
+            )
+        })?;
+        let cleanup = serde_json::to_string(&receipt.shutdown).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "foreground_observation",
+                "cleanup observation could not be encoded",
+            )
+        })?;
+        let limit = |value: Option<u64>| {
+            value.map_or_else(|| "absent".to_owned(), |value| value.to_string())
+        };
+        let mut output = compact_response_writer()?;
+        append_compact_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "run".to_owned()),
+            ],
+        )?;
+        append_compact_record(
+            &mut output,
+            "execution",
+            &[
+                ("target", receipt.deployment.target),
+                ("artifact", receipt.deployment.artifact_digest),
+                ("repository", receipt.repository),
+                ("package", receipt.package),
+                ("revision", receipt.revision),
+                ("semantic-state", receipt.semantic_state),
+                ("execution-mode", "production".to_owned()),
+                ("verification", "not-performed".to_owned()),
+                (
+                    "execution-profile",
+                    if receipt.policy.instruction_steps.is_none() {
+                        "trusted-foreground"
+                    } else {
+                        "bounded"
+                    }
+                    .to_owned(),
+                ),
+                ("instruction-limit", limit(receipt.policy.instruction_steps)),
+                (
+                    "allocation-limit",
+                    limit(receipt.policy.maximum_allocated_bytes),
+                ),
+                (
+                    "collection-limit",
+                    limit(receipt.policy.maximum_collection_items),
+                ),
+                (
+                    "capability-call-limit",
+                    limit(receipt.policy.maximum_capability_calls),
+                ),
+                (
+                    "call-depth-limit",
+                    receipt.policy.maximum_call_depth.to_string(),
+                ),
+                (
+                    "value-stack-limit",
+                    receipt.policy.maximum_value_stack.to_string(),
+                ),
+                (
+                    "deadline-milliseconds",
+                    limit(receipt.deadline_milliseconds),
+                ),
+                (
+                    "counter-semantics",
+                    "saturated-u64-is-lower-bound".to_owned(),
+                ),
+                (
+                    "preparation-nanoseconds",
+                    preparation_nanoseconds.to_string(),
+                ),
+                (
+                    "invocation-nanoseconds",
+                    receipt.invocation_nanoseconds.to_string(),
+                ),
+                ("production-observation", observation),
+                ("cleanup", cleanup),
+                ("value", result),
+            ],
+        )?;
+        Ok(output.finish())
+    })();
+    result.map_err(|mut error| {
+        foreground_visibility(&mut error);
+        error
+    })
+}
+
+fn foreground_join_error(error: tokio::task::JoinError) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Infrastructure,
+        "foreground_preparation_join",
+        format!("foreground preparation failed to join: {error}"),
+    )
 }
 
 pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {

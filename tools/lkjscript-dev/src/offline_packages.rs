@@ -9,6 +9,8 @@ mod effects_iteration_program;
 mod effects_program;
 mod effects_resources;
 mod effects_traversal;
+mod foreground;
+mod foreground_program;
 mod nominal;
 mod nominal_session;
 mod recursive;
@@ -146,7 +148,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-7".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-8".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -294,6 +296,16 @@ impl Context {
         arguments: &[&str],
         passes: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
+        self.cli_at(&self.root.clone(), project, arguments, passes)
+    }
+
+    fn cli_at(
+        &mut self,
+        cwd: &Path,
+        project: Option<&Path>,
+        arguments: &[&str],
+        passes: bool,
+    ) -> Result<Vec<CompactRecord>, DevError> {
         let index = self.receipt.commands.len();
         let mut command = vec![self.binary.display().to_string()];
         if let Some(project) = project {
@@ -302,7 +314,7 @@ impl Context {
         command.extend(arguments.iter().map(|value| (*value).to_owned()));
         let spec = process::ProcessSpec {
             command,
-            cwd: self.root.clone(),
+            cwd: cwd.to_path_buf(),
             environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
             timeout: Duration::from_secs(90),
             maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
@@ -317,7 +329,7 @@ impl Context {
             && observation.exit_code.is_some_and(|code| code != 0);
         self.receipt.commands.push(CommandEvidence {
             command: spec.command.clone(),
-            cwd: self.root.display().to_string(),
+            cwd: cwd.display().to_string(),
             expects_success: passes,
             observation,
         });
@@ -1756,7 +1768,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-7"
+        receipt.schema == "lkjscript-offline-packages-acceptance-8"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
