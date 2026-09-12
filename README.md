@@ -195,7 +195,7 @@ removes their authoring checkouts, and runs each from an unrelated directory:
 ```sh
 lkj_runtime="/absolute/path/to/lkjscript"
 foreground_demo=$(mktemp -d)
-"$lkj_runtime" capabilities deployment
+"$lkj_runtime" capabilities --section deployment
 for app in alpha beta; do
   "$lkj_runtime" new "$foreground_demo/author-$app" --template command
   "$lkj_runtime" --project "$foreground_demo/author-$app" check

@@ -109,6 +109,7 @@ fn foreground_starters_run_from_two_bundles_after_authoring_checkouts_are_remove
             serde_json::from_str(compact_field(execution, "production-observation").unwrap())
                 .unwrap();
         assert_eq!(production["capability_calls"], 0);
+        assert!(production.get("production_tier").is_none());
         assert_eq!(production["live_handles_after"], 0);
         let cleanup: Value =
             serde_json::from_str(compact_field(execution, "cleanup").unwrap()).unwrap();
@@ -1466,17 +1467,23 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_field(nostr_template, "recommended-artifact-output"),
         Some("generated/application.lkja")
     );
-    for name in ["minimal", "command"] {
+    for (name, deployment, artifact) in [
+        ("minimal", "false", "none"),
+        ("command", "true", "generated/application.lkja"),
+    ] {
         let template = templates
             .iter()
             .find(|record| {
                 record.operation == "template" && compact_field(record, "name") == Some(name)
             })
             .expect("non-HTTP template descriptor");
-        assert_eq!(compact_field(template, "starter-deployment"), Some("false"));
+        assert_eq!(
+            compact_field(template, "starter-deployment"),
+            Some(deployment)
+        );
         assert_eq!(
             compact_field(template, "recommended-artifact-output"),
-            Some("none")
+            Some(artifact)
         );
     }
 

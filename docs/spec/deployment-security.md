@@ -51,7 +51,7 @@ transition, tick interval, idle and total lifetime, close/cancellation grace, an
 session-buffer bytes. The separately supplied stream and resident/execution records continue to
 bound callback streams, work, deadlines, and cleanup.
 
-`deployment inspect` returns public descriptor structure; runtime readiness returns the
+`capabilities --section deployment` returns the public descriptor schema; runtime readiness returns the
 domain-tagged artifact-bundle digest,
 target, runner, listener, typed configuration observation, secret names, and adapter kinds. Secret
 bytes, data/object authority internals, password inputs, and live handles are omitted. Startup failure

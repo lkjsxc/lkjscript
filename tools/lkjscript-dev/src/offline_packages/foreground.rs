@@ -365,7 +365,8 @@ fn validate_loop(cell: &LoopCell) -> Result<(), DevError> {
             .ok_or_else(|| DevError::corrupt("loop production observation absent"))?,
     )?;
     require(
-        production["instructions"] == 44 + 32 * cell.n
+        production.get("production_tier").is_none()
+            && production["instructions"] == 44 + 32 * cell.n
             && production["capability_calls"] == 0
             && production["maximum_call_depth"] == 3
             && production["live_handles_after"] == 0
@@ -917,6 +918,71 @@ fn validate_cell(cell: &Cell) -> Result<(), DevError> {
     )
 }
 
+pub(super) fn command_cwd(receipt: &ForegroundReceipt, index: usize) -> Option<&str> {
+    let consumer = receipt
+        .cells
+        .iter()
+        .find(|cell| cell.command == index)
+        .map(|cell| cell.consumer)
+        .or_else(|| {
+            receipt
+                .loops
+                .iter()
+                .any(|cell| cell.command == index)
+                .then_some(0)
+        })
+        .or_else(|| {
+            receipt
+                .failures
+                .iter()
+                .any(|cell| cell.command == index)
+                .then_some(1)
+        })?;
+    receipt
+        .consumers
+        .get(consumer)
+        .map(|consumer| consumer.cwd.as_str())
+}
+
+fn command_evidence<'a>(
+    parent: &'a Receipt,
+    index: usize,
+    consumer: usize,
+    descriptor: &str,
+    arguments: &str,
+) -> Result<&'a CommandEvidence, DevError> {
+    let consumer = parent
+        .effects
+        .foreground
+        .consumers
+        .get(consumer)
+        .ok_or_else(|| DevError::corrupt("foreground consumer absent"))?;
+    let command = parent
+        .commands
+        .get(index)
+        .ok_or_else(|| DevError::corrupt("foreground command absent"))?;
+    require(
+        command.cwd == consumer.cwd
+            && command.command
+                == vec![
+                    Path::new(&parent.isolated_root)
+                        .join("lkjscript")
+                        .display()
+                        .to_string(),
+                    "run".into(),
+                    "--deployment".into(),
+                    Path::new(&consumer.bundle)
+                        .join(descriptor)
+                        .display()
+                        .to_string(),
+                    "--arguments".into(),
+                    arguments.into(),
+                ],
+        "foreground command, directory or arguments substituted",
+    )?;
+    Ok(command)
+}
+
 pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
     let receipt = &parent.effects.foreground;
     require(
@@ -924,6 +990,17 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             && receipt.consumers.len() == 2
             && receipt.cells.len() == 7,
         "foreground child missing required composition cells",
+    )?;
+    let commands = receipt
+        .cells
+        .iter()
+        .map(|cell| cell.command)
+        .chain(receipt.loops.iter().map(|cell| cell.command))
+        .chain(receipt.failures.iter().map(|cell| cell.command))
+        .collect::<std::collections::BTreeSet<_>>();
+    require(
+        commands.len() == 27,
+        "foreground invocations substituted or duplicated",
     )?;
     let failures = [
         (
@@ -982,10 +1059,27 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         if index >= 8 && label != "broken-output" {
             require(cell.notes.iter().any(|note|note=="foreground cleanup: admission-stopped=true remaining-owned-tasks=0 failures=0") && cell.notes.iter().any(|note|note.contains("earlier application effects may already be visible")),"foreground failed invocation omitted visibility/cleanup")?;
         }
-        let command = parent
-            .commands
-            .get(cell.command)
-            .ok_or_else(|| DevError::corrupt("foreground failure process evidence absent"))?;
+        let arguments = match label {
+            "arity-before-secret"
+            | "unselected-output-before-secret"
+            | "whole-component-count"
+            | "whole-component-pure-requiring-component"
+            | "late-oversized-result" => "[]",
+            "type-before-secret" => "[\"wrong\"]",
+            "transaction-rollback" | "committed-then-trap" | "explicit-fuel" => "[1]",
+            _ => "[0]",
+        };
+        let command = command_evidence(
+            parent,
+            cell.command,
+            1,
+            if label == "broken-output" {
+                "command.deployment.json"
+            } else {
+                "failure.deployment.json"
+            },
+            arguments,
+        )?;
         require(
             !command.expects_success
                 && command.observation.status == process::ProcessStatus::Failed
@@ -1034,6 +1128,17 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             "foreground loop workload substituted",
         )?;
         validate_loop(cell)?;
+        let command = command_evidence(
+            parent,
+            cell.command,
+            0,
+            "loop.deployment.json",
+            &format!("[{}]", cell.n),
+        )?;
+        require(
+            command.expects_success && command.observation.status == process::ProcessStatus::Passed,
+            "foreground loop process did not complete successfully",
+        )?;
         let records = parse_records(
             "loop-evidence",
             &process::read_bounded(
@@ -1071,6 +1176,26 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         "foreground consumers do not have independent identities and roots",
     )?;
     for (index, consumer) in receipt.consumers.iter().enumerate() {
+        for (observed, name) in [
+            (&consumer.checkout, format!("foreground-{index}")),
+            (&consumer.bundle, format!("foreground-{index}-bundle")),
+            (&consumer.cwd, format!("unrelated-{index}")),
+        ] {
+            require(
+                Path::new(observed) == Path::new(&parent.isolated_root).join(name),
+                "foreground fixture directory escaped its owned root",
+            )?;
+        }
+        for revision in std::iter::once(&consumer.revision).chain(consumer.changed_revision.iter())
+        {
+            require(
+                parent.producer_inventories.iter().any(|inventory| {
+                    inventory.package == consumer.package
+                        && &inventory.semantic_revision == revision
+                }),
+                "foreground consumer source revision absent from independent transported inventory",
+            )?;
+        }
         require(
             consumer.checkout_unavailable
                 && digest_file(

@@ -594,7 +594,19 @@ pub async fn execute_foreground_run(
                 "typed foreground result is not UTF-8 JSON",
             )
         })?;
-        let observation = serde_json::to_string(&receipt.production).map_err(|_| {
+        let mut public_observation = serde_json::to_value(&receipt.production).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "foreground_observation",
+                "production observation could not be encoded",
+            )
+        })?;
+        // Evaluator generation labels remain contributor metadata. Public observations expose
+        // work and storage facts under the product version and capabilities contract.
+        if let serde_json::Value::Object(fields) = &mut public_observation {
+            fields.remove("production_tier");
+        }
+        let observation = serde_json::to_string(&public_observation).map_err(|_| {
             Diagnostic::new(
                 DiagnosticClass::Infrastructure,
                 "foreground_observation",

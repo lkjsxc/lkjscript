@@ -1932,10 +1932,10 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 24
-            && receipt.transport_digests.len() == 24
-            && receipt.producer_inventories.len() == 24,
-        "complete producer, replacement, and HTTP source inventories missing",
+        receipt.inventories.len() == 27
+            && receipt.transport_digests.len() == 27
+            && receipt.producer_inventories.len() == 27,
+        "complete producer, replacement, HTTP and foreground source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
         verify_producer_inventory(&receipt.producer_inventories[index], inventory)?;
@@ -1972,7 +1972,9 @@ pub(crate) fn read_transferred_receipt(
     let mut missing_source_diagnostic = false;
     for (index, command) in receipt.commands.iter().enumerate() {
         require(
-            command.cwd == receipt.isolated_root
+            command.cwd
+                == foreground::command_cwd(&receipt.effects.foreground, index)
+                    .unwrap_or(&receipt.isolated_root)
                 && command.command.first().is_some_and(|binary| {
                     Path::new(binary) == Path::new(&receipt.isolated_root).join("lkjscript")
                 }),

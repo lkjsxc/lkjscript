@@ -668,6 +668,28 @@ fn endpoint(
 }
 
 fn deployment_projection(path: &Path) -> String {
+    let command = path.join(STARTER_COMMAND_DESCRIPTOR_PATH);
+    if command.exists() {
+        assert!(path.join(STARTER_HTTP_ARTIFACT_DIRECTORY).is_dir());
+        assert!(!path.join(STARTER_HTTP_ARTIFACT_PATH).exists());
+        assert!(!path.join(STARTER_HTTP_DESCRIPTOR_PATH).exists());
+        let value: Value =
+            serde_json::from_slice(&std::fs::read(command).expect("command auxiliary"))
+                .expect("command JSON");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "artifact":"generated/application.lkja", "target":"main", "listen":null,
+                "http":null, "session":null, "worker":null,
+                "streams":{"maximum_chunk_bytes":65536,"maximum_buffered_chunks":8,
+                    "maximum_total_bytes":67108864,"maximum_live_streams":1024},
+                "configuration":{},"secrets":[],"grants":[]
+            })
+        );
+        // Preserve the captured predecessor graph projection. The newly added operator
+        // auxiliary is checked independently in full above, including absent policy fields.
+        return "none".to_owned();
+    }
     let descriptor = path.join(STARTER_HTTP_DESCRIPTOR_PATH);
     if !descriptor.exists() {
         assert!(!path.join(STARTER_HTTP_ARTIFACT_DIRECTORY).exists());
