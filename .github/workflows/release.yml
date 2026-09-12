@@ -27,6 +27,7 @@ env:
   CARGO_TERM_COLOR: never
   RUST_BACKTRACE: "0"
   RELEASE_CHECKSUMS: SHA256SUMS
+  RELEASE_INSTALLER: install.sh
   RELEASE_RECEIPT: release-receipt.json
   RELEASE_HANDOFF: release-handoff-${{ github.run_id }}-${{ github.run_attempt }}
   VERIFIER_HANDOFF: verifier-handoff-${{ github.run_id }}-${{ github.run_attempt }}
@@ -389,7 +390,7 @@ jobs:
             --expected-tag "${{ steps.identity.outputs.tag }}" \
             --expected-publication "${{ steps.identity.outputs.publication_mode }}"
           (cd "$output" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
-          test "$(find "$output" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+          test "$(find "$output" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 4
           test "$(find "$output" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
           echo "output=$output" >> "$GITHUB_OUTPUT"
 
@@ -508,7 +509,7 @@ jobs:
           verifier_artifact_bytes=$(validate_artifact "$VERIFIER_ARTIFACT_ID" "$VERIFIER_HANDOFF" "$VERIFIER_ARTIFACT_DIGEST")
 
           release="$RUNNER_TEMP/release-handoff"
-          expected_release=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_RECEIPT" | sort)
+          expected_release=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_INSTALLER" "$RELEASE_RECEIPT" | sort)
           observed_release=$(find "$release" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
           test "$observed_release" = "$expected_release"
           test "$(find "$release" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
@@ -594,16 +595,21 @@ jobs:
             '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == $mode and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
             "$release_summary" > /dev/null
 
-          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release transferred run \
-            --candidate "$candidate" --manifest "$manifest" \
+          mkdir "$root/exact-assets" "$root/latest-assets"
+          for name in "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_INSTALLER"; do
+            cp "$RELEASE/$name" "$root/exact-assets/$name"
+            cp "$RELEASE/$name" "$root/latest-assets/$name"
+          done
+          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release transferred pair-run \
+            --exact-assets "$root/exact-assets" --latest-assets "$root/latest-assets" \
             --tag "$TAG" --commit "$COMMIT_SHA" --publication "$PUBLICATION_MODE" \
-            --boundary pre-publication --evidence-root "$root/transferred" \
+            --acquisition simulated --evidence-root "$root/transferred" \
             --verifier-identity "$RUNNER_TEMP/verifier-handoff/$VERIFIER_IDENTITY" \
             --expected-verifier-sha256 "$VERIFIER_FILE_SHA256" \
             --expected-verifier-bytes "$VERIFIER_FILE_BYTES" | tee "$root/transferred-summary.json"
           {
-            echo "transferred_receipt_digest=$(jq -er '.receipt_digest' "$root/transferred-summary.json")"
-            echo "transferred_receipt_sha256=$(jq -er '.receipt_sha256' "$root/transferred-summary.json")"
+            echo "transferred_receipt_digest=$(jq -er '.receipt.digest' "$root/transferred-summary.json")"
+            echo "transferred_receipt_sha256=$(jq -er '.receipt.file.sha256' "$root/transferred-summary.json")"
           } >> "$GITHUB_OUTPUT"
 
       - name: Retain bounded pre-publication application evidence
@@ -618,11 +624,18 @@ jobs:
             ${{ runner.temp }}/prepublication/extracted/RELEASE-MANIFEST.json
             ${{ runner.temp }}/prepublication/transferred/receipt.json
             ${{ runner.temp }}/prepublication/transferred/*.log
-            ${{ runner.temp }}/prepublication/transferred/distributed-http/*
-            ${{ runner.temp }}/prepublication/transferred/outbound-http/*
-            ${{ runner.temp }}/prepublication/transferred/offline-packages/*
-            ${{ runner.temp }}/prepublication/transferred/pure-tail/*
-            ${{ runner.temp }}/prepublication/transferred/stateful-http/*
+            ${{ runner.temp }}/prepublication/transferred/*
+            ${{ runner.temp }}/prepublication/transferred/exact/**
+            ${{ runner.temp }}/prepublication/transferred/latest/**
+            ${{ runner.temp }}/prepublication/transferred/recovery/**
+            ${{ runner.temp }}/prepublication/transferred/full-suite/*
+            ${{ runner.temp }}/prepublication/transferred/full-suite/distributed-http/*
+            ${{ runner.temp }}/prepublication/transferred/full-suite/outbound-http/*
+            ${{ runner.temp }}/prepublication/transferred/full-suite/offline-packages/*
+            ${{ runner.temp }}/prepublication/transferred/full-suite/pure-tail/*
+            ${{ runner.temp }}/prepublication/transferred/full-suite/stateful-http/*
+            ${{ runner.temp }}/prepublication/exact-assets/*
+            ${{ runner.temp }}/prepublication/latest-assets/*
             ${{ runner.temp }}/verifier-handoff/verifier-identity.json
             ${{ runner.temp }}/verifier-verify-summary.json
             ${{ runner.temp }}/artifact-*.json
@@ -662,7 +675,7 @@ jobs:
         run: |
           set -euo pipefail
           handoff="$RUNNER_TEMP/release-handoff"
-          expected=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_RECEIPT" | sort)
+          expected=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_INSTALLER" "$RELEASE_RECEIPT" | sort)
           observed=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
           test "$observed" = "$expected"
           test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
@@ -677,6 +690,10 @@ jobs:
             --argjson bytes "$archive_bytes" \
             '.publication_mode == "release" and .release_tag == $tag and .commit_sha == $commit and .archive.name == $archive and .archive.sha256 == $sha and .archive.byte_length == $bytes and (.classifications | all(.classification == "fresh_passed"))' \
             "$handoff/$RELEASE_RECEIPT"
+          jq -e --arg name "$RELEASE_INSTALLER" \
+            --arg sha "$(sha256sum "$handoff/$RELEASE_INSTALLER" | cut -d' ' -f1)" \
+            --argjson bytes "$(stat -c '%s' "$handoff/$RELEASE_INSTALLER")" \
+            '.schema.version == 3 and .installer == {name:$name,sha256:$sha,byte_length:$bytes}' "$handoff/$RELEASE_RECEIPT"
           tar -xOzf "$handoff/$RELEASE_ARCHIVE" lkjscript/RELEASE-MANIFEST.json > "$RUNNER_TEMP/RELEASE-MANIFEST.json"
           manifest_sha=$(sha256sum "$RUNNER_TEMP/RELEASE-MANIFEST.json" | cut -d' ' -f1)
           test "$manifest_sha" = "$(jq -er '.manifest_sha256' "$handoff/$RELEASE_RECEIPT")"
@@ -777,10 +794,12 @@ jobs:
 
           checksum_sha=$(sha256sum "$HANDOFF/$RELEASE_CHECKSUMS" | cut -d' ' -f1)
           checksum_bytes=$(stat -c '%s' "$HANDOFF/$RELEASE_CHECKSUMS")
+          installer_sha=$(sha256sum "$HANDOFF/$RELEASE_INSTALLER" | cut -d' ' -f1)
+          installer_bytes=$(stat -c '%s' "$HANDOFF/$RELEASE_INSTALLER")
           asset_names=$(jq -r '.assets[].name' "$release_file" | sort)
           if [[ -n "$asset_names" ]]; then
             while IFS= read -r name; do
-              [[ "$name" == "$RELEASE_ARCHIVE" || "$name" == "$RELEASE_CHECKSUMS" ]]
+              [[ "$name" == "$RELEASE_ARCHIVE" || "$name" == "$RELEASE_CHECKSUMS" || "$name" == "$RELEASE_INSTALLER" ]]
             done <<< "$asset_names"
           fi
 
@@ -813,6 +832,7 @@ jobs:
           }
           upload_missing "$RELEASE_ARCHIVE"
           upload_missing "$RELEASE_CHECKSUMS"
+          upload_missing "$RELEASE_INSTALLER"
 
           verify_assets() {
             jq -e \
@@ -822,9 +842,13 @@ jobs:
               --arg checksums "$RELEASE_CHECKSUMS" \
               --arg checksum_digest "sha256:$checksum_sha" \
               --argjson checksum_bytes "$checksum_bytes" \
-              '(.assets | length) == 2 and
+              --arg installer "$RELEASE_INSTALLER" \
+              --arg installer_digest "sha256:$installer_sha" \
+              --argjson installer_bytes "$installer_bytes" \
+              '(.assets | length) == 3 and
                any(.assets[]; .name == $archive and .digest == $archive_digest and .size == $archive_bytes) and
-               any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes)' \
+               any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes) and
+               any(.assets[]; .name == $installer and .digest == $installer_digest and .size == $installer_bytes)' \
               "$release_file" > /dev/null
           }
           verified=false
@@ -971,13 +995,15 @@ jobs:
           exact="$RUNNER_TEMP/exact"
           latest="$RUNNER_TEMP/latest"
           mkdir -p "$exact" "$latest"
+          mkdir -m 0700 "$RUNNER_TEMP/anonymous-home"
           base="https://github.com/$GITHUB_REPOSITORY/releases"
           download_public_asset() {
             local url=$1
             local destination=$2
             for attempt in $(seq 1 12); do
-              if env -u GH_TOKEN -u GITHUB_TOKEN curl \
-                --fail --location --silent --show-error \
+              if env -i PATH=/usr/bin:/bin HOME="$RUNNER_TEMP/anonymous-home" LANG=C curl -q \
+                --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+                --connect-timeout 15 --max-time 180 --max-filesize 134217728 \
                 --output "$destination.part" "$url"; then
                 mv "$destination.part" "$destination"
                 echo "anonymous download propagation attempts=$attempt url=$url"
@@ -997,6 +1023,10 @@ jobs:
             "$base/latest/download/$RELEASE_ARCHIVE" "$latest/$RELEASE_ARCHIVE"
           download_public_asset \
             "$base/latest/download/$RELEASE_CHECKSUMS" "$latest/$RELEASE_CHECKSUMS"
+          download_public_asset \
+            "$base/download/$TAG/$RELEASE_INSTALLER" "$exact/$RELEASE_INSTALLER"
+          download_public_asset \
+            "$base/latest/download/$RELEASE_INSTALLER" "$latest/$RELEASE_INSTALLER"
           (cd "$exact" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
           (cd "$latest" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
           archive_sha=$(sha256sum "$exact/$RELEASE_ARCHIVE" | cut -d' ' -f1)
@@ -1040,7 +1070,10 @@ jobs:
             --arg checksums "$RELEASE_CHECKSUMS" \
             --arg checksum_digest "sha256:$(sha256sum "$asset_root/$RELEASE_CHECKSUMS" | cut -d' ' -f1)" \
             --argjson checksum_bytes "$(stat -c '%s' "$asset_root/$RELEASE_CHECKSUMS")" \
-            '(.assets | length) == 2 and any(.assets[]; .name == $archive and .digest == $archive_digest and .size == $archive_bytes) and any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes)' \
+            --arg installer "$RELEASE_INSTALLER" \
+            --arg installer_digest "sha256:$(sha256sum "$asset_root/$RELEASE_INSTALLER" | cut -d' ' -f1)" \
+            --argjson installer_bytes "$(stat -c '%s' "$asset_root/$RELEASE_INSTALLER")" \
+            '(.assets | length) == 3 and any(.assets[]; .name == $archive and .digest == $archive_digest and .size == $archive_bytes) and any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes) and any(.assets[]; .name == $installer and .digest == $installer_digest and .size == $installer_bytes)' \
             <<< "$release" > /dev/null
           done
 
@@ -1083,6 +1116,10 @@ jobs:
             "$LATEST/$RELEASE_ARCHIVE" "$RUNNER_TEMP/latest-archive-attestation.json"
           verify_asset_attestation \
             "$LATEST/$RELEASE_CHECKSUMS" "$RUNNER_TEMP/latest-checksum-attestation.json"
+          verify_asset_attestation \
+            "$EXACT/$RELEASE_INSTALLER" "$RUNNER_TEMP/installer-attestation.json"
+          verify_asset_attestation \
+            "$LATEST/$RELEASE_INSTALLER" "$RUNNER_TEMP/latest-installer-attestation.json"
 
       - name: Admit both public routes and bind one fresh application suite
         id: acceptance
@@ -1108,6 +1145,7 @@ jobs:
             GITHUB_SERVER_URL="$GITHUB_SERVER_URL" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
             "$VERIFIER" release transferred pair-run \
             --exact-assets "$EXACT" --latest-assets "$LATEST" \
+            --acquisition anonymous \
             --tag "$TAG" --commit "$COMMIT_SHA" --publication release \
             --evidence-root "$root/pair" \
             --verifier-identity "$RUNNER_TEMP/verifier-handoff/$VERIFIER_IDENTITY" \
@@ -1127,7 +1165,11 @@ jobs:
             ${{ runner.temp }}/public-verification/pair/latest/lifecycle.json
             ${{ runner.temp }}/public-verification/pair/*/*.log
             ${{ runner.temp }}/public-verification/pair/*/artifact.lkja
-            ${{ runner.temp }}/public-verification/pair/*/extracted/RELEASE-MANIFEST.json
+            ${{ runner.temp }}/public-verification/pair/*/extracted/*
+            ${{ runner.temp }}/public-verification/pair/*/installation/**
+            ${{ runner.temp }}/public-verification/pair/recovery/**
+            ${{ runner.temp }}/exact/*
+            ${{ runner.temp }}/latest/*
             ${{ runner.temp }}/public-verification/pair/full-suite/receipt.json
             ${{ runner.temp }}/public-verification/pair/full-suite/*.log
             ${{ runner.temp }}/public-verification/pair/full-suite/distributed-http/*

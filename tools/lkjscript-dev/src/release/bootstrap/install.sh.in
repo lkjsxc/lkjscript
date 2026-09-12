@@ -1,0 +1,68 @@
+#!/bin/sh
+# lkjscript immutable release bootstrap. Trust this script through its selected GitHub HTTPS source.
+# Embedded digests bind the archive and executable to this script; they are not independent signatures.
+set -eu
+umask 077
+repository='@REPOSITORY@'
+tag='@TAG@'
+target='@TARGET@'
+archive_name='@ARCHIVE@'
+archive_bytes='@ARCHIVE_BYTES@'
+archive_sha256='@ARCHIVE_SHA256@'
+executable_bytes='@EXECUTABLE_BYTES@'
+executable_sha256='@EXECUTABLE_SHA256@'
+fail() { printf '%s\n' "lkjscript install: $*" >&2; exit 1; }
+prefix=''
+seen_prefix=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --prefix)
+            [ "$seen_prefix" = false ] || fail '--prefix may be supplied only once'
+            [ "$#" -ge 2 ] || fail '--prefix requires an absolute path'
+            prefix=$2
+            seen_prefix=true
+            shift 2
+            ;;
+        *) fail 'only --prefix PATH is accepted; acquire an exact bootstrap to choose a version' ;;
+    esac
+done
+if [ "$seen_prefix" = false ]; then
+    case "${HOME-}" in /*) prefix=$HOME/.local ;; *) fail 'absolute HOME is unavailable; supply --prefix PATH' ;; esac
+fi
+case "$prefix" in /*) ;; *) fail '--prefix must be absolute' ;; esac
+for utility in sh curl sha256sum tar mktemp chmod wc rm uname; do
+    command -v "$utility" >/dev/null 2>&1 || fail "required utility missing: $utility (install it or use the native offline installer)"
+done
+[ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || fail "unsupported host; required Linux x86-64 ($target)"
+case "${TMPDIR:-/tmp}" in /*) ;; *) fail 'TMPDIR must be absolute' ;; esac
+stage=$(mktemp -d "${TMPDIR:-/tmp}/lkjscript-install.XXXXXXXXXX") || fail 'could not create private temporary directory'
+cleanup() {
+    status=$?
+    trap - 0 HUP INT TERM
+    if ! rm -rf "$stage"; then
+        printf '%s\n' "lkjscript install: cleanup failed for $stage; any committed installation is retained" >&2
+        [ "$status" -ne 0 ] || status=1
+    fi
+    exit "$status"
+}
+trap cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# POSIX shells differ between 512- and 1024-byte units. This remains at most 256 MiB.
+ulimit -f 262144 || fail 'cannot establish temporary file bound'
+archive=$stage/archive.tar.gz
+manager=$stage/lkjscript
+: > "$archive"
+curl -q --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+    --connect-timeout 15 --max-time 180 --retry 2 --retry-max-time 240 \
+    --max-filesize "$archive_bytes" --output "$archive" \
+    "https://github.com/$repository/releases/download/$tag/$archive_name" || fail 'exact archive download failed; default unchanged'
+[ "$(wc -c < "$archive")" -eq "$archive_bytes" ] || fail 'archive length mismatch; default unchanged'
+(cd "$stage" && printf '%s  archive.tar.gz\n' "$archive_sha256" | sha256sum -c -) >/dev/null || fail 'archive SHA-256 mismatch; default unchanged'
+: > "$manager"
+tar -xzOf "$archive" lkjscript/lkjscript > "$manager" || fail 'candidate extraction failed; default unchanged'
+[ "$(wc -c < "$manager")" -eq "$executable_bytes" ] || fail 'candidate length mismatch; default unchanged'
+(cd "$stage" && printf '%s  lkjscript\n' "$executable_sha256" | sha256sum -c -) >/dev/null || fail 'candidate SHA-256 mismatch; default unchanged'
+chmod 0700 "$manager" || fail 'candidate executable mode could not be set'
+"$manager" runtime install --archive "$archive" --sha256 "$archive_sha256" --prefix "$prefix" --activate

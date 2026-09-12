@@ -26,6 +26,7 @@ pub(super) struct Lifecycle {
     pub(super) status: Status,
     disposition: Disposition,
     candidate: FileBinding,
+    pub(super) installation: Option<installation::Installation>,
     runtime: String,
     pub(super) commands: Vec<Command>,
     revision: Option<String>,
@@ -39,9 +40,7 @@ pub(super) struct Lifecycle {
     failure: Option<String>,
 }
 fn commands(options: &PairOptions, route: Route) -> Vec<Command> {
-    let candidate = route
-        .extraction(options)
-        .join("lkjscript")
+    let candidate = installation::candidate(options, route)
         .display()
         .to_string();
     let project = route
@@ -94,9 +93,10 @@ fn commands(options: &PairOptions, route: Route) -> Vec<Command> {
 pub(super) fn run(
     options: &PairOptions,
     route: Route,
-    manifest: &ReleaseManifest,
+    admitted: &archive::VerifiedArchive,
     control: &process::ProcessControl,
 ) -> Result<Lifecycle, DevError> {
+    let manifest = &admitted.manifest;
     let root = route.root(options);
     let runtime = root.join("runtime");
     fs::create_dir(&runtime)?;
@@ -107,6 +107,7 @@ pub(super) fn run(
         status: Status::NotRun,
         disposition: Disposition::FreshExecution,
         candidate: binding(&route.extraction(options).join("lkjscript"))?,
+        installation: None,
         runtime: runtime.display().to_string(),
         commands: commands(options, route),
         revision: None,
@@ -122,6 +123,8 @@ pub(super) fn run(
     let path = root.join("lifecycle.json");
     evidence::publish_json(&path, &receipt)?;
     let result = (|| {
+        receipt.installation = Some(installation::run(options, route, admitted, control)?);
+        evidence::publish_json(&path, &receipt)?;
         let mut head = None;
         for (index, name) in COMMANDS.iter().enumerate() {
             require(!control.cancelled(), "route lifecycle cancelled")?;
@@ -209,11 +212,21 @@ pub(super) fn run(
 pub(super) fn validate(
     options: &PairOptions,
     route: Route,
-    manifest: &ReleaseManifest,
+    admitted: &archive::VerifiedArchive,
     receipt: &Lifecycle,
 ) -> Result<(), DevError> {
+    let manifest = &admitted.manifest;
     let root = route.root(options);
     let path = root.join("lifecycle.json");
+    installation::validate(
+        options,
+        route,
+        admitted,
+        receipt
+            .installation
+            .as_ref()
+            .ok_or_else(|| DevError::corrupt("installation observation missing"))?,
+    )?;
     regular(&path)?;
     require(
         process::read_bounded(&path, MAXIMUM_RECEIPT_BYTES)? == evidence::encode_json(receipt)?,
@@ -326,7 +339,7 @@ fn read_command(
     )?;
     Ok(records)
 }
-fn value<'a>(
+pub(super) fn value<'a>(
     records: &'a [CompactRecord],
     operation: &str,
     field: &str,

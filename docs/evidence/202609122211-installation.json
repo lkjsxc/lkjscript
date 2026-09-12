@@ -1,0 +1,90 @@
+{
+  "campaign": "202609122211",
+  "status": "implementation-and-acceptance-in-progress",
+  "starting_head": "21bee29a132bf25202ad056748a4324d6fde7795",
+  "guidance_and_mandate_commit": "efdbb3e5",
+  "preserved": [
+    "preexisting August 31 stash",
+    "frozen foreground candidates/verifiers",
+    "immutable v0.1.32 and earlier releases",
+    "maintained semantic assets and application data"
+  ],
+  "inherited": {
+    "failed_dry_run": {
+      "run": 34693887632,
+      "attempt": 1,
+      "source": "0b5e982727a080761d14afd98e45199497acf87d",
+      "failure": "offline-packages outer 1200-second deadline; command 470 of 492",
+      "publication": "skipped; no tag"
+    },
+    "corrected_source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
+    "source_full": {
+      "status": "fresh-passed",
+      "gates": 26,
+      "digest": "verification_88e19008b1a7ae6bae0d8c05eb8e0ce69afec9d71d403c20ebe957534726d508"
+    },
+    "target": {
+      "status": "fresh-passed",
+      "userlands": 2,
+      "oracles": 6,
+      "candidate_bytes": 22223104,
+      "candidate_sha256": "f53c8a6abed3cc81cd8221411b2336757701ee8082b92e1153d39cc64d35448a",
+      "receipt_digest": "verification_c0384e1fa4d898e217a153f3241134bec5a5ed0fe0d75c72042ebcc2eba21a2e",
+      "cleanup_complete": true
+    },
+    "package": {
+      "status": "fresh-passed",
+      "mode": "dry-run",
+      "archive_bytes": 10003387,
+      "archive_sha256": "cc6664e68d5b74530ab7bb8543e0138b14394ba59dbb1ea13abab0becfb9e448"
+    },
+    "integration": "normal main push",
+    "selected_tag": "v0.1.33",
+    "dry_run": {
+      "run": 34700198909,
+      "attempt": 1,
+      "observed": "in_progress",
+      "publish": false
+    },
+    "publication": "pending; no tag/control write",
+    "receipt_faults": "pending actual execution"
+  },
+  "installation": {
+    "selected_tag": "v0.1.34",
+    "source_acceptance": "unrun",
+    "target_acceptance": "unrun",
+    "package_acceptance": "unrun",
+    "public_acceptance": "unrun",
+    "format_owners": {
+      "historical_integrity": "src/release_container",
+      "current_production": "tools/lkjscript-dev/src/release",
+      "transactions": "src/platform/installation",
+      "bootstrap": "tools/lkjscript-dev/src/release/bootstrap"
+    },
+    "claims": {
+      "INS-1": "partial fresh: actual predecessor installed/listed/selected and public command authored/check/build/run outside checkout with PATH empty; stabilized candidate package pending",
+      "INS-2": "partial fresh native fixture cases and actual unmanaged-manager reporting; retained two-version candidate recovery pending",
+      "INS-3": "partial fresh native races, OS locks, substitution, I/O checkpoints, five killed-process cuts/recovery, cleanup faults, actual closed-stdout commit; stabilized source acceptance pending",
+      "INS-4": "partial fresh strict fixtures, historical producer-policy separation, actual public predecessor container; full gate pending",
+      "INS-5": "fresh negative shell acquisition tests; genuine frozen script in both pinned userlands pending",
+      "INS-6": "existing foreground expectations retained; installed candidate aggregate and held processes pending",
+      "INS-7": "unrun; inherited foreground delivery separately pending"
+    },
+    "historical_archive": {
+      "tag": "v0.1.32",
+      "archive_bytes": 9877724,
+      "archive_sha256": "3beed341cbb315999531746d0f2ed197df4871ba9e6e0393666b1feaf11efa66",
+      "executable_sha256": "863f337769a594a1961921f24bd278e23fbe52a689403f2c56b21986dce537ad",
+      "manifest_sha256": "fb6f026e7c4face353dd14b9b03e316d3acfb453c8732c840ef49919ee2e7960",
+      "native_admission": "fresh-passed; declared-release/unverified-publication",
+      "acquisition": "exact public URL with embedded expected digest; not claimed as a completed anonymous pair"
+    },
+    "limitations": [
+      "only Linux x86-64/static-musl supported",
+      "initial bootstrap trust is selected GitHub HTTPS code, not independent signing",
+      "PATH is not edited",
+      "no graph/artifact/deployment/grant/data migration or implicit fallback",
+      "no performance or billing improvement claim"
+    ]
+  }
+}

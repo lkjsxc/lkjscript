@@ -126,43 +126,75 @@ passed independently from both exact-tag and latest downloads; target admission 
 the maintained `lkjournal` service oracle. These observations do not claim a minimum kernel, every
 x86-64 environment, or broader Linux portability.
 
-## Download
+## Download and install
 
-Download the latest supported archive and its checksum without running a remote installer:
-
-```sh
-mkdir -p /tmp/lkjscript-download
-cd /tmp/lkjscript-download
-curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-musl.tar.gz
-curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/latest/download/SHA256SUMS
-sha256sum --check SHA256SUMS
-tar -xzf lkjscript-x86_64-unknown-linux-musl.tar.gz
-./lkjscript/lkjscript capabilities
-```
-
-The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
-release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.32` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.32) owns the immutable
-version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.32/lkjscript-x86_64-unknown-linux-musl.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.32/SHA256SUMS). See the
-[maintainer release procedure](docs/release.md) for identity, packaging, verification, and
-recovery details.
-
-Upgrading the executable does not migrate repositories, artifacts or operational data. Retain
-backups/exports and the matching predecessor executable for unsupported older inputs; no automatic
-Graph 12/Artifact 16 converter is provided.
-
-Installation is optional. Select a directory you own rather than piping a download into a shell:
+The supported runtime is Linux x86-64, statically linked for `x86_64-unknown-linux-musl`.
+The installation milestone uses immutable version slots and an explicit default selection. It is
+selected for publication as v0.1.34; see [release state](docs/release.md) for actual delivery status.
+The latest bootstrap is acquired completely before execution with this single compound invocation:
 
 ```sh
-install_dir="$PWD/bin"
-mkdir -p "$install_dir"
-install -Dm755 ./lkjscript/lkjscript "$install_dir/lkjscript"
-"$install_dir/lkjscript" capabilities
+(umask 077; installer=$(mktemp) || exit; trap 'rm -f "$installer"' 0; trap 'exit 130' INT; trap 'exit 143' TERM; curl -q --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output "$installer" https://github.com/lkjsxc/lkjscript/releases/latest/download/install.sh && sh "$installer")
 ```
+
+The script needs `sh`, `curl`, `sha256sum`, `tar`, `mktemp`, `chmod`, `wc`, `rm`, and
+`uname`. It does not install tools or use sudo. The installed native manager and applications need
+none of those acquisition tools. The script installs into absolute `$HOME/.local` by default;
+append `--prefix /absolute/owned/path` to its `sh` invocation to choose another prefix.
+No shell profile changes. If needed, explicitly add the selected prefix's bin directory to this shell:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+lkjscript runtime list
+```
+
+For download/inspect/run, use the exact immutable URL and review the complete script first:
+
+```sh
+curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.34.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.34/install.sh
+cat install-v0.1.34.sh
+sh install-v0.1.34.sh --prefix "$HOME/.local"
+```
+
+Trust the initial script as executable code from the selected GitHub HTTPS source. Its embedded
+digests bind the subsequently downloaded exact archive and executable; they are not an independent
+signing authority. Once downloaded, that script always selects its embedded version, even if latest
+moves. A missing pinned asset fails without fallback. Reacquiring a newer bootstrap is an explicit
+additive update. The archive's `SHA256SUMS` remains a one-line archive checksum; authenticated release
+metadata and attestations are separate from anonymous download.
+
+The public native offline boundary takes a local archive and its expected lowercase SHA-256:
+
+```sh
+manager="$HOME/.local/lib/lkjscript/versions/v0.1.34/x86_64-unknown-linux-musl/lkjscript"
+"$manager" runtime install --archive "$PWD/lkjscript-x86_64-unknown-linux-musl.tar.gz" --sha256 "$archive_sha256" --prefix "$HOME/.local"
+"$manager" runtime list --prefix "$HOME/.local"
+"$manager" runtime select v0.1.34 --prefix "$HOME/.local"
+```
+
+Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Local dry-run
+archives are admitted as declared dry-run/unverified publication; they cannot overwrite a different
+archive at the same tag. Installation without `--activate` does not change the default. Inventory
+reports full payload integrity as unchecked; selection and exact reinstall fully validate retained
+payloads. A corrupted slot is preserved: use a new owned prefix for recovery.
+
+Pinned applications use the emitted versioned absolute executable path. Selecting another default
+changes future invocations through `PREFIX/bin/lkjscript`; already running processes and pinned paths
+keep their original bytes. After installing and selecting v0.1.32, which has no `runtime` command,
+recover through the retained newer manager:
+
+```sh
+"$manager" runtime select v0.1.32 --prefix "$HOME/.local"
+"$HOME/.local/bin/lkjscript" --version
+"$manager" runtime select v0.1.34 --prefix "$HOME/.local"
+"$manager" run --deployment /absolute/application/command.deployment.json
+```
+
+Alternatively rerun that newer exact bootstrap. If the invoking manager was never installed,
+management reports its actual path as external/unmanaged and explicitly reports no retained manager
+slot. There is no automatic artifact/data migration, compatible-version search, daemon or updater.
+Retain each application's matching executable, bundle and descriptor. See [release procedure](docs/release.md)
+and [installation contract](docs/spec/product-surface.md#local-runtime-installation).
 
 ## Start from one binary
 
@@ -170,7 +202,7 @@ Use the extracted or installed executable outside the checkout to create a usefu
 
 ```sh
 mkdir -p /tmp/lkjscript-demo
-cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-demo/lkjscript
+cp "$HOME/.local/bin/lkjscript" /tmp/lkjscript-demo/lkjscript
 cd /tmp/lkjscript-demo
 ./lkjscript capabilities
 ./lkjscript new ./hello --template command --name hello
@@ -231,7 +263,7 @@ The immutable v0.1.32 download above exposes this complete workflow from the sam
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
-cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-http-demo/lkjscript
+cp "$HOME/.local/bin/lkjscript" /tmp/lkjscript-http-demo/lkjscript
 cd /tmp/lkjscript-http-demo
 ./lkjscript capabilities new
 ./lkjscript new ./site --template http --name site
@@ -270,7 +302,7 @@ The immutable v0.1.32 download can create the complete closed NIP-11 information
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
-cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-relay-info-demo/lkjscript
+cp "$HOME/.local/bin/lkjscript" /tmp/lkjscript-relay-info-demo/lkjscript
 cd /tmp/lkjscript-relay-info-demo
 ./lkjscript capabilities new
 ./lkjscript new ./relay-info \
@@ -343,7 +375,7 @@ Command and interactive targets still require one exact port. An interactive por
 `(Option<State>, SessionEvent) -> SessionDecision<State>` with one closed ordinary concrete
 `State`. The same relation is independently reconstructed during accepted validation, package and
 artifact construction/loading, and deployment preparation. `serve` selects either exact HTTP or
-interactive topology; public `run` remains pure-command-only. See the normative
+interactive topology; project `run TARGET` remains pure-command-only and artifact `run --deployment PATH` supports pure/task Command ports. See the normative
 [structured-session contract](docs/spec/structured-sessions.md).
 
 The public vocabulary also includes `add.type-parameter`, `expression.function-value`,
@@ -401,7 +433,7 @@ repository is built and synchronized in a private sibling stage, then made visib
 `check`, `build`, and `run` share exact project discovery, dependency resolution, compilation,
 artifact linking/loading, and dense runtime preparation. `check` runs every graph-owned test
 through both execution tiers. `build` requires an explicit absent output path and never replaces a
-file, directory, or symlink. `run` accepts a pure command target and the strict bounded JSON-array
+file, directory, or symlink. Project `run TARGET` accepts a pure command target and the strict bounded JSON-array
 argument adapter:
 
 ```sh

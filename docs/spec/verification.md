@@ -756,3 +756,24 @@ It preserves public requests, three complete CLI runs per size/target, independe
 candidate/verifier identities and cleanup. These include preparation and materialization costs;
 the separate recursive resource probe measures execution after preparation. A feature milestone
 does not establish a speedup, and an ignored test that has not actually run supplies no evidence.
+
+## Native installation and release bootstrap
+
+Production installation tests use independently assembled canonical declared-dry-run containers and
+the ordinary public admission boundary. They must not call release preparation or require completed
+source/target receipts. Native parser, immutable-slot, prefix ownership, OS lock, symlink selection,
+I/O fault and process-termination tests belong to the workspace test gate. Shared archive parsing
+and production dependencies require the full dependency-closed profile and exact static target proof.
+
+After those prerequisites, genuine frozen packages exercise deterministic third-asset generation,
+the unchanged bootstrap in both pinned userlands with explicitly simulated exact-URL acquisition,
+and installed public lifecycles through the existing transferred pair owner. That pair adds one
+small predecessor-manager/process-continuity witness and retains one five-owner aggregate. Public
+acceptance independently downloads exact/latest triples anonymously, admits all three asset identities
+and attestations separately, executes the original scripts with real network acquisition, and binds
+the one fresh aggregate within the pair. Simulated acquisition is never anonymous-download evidence.
+
+Changed asset, installation, recovery and nested receipt readers require live omitted/substituted and
+consistently rehashed fault fixtures from the first complete matching acceptance; an ignored test
+without that execution remains unrun. Preserve predecessor readers for historical receipts. No
+installation proof licenses graph/artifact/data migration, effect replay or implicit runtime fallback.

@@ -6,16 +6,27 @@ public guides live under [generated](generated), including the
 
 ## Current authority and maintained consumers
 
-The active [foreground campaign](campaigns/202609121842.md) implements public
+The preceding [foreground campaign](campaigns/202609121842.md) implements public
 `run --deployment PATH [--arguments JSON]` for exact artifact Command targets. A copied candidate
 has passed pure starters and fresh transported task-library consumers after their authoring paths
 were removed, including persistent once-only counters and dependency replacement/recovery.
 Source `0b5e982727a080761d14afd98e45199497acf87d` passed 26 fresh full gates, exact static-musl
 admission in both pinned userlands and all six target owners, 73 receipt faults, and deterministic
 package verification. It is normally integrated on main. The selected combined v0.1.33 release
-is awaiting hosted dry run `34693887632/1`, initially observed in progress; tagging, publication
-and public exact/latest acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
+remains selected. Dry run `34693887632/1` failed at the 1,200-second outer offline-package deadline
+after reaching command 470 of 492; no semantic failure was established. Corrected isolated source
+`c34114fc1b51f96f42c2b637fb9ad522b55b41f9` preserves the two-asset workflow, gives that owner
+1,800 seconds, and initializes a missing derived catalog before its read-only projection test. Its
+fresh full profile passed all 26 gates; exact static target admission passed both userlands and all
+six owners, and deterministic packaging passed. It is normally integrated on main. Matching dry run
+`34700198909/1` is in progress; tag publication and public acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
 separates accepted source from later reporting. This designed witness is separate from maintained adoption.
+
+The [installation campaign](campaigns/202609122211.md) adds project-independent native `runtime
+install`, `runtime list`, and `runtime select`, immutable version slots and one relative default symlink.
+Source implementation and focused fault tests are in progress toward v0.1.34; the new package, hosted
+and public bootstrap acceptance are not yet established. Selection changes no graph, artifact, grant
+or application data and never infers compatibility or invokes another runtime as fallback.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
@@ -312,7 +323,7 @@ coalesced tick source, cancellation lineage, bounded byte-accounted mailboxes, s
 permits, and joined children. Each callback remains a finite resident task under the one-hour task
 ceiling, while separately bounded idle and total session lifetimes admit 24 hours. Complete output
 capacity is reserved before a potentially effectful callback; a failed or invalid transition
-installs neither state nor partial output. Public `run` remains pure-command-only, and no live
+installs neither state nor partial output. Project `run TARGET` remains pure-command-only; `run --deployment PATH` executes pure or task Command ports, and no live
 resource becomes a graph value or result.
 
 Every inbound HTTP target now owns one nonempty finite set of stable exact-or-pattern route owners
@@ -503,7 +514,7 @@ project discovery -> exact RepositoryView -> dependency closure
 
 `check` runs all graph tests through the normalized VM and canonical reference interpreter.
 `build` writes an artifact bundle to an explicit absent path through synchronized create-new
-publication. `run` accepts a pure command target, parses a bounded JSON argument array, executes
+publication. Project `run TARGET` accepts a pure command target, parses a bounded JSON argument array, executes
 both tiers once, and rejects disagreement. These operations never advance semantic authority.
 
 The compiler cache under `derived/compiler` is revision-bound disposable state. A valid exact
@@ -570,8 +581,9 @@ full-profile gates, and all nine fresh local musl classifications pass. The exac
 is 20,359,424 bytes, SHA-256 `8c258b2fc9236519ef45ee33dc6ce940fb7ceef406ff988515d0d359950448c0`.
 This is local distribution proof; 0.1.27 remains unreleased.
 
-Normalized production and reference execution support pure commands and graph tests. Public `run`
-deliberately rejects non-command runners and effectful command entry points. Public `serve` and
+Normalized production and reference execution support pure commands and graph tests. Project `run TARGET`
+rejects non-command runners and effectful command entry points. Artifact `run --deployment PATH`
+executes pure or task Command ports once under checked grants. Public `serve` and
 `worker` strictly load a standalone artifact bundle, prepare `NormalizedProgram`, resolve the
 selected target and exact component requirement closure, and invoke the normalized resident VM.
 Their descriptors supply configuration, named secrets, adapter selection, external coordinates,
@@ -629,7 +641,7 @@ sandbox or multi-tenant isolation boundary.
 - Unreleased source resolves exact immutable code-complete dependency closures, including ordinary
   non-built-in packages. There is no ambient filesystem lookup, mutable tag, network registry,
   package publication, or upgrade resolver. Public release behavior remains separately identified.
-- Public `run` is pure-command-only. Arbitrary outbound URLs/methods, request bodies, outbound
+- Project `run TARGET` is pure-command-only; artifact `run --deployment PATH` supports pure/task commands. Arbitrary outbound URLs/methods, request bodies, outbound
   WebSocket clients, redirects, private-network destinations, proxies, client certificates,
   NIP-01 event models/signing, reconnect/backoff, and additional effect families remain absent.
 - Source text, recursive referenced-declaration detail, dependency implementation detail queries,

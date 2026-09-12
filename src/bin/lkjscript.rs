@@ -27,6 +27,24 @@ fn main() -> ExitCode {
     if arguments.as_slice() == ["--version"] {
         return product_version();
     }
+    if arguments.first().map(String::as_str) == Some("runtime") {
+        return match lkjscript::platform::cli::execute_runtime(&arguments[1..]) {
+            Ok(bytes) => match write_bytes(&bytes) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    let mut diagnostic = Diagnostic::new(
+                        lkjscript::platform::DiagnosticClass::Infrastructure,
+                        "runtime_output",
+                        format!("runtime result delivery failed: {error}"),
+                    );
+                    diagnostic.notes.push("a requested installation or selection may already be committed; use runtime list and the invoking manager's absolute path; output failure does not reverse it".to_owned());
+                    write_stderr_diagnostic(&diagnostic);
+                    ExitCode::from(exit_for(&diagnostic))
+                }
+            },
+            Err(error) => write_compact_failures_with_fallback("runtime", &[error], true),
+        };
+    }
     if let Some(capability_arguments) = compact_capability_arguments(&arguments) {
         return compact_capabilities(&capability_arguments);
     }
@@ -454,6 +472,21 @@ fn write_compact_failure(command: &str, error: &Diagnostic) -> ExitCode {
 }
 
 fn write_compact_failures(command: &str, diagnostics: &[Diagnostic]) -> ExitCode {
+    write_compact_failures_with_fallback(command, diagnostics, false)
+}
+
+fn write_stderr_diagnostic(error: &Diagnostic) {
+    if let Ok(mut bytes) = serde_json::to_vec(error) {
+        bytes.push(b'\n');
+        let _ = std::io::stderr().lock().write_all(&bytes);
+    }
+}
+
+fn write_compact_failures_with_fallback(
+    command: &str,
+    diagnostics: &[Diagnostic],
+    stderr_fallback: bool,
+) -> ExitCode {
     let Some(first) = diagnostics.first() else {
         return ExitCode::from(exit_status_for(
             lkjscript::platform::DiagnosticClass::Infrastructure,
@@ -504,7 +537,14 @@ fn write_compact_failures(command: &str, diagnostics: &[Diagnostic]) -> ExitCode
         }
         write_bytes(&output.finish())
     })();
-    if result.is_err() {
+    if let Err(delivery) = result {
+        if stderr_fallback {
+            let mut failure = first.clone();
+            failure
+                .notes
+                .push(format!("diagnostic delivery also failed: {delivery}"));
+            write_stderr_diagnostic(&failure);
+        }
         ExitCode::from(exit_status_for(
             lkjscript::platform::DiagnosticClass::Infrastructure,
         ))

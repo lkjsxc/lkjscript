@@ -10,3 +10,4 @@
 pub const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod platform;
+pub mod release_container;

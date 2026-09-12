@@ -1,7 +1,7 @@
 # Release procedure
 
 GitHub Releases are the sole public binary distribution path. A release is derived from one exact
-source commit. Its tag, target, candidate, archive, manifest, checksum, asset digest, attestation,
+source commit. Its tag, target, candidate, archive, manifest, checksum, bootstrap, asset digest, attestation,
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
@@ -17,7 +17,10 @@ at source, target, transferred and public acceptance. Existing exact-source dry-
 immutability control and public-pair gates still apply. A descriptor may omit command execution
 and runtime policy only on a matching foreground-capable executable; retain numeric descriptors
 and the previous executable with immutable bundles for recovery. No operational-data migration
-is part of publication.
+is part of publication. The failed original dry run `34693887632/1` reached its offline-package outer
+deadline. Corrected two-asset source `c34114fc` passed fresh full, exact six-owner target and package
+proof and is integrated; matching `34700198909/1` is running without publication. The installation
+campaign separately selects v0.1.34 and its verified third asset after the acceptance below.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
@@ -57,7 +60,7 @@ compatibility identities remain independently owned as described by
 
 `lkjscript-dev release target` is the sole executable owner of the current release target triple,
 archive name, static-linkage policy, native build inputs, and pinned test userlands. The current
-policy selects one asset:
+policy selects one archive target:
 
 ```text
 lkjscript-x86_64-unknown-linux-musl.tar.gz
@@ -199,7 +202,11 @@ target/release/lkjscript-dev release verify \
 Preparation generates target-filtered third-party notices twice from the locked offline production
 closure, creates two archives, and requires byte equality. The archive inventory is exactly one
 `lkjscript/` directory containing the executable, root license, generated third-party notices, and
-canonical release manifest. `SHA256SUMS` contains exactly the one archive entry. Strict verification
+canonical release manifest. `SHA256SUMS` contains exactly the one archive entry. Only after the exact
+archive is finalized, the release owner renders `install.sh` from one source template. This third asset
+binds the exact repository/tag/target and archive/executable lengths and digests; it is outside the archive.
+`release verify` requires that exact deterministic script beside the archive. Release receipt 3 binds
+all three asset identities; predecessor receipt 2 and two-asset workflows remain with their frozen readers. Strict verification
 rejects nonregular inputs, links, traversal, duplicates, extras, incorrect order/mode/timestamp,
 noncanonical or predecessor metadata, target/linkage contradiction, checksum corruption, extraction
 conflict, and candidate mismatch. `release verify --extract-to` makes the validated directory visible
@@ -211,18 +218,36 @@ deterministic packaging. It contains no separate format or subsystem version. Th
 receipt additionally binds fresh source and target-admission evidence; that contributor evidence is
 not shipped as public product metadata.
 
+The shared production `release_container` owner admits historical canonical payloads with bounded
+native gzip/tar, SHA-256 and static ELF checks. Installation never invokes contributor tools or external
+processes. Current release production separately enforces the exact pinned Rust, notice-tool and
+packaging policy; historical admission does not weaken producer policy. An install receipt records
+declared dry-run/release mode as unverified publication, not an authenticity claim.
+
+The bootstrap trusts its selected GitHub HTTPS source and uses embedded digests to bind subsequent
+bytes. It accepts only `--prefix`, performs bounded exact-URL acquisition, extracts only the manager
+into private temporary storage, and delegates to `runtime install --activate`. Rust exclusively owns
+archive admission, installation locks, immutable slots and atomic selection. PATH and shell profiles
+are untouched. See the [public installation commands](../README.md#download-and-install).
+
+Each pair additionally installs immutable public v0.1.32, checks exact/idempotent selection and manager
+recovery, and holds two independent HTTP starter bundles alive through a default change. The original
+foreground owner still supplies the independent arithmetic, once-only counter and cleanup expectations.
+No effects are replayed for a reference comparison. Retained binaries, receipts, descriptors and
+artifacts remain bound; generated authoring projects and owned live processes are cleaned.
+
 ## Hosted dry run
 
 The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout job builds the host
 verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
-deterministic package, and uploads a three-file release handoff plus a two-file application-verifier
+deterministic package, and uploads a four-file release handoff plus a two-file application-verifier
 handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
 commit, mode, and the roles in private handoff version 4 release-verify, distributed-http, outbound-http,
 offline-packages, pure-tail, and stateful-http.
 
 A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
 the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,
-and runs all five transferred behavioral owners through `release transferred run`. Stateful verification uses only an explicit absolute
+and runs `release transferred pair-run --acquisition simulated` over independent copies of all three assets. The unchanged generated bootstrap runs in both pinned userlands with controlled exact-URL acquisition. Both installed small lifecycles and one two-version recovery witness precede the single five-owner aggregate. Stateful verification uses only an explicit absolute
 create-new evidence root and an isolated first-party data store; it provisions no database server or
 container. Outbound verification uses a separate create-new root and deterministic local raw
 HTTP/TLS fixtures. All five child receipts must pass their complete current typed readers before the publication job
@@ -250,7 +275,7 @@ Do not watch indefinitely, poll, fetch unchanged logs repeatedly or merge around
 Download artifacts only after completion, and retain the explicit failing artifact-ID/digest checks.
 
 The dry run must freshly pass build, full, all six named target oracles, package, and the
-five-owner transferred operation. Its publish and post-release jobs must be
+installed pair and five-owner transferred operation. Its publish and post-release jobs must be
 skipped, and no tag, draft,
 release, or public asset may be created. Evidence from another commit, workflow, target policy,
 candidate, verifier, image, or run attempt is stale.
@@ -315,17 +340,20 @@ grant does not authorize changing immutability or any other settings.
 The tag push owns publication. The only `contents: write` job receives the verified release handoff,
 performs no checkout, and executes no repository binary or script. It checks the remote annotated tag
 and administrator binding, creates or resumes only the exact draft, uploads only missing exact assets
-without clobber, verifies both GitHub asset digests, and publishes immutable latest state. Do not
+without clobber, verifies all three GitHub asset digests, and publishes immutable latest state. Do not
 manually create a parallel release.
 
 ## Anonymous public acceptance
 
-The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum
-pairs and independently accepts their release/asset authenticity and asset identities. It then invokes
-one `release transferred pair-run` in mandatory release mode. Rust independently admits each strict
+The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum/
+bootstrap triples. Acquisition clears inherited authentication and curl configuration; separate authenticated
+metadata and attestation reads admit every asset identity. It then invokes
+one `release transferred pair-run --acquisition anonymous` in mandatory release mode. The original
+downloaded scripts execute with the real downloader and each acquires its embedded exact-tag archive;
+there are no URL overrides or acquisition fixtures in public proof. Rust independently admits each strict
 archive and static executable into a create-new extraction, compares complete archive/checksum/
-manifest/executable bytes and admitted modes, and runs the documented capabilities/new/status/check/
-build/run lifecycle through each extraction with independently expected typed text `"hello"`.
+installer/manifest/executable bytes and admitted modes, and runs the documented capabilities/new/status/check/
+build/run lifecycle through each installed pinned executable with independently expected typed text `"hello"`.
 A final status confirms the accepted revision remains healthy. Each route has a private project and
 supervised cleanup. The pair then freshly executes the existing five-owner suite once against exact,
 with boundary `exact-download`. Latest binds that actual aggregate within this invocation; it does
@@ -335,6 +363,7 @@ not receive a fabricated fresh five-child receipt. Its small lifecycle is separa
 /absolute/verifier/lkjscript-dev release transferred pair-run \
   --exact-assets /absolute/exact-assets --latest-assets /absolute/latest-assets \
   --tag "$release_tag" --commit "$release_source" --publication release \
+  --acquisition anonymous \
   --evidence-root /absolute/absent/pair \
   --verifier-identity /absolute/verifier/verifier-identity.json \
   --expected-verifier-sha256 "$verifier_sha256" --expected-verifier-bytes "$verifier_bytes"
@@ -342,17 +371,18 @@ not receive a fabricated fresh five-child receipt. Its small lifecycle is separa
 
 `pair-verify` accepts the same arguments and strictly rereads the pair, both admissions, lifecycles
 and every actual child receipt without executing applications. Input directories must be separate
-canonical absolute directories containing exactly the target-owned archive and `SHA256SUMS`;
+canonical absolute directories containing exactly the target-owned archive, `SHA256SUMS`, and `install.sh`;
 symlinks, aliases, hard-linked inputs and pre-existing output roots reject. Both routes, the verifier
 and its handoff are reobserved around each expensive child and before terminal acceptance. Failed,
 cancelled, unavailable, output-exhausted, changed or unclean attempts remain non-passing; retries
 use new roots. Evidence retains route receipts/logs and the small built artifacts required by their
 reader, plus the one actual aggregate and all child records. Generated projects are removed.
 
-`--publication dry-run` is explicitly a **local pair rehearsal**. Prepare from a clean source commit
+`--acquisition simulated` is explicitly a **local pair rehearsal**, for either declared dry-run or final
+release package bytes. `--acquisition anonymous` requires a release manifest. Prepare from a clean source commit
 using fresh full and exact target-admission receipts, the unchanged product-version tag string and
 the pinned notice tool; create a matching verifier handoff and two independent local input copies.
-The pair's real child aggregate uses `pre-publication` for dry-run manifests. This requires no new
+The pair's real child aggregate uses `pre-publication` for simulated acquisition. This requires no new
 tag or release and proves no anonymous acquisition or GitHub authenticity. Release and rehearsal
 evidence cannot substitute for each other. Source-full, six-owner target and independent fresh
 pre-publication acceptance remain mandatory for a selected publication. The contributor command
@@ -370,8 +400,8 @@ with `--ignored --exact`, then perform the genuine `pair-run` into `pair`. Expli
 `release::transferred::fault_tests::live_receipt_fault_matrix` with
 `LKJSCRIPT_TRANSFERRED_FIXTURE_ROOT` naming its `full-suite`. These source-bound fault tests restore
 original evidence; they are not fresh product behavioral observations or default full rehearsals.
-The next selected user-visible release milestone must exercise this public workflow. No new
-publication or deployment is selected merely to integrate this tooling change.
+The next selected user-visible release milestone must exercise this public workflow. The installation campaign explicitly selects additive publication after source, target and transferred
+acceptance. It does not select deployment or automatic future releases.
 
 An independent token-free transport check may repeat:
 

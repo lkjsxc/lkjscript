@@ -121,6 +121,12 @@ fn pack(root: &Path, members: &[archive::tests::TestMember]) -> PathBuf {
         crate::release::checksum_bytes(&digest),
     )
     .expect("checksums");
+    // Deliberately malformed archive fixtures have no admissible bootstrap; admission must fail first.
+    let script = match archive::verify_archive(&input.join(archive::ARCHIVE_NAME), root, None) {
+        Ok(verified) => crate::release::bootstrap::render(&verified).expect("fixture bootstrap"),
+        Err(_) => b"invalid fixture bootstrap\n".to_vec(),
+    };
+    fs::write(input.join(crate::release::bootstrap::NAME), script).expect("installer");
     input
 }
 fn admit_fixture(root: &Path, input: &Path) -> Result<archive::VerifiedArchive, DevError> {
@@ -155,6 +161,7 @@ fn equality_inventory_and_same_tag_different_valid_content_are_independent() {
         }
         let latest_assets = pack(right.path(), &latest);
         let options = PairOptions {
+            acquisition: Acquisition::Simulated,
             verify: false,
             exact_assets,
             latest_assets,
@@ -207,7 +214,13 @@ fn equality_inventory_and_same_tag_different_valid_content_are_independent() {
                     .iter()
                     .map(|c| c.name.as_str())
                     .collect::<Vec<_>>(),
-                ["archive", "checksums", "manifest", "executable"]
+                [
+                    "archive",
+                    "checksums",
+                    "installer",
+                    "manifest",
+                    "executable"
+                ]
             );
             assert!(equality.comparisons.iter().all(|c| c.compared_bytes > 0
                 && c.compared_bytes == c.exact.file.byte_length
@@ -324,7 +337,11 @@ fn equality_compares_every_byte_in_both_input_orders() {
 #[test]
 fn independent_inputs_reject_aliases_and_sidecars() {
     let root = tempfile::tempdir().expect("root");
-    for name in [archive::ARCHIVE_NAME, archive::CHECKSUM_NAME] {
+    for name in [
+        archive::ARCHIVE_NAME,
+        archive::CHECKSUM_NAME,
+        crate::release::bootstrap::NAME,
+    ] {
         fs::write(root.path().join(name), b"fixture").expect("input");
     }
     inputs(root.path()).expect("independent regular files");
@@ -361,6 +378,7 @@ fn options_from_fixture(root: &Path) -> (PairOptions, PathBuf) {
         identity["tag"].as_str()
     );
     let options = PairOptions {
+        acquisition: Acquisition::Simulated,
         verify: false,
         exact_assets: root.join("exact-assets"),
         latest_assets: root.join("latest-assets"),
@@ -415,6 +433,7 @@ fn live_route_recipe_smoke() {
     let evidence_root = root.path().join("evidence");
     fs::create_dir(&evidence_root).expect("evidence");
     let mut options = PairOptions {
+        acquisition: Acquisition::Simulated,
         verify: false,
         exact_assets: root.path().join("exact-assets"),
         latest_assets: root.path().join("latest-assets"),
@@ -428,7 +447,11 @@ fn live_route_recipe_smoke() {
     };
     for route in [Route::Exact, Route::Latest] {
         fs::create_dir(route.assets(&options)).expect("assets");
-        for name in [archive::ARCHIVE_NAME, archive::CHECKSUM_NAME] {
+        for name in [
+            archive::ARCHIVE_NAME,
+            archive::CHECKSUM_NAME,
+            crate::release::bootstrap::NAME,
+        ] {
             archive::copy_new(&input.join(name), &route.assets(&options).join(name), 0o644)
                 .expect("independent local input");
         }
@@ -441,7 +464,7 @@ fn live_route_recipe_smoke() {
         let receipt = lifecycle::run(
             &options,
             route,
-            &admitted.manifest,
+            &admitted,
             &process::ProcessControl::default(),
         )
         .expect("lifecycle result");
@@ -452,8 +475,7 @@ fn live_route_recipe_smoke() {
                 retained.display()
             );
         }
-        lifecycle::validate(&options, route, &admitted.manifest, &receipt)
-            .expect("actual recipe receipt");
+        lifecycle::validate(&options, route, &admitted, &receipt).expect("actual recipe receipt");
     }
     root.close().expect("owned smoke cleanup");
 }
@@ -608,6 +630,10 @@ fn live_pair_receipt_fault_matrix() {
     let (mut options, verifier) = options_from_fixture(fixture_root);
     options.evidence_root = pair_root.clone();
     options.verify = true;
+    let observed: PairReceipt =
+        serde_json::from_slice(&fs::read(pair_root.join("receipt.json")).expect("pair source"))
+            .expect("typed pair source");
+    options.acquisition = observed.acquisition;
     let baseline = read(&options, &verifier).expect("unmodified real pair passes");
     let path = pair_root.join("receipt.json");
     let original = fs::read(&path).expect("pair bytes");
@@ -671,6 +697,16 @@ fn live_pair_receipt_fault_matrix() {
         fault.routes[index].inputs.archive.file.byte_length += 1;
         reject("route-identity", fault);
         let mut fault = baseline.clone();
+        fault.routes[index].inputs.installer.file.byte_length += 1;
+        reject("installer-identity", fault);
+        let mut fault = baseline.clone();
+        fault.routes[index]
+            .lifecycle
+            .as_mut()
+            .expect("lifecycle")
+            .installation = None;
+        reject("omit-installed-bootstrap", fault);
+        let mut fault = baseline.clone();
         fault.routes[index]
             .lifecycle
             .as_mut()
@@ -695,6 +731,9 @@ fn live_pair_receipt_fault_matrix() {
     let mut fault = baseline.clone();
     fault.suite = None;
     reject("absent-source", fault);
+    let mut fault = baseline.clone();
+    fault.recovery = None;
+    reject("omit-predecessor-recovery", fault);
     let mut fault = baseline.clone();
     fault.equality = None;
     reject("absent-equality", fault);
@@ -857,6 +896,76 @@ fn live_pair_receipt_fault_matrix() {
         fs::write(&path, &original).expect("restore pair");
         results.push(serde_json::json!({"fault":pointer,"rehashed_child_aggregate_and_pair":true,"rejection":rejected.expect_err(pointer).to_string()}));
     }
+    // Rewrite both nested source receipt and enclosing pair to exercise their actual readers.
+    for route_index in [0, 1] {
+        for pointer in [
+            "/installation/command",
+            "/installation/environment/PATH",
+            "/installation/cleanup_complete",
+            "/installation/candidate/file/sha256",
+        ] {
+            let mut value = serde_json::to_value(&baseline.routes[route_index].lifecycle)
+                .expect("lifecycle JSON");
+            let field = value
+                .pointer_mut(pointer)
+                .expect("required installation field");
+            *field = match field {
+                serde_json::Value::Array(_) => serde_json::json!([]),
+                serde_json::Value::Bool(_) => serde_json::json!(false),
+                _ => serde_json::json!("foreign"),
+            };
+            let decoded = serde_json::from_value::<lifecycle::Lifecycle>(value);
+            if let Ok(changed) = decoded {
+                let child_path = baseline.routes[route_index]
+                    .route
+                    .root(&options)
+                    .join("lifecycle.json");
+                let child_original = fs::read(&child_path).expect("lifecycle bytes");
+                fs::write(
+                    &child_path,
+                    evidence::encode_json(&changed).expect("canonical lifecycle"),
+                )
+                .expect("rewrite lifecycle");
+                let mut fault = baseline.clone();
+                fault.routes[route_index].lifecycle = Some(changed);
+                fs::write(&path, evidence::encode_json(&fault).expect("pair bytes"))
+                    .expect("rewrite pair");
+                let rejected = read(&options, &verifier);
+                fs::write(&child_path, child_original).expect("restore lifecycle");
+                fs::write(&path, &original).expect("restore pair");
+                results.push(serde_json::json!({"fault":pointer,"rehashed_nested_pair":true,"rejection":rejected.expect_err(pointer).to_string()}));
+            } else {
+                results.push(
+                    serde_json::json!({"fault":pointer,"rejection":"typed identity admission"}),
+                );
+            }
+        }
+    }
+    for pointer in ["/commands", "/residents", "/retained", "/cleanup_complete"] {
+        let mut value = serde_json::to_value(&baseline.recovery).expect("recovery JSON");
+        let field = value.pointer_mut(pointer).expect("required recovery field");
+        *field = if field.is_boolean() {
+            serde_json::json!(false)
+        } else {
+            serde_json::json!([])
+        };
+        let changed: recovery::Recovery =
+            serde_json::from_value(value).expect("typed recovery mutation");
+        let child_path = options.evidence_root.join("recovery/receipt.json");
+        let child_original = fs::read(&child_path).expect("recovery bytes");
+        fs::write(
+            &child_path,
+            evidence::encode_json(&changed).expect("canonical recovery"),
+        )
+        .expect("rewrite recovery");
+        let mut fault = baseline.clone();
+        fault.recovery = Some(changed);
+        fs::write(&path, evidence::encode_json(&fault).expect("pair bytes")).expect("rewrite pair");
+        let rejected = read(&options, &verifier);
+        fs::write(&child_path, child_original).expect("restore recovery");
+        fs::write(&path, &original).expect("restore pair");
+        results.push(serde_json::json!({"fault":pointer,"rehashed_nested_pair":true,"rejection":rejected.expect_err(pointer).to_string()}));
+    }
     for input in [
         verifier.clone(),
         options.verifier_identity.clone(),
@@ -875,7 +984,11 @@ fn live_pair_receipt_fault_matrix() {
         results.push(serde_json::json!({"fault":"binding-drift","path":input,"rejection":rejected.expect_err("binding drift").to_string()}));
     }
     for route in [Route::Exact, Route::Latest] {
-        for relative in [archive::ARCHIVE_NAME, archive::CHECKSUM_NAME] {
+        for relative in [
+            archive::ARCHIVE_NAME,
+            archive::CHECKSUM_NAME,
+            crate::release::bootstrap::NAME,
+        ] {
             let input = route.assets(&options).join(relative);
             use std::io::{Seek, SeekFrom, Write};
             let mut file = fs::OpenOptions::new()
@@ -899,4 +1012,117 @@ fn live_pair_receipt_fault_matrix() {
     assert_eq!(fs::read(&path).expect("final pair"), original);
     evidence::publish_json(&pair_root.join("live-pair-fault-results.json"), &results)
         .expect("fault evidence");
+}
+
+#[test]
+fn bootstrap_acquisition_failures_never_create_a_prefix() {
+    let root = tempfile::tempdir().expect("bootstrap fixture");
+    let members = fixture_members(root.path());
+    let assets = pack(root.path(), &members);
+    let script = assets.join(crate::release::bootstrap::NAME);
+    let prefix = root
+        .path()
+        .join("prefix with spaces and $(touch should-not-exist)");
+    let fixture = root.path().join("tools");
+    fs::create_dir(&fixture).expect("tools");
+    let tmp = root.path().join("tmp");
+    fs::create_dir(&tmp).expect("tmp");
+    for mode in [
+        "transfer-failure",
+        "partial",
+        "wrong-length",
+        "wrong-digest",
+        "unsupported-host",
+        "missing-tools",
+        "duplicate-prefix",
+    ] {
+        let curl = match mode {
+            "transfer-failure" => "#!/bin/sh\nexit 22\n".to_owned(),
+            "partial" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nprintf partial > \"$2\"\nexit 18\n".to_owned(),
+            "wrong-length" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nprintf short > \"$2\"\n".to_owned(),
+            "wrong-digest" => "#!/bin/sh\nwhile [ \"$1\" != --output ]; do shift; done\nhead -c \"$FIXTURE_LENGTH\" /dev/zero > \"$2\"\n".to_owned(),
+            _ => "#!/bin/sh\nexit 99\n".to_owned(),
+        };
+        let curl_path = fixture.join("curl");
+        fs::write(&curl_path, curl).expect("curl fixture");
+        fs::set_permissions(&curl_path, fs::Permissions::from_mode(0o755)).expect("mode");
+        let uname = fixture.join("uname");
+        if mode == "unsupported-host" {
+            fs::write(&uname, "#!/bin/sh\nprintf Darwin\\n\n").expect("uname");
+            fs::set_permissions(&uname, fs::Permissions::from_mode(0o755)).expect("mode");
+        } else if uname.exists() {
+            fs::remove_file(&uname).expect("remove uname");
+        }
+        let mut args = vec![
+            script.display().to_string(),
+            "--prefix".to_owned(),
+            prefix.display().to_string(),
+        ];
+        if mode == "duplicate-prefix" {
+            args.extend(["--prefix".to_owned(), prefix.display().to_string()]);
+        }
+        let output = std::process::Command::new("/bin/sh")
+            .args(args)
+            .env_clear()
+            .env(
+                "PATH",
+                if mode == "missing-tools" {
+                    fixture.display().to_string()
+                } else {
+                    format!("{}:/usr/bin:/bin", fixture.display())
+                },
+            )
+            .env("TMPDIR", &tmp)
+            .env(
+                "FIXTURE_LENGTH",
+                fs::metadata(assets.join(archive::ARCHIVE_NAME))
+                    .expect("archive")
+                    .len()
+                    .to_string(),
+            )
+            .current_dir(root.path())
+            .output()
+            .expect("unchanged generated bootstrap");
+        assert!(!output.status.success(), "{mode}");
+        assert!(!prefix.exists(), "{mode}");
+        assert!(!root.path().join("should-not-exist").exists());
+        assert_eq!(
+            fs::read_dir(&tmp).expect("temporary leftovers").count(),
+            0,
+            "{mode}"
+        );
+    }
+}
+
+#[test]
+fn historical_integrity_admission_does_not_relax_current_producer_policy() {
+    let root = tempfile::tempdir().expect("producer policy fixture");
+    let members = fixture_members(root.path());
+    let original: ReleaseManifest =
+        serde_json::from_slice(&members[4].bytes).expect("canonical manifest");
+    for field in [
+        "toolchain",
+        "notice-version",
+        "notice-digest",
+        "packaging-invocation",
+    ] {
+        let mut historical = original.clone();
+        match field {
+            "toolchain" => historical.toolchain.toolchain_channel = "1.75.0".to_owned(),
+            "notice-version" => {
+                historical.third_party_notices.generator_version = "0.1.0".to_owned()
+            }
+            "notice-digest" => {
+                historical.third_party_notices.downloaded_archive_sha256 =
+                    Sha256Digest::new("9".repeat(64)).expect("digest")
+            }
+            _ => historical.packaging.tar_invocation = vec!["historical tar invocation".to_owned()],
+        }
+        lkjscript::release_container::validate_manifest(&historical)
+            .expect("historical format is internally valid");
+        assert!(
+            crate::release::validate_manifest(&historical).is_err(),
+            "{field}"
+        );
+    }
 }

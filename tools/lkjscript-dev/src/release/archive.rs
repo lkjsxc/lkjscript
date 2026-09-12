@@ -1,135 +1,24 @@
-use super::model::{ReleaseManifest, Sha256Digest};
+use super::model::Sha256Digest;
 use crate::error::DevError;
-use crate::process::{self, ProcessSpec, ProcessStatus};
+use crate::process;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
 
 pub(super) const ARCHIVE_NAME: &str = super::target::ARCHIVE_NAME;
 pub(super) const CHECKSUM_NAME: &str = "SHA256SUMS";
 pub(super) const RECEIPT_NAME: &str = "release-receipt.json";
-pub(super) const TOP_DIRECTORY: &str = "lkjscript/";
-pub(super) const EXECUTABLE_MEMBER: &str = "lkjscript/lkjscript";
-pub(super) const LICENSE_MEMBER: &str = "lkjscript/LICENSE";
-pub(super) const NOTICE_MEMBER: &str = "lkjscript/THIRD-PARTY-LICENSES.html";
-pub(super) const MANIFEST_MEMBER: &str = "lkjscript/RELEASE-MANIFEST.json";
+pub(super) use lkjscript::release_container::{
+    EXECUTABLE_MEMBER, LICENSE_MEMBER, MANIFEST_MEMBER, NOTICE_MEMBER, TOP_DIRECTORY,
+    VerifiedArchive, manifest_members, normalized_gzip_invocation, normalized_tar_invocation,
+};
+#[cfg(test)]
+use lkjscript::release_container::{ParsedTar, parse_tar_bytes};
+#[cfg(test)]
 const TAR_BLOCK_BYTES: usize = 512;
-const MAXIMUM_COMPRESSED_BYTES: u64 = 128 * 1024 * 1024;
-const MAXIMUM_UNCOMPRESSED_BYTES: u64 = 256 * 1024 * 1024;
-const MAXIMUM_MANIFEST_BYTES: u64 = 1024 * 1024;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MemberKind {
-    Directory,
-    File,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ExpectedMember {
-    name: &'static str,
-    mode: u32,
-    kind: MemberKind,
-}
-
-const EXPECTED_MEMBERS: [ExpectedMember; 5] = [
-    ExpectedMember {
-        name: TOP_DIRECTORY,
-        mode: 0o755,
-        kind: MemberKind::Directory,
-    },
-    ExpectedMember {
-        name: EXECUTABLE_MEMBER,
-        mode: 0o755,
-        kind: MemberKind::File,
-    },
-    ExpectedMember {
-        name: LICENSE_MEMBER,
-        mode: 0o644,
-        kind: MemberKind::File,
-    },
-    ExpectedMember {
-        name: NOTICE_MEMBER,
-        mode: 0o644,
-        kind: MemberKind::File,
-    },
-    ExpectedMember {
-        name: MANIFEST_MEMBER,
-        mode: 0o644,
-        kind: MemberKind::File,
-    },
-];
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ObservedMember {
-    pub(super) name: String,
-    pub(super) mode: u32,
-    pub(super) byte_length: u64,
-    pub(super) sha256: Option<Sha256Digest>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct VerifiedArchive {
-    pub(super) manifest: ReleaseManifest,
-    pub(super) manifest_sha256: Sha256Digest,
-    pub(super) archive_byte_length: u64,
-    pub(super) archive_sha256: Sha256Digest,
-    pub(super) source_timestamp_unix_seconds: u64,
-    pub(super) members: Vec<ObservedMember>,
-}
-
-pub(super) fn manifest_members() -> Vec<super::model::ArchiveMemberIdentity> {
-    EXPECTED_MEMBERS
-        .iter()
-        .map(|member| super::model::ArchiveMemberIdentity {
-            name: member.name.to_owned(),
-            mode: member.mode,
-            kind: match member.kind {
-                MemberKind::Directory => "directory",
-                MemberKind::File => "regular-file",
-            }
-            .to_owned(),
-        })
-        .collect()
-}
-
-pub(super) fn normalized_tar_invocation(timestamp: u64) -> Vec<String> {
-    vec![
-        "tar".to_owned(),
-        "--format=ustar".to_owned(),
-        "--create".to_owned(),
-        "--file=$TAR".to_owned(),
-        "--directory=$STAGE".to_owned(),
-        "--no-recursion".to_owned(),
-        "--numeric-owner".to_owned(),
-        "--owner=0".to_owned(),
-        "--group=0".to_owned(),
-        format!("--mtime=@{timestamp}"),
-        "--no-xattrs".to_owned(),
-        "--no-acls".to_owned(),
-        "--no-selinux".to_owned(),
-        TOP_DIRECTORY.trim_end_matches('/').to_owned(),
-        EXECUTABLE_MEMBER.to_owned(),
-        LICENSE_MEMBER.to_owned(),
-        NOTICE_MEMBER.to_owned(),
-        MANIFEST_MEMBER.to_owned(),
-    ]
-}
-
-pub(super) fn normalized_gzip_invocation() -> Vec<String> {
-    vec![
-        "gzip".to_owned(),
-        "--no-name".to_owned(),
-        "--best".to_owned(),
-        "$TAR".to_owned(),
-    ]
-}
 
 pub(super) fn stage_payload(
     stage: &Path,
@@ -243,100 +132,43 @@ fn verify_archive_into(
     extraction: &Path,
     control: Option<&process::ProcessControl>,
 ) -> Result<VerifiedArchive, DevError> {
-    let archive_metadata = ensure_regular(archive, "release archive")?;
-    if archive_metadata.len() > MAXIMUM_COMPRESSED_BYTES {
-        return Err(DevError::corrupt(format!(
-            "release archive exceeds {MAXIMUM_COMPRESSED_BYTES} bytes"
-        )));
+    let _ = working_directory;
+    if control.is_some_and(process::ProcessControl::cancelled) {
+        return Err(DevError::corrupt("archive admission cancelled"));
     }
-    verify_gzip_header(archive)?;
-    let archive_sha256 = sha256_file(archive)?.0;
-    let tar_path = working_directory.join("verified.tar");
-    let stderr_path = working_directory.join("gzip.stderr");
-    let spec = &ProcessSpec {
-        command: vec![
-            "gzip".to_owned(),
-            "--decompress".to_owned(),
-            "--stdout".to_owned(),
-            archive.to_string_lossy().into_owned(),
-        ],
-        cwd: working_directory.to_path_buf(),
-        environment: process::environment(),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_UNCOMPRESSED_BYTES,
-        maximum_stderr_bytes: 64 * 1024,
-        stdout_path: tar_path.clone(),
-        stderr_path,
-        unavailable_exit_code: None,
-    };
-    let observation = match control {
-        Some(control) => process::run_supervised(spec, working_directory, Some(control)),
-        None => process::run(spec, working_directory),
-    };
-    if observation.status != ProcessStatus::Passed {
-        return Err(DevError::corrupt(format!(
-            "gzip decompression failed with {:?}: {}",
-            observation.status,
-            observation.reason.as_deref().unwrap_or("no reason")
-        )));
-    }
-    let parsed = parse_tar(&tar_path, extraction)?;
-    let manifest_member = parsed
-        .members
-        .iter()
-        .find(|member| member.name == MANIFEST_MEMBER)
-        .ok_or_else(|| DevError::corrupt("release manifest member is missing"))?;
-    if manifest_member.byte_length > MAXIMUM_MANIFEST_BYTES {
-        return Err(DevError::corrupt("release manifest exceeds its byte limit"));
-    }
-    let manifest_path = extraction.join(MANIFEST_MEMBER);
-    let manifest_bytes = fs::read(&manifest_path).map_err(|error| {
-        DevError::infrastructure(format!("read extracted release manifest: {error}"))
-    })?;
-    let manifest: ReleaseManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|error| DevError::corrupt(format!("decode release manifest: {error}")))?;
-    let canonical = canonical_json(&manifest)?;
-    if canonical != manifest_bytes {
-        return Err(DevError::corrupt(
-            "release manifest is not in canonical first-party encoding",
-        ));
-    }
-    let manifest_sha256 = sha256_bytes(&manifest_bytes)?;
-    if parsed.source_timestamp_unix_seconds != manifest.packaging.source_timestamp_unix_seconds {
-        return Err(DevError::corrupt(
-            "archive member timestamp disagrees with release manifest",
-        ));
-    }
-    cross_check_payloads(&manifest, &parsed.members)?;
-    let extracted_executable = extraction.join(EXECUTABLE_MEMBER);
-    let extracted_elf = super::target::inspect_static_elf(&extracted_executable)?;
-    if extracted_elf != manifest.executable.elf {
-        return Err(DevError::corrupt(
-            "extracted executable linkage disagrees with the release manifest",
-        ));
-    }
+    ensure_regular(archive, "release archive")?;
+    let mut input = File::open(archive)?;
+    let bytes = lkjscript::release_container::read_bounded(
+        &mut input,
+        lkjscript::release_container::MAXIMUM_COMPRESSED_BYTES,
+    )?;
+    let admitted = lkjscript::release_container::admit_gzip(&bytes)?;
     if let Some(candidate) = candidate {
         let metadata = ensure_regular(candidate, "candidate executable")?;
         let (digest, length) = sha256_file(candidate)?;
-        let candidate_elf = super::target::inspect_static_elf(candidate)?;
-        if length != manifest.executable.byte_length
-            || digest != manifest.executable.sha256
+        if digest != admitted.verified.manifest.executable.sha256
+            || length != admitted.verified.manifest.executable.byte_length
             || metadata.permissions().mode() & 0o111 == 0
-            || candidate_elf != extracted_elf
+            || super::target::inspect_static_elf(candidate)?
+                != admitted.verified.manifest.executable.elf
         {
             return Err(DevError::corrupt(
                 "candidate executable does not match archived executable",
             ));
         }
     }
-    Ok(VerifiedArchive {
-        manifest,
-        manifest_sha256,
-        archive_byte_length: archive_metadata.len(),
-        archive_sha256,
-        source_timestamp_unix_seconds: parsed.source_timestamp_unix_seconds,
-        members: parsed.members,
-    })
+    if control.is_some_and(process::ProcessControl::cancelled) {
+        return Err(DevError::corrupt("archive admission cancelled"));
+    }
+    let payload = extraction.join("lkjscript");
+    fs::create_dir(&payload)?;
+    fs::set_permissions(&payload, fs::Permissions::from_mode(0o755))?;
+    for (member, bytes) in admitted.payloads() {
+        write_new(&extraction.join(&member.name), bytes, member.mode)?;
+    }
+    synchronize_directory(&payload)?;
+    synchronize_directory(extraction)?;
+    Ok(admitted.verified)
 }
 
 pub(super) fn extract_verified_archive(
@@ -414,213 +246,6 @@ pub(super) fn admit_archive(
     stage_closed?;
     work_closed?;
     result
-}
-
-struct ParsedTar {
-    source_timestamp_unix_seconds: u64,
-    members: Vec<ObservedMember>,
-}
-
-fn parse_tar(path: &Path, extraction: &Path) -> Result<ParsedTar, DevError> {
-    let metadata = ensure_regular(path, "decompressed tar")?;
-    if metadata.len() > MAXIMUM_UNCOMPRESSED_BYTES {
-        return Err(DevError::corrupt("decompressed tar exceeds its byte limit"));
-    }
-    let mut input = File::open(path)
-        .map_err(|error| DevError::infrastructure(format!("open decompressed tar: {error}")))?;
-    let mut observed = Vec::with_capacity(EXPECTED_MEMBERS.len());
-    let mut names = BTreeSet::new();
-    let mut source_timestamp = None;
-    for expected in EXPECTED_MEMBERS {
-        let mut header = [0_u8; TAR_BLOCK_BYTES];
-        input.read_exact(&mut header).map_err(|error| {
-            DevError::corrupt(format!("read tar header for '{}': {error}", expected.name))
-        })?;
-        if header.iter().all(|byte| *byte == 0) {
-            return Err(DevError::corrupt(format!(
-                "archive ended before expected member '{}'",
-                expected.name
-            )));
-        }
-        validate_header_checksum(&header)?;
-        let name = tar_name(&header)?;
-        validate_member_name(&name)?;
-        if !names.insert(name.clone()) {
-            return Err(DevError::corrupt(format!(
-                "duplicate archive member '{name}'"
-            )));
-        }
-        if name != expected.name {
-            return Err(DevError::corrupt(format!(
-                "noncanonical archive member order: expected '{}', observed '{name}'",
-                expected.name
-            )));
-        }
-        let mode = parse_octal(&header[100..108], "member mode")? as u32;
-        let uid = parse_octal(&header[108..116], "member uid")?;
-        let gid = parse_octal(&header[116..124], "member gid")?;
-        let size = parse_octal(&header[124..136], "member size")?;
-        let timestamp = parse_octal(&header[136..148], "member mtime")?;
-        let type_flag = header[156];
-        if mode != expected.mode || uid != 0 || gid != 0 {
-            return Err(DevError::corrupt(format!(
-                "archive metadata mismatch for '{name}'"
-            )));
-        }
-        if &header[257..263] != b"ustar\0" || &header[263..265] != b"00" {
-            return Err(DevError::corrupt(format!(
-                "archive member '{name}' is not POSIX ustar"
-            )));
-        }
-        if header[157..257].iter().any(|byte| *byte != 0) {
-            return Err(DevError::corrupt(format!(
-                "archive member '{name}' contains a link target"
-            )));
-        }
-        match expected.kind {
-            MemberKind::Directory if type_flag != b'5' || size != 0 => {
-                return Err(DevError::corrupt(format!(
-                    "archive member '{name}' is not the expected directory"
-                )));
-            }
-            MemberKind::File if type_flag != b'0' => {
-                return Err(DevError::corrupt(format!(
-                    "archive member '{name}' is not a regular file"
-                )));
-            }
-            _ => {}
-        }
-        if let Some(previous) = source_timestamp {
-            if previous != timestamp {
-                return Err(DevError::corrupt(
-                    "archive members have inconsistent timestamps",
-                ));
-            }
-        } else {
-            source_timestamp = Some(timestamp);
-        }
-        let sha256 = match expected.kind {
-            MemberKind::Directory => {
-                fs::create_dir(extraction.join(name.trim_end_matches('/'))).map_err(|error| {
-                    DevError::infrastructure(format!("create extracted directory: {error}"))
-                })?;
-                fs::set_permissions(
-                    extraction.join(name.trim_end_matches('/')),
-                    fs::Permissions::from_mode(expected.mode),
-                )
-                .map_err(|error| {
-                    DevError::infrastructure(format!("set extracted directory mode: {error}"))
-                })?;
-                None
-            }
-            MemberKind::File => {
-                let destination = extraction.join(&name);
-                let parent = destination.parent().ok_or_else(|| {
-                    DevError::corrupt(format!("archive member '{name}' has no parent"))
-                })?;
-                ensure_directory(parent, "extraction parent")?;
-                let mut options = OpenOptions::new();
-                options.create_new(true).write(true).mode(expected.mode);
-                let mut output = options.open(&destination).map_err(|error| {
-                    DevError::infrastructure(format!("create extracted member '{name}': {error}"))
-                })?;
-                let digest = copy_exact(&mut input, &mut output, size, &name)?;
-                output
-                    .set_permissions(fs::Permissions::from_mode(expected.mode))
-                    .map_err(|error| {
-                        DevError::infrastructure(format!(
-                            "set extracted member mode '{name}': {error}"
-                        ))
-                    })?;
-                output.sync_all().map_err(|error| {
-                    DevError::infrastructure(format!(
-                        "synchronize extracted member '{name}': {error}"
-                    ))
-                })?;
-                drop(output);
-                skip_zero_padding(&mut input, size, &name)?;
-                Some(digest)
-            }
-        };
-        observed.push(ObservedMember {
-            name,
-            mode,
-            byte_length: size,
-            sha256,
-        });
-    }
-    let mut trailing = Vec::new();
-    input
-        .read_to_end(&mut trailing)
-        .map_err(|error| DevError::infrastructure(format!("read trailing tar blocks: {error}")))?;
-    if trailing.len() < TAR_BLOCK_BYTES * 2
-        || trailing.len() % TAR_BLOCK_BYTES != 0
-        || trailing.iter().any(|byte| *byte != 0)
-    {
-        return Err(DevError::corrupt(
-            "archive has missing, malformed, or nonzero terminal blocks",
-        ));
-    }
-    synchronize_directory(extraction)?;
-    Ok(ParsedTar {
-        source_timestamp_unix_seconds: source_timestamp
-            .ok_or_else(|| DevError::corrupt("archive contains no members"))?,
-        members: observed,
-    })
-}
-
-fn cross_check_payloads(
-    manifest: &ReleaseManifest,
-    members: &[ObservedMember],
-) -> Result<(), DevError> {
-    if manifest.packaging.members != manifest_members() {
-        return Err(DevError::corrupt(
-            "release manifest archive inventory is not canonical",
-        ));
-    }
-    cross_check_member(
-        members,
-        EXECUTABLE_MEMBER,
-        manifest.executable.archive_mode,
-        manifest.executable.byte_length,
-        &manifest.executable.sha256,
-    )?;
-    cross_check_member(
-        members,
-        LICENSE_MEMBER,
-        manifest.root_license.archive_mode,
-        manifest.root_license.byte_length,
-        &manifest.root_license.sha256,
-    )?;
-    cross_check_member(
-        members,
-        NOTICE_MEMBER,
-        manifest.third_party_notices.archive_mode,
-        manifest.third_party_notices.byte_length,
-        &manifest.third_party_notices.sha256,
-    )
-}
-
-fn cross_check_member(
-    members: &[ObservedMember],
-    name: &str,
-    mode: u32,
-    byte_length: u64,
-    sha256: &Sha256Digest,
-) -> Result<(), DevError> {
-    let member = members
-        .iter()
-        .find(|member| member.name == name)
-        .ok_or_else(|| DevError::corrupt(format!("archive member '{name}' is missing")))?;
-    if member.mode != mode
-        || member.byte_length != byte_length
-        || member.sha256.as_ref() != Some(sha256)
-    {
-        return Err(DevError::corrupt(format!(
-            "archive member '{name}' disagrees with release manifest"
-        )));
-    }
-    Ok(())
 }
 
 fn copy_regular(source: &Path, destination: &Path, mode: u32) -> Result<(), DevError> {
@@ -711,17 +336,11 @@ pub(super) fn sha256_file(path: &Path) -> Result<(Sha256Digest, u64), DevError> 
 }
 
 pub(super) fn sha256_bytes(bytes: &[u8]) -> Result<Sha256Digest, DevError> {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    digest_from_hasher(hasher)
+    Ok(lkjscript::release_container::sha256_bytes(bytes)?)
 }
 
 pub(super) fn canonical_json<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, DevError> {
-    let mut bytes = serde_json::to_vec_pretty(value).map_err(|error| {
-        DevError::infrastructure(format!("encode canonical release JSON: {error}"))
-    })?;
-    bytes.push(b'\n');
-    Ok(bytes)
+    Ok(lkjscript::release_container::canonical_json(value)?)
 }
 
 pub(super) fn reject_existing(path: &Path, label: &str) -> Result<(), DevError> {
@@ -811,160 +430,6 @@ fn publish_directory_no_replace(stage: &Path, output: &Path) -> Result<(), DevEr
             output.display()
         ))
     })
-}
-
-fn verify_gzip_header(path: &Path) -> Result<(), DevError> {
-    let mut input = File::open(path)
-        .map_err(|error| DevError::infrastructure(format!("open gzip header: {error}")))?;
-    let mut header = [0_u8; 10];
-    input
-        .read_exact(&mut header)
-        .map_err(|error| DevError::corrupt(format!("read gzip header: {error}")))?;
-    if header[0..3] != [0x1f, 0x8b, 0x08]
-        || header[3] != 0
-        || header[4..8] != [0, 0, 0, 0]
-        || header[8] != 2
-    {
-        return Err(DevError::corrupt(
-            "gzip header is not canonical level-9 output with name/time disabled",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_header_checksum(header: &[u8; TAR_BLOCK_BYTES]) -> Result<(), DevError> {
-    let expected = parse_octal(&header[148..156], "header checksum")?;
-    let observed = header
-        .iter()
-        .enumerate()
-        .map(|(index, byte)| {
-            if (148..156).contains(&index) {
-                b' ' as u64
-            } else {
-                *byte as u64
-            }
-        })
-        .sum::<u64>();
-    if expected != observed {
-        return Err(DevError::corrupt("archive header checksum mismatch"));
-    }
-    Ok(())
-}
-
-fn tar_name(header: &[u8; TAR_BLOCK_BYTES]) -> Result<String, DevError> {
-    let name = nul_terminated(&header[0..100], "member name")?;
-    let prefix = nul_terminated(&header[345..500], "member prefix")?;
-    let bytes = if prefix.is_empty() {
-        name
-    } else {
-        let mut combined = prefix;
-        combined.push(b'/');
-        combined.extend(name);
-        combined
-    };
-    String::from_utf8(bytes)
-        .map_err(|_| DevError::corrupt("archive member name is not portable UTF-8"))
-}
-
-fn nul_terminated(field: &[u8], label: &str) -> Result<Vec<u8>, DevError> {
-    let end = field
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(field.len());
-    if field[end..].iter().any(|byte| *byte != 0) {
-        return Err(DevError::corrupt(format!(
-            "archive {label} has nonzero bytes after terminator"
-        )));
-    }
-    Ok(field[..end].to_vec())
-}
-
-fn validate_member_name(name: &str) -> Result<(), DevError> {
-    if name.is_empty() || name.starts_with('/') || name.contains('\\') {
-        return Err(DevError::corrupt(format!(
-            "unsafe archive member name '{name}'"
-        )));
-    }
-    let trimmed = name.trim_end_matches('/');
-    let path = Path::new(trimmed);
-    if path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
-        return Err(DevError::corrupt(format!(
-            "unsafe archive member name '{name}'"
-        )));
-    }
-    Ok(())
-}
-
-fn parse_octal(field: &[u8], label: &str) -> Result<u64, DevError> {
-    let trimmed = field
-        .iter()
-        .copied()
-        .skip_while(|byte| *byte == b' ' || *byte == 0)
-        .take_while(|byte| *byte != b' ' && *byte != 0)
-        .collect::<Vec<_>>();
-    if trimmed.is_empty() || trimmed.iter().any(|byte| !(b'0'..=b'7').contains(byte)) {
-        return Err(DevError::corrupt(format!("invalid octal {label}")));
-    }
-    let mut value = 0_u64;
-    for byte in trimmed {
-        value = value
-            .checked_mul(8)
-            .and_then(|current| current.checked_add((byte - b'0') as u64))
-            .ok_or_else(|| DevError::corrupt(format!("octal {label} overflow")))?;
-    }
-    Ok(value)
-}
-
-fn copy_exact(
-    input: &mut File,
-    output: &mut File,
-    bytes: u64,
-    name: &str,
-) -> Result<Sha256Digest, DevError> {
-    let mut remaining = bytes;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    while remaining > 0 {
-        let requested = usize::try_from(remaining.min(buffer.len() as u64))
-            .map_err(|_| DevError::corrupt("archive member size conversion overflow"))?;
-        input
-            .read_exact(&mut buffer[..requested])
-            .map_err(|error| {
-                DevError::corrupt(format!("truncated archive member '{name}': {error}"))
-            })?;
-        output.write_all(&buffer[..requested]).map_err(|error| {
-            DevError::infrastructure(format!("write extracted member '{name}': {error}"))
-        })?;
-        hasher.update(&buffer[..requested]);
-        remaining -= requested as u64;
-    }
-    digest_from_hasher(hasher)
-}
-
-fn skip_zero_padding(input: &mut File, size: u64, name: &str) -> Result<(), DevError> {
-    let remainder = size % TAR_BLOCK_BYTES as u64;
-    let padding = if remainder == 0 {
-        0
-    } else {
-        TAR_BLOCK_BYTES as u64 - remainder
-    };
-    let padding = usize::try_from(padding)
-        .map_err(|_| DevError::corrupt("archive padding conversion overflow"))?;
-    let mut bytes = vec![0_u8; padding];
-    input.read_exact(&mut bytes).map_err(|error| {
-        DevError::corrupt(format!("truncated archive padding for '{name}': {error}"))
-    })?;
-    if bytes.iter().any(|byte| *byte != 0) {
-        return Err(DevError::corrupt(format!(
-            "archive padding for '{name}' is nonzero"
-        )));
-    }
-    Ok(())
 }
 
 fn digest_from_hasher(hasher: Sha256) -> Result<Sha256Digest, DevError> {
@@ -1092,27 +557,7 @@ pub(super) mod tests {
     }
 
     fn parse_fixture(bytes: &[u8]) -> Result<ParsedTar, DevError> {
-        let temporary = tempfile::tempdir().expect("temporary archive fixture");
-        let tar = temporary.path().join("fixture.tar");
-        fs::write(&tar, bytes).expect("write tar fixture");
-        let extraction = temporary.path().join("extract");
-        fs::create_dir(&extraction).expect("create fixture extraction");
-        parse_tar(&tar, &extraction)
-    }
-
-    #[test]
-    fn release_member_names_reject_traversal_and_absolute_paths() {
-        for name in ["../escape", "/absolute", "lkjscript/../escape", "a\\b"] {
-            assert!(validate_member_name(name).is_err(), "accepted {name}");
-        }
-        assert!(validate_member_name(EXECUTABLE_MEMBER).is_ok());
-    }
-
-    #[test]
-    fn release_octal_parser_rejects_malformed_and_overflowing_values() {
-        assert_eq!(parse_octal(b"0000755\0", "mode").expect("mode"), 0o755);
-        assert!(parse_octal(b"00008\0", "mode").is_err());
-        assert!(parse_octal(b"77777777777777777777777777777777", "size").is_err());
+        Ok(parse_tar_bytes(bytes)?)
     }
 
     #[test]

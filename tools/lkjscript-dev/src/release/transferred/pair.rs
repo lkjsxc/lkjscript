@@ -3,11 +3,14 @@ use super::*;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 
+mod installation;
 mod lifecycle;
+mod recovery;
+use installation::Acquisition;
 
 const PAIR_SCHEMA: &str = "lkjscript-transferred-pair";
-const PAIR_VERSION: u32 = 1;
-const POLICY: &str = "static-pair-cleared-environment-private-state-1";
+const PAIR_VERSION: u32 = 2;
+const POLICY: &str = "static-installed-pair-cleared-environment-private-state-2";
 
 #[derive(Clone, Debug)]
 struct PairOptions {
@@ -17,6 +20,7 @@ struct PairOptions {
     tag: String,
     commit: String,
     publication: PublicationMode,
+    acquisition: Acquisition,
     evidence_root: PathBuf,
     verifier_identity: PathBuf,
     expected_verifier_sha256: String,
@@ -56,10 +60,10 @@ enum Scope {
     PublicFormatValidation,
     LocalPairRehearsal,
 }
-fn scope(publication: PublicationMode) -> Scope {
-    match publication {
-        PublicationMode::Release => Scope::PublicFormatValidation,
-        PublicationMode::DryRun => Scope::LocalPairRehearsal,
+fn scope(acquisition: Acquisition) -> Scope {
+    match acquisition {
+        Acquisition::Anonymous => Scope::PublicFormatValidation,
+        Acquisition::Simulated => Scope::LocalPairRehearsal,
     }
 }
 
@@ -88,26 +92,29 @@ fn binding(path: &Path) -> Result<FileBinding, DevError> {
 struct Inputs {
     archive: FileBinding,
     checksums: FileBinding,
+    installer: FileBinding,
 }
 fn inputs(path: &Path) -> Result<Inputs, DevError> {
     directory(path)?;
     let mut names = fs::read_dir(path)?
-        .take(3)
+        .take(4)
         .map(|e| e.map(|e| e.file_name()))
         .collect::<Result<Vec<_>, _>>()?;
     names.sort();
     let mut expected = [
         OsString::from(archive::ARCHIVE_NAME),
         OsString::from(archive::CHECKSUM_NAME),
+        OsString::from(super::super::bootstrap::NAME),
     ];
     expected.sort();
     require(
         names == expected,
-        "pair asset directory must contain exactly the target archive and SHA256SUMS",
+        "pair asset directory must contain exactly the target archive, SHA256SUMS and install.sh",
     )?;
     Ok(Inputs {
         archive: binding(&path.join(archive::ARCHIVE_NAME))?,
         checksums: binding(&path.join(archive::CHECKSUM_NAME))?,
+        installer: binding(&path.join(super::super::bootstrap::NAME))?,
     })
 }
 
@@ -257,6 +264,7 @@ struct PairReceipt {
     tag: String,
     source_commit: String,
     publication: PublicationMode,
+    acquisition: Acquisition,
     evidence_root: String,
     target: String,
     target_policy_sha256: String,
@@ -272,6 +280,7 @@ struct PairReceipt {
     routes: [RouteReceipt; 2],
     equality: Option<Equality>,
     suite: Option<SuiteBinding>,
+    recovery: Option<recovery::Recovery>,
     cleanup_complete: bool,
     failure: Option<String>,
 }
@@ -314,10 +323,11 @@ fn run(
         },
         status: Status::NotRun,
         phase: "created".to_owned(),
-        scope: scope(options.publication),
+        scope: scope(options.acquisition),
         tag: options.tag.clone(),
         source_commit: options.commit.clone(),
         publication: options.publication,
+        acquisition: options.acquisition,
         evidence_root: options.evidence_root.display().to_string(),
         target: target::TARGET_TRIPLE.to_owned(),
         target_policy_sha256: target::policy_sha256()?,
@@ -350,6 +360,7 @@ fn run(
         ],
         equality: None,
         suite: None,
+        recovery: None,
         cleanup_complete: false,
         failure: None,
     };
@@ -419,6 +430,7 @@ fn execute_pair(
             control,
         )?;
         validate_admission(&admitted, options)?;
+        super::super::bootstrap::verify(&assets.join(super::super::bootstrap::NAME), &admitted)?;
         let observed = extraction(&route.extraction(options), &admitted)?;
         receipt.routes[index].admission = Some(admitted);
         receipt.routes[index].extraction = Some(observed);
@@ -441,13 +453,12 @@ fn execute_pair(
             .admission
             .clone()
             .ok_or_else(|| DevError::corrupt("route admission missing"))?;
-        receipt.routes[index].lifecycle =
-            Some(lifecycle::run(options, route, &admitted.manifest, control)?);
+        receipt.routes[index].lifecycle = Some(lifecycle::run(options, route, &admitted, control)?);
         persist(options, receipt)?;
         lifecycle::validate(
             options,
             route,
-            &admitted.manifest,
+            &admitted,
             receipt.routes[index]
                 .lifecycle
                 .as_ref()
@@ -455,6 +466,17 @@ fn execute_pair(
         )?;
         checkpoint(options, verifier, receipt, control)?;
     }
+    receipt.phase = "installation-recovery".to_owned();
+    persist(options, receipt)?;
+    receipt.recovery = Some(recovery::run(
+        options,
+        receipt.routes[0]
+            .admission
+            .as_ref()
+            .ok_or_else(|| DevError::corrupt("missing recovery archive"))?,
+        control,
+    )?);
+    persist(options, receipt)?;
     receipt.phase = "full-suite".to_owned();
     persist(options, receipt)?;
     #[cfg(test)]
@@ -607,6 +629,11 @@ fn compare(options: &PairOptions, routes: &[RouteReceipt; 2]) -> Result<Equality
             options.latest_assets.join(archive::CHECKSUM_NAME),
         ),
         (
+            "installer",
+            options.exact_assets.join(super::super::bootstrap::NAME),
+            options.latest_assets.join(super::super::bootstrap::NAME),
+        ),
+        (
             "manifest",
             Route::Exact
                 .extraction(options)
@@ -677,16 +704,16 @@ fn stream_equal(left: &Path, right: &Path) -> Result<u64, DevError> {
 fn single_options(options: &PairOptions) -> Options {
     Options {
         verify: true,
-        candidate: Route::Exact.extraction(options).join("lkjscript"),
+        candidate: installation::candidate(options, Route::Exact),
         manifest: Route::Exact
             .extraction(options)
             .join("RELEASE-MANIFEST.json"),
         tag: options.tag.clone(),
         commit: options.commit.clone(),
         publication: options.publication,
-        boundary: match options.publication {
-            PublicationMode::Release => Boundary::ExactDownload,
-            PublicationMode::DryRun => Boundary::PrePublication,
+        boundary: match options.acquisition {
+            Acquisition::Anonymous => Boundary::ExactDownload,
+            Acquisition::Simulated => Boundary::PrePublication,
         },
         verifier_identity: options.verifier_identity.clone(),
         expected_verifier_sha256: options.expected_verifier_sha256.clone(),
@@ -759,7 +786,8 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
             && receipt.phase == "complete"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
-            && receipt.scope == scope(options.publication)
+            && receipt.acquisition == options.acquisition
+            && receipt.scope == scope(options.acquisition)
             && receipt.publication == options.publication
             && receipt.tag == options.tag
             && receipt.source_commit == options.commit
@@ -782,13 +810,24 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
             .lifecycle
             .as_ref()
             .ok_or_else(|| DevError::corrupt("missing independent route lifecycle"))?;
-        lifecycle::validate(options, route.route, &admitted.manifest, lifecycle)?;
+        lifecycle::validate(options, route.route, admitted, lifecycle)?;
         require(
             lifecycle.started_unix_nanoseconds >= receipt.started_unix_nanoseconds
                 && Some(lifecycle.completed_unix_nanoseconds) <= receipt.completed_unix_nanoseconds,
             "route lifecycle is outside this pair",
         )?;
     }
+    recovery::validate(
+        options,
+        receipt.routes[0]
+            .admission
+            .as_ref()
+            .ok_or_else(|| DevError::corrupt("missing recovery admission"))?,
+        receipt
+            .recovery
+            .as_ref()
+            .ok_or_else(|| DevError::corrupt("missing two-version recovery proof"))?,
+    )?;
     let equality = receipt
         .equality
         .as_ref()
@@ -960,7 +999,11 @@ fn validate_options(options: &PairOptions, verifier: &Path) -> Result<(), DevErr
     }
     let mut identities = std::collections::BTreeSet::new();
     for directory in [&options.exact_assets, &options.latest_assets] {
-        for name in [archive::ARCHIVE_NAME, archive::CHECKSUM_NAME] {
+        for name in [
+            archive::ARCHIVE_NAME,
+            archive::CHECKSUM_NAME,
+            super::super::bootstrap::NAME,
+        ] {
             let metadata = fs::symlink_metadata(directory.join(name))?;
             require(
                 identities.insert((metadata.dev(), metadata.ino())),
@@ -992,6 +1035,7 @@ fn parse_options(
             "--tag",
             "--commit",
             "--publication",
+            "--acquisition",
             "--evidence-root",
             "--verifier-identity",
             "--expected-verifier-sha256",
@@ -1006,6 +1050,15 @@ fn parse_options(
     super::super::validate_git_sha(&commit, "pair source")?;
     let publication =
         super::super::parse_publication(verifier::required(&mut values, "--publication")?)?;
+    let acquisition = match verifier::required(&mut values, "--acquisition")?.as_str() {
+        "simulated" => Acquisition::Simulated,
+        "anonymous" if publication == PublicationMode::Release => Acquisition::Anonymous,
+        _ => {
+            return Err(DevError::usage(
+                "pair acquisition must be simulated, or anonymous with release publication",
+            ));
+        }
+    };
     let expected_verifier_sha256 = verifier::required(&mut values, "--expected-verifier-sha256")?;
     Sha256Digest::new(expected_verifier_sha256.clone()).map_err(DevError::usage)?;
     let expected_verifier_bytes = verifier::required(&mut values, "--expected-verifier-bytes")?
@@ -1020,6 +1073,7 @@ fn parse_options(
         tag,
         commit,
         publication,
+        acquisition,
         evidence_root: PathBuf::from(verifier::required(&mut values, "--evidence-root")?),
         verifier_identity: PathBuf::from(verifier::required(&mut values, "--verifier-identity")?),
         expected_verifier_sha256,

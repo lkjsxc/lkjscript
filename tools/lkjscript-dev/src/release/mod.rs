@@ -1,5 +1,6 @@
 mod admission;
 mod archive;
+mod bootstrap;
 mod model;
 mod target;
 mod transferred;
@@ -389,6 +390,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             byte_length: checksum_bytes.len() as u64,
             sha256: checksum_sha256,
         },
+        installer: bootstrap::identity(&verified_one)?,
         full_verification_receipt: full_verification.map(|facts| facts.evidence),
         target_admission_receipt: target_admission.evidence,
         candidate_lifecycle,
@@ -414,6 +416,12 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         &receipt_bytes,
         0o644,
     )?;
+    archive::write_new(
+        &output_stage.path().join(bootstrap::NAME),
+        &bootstrap::render(&verified_one)?,
+        0o644,
+    )?;
+    bootstrap::verify(&output_stage.path().join(bootstrap::NAME), &verified_one)?;
     fs::set_permissions(output_stage.path(), fs::Permissions::from_mode(0o755)).map_err(
         |error| DevError::infrastructure(format!("set release output directory mode: {error}")),
     )?;
@@ -483,6 +491,7 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
     let verified =
         archive::verify_archive(&options.archive, work.path(), options.candidate.as_deref())?;
     validate_manifest(&verified.manifest)?;
+    bootstrap::verify(&parent.join(bootstrap::NAME), &verified)?;
     if let Some(tag) = &options.expected_tag
         && verified.manifest.source.expected_release_tag != *tag
     {
@@ -1292,6 +1301,7 @@ fn require_json_u64(
 }
 
 fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
+    lkjscript::release_container::validate_manifest(manifest)?;
     if manifest.product.name != PACKAGE_NAME
         || manifest.target_triple != TARGET_TRIPLE
         || manifest.source.repository != REPOSITORY_IDENTITY
@@ -1375,6 +1385,7 @@ fn validate_receipt(
         || receipt.archive.name != ARCHIVE_NAME
         || receipt.archive.byte_length != archive.archive_byte_length
         || receipt.archive.sha256 != archive.archive_sha256
+        || receipt.installer != bootstrap::identity(archive)?
         || receipt.checksum_file.name != CHECKSUM_NAME
         || receipt.candidate_lifecycle.status != ProcessStatus::Passed
         || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
@@ -1970,7 +1981,8 @@ mod tests {
         assert!(pre_publication.contains("distributed-http"));
         assert!(pre_publication.contains("outbound-http"));
         assert!(pre_publication.contains("stateful-http"));
-        assert!(pre_publication.contains("release transferred run"));
+        assert!(pre_publication.contains("release transferred pair-run"));
+        assert!(pre_publication.contains("--acquisition simulated"));
         for role in [
             "distributed-http",
             "outbound-http",
@@ -2034,6 +2046,7 @@ mod tests {
         assert!(!post_release.contains(".executable.executable_registry_digest"));
         assert!(!post_release.contains("verify_public_application"));
         assert!(!post_release.contains("release transferred run"));
+        assert!(post_release.contains("--acquisition anonymous"));
         assert_eq!(
             post_release.matches("release transferred pair-run").count(),
             1
@@ -2053,7 +2066,7 @@ mod tests {
             "pair/exact/lifecycle.json",
             "pair/latest/lifecycle.json",
             "pair/full-suite/receipt.json",
-            "pair/*/extracted/RELEASE-MANIFEST.json",
+            "pair/*/extracted/*",
         ] {
             assert!(post_release.contains(retained), "missing {retained}");
         }

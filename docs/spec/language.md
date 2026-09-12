@@ -391,8 +391,8 @@ A type-parameter owner carries the closed constraint set `[]` or `["capture-safe
 The canonical set tags are 0 (empty) and 1 (capture-safe); unknown tags, names and duplicates
 reject. Omission in authoring creates the empty set. Constraints attach to the stable parameter
 identity and its exact declaration and are interface meaning even when the parameter is unused.
-Pure graph functions, records and variants may declare the constraint. Generic tasks remain
-inadmissible. Closed external signatures must match the intrinsic inventory, whose existing
+Pure and task graph functions, records and variants may declare the constraint. Generic tasks
+carry explicit type and effect arguments under the same scope/constraint admission. Closed external signatures must match the intrinsic inventory, whose existing
 parameters have empty constraints.
 
 At every direct call and named function-value instantiation, every explicit argument must satisfy
@@ -402,12 +402,15 @@ A constrained caller parameter can discharge the same callee constraint; an unco
 foreign-scope parameter cannot. Safe stored children compose through lists, map keys and values,
 options, both result branches, every structural or nominal record field, and every variant payload,
 including absent cases and empty containers. Already admitted nominal cycles use bounded visitation.
-A pure Function type remains a leaf even when its signature mentions unconstrained parameters;
-actual callable admission still verifies pure target, exact origin and safe runtime environment.
+Pure Function and TaskFunction descriptors remain capture-safe leaves even when signatures mention
+unconstrained parameters. Actual callable admission verifies exact pure/task target, prepared origin
+and retained environment. Binding a task descriptor acquires no grants; invocation still requires
+the calling task effect allowance and exact deployment bindings.
 
 A constrained body may bind its parameter or aggregates of it. An unconstrained body cannot bind
 an actual value of that parameter. There is no implicit constraint inference, subtyping, dictionary,
-specialization, generic extraction, task closure, user-defined trait or higher-rank quantification.
+specialization, generic extraction, anonymous lexical capture inference, affine captures, user-defined
+trait or higher-rank quantification. Explicit named task descriptor binding is supported.
 Capture safety does not confer equality, serialization, session retention or capability authority.
 Existing lifetime, affine resource, pure evaluation order, tail transfer and data rules still apply.
 
@@ -429,7 +432,8 @@ A record or variant owns an ordered vector of stable type-parameter identities. 
 exact declaration scope and the same explicit `none` or `capture-safe` constraint as a pure function
 parameter. Every positive-arity reference supplies all arguments, in order, through an explicit
 application; a plain named reference is valid only for a zero-arity declaration. There are no inferred
-arguments, defaults, higher kinds, generic tasks or resource polymorphism. Concrete task signatures
+arguments, defaults, higher kinds or resource polymorphism. Generic task functions use explicit
+type/effect arguments; concrete task signatures
 and component ports may contain closed ordinary applications.
 
 Constructors carry the declaration and ordered type arguments. Field and case selectors retain stable

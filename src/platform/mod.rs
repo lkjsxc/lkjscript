@@ -28,6 +28,7 @@ pub mod execution;
 pub mod graph;
 pub mod http;
 pub mod http_client;
+pub mod installation;
 mod intrinsic_contract;
 pub mod json;
 #[allow(

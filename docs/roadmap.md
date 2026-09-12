@@ -43,10 +43,15 @@ Task iteration separately passed engineering, source/target acceptance and main 
 `3f25c3a7`. The [foreground campaign](campaigns/202609121842.md) now selects that named composition
 milestone and one combined release: ordinary command bundles execute once through an installed
 runtime with exact grants and joined cleanup. Foreground source `0b5e9827` has passed fresh
-source/target acceptance and normal main integration. Selected v0.1.33 awaits hosted dry run
-`34693887632/1`, then annotated-tag publication and independent public exact/latest acceptance.
-After delivery, reassess installation and explicit runtime selection using these independent
-foreground applications; no installer, daemon or upgrade automation is selected here. Further
+source/target acceptance and normal main integration. Dry run `34693887632/1` exhausted its
+offline-package deadline. Corrected source `c34114fc` passed fresh full, six-owner target and package
+acceptance and is normally integrated; selected v0.1.33 now awaits matching dry run `34700198909/1`,
+then annotated-tag publication and independent public exact/latest acceptance.
+The installation campaign now selects immutable Linux runtime slots, a release-owned bootstrap,
+explicit default selection and retained-manager recovery using those foreground applications.
+It carries the inherited foreground publication and an additive installation milestone; no daemon,
+automatic update service or artifact-to-runtime resolver is selected. After installation delivery,
+reassess ordinary public authoring friction and the coherent resource/requirement abstraction. Further
 infrastructure work needs a newly measured bottleneck.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
@@ -100,7 +105,8 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
 9. **Broad branch and pull-request CI.** Select this only when its independent operating value,
    required gate profile, retention, trust model, and recovery policy are explicit. Do not treat
    the release workflow or its transient artifacts as general CI.
-10. **Installers, package managers, signing, and build provenance.** Each registry, installer,
+10. **Additional distribution integrations, signing, and build provenance.** The selected native installer
+   covers one Linux target and explicit local selection. Each additional registry, installer,
    updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
    authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
    None follows automatically from immutable release integrity.

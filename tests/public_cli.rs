@@ -24,6 +24,76 @@ const EXECUTABLE_BUSY_ATTEMPTS: usize = 12;
 const EXECUTABLE_BUSY_DELAY: Duration = Duration::from_millis(50);
 
 #[test]
+fn runtime_inventory_is_project_independent_and_closed_output_preserves_primary_failure() {
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &executable);
+    std::fs::write(
+        temporary.path().join("HEAD"),
+        b"unrelated invalid graph sentinel",
+    )
+    .unwrap();
+    let prefix = temporary.path().join("absent prefix");
+    let result = Command::new(&executable)
+        .args(["runtime", "list", "--prefix", path(&prefix)])
+        .current_dir(temporary.path())
+        .env_clear()
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    let records = parse_records("runtime inventory", &result.stdout).unwrap();
+    assert_eq!(
+        compact_field(compact_record(&records, "installation"), "versions"),
+        Some("0")
+    );
+    assert!(!prefix.exists());
+    for args in [
+        vec!["runtime", "list", "--project", path(temporary.path())],
+        vec!["--project", path(temporary.path()), "runtime", "list"],
+        vec!["runtime", "select", "latest"],
+        vec!["runtime", "list", "--prefix", "relative"],
+        vec!["runtime", "list", "--activate"],
+    ] {
+        assert!(
+            !Command::new(&executable)
+                .args(args)
+                .current_dir(temporary.path())
+                .env_clear()
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+    let mut child = Command::new(&executable)
+        .args(["runtime", "select", "v0.1.32", "--prefix", path(&prefix)])
+        .current_dir(temporary.path())
+        .env_clear()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let failed = child.wait_with_output().unwrap();
+    assert!(!failed.status.success());
+    let diagnostic: Value = serde_json::from_slice(&failed.stderr).unwrap();
+    assert_eq!(diagnostic["code"], "runtime_not_installed");
+    assert!(
+        diagnostic["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("delivery also failed"))
+    );
+    assert_eq!(
+        std::fs::read(temporary.path().join("HEAD")).unwrap(),
+        b"unrelated invalid graph sentinel"
+    );
+    assert!(!prefix.exists());
+}
+
+#[test]
 fn foreground_starters_run_from_two_bundles_after_authoring_checkouts_are_removed() {
     let temporary = tempfile::tempdir().unwrap();
     let executable = temporary.path().join("lkjscript");
@@ -762,6 +832,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         vec![
             "capabilities",
             "data",
+            "runtime",
             "new",
             "status",
             "inspect",

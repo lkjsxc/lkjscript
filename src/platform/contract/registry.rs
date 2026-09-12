@@ -1176,6 +1176,7 @@ const fn simple_contract(
 pub enum PublicOperation {
     Capabilities,
     Data,
+    Runtime,
     New,
     Status,
     Inspect,
@@ -1190,9 +1191,10 @@ pub enum PublicOperation {
 }
 
 impl PublicOperation {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Capabilities,
         Self::Data,
+        Self::Runtime,
         Self::New,
         Self::Status,
         Self::Inspect,
@@ -1210,6 +1212,7 @@ impl PublicOperation {
         match self {
             Self::Capabilities => "capabilities",
             Self::Data => "data",
+            Self::Runtime => "runtime",
             Self::New => "new",
             Self::Status => "status",
             Self::Inspect => "inspect",
@@ -1308,6 +1311,8 @@ pub enum ControlModel {
     CapabilitiesResult,
     DataRequest,
     DataResult,
+    InstallationRequest,
+    InstallationResult,
     NewRequest,
     NewResult,
     StatusRequest,
@@ -1338,6 +1343,8 @@ impl ControlModel {
             Self::CapabilitiesResult => "capabilities_result",
             Self::DataRequest => "data_request",
             Self::DataResult => "data_result",
+            Self::InstallationRequest => "installation_request",
+            Self::InstallationResult => "installation_result",
             Self::NewRequest => "new_request",
             Self::NewResult => "new_result",
             Self::StatusRequest => "status_request",
@@ -1387,6 +1394,18 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "Initialize, verify, back up, or restore one first-party ordered application-data root.",
             "data initialize --root PATH | data verify --root PATH | data backup --root PATH --output PATH | data restore --backup PATH --root PATH",
             (ControlModel::DataRequest, ControlModel::DataResult),
+            AuthorityEffect::ExternalOutput,
+            ProjectRequirement::None,
+            BudgetProfile::Maintenance,
+        ),
+        operation(
+            PublicOperation::Runtime,
+            "Install immutable exact runtimes, list local versions, or atomically select the default executable. Application state is separate.",
+            "runtime install --archive PATH --sha256 HEX [--prefix PATH] [--activate] | runtime list [--prefix PATH] | runtime select TAG [--prefix PATH]",
+            (
+                ControlModel::InstallationRequest,
+                ControlModel::InstallationResult,
+            ),
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::None,
             BudgetProfile::Maintenance,
@@ -1648,6 +1667,34 @@ pub struct LimitDescriptor {
 
 pub fn limit_descriptors() -> &'static [LimitDescriptor] {
     const LIMITS: &[LimitDescriptor] = &[
+        limit(
+            "runtime_versions",
+            crate::platform::installation::MAXIMUM_VERSIONS,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "runtime_archive_compressed_bytes",
+            crate::release_container::MAXIMUM_COMPRESSED_BYTES as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "runtime_archive_uncompressed_bytes",
+            crate::release_container::MAXIMUM_UNCOMPRESSED_BYTES as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "runtime_manifest_bytes",
+            crate::release_container::MAXIMUM_MANIFEST_BYTES as usize,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
         limit(
             "package_container_bytes",
             crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
@@ -2090,6 +2137,102 @@ const fn package_source_diagnostic(code: &'static str) -> DiagnosticDescriptor {
 
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
+        diagnostic(
+            "runtime_prefix",
+            DiagnosticClass::Source,
+            "The prefix is not an admitted absolute user path.",
+            "Supply an absolute owned --prefix; no system directory is inferred.",
+        ),
+        diagnostic(
+            "runtime_tag",
+            DiagnosticClass::Source,
+            "The tag is not exact canonical stable semver.",
+            "Use an installed exact vMAJOR.MINOR.PATCH tag.",
+        ),
+        diagnostic(
+            "runtime_sha256",
+            DiagnosticClass::Source,
+            "The archive digest is malformed.",
+            "Supply exactly 64 lowercase hexadecimal SHA-256 characters.",
+        ),
+        diagnostic(
+            "runtime_host",
+            DiagnosticClass::Source,
+            "The installation host is unsupported.",
+            "Use supported Linux x86-64; no target fallback is performed.",
+        ),
+        diagnostic(
+            "runtime_path",
+            DiagnosticClass::Source,
+            "A path component is missing, foreign or a symlink.",
+            "Preserve conflicting paths and choose another owned prefix.",
+        ),
+        diagnostic(
+            "runtime_ownership",
+            DiagnosticClass::Source,
+            "An installation path is not owned privately by the invoking user.",
+            "Choose a prefix you own without group/other write access.",
+        ),
+        diagnostic(
+            "runtime_root_conflict",
+            DiagnosticClass::Source,
+            "A reserved product root has no valid installation ownership.",
+            "Choose a different prefix; no adoption is performed.",
+        ),
+        diagnostic(
+            "runtime_pointer_conflict",
+            DiagnosticClass::Source,
+            "The default path is not an installation-owned direct relative pointer.",
+            "Preserve the path and choose a different prefix.",
+        ),
+        diagnostic(
+            "runtime_version_conflict",
+            DiagnosticClass::Source,
+            "The exact tag already retains another archive identity.",
+            "Retain the immutable slot and install into another owned prefix.",
+        ),
+        diagnostic(
+            "runtime_not_installed",
+            DiagnosticClass::Source,
+            "The exact installed version is absent.",
+            "Install its exact archive before selecting it.",
+        ),
+        diagnostic(
+            "runtime_busy",
+            DiagnosticClass::Source,
+            "Another process holds the OS installation lock.",
+            "Retry after that operation completes; do not delete the lock file.",
+        ),
+        diagnostic(
+            "runtime_corrupt",
+            DiagnosticClass::Corrupt,
+            "Installation metadata or retained bytes fail admission.",
+            "Preserve the corrupted slot and use a new owned prefix.",
+        ),
+        diagnostic(
+            "runtime_archive",
+            DiagnosticClass::Corrupt,
+            "The snapshot is not a valid exact supported container.",
+            "Acquire the intended complete archive and expected digest.",
+        ),
+        diagnostic(
+            "runtime_capacity",
+            DiagnosticClass::Resource,
+            "An independent installation admission bound was exceeded.",
+            "Use the named bound; inventory is never silently truncated.",
+        ),
+        diagnostic(
+            "runtime_io",
+            DiagnosticClass::Infrastructure,
+            "Installation filesystem work or synchronization failed.",
+            "Read commit and durability notes; inspect selection with the retained manager before retry.",
+        ),
+        diagnostic(
+            "runtime_output",
+            DiagnosticClass::Infrastructure,
+            "A completed runtime operation could not deliver its response.",
+            "Inspect runtime list through the absolute manager; output failure does not reverse a commit.",
+        ),
         diagnostic(
             "deployment_policy_required",
             DiagnosticClass::Source,

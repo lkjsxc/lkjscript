@@ -49,10 +49,72 @@ diagnostics, receipts, and cleanup evidence without a subsystem version field.
 Foreground `run --deployment` has no project discovery and returns production-only execution,
 effective policy, typed result and completed cleanup records. An installed executable can execute
 multiple runtime-dependent application bundles in separate processes. A bundle does not embed
-the runtime, and this contract supplies no daemon, installer or automatic runtime selection.
+the runtime. Runtime selection is explicit operational state; there is no daemon or automatic
+artifact-to-runtime resolver.
 Command policy omissions have deliberate meanings; explicit null rejects. Older executables
 reject descriptors omitting their formerly required policy fields. Retain the matching executable,
 immutable bundle and descriptor for recovery; executable updates do not migrate operational data.
+
+## Local runtime installation
+
+`runtime install --archive PATH --sha256 HEX [--prefix PATH] [--activate]`,
+`runtime list [--prefix PATH]`, and `runtime select TAG [--prefix PATH]` are strict,
+project-independent operations. Project/runner flags, duplicate/unknown flags and missing values
+reject before mutation. No project discovery, application invocation, grants or secrets are involved.
+Only Linux x86-64 admits the static `x86_64-unknown-linux-musl` container. Tags are exact canonical
+stable `vMAJOR.MINOR.PATCH` values; SHA-256 is exactly 64 lowercase hexadecimal characters.
+The default prefix is absolute `$HOME/.local`; absent/nonabsolute HOME requires explicit absolute
+`--prefix`. PATH and shell profiles are never edited. Paths are at most 4096 bytes/64 components.
+
+The installation owns `PREFIX/lib/lkjscript/INSTALLATION.json`, its OS-backed `installation.lock`,
+and immutable `versions/TAG/x86_64-unknown-linux-musl/` slots. Each slot retains the archive's four
+payloads unchanged and a separate canonical `INSTALL-RECEIPT.json` binding installation ownership,
+archive length/digest, canonical manifest, product/target and payload lengths/modes/digests.
+Metadata format 1 is operational, not graph authority or a product edition. The sole default
+selection is `PREFIX/bin/lkjscript`, a relative symlink directly to
+`../lib/lkjscript/versions/TAG/x86_64-unknown-linux-musl/lkjscript`. There is no second current pointer
+or selected-version metadata field. List orders canonical tag/target entries and explicitly reports
+payload integrity as unchecked; metadata, manifest and containment are checked. Missing installation
+is empty/unselected without writes. Malformed state rejects. Inventory is bounded to 128 versions;
+capacity failure precedes success output, with no truncation.
+
+Ordinary existing prefix/bin/lib directories and unrelated contents coexist. Installation-owned
+paths must belong to the invoking user and may not be writable by group/others. Unexpected symlinks,
+nonregular files, foreign default pointers, a copied bin file, or an unmarked reserved product root
+reject with a different-prefix recovery action. Descriptor-relative no-follow access anchors writes.
+An absent root is initialized completely in a private lib sibling, then published without replacement;
+a losing initializer validates the winner. Mutations use one nonblocking OS lock; contention is a
+stable busy diagnostic. A surviving lock file does not imply a live owner.
+
+Install snapshots the input once into private destination staging while hashing, admits that exact
+snapshot natively, reserves bounded storage, writes/synchronizes complete payloads and receipt, and
+publishes one absent version directory without replacement. Exact identity reinstall revalidates
+and is idempotent; a different identity at the same tag conflicts. Corrupted retained bytes are never
+repaired in place: preserve the slot and install into a new owned prefix. Installation without
+activation leaves the default unchanged. Activation/select fully rehashes and statically admits the
+retained target, creates a private relative symlink and atomically replaces only the owned pointer.
+Version publication and selection are separate commits. Failure between them can leave a complete
+unselected version. Post-rename synchronization failure reports observed selection and uncertain
+durability; broken output cannot reverse a commit. Primary and cleanup failures remain reportable.
+Verified orphan stages can be removed only under the lock; unverified stages require precise manual
+cleanup. Complete versions are retained indefinitely.
+
+Recovery manager discovery compares installed executable digests with the invoking executable,
+without executing installed payloads or inferring support from version order. A matching fully
+admitted slot is retained recovery; otherwise the actual invoking absolute path is explicitly
+external/unmanaged and not durable. A bootstrap's newly installed matching slot is the recovery
+manager. Selecting a predecessor without `runtime` requires that newer pinned manager for management.
+Running processes and pinned version paths retain their selected bytes when the default changes.
+No bundle, descriptor, graph, grant, secret or application data migrates. This path model does not
+claim protection against a hostile administrator or an attacker controlling the user's namespace.
+
+One production release-container owner admits bounded gzip (128 MiB), tar (256 MiB), and canonical
+manifest (1 MiB), exact five-member inventory, metadata, digests and actual static ELF. It rejects
+extensions, links, devices, traversal, duplicates, truncation, invalid checksums and trailing data.
+Historical producer identities are admitted independently of the current release owner's stricter
+pinned toolchain/notice/provenance policy. A local dry-run archive is explicitly declared dry-run
+with unverified publication; even a release-labelled manifest does not establish publication or
+authenticity. Differing dry-run/final archive identities intentionally conflict in the same prefix.
 
 Current public release metadata contains product name/version plus exact source, target, toolchain,
 candidate, linkage, notice, archive, checksum, and integrity evidence. Private first-party handoffs

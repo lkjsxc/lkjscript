@@ -67,6 +67,177 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+pub fn execute_runtime(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
+    use super::installation;
+    let action = arguments
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| usage_error("runtime requires install, list, or select"))?;
+    let (tag, options) = if action == "select" {
+        let tag = arguments
+            .get(1)
+            .ok_or_else(|| usage_error("runtime select requires an exact tag"))?;
+        installation::validate_tag(tag)?;
+        (Some(tag.as_str()), &arguments[2..])
+    } else {
+        (None, &arguments[1..])
+    };
+    match action {
+        "install" => ensure_options(
+            options,
+            &["--archive", "--sha256", "--prefix"],
+            &["--activate"],
+        )?,
+        "list" | "select" => ensure_options(options, &["--prefix"], &[])?,
+        _ => return Err(usage_error("runtime requires install, list, or select")),
+    }
+    // The common grammar checks flag shape; this closed boundary also forbids duplicate flags.
+    let mut seen = BTreeSet::new();
+    let mut index = 0;
+    while index < options.len() {
+        if !seen.insert(options[index].as_str()) {
+            return Err(usage_error(format!(
+                "{} may be supplied only once",
+                options[index]
+            )));
+        }
+        index += if options[index] == "--activate" { 1 } else { 2 };
+    }
+    let prefix_value = option_value(options, "--prefix")?;
+    let prefix = installation::resolve_prefix(prefix_value.as_deref())?;
+    let mut output = compact_response_writer()?;
+    if action == "list" {
+        let inventory = installation::list(&prefix)?;
+        append_compact_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "runtime.list".to_owned()),
+            ],
+        )?;
+        append_compact_record(
+            &mut output,
+            "installation",
+            &[
+                ("prefix", prefix.display().to_string()),
+                (
+                    "default-path",
+                    prefix.join("bin/lkjscript").display().to_string(),
+                ),
+                (
+                    "selected",
+                    inventory.selected.unwrap_or_else(|| "none".to_owned()),
+                ),
+                ("versions", inventory.versions.len().to_string()),
+            ],
+        )?;
+        for version in inventory.versions {
+            runtime_version_record(&mut output, &version)?;
+        }
+    } else {
+        let mutation = if action == "install" {
+            let archive = required_option(options, "--archive")?;
+            let digest = required_option(options, "--sha256")?;
+            installation::install(
+                &prefix,
+                Path::new(&archive),
+                &digest,
+                seen.contains("--activate"),
+            )?
+        } else {
+            installation::select(
+                &prefix,
+                tag.ok_or_else(|| usage_error("runtime select requires tag"))?,
+            )?
+        };
+        let render = (|| {
+            append_compact_record(
+                &mut output,
+                "result",
+                &[
+                    ("status", "success".to_owned()),
+                    ("command", format!("runtime.{action}")),
+                    ("outcome", mutation.outcome.to_owned()),
+                ],
+            )?;
+            runtime_version_record(&mut output, &mutation.version)?;
+            append_compact_record(
+                &mut output,
+                "selection",
+                &[
+                    (
+                        "tag",
+                        mutation
+                            .selected
+                            .clone()
+                            .unwrap_or_else(|| "none".to_owned()),
+                    ),
+                    (
+                        "previous",
+                        mutation
+                            .previous
+                            .clone()
+                            .unwrap_or_else(|| "none".to_owned()),
+                    ),
+                    (
+                        "default-path",
+                        prefix.join("bin/lkjscript").display().to_string(),
+                    ),
+                    ("path-search", "unchanged".to_owned()),
+                ],
+            )?;
+            append_compact_record(
+                &mut output,
+                "recovery",
+                &[
+                    ("manager-path", mutation.manager.display().to_string()),
+                    ("retained-manager", mutation.retained_manager.to_string()),
+                    (
+                        "ownership",
+                        if mutation.retained_manager {
+                            "installed"
+                        } else {
+                            "external/unmanaged-not-durable-no-retained-manager-slot"
+                        }
+                        .to_owned(),
+                    ),
+                ],
+            )
+        })();
+        render.map_err(|mut error: Diagnostic| {
+            error.notes.push(format!(
+                "installation operation committed; version retained at {}; observed selection {:?}",
+                mutation.version.path.display(),
+                mutation.selected
+            ));
+            error
+        })?;
+    }
+    Ok(output.finish())
+}
+
+fn runtime_version_record(
+    output: &mut CompactResponseWriter,
+    version: &super::installation::InstalledVersion,
+) -> Result<(), Diagnostic> {
+    append_compact_record(
+        output,
+        "runtime",
+        &[
+            ("tag", version.tag.clone()),
+            ("target", crate::release_container::TARGET_TRIPLE.to_owned()),
+            ("path", version.path.display().to_string()),
+            ("sha256", version.executable_sha256.clone()),
+            ("archive-sha256", version.archive_sha256.clone()),
+            ("archive-bytes", version.archive_bytes.to_string()),
+            ("manifest-sha256", version.manifest_sha256.clone()),
+            ("publication", version.publication.to_owned()),
+            ("payload-integrity", version.integrity.to_owned()),
+        ],
+    )
+}
+
 pub fn execute_data(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
     let action = arguments
         .first()
@@ -7135,6 +7306,14 @@ mod tests {
     #[test]
     fn maintained_affine_worker_definition_pages_are_complete_stateless_and_read_only() {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        // A pristine checkout has no derived catalog. Establish it through the public owner
+        // before taking the read-only projection baseline, independent of other test ordering.
+        execute_status(vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "status".to_owned(),
+        ])
+        .expect("initialize maintained catalog through public status");
         let head_path = project.join("HEAD");
         let catalog_path = project.join("catalog/current.lkjc");
         let generated_path = project.join("generated/lkjournal.lkja");

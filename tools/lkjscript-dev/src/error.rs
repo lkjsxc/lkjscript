@@ -63,3 +63,13 @@ impl From<serde_json::Error> for DevError {
         Self::corrupt(error.to_string())
     }
 }
+
+impl From<lkjscript::release_container::ContainerError> for DevError {
+    fn from(error: lkjscript::release_container::ContainerError) -> Self {
+        if error.infrastructure {
+            Self::infrastructure(error.message)
+        } else {
+            Self::corrupt(error.message)
+        }
+    }
+}
