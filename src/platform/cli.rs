@@ -7135,6 +7135,14 @@ mod tests {
     #[test]
     fn maintained_affine_worker_definition_pages_are_complete_stateless_and_read_only() {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        // A pristine checkout has no derived catalog. Establish it through the public owner
+        // before taking the read-only projection baseline, independent of other test ordering.
+        execute_status(vec![
+            "--project".to_owned(),
+            project.display().to_string(),
+            "status".to_owned(),
+        ])
+        .expect("initialize maintained catalog through public status");
         let head_path = project.join("HEAD");
         let catalog_path = project.join("catalog/current.lkjc");
         let generated_path = project.join("generated/lkjournal.lkja");
