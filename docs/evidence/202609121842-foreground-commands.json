@@ -1,0 +1,373 @@
+{
+  "schema": "lkjscript-foreground-command-evidence-1",
+  "campaign": "202609121842",
+  "status": "FG-1–FG-6 accepted and integrated; FG-7 hosted dry run in progress",
+  "source": {
+    "startup": "dc584d590c1bf74112d306a61eee2c5ef636a6fe",
+    "archive_commit": "8cfaaf97d0888b147ef9e4595a05635700ddf110",
+    "implementation": "38f092859a3c0ce2dc3ec08ff8efeb47c5da3866",
+    "reconciliations": [
+      "494baacdc679232a7de8aef084622ba74d257bb8",
+      "0b5e982727a080761d14afd98e45199497acf87d"
+    ],
+    "selected": "0b5e982727a080761d14afd98e45199497acf87d",
+    "report": "Later containing commit is supplied by Git history and the final handoff; it is not retrospectively tested source.",
+    "capabilities_digest": "477ea7f9a61ad57954b14ef33a2c5d3f4369c49f6ee5d0d96a6fd5156a5afe09"
+  },
+  "contract": {
+    "command": "run --deployment PATH [--arguments JSON]",
+    "execution": "Exactly one production invocation of a pure or task Command port; verification=not-performed. Read-only artifact, exact component grants, directional argument/result codec admission precede secrets and adapters.",
+    "trusted": "Omitted execution/runtime select no cumulative instruction, allocation, collection-item or invocation capability-call quotas, and no implicit deadline.",
+    "bounded": "Complete numeric execution retains supplied fuel/depth/stack and cumulative defaults 256 MiB allocation, 1,000,000 collection items and 100,000 capability calls. Existing resident and project differential defaults remain bounded. Null is invalid.",
+    "lifecycle": "SIGINT/SIGTERM cancellation; completion-ready race preference; joined invocation and adapter shutdown before success; post-invocation failures preserve possible visibility and cleanup notes.",
+    "remaining": "Finite preparation/type/codec/value/container bounds, checked storage arithmetic, call depth/value stack, individual adapter limits and canonical cumulative per-grant quotas remain.",
+    "creation": "Atomic command.deployment.json auxiliary file, no listener or budgets; recommended derived output generated/application.lkja. Captured pure starter meaning/result remains unchanged.",
+    "discovery_correction": "No deployment inspect operation exists. Actual schema discovery is capabilities --section deployment."
+  },
+  "composition": {
+    "scope": "Designed public witness in the existing offline-package effect owner, not maintained application adoption.",
+    "authoring": "One copied executable publicly authors/transports/checks/builds an effect-polymorphic task-iterate helper, pure bound callback factory and two recursive nominal Command consumers; producer and consumer checkouts unavailable at execution; independent working directories and data roots; product environment only LANG.",
+    "arithmetic": {
+      "n": [
+        0,
+        1,
+        257,
+        8193
+      ],
+      "sums": [
+        0,
+        0,
+        32896,
+        33558528
+      ]
+    },
+    "live_cells": 7,
+    "policy_cells": 4,
+    "negative_cells": 16,
+    "replay_oracle": "Persisted monotonic executions count increments once per invocation; complete ordered small-case trace, exact final report/data and first 258 events retained for 8193 to respect the existing transaction mutation bound.",
+    "replacement": "Reviewed helper replacement changes N=257 to position 258 and total 33153; retained original bundle still returns position 257 and total 32896.",
+    "long_loop": {
+      "calibration": "44+32N production instruction units, observed at N=0 and 1000",
+      "n": 312499,
+      "instructions": 10000012,
+      "result": 48827656251,
+      "capability_calls": 0,
+      "storage": "Fixed scalar/nominal state, no growing input or collection; cumulative charged allocation is distinct from live memory."
+    },
+    "failures": "Arguments/output branch before missing secrets; absent/foreign/wrong-interface and whole-component grants; rollback; committed effect then trap; fuel/deadline; SIGINT/SIGTERM; oversized result; broken stdout.",
+    "independent": "Both evaluators separately test optional quotas, exact grants, cancellation and overflow with neutral effects. Live foreground work is never replayed for reference comparison.",
+    "accepted_source": {
+      "receipt": ".artifacts/offline-packages/run-170xkv/receipt.json",
+      "sha256": "f93604bed023ca0cd893d38ca134772084692f4276a5ee01436732ad2cf6fc72",
+      "seconds": 277.762289087,
+      "status": "fresh passed"
+    }
+  },
+  "compatibility": {
+    "graph": 14,
+    "type_object": 10,
+    "artifact": 18,
+    "identity": "No format or operational-data migration. Maintained standard and lkjournal semantic assets remain byte-identical through their generators and equality owners.",
+    "descriptor": "Omission is contextual unversioned syntax evolution; old executables reject omitted formerly required policies. Previously valid complete numeric descriptors retain behavior on the new executable.",
+    "recovery": "Retain matching previous executable and immutable bundles. The installed runtime executable and runtime-dependent .lkja bundle are delivered; no embedded application executable, installer, registry or daemon.",
+    "predecessor_artifact": {
+      "authoring_executable_sha256": "a99f2d540f8d79452cca1fdc9f958cd9ebe77e9197e6e9449ea08ef7fb1f282f",
+      "source": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "artifact_sha256": "07c8db692c4a4bca88671df2025bcb607461d7f483fc99bb1c8c25da1e8c1d46",
+      "observed": "Fresh public authoring/build with retained iteration executable; new foreground runtime returns typed hello after checkout removal. Original build receipt/candidate hash authenticated; no inherited full receipt claimed fresh.",
+      "final_musl": {
+        "status": "fresh passed",
+        "source": "0b5e982727a080761d14afd98e45199497acf87d",
+        "candidate_sha256": "b7a97d124617223306d22a5e2861a7110cdc5dbd76b894767b5b6d4ae7420689",
+        "stdout_sha256": "c5242c2e36a7a9368ec92e3b2846cbc0bca42936a43e6e63c09f0f5e0f76f037",
+        "result": "hello",
+        "environment": "LANG-only, cwd /tmp, authoring path unavailable"
+      }
+    },
+    "installed_demo": {
+      "status": "fresh passed",
+      "root": "/tmp/lkjscript-foreground-installed-QDvQdq2V",
+      "candidate_sha256": "b7a97d124617223306d22a5e2861a7110cdc5dbd76b894767b5b6d4ae7420689",
+      "observed": "README sequence creates/checks/builds alpha and beta; both authoring directories removed; one binary in bin; unrelated cwd-alpha/cwd-beta; LANG-only environment; two pure hello results with completed cleanup.",
+      "stdout_sha256": [
+        "e77747c8ad70e501536c0161b608e5a7043d1a94feb817b987a8f98adf3a0124",
+        "20a409add393b821d7fb4e7ade8f39bd75c6f31924fab94dd2d16f37ae9e42a0"
+      ]
+    }
+  },
+  "failures_retained": [
+    {
+      "source": "38f092859a3c0ce2dc3ec08ff8efeb47c5da3866",
+      "full_passed": 24,
+      "selected": 26,
+      "seconds": 554.349696428,
+      "reason": "Stale command recipe projection and 24-inventory/root-only package reader assumptions.",
+      "full_receipt": ".artifacts/lkjscript-dev/check/1789212526821814156-1846023-0/receipt.json",
+      "package_receipt": ".artifacts/offline-packages/run-AJ1VQt/receipt.json"
+    },
+    {
+      "source": "494baacdc679232a7de8aef084622ba74d257bb8",
+      "full_passed": 25,
+      "selected": 26,
+      "seconds": 643.684844845,
+      "reason": "Aggregate required stdout diagnostic for deliberate broken stdout; exact foreground stderr diagnostic is separately admitted.",
+      "full_receipt": ".artifacts/lkjscript-dev/check/1789214056813734078-1867156-0/receipt.json",
+      "full_sha256": "5cceb951a7a8ae78d7ae3c39205b507703353f6f053aaf3aeeb6aba54b0cb9f2",
+      "package_receipt": ".artifacts/offline-packages/run-QTzNkI/receipt.json",
+      "package_sha256": "19e42b59f74408651f9e989db355059c1befbc9b4327b29abd3ae21ec3d4f572"
+    },
+    {
+      "source": "494baacdc679232a7de8aef084622ba74d257bb8",
+      "target_build": "Fresh build and static inspection passed in 191.229176723 seconds; target behavioral admission unrun after reader correction superseded source.",
+      "candidate_sha256": "b7a97d124617223306d22a5e2861a7110cdc5dbd76b894767b5b6d4ae7420689"
+    }
+  ],
+  "fault_sensitivity": {
+    "source": "38f092859a3c0ce2dc3ec08ff8efeb47c5da3866",
+    "scope": "Fresh isolated source faults; affected production owner files remain byte-identical at selected source, explicitly verified by git diff. This is bound module reuse, not fresh whole-source fault execution.",
+    "faults": [
+      "Double invocation detected by admitted count 2 versus 1",
+      "Skipped adapter shutdown detected by shutdown count 0 versus 1",
+      "Restored foreground fuel detected by normalized_instruction_steps",
+      "Skipped grant preflight detected by secret_missing instead of deployment_grant_missing in copied public witness"
+    ],
+    "recovery": "Healthy six unit checks and public grant check pass after restoration; fault clone clean; mutants never integrated.",
+    "artifact_root": ".artifacts/foreground-202609121842/"
+  },
+  "acceptance": {
+    "full": {
+      "status": "fresh passed",
+      "source": "0b5e982727a080761d14afd98e45199497acf87d",
+      "gates": 26,
+      "reused": 0,
+      "seconds": 311.116930843,
+      "input_stable": true,
+      "receipt": ".artifacts/lkjscript-dev/check/1789215070862274594-1888749-0/receipt.json",
+      "sha256": "ac9bd037bd621cd329f273b8a3ffd5db7b6898d8e81279cc88977c834ff280f2",
+      "digest": "verification_cff6bc0049b431176decf583f3caca0c58cbb92409764a1ff68c8b03804326b1",
+      "verifier_sha256": "eadb3ea7336787ca44aea5c04400f1c668a6d0c5402f6b9efe70090e0653ec7f",
+      "candidate_sha256": "6d435dcfbce0f91ff4cd6bde47b47d0e52fd339b778b4e017f976af1285d01e9",
+      "verifier_build_seconds": 157
+    },
+    "target_build": {
+      "status": "fresh command passed; valid compiler-cache reuse",
+      "source": "0b5e982727a080761d14afd98e45199497acf87d",
+      "seconds": 0.196440921,
+      "receipt": ".artifacts/foreground-202609121842/target-02/build-receipt.json",
+      "sha256": "ddb7439925bad76bc0e9f7bcd46ed9c0767e589743c962ddd83107c54efdd466",
+      "candidate_sha256": "b7a97d124617223306d22a5e2861a7110cdc5dbd76b894767b5b6d4ae7420689",
+      "candidate_bytes": 22231296,
+      "target": "x86_64-unknown-linux-musl",
+      "policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "scope": "Reader-only correction leaves product bytes identical to the prior 191.23-second build. Fresh admission uses the final source and current frozen verifier; compiler cache reuse is not correctness evidence."
+    },
+    "target_admission": {
+      "status": "fresh passed",
+      "source": "0b5e982727a080761d14afd98e45199497acf87d",
+      "seconds": 793.451363618,
+      "receipt": ".artifacts/foreground-202609121842/target-02/admission/receipt.json",
+      "sha256": "25f2cd86e59f234f0eaa75ee9c9810efe70719d6e38a33c047bf17c29d1a0ee5",
+      "digest": "verification_c0e228008a93691a2ea5fc5535eb39bc18b223e1f45c12dd6f6758c50286188e",
+      "userlands": 2,
+      "behavioral_owners": 6,
+      "verifier": {
+        "path": "/home/coder/workspace/lkjscript/.artifacts/foreground-202609121842/source-0b5e9827-verifier",
+        "byte_length": 26393752,
+        "mode": 488,
+        "sha256": "eadb3ea7336787ca44aea5c04400f1c668a6d0c5402f6b9efe70090e0653ec7f"
+      },
+      "cleanup_complete": true
+    },
+    "target_receipt_faults": {
+      "status": "fresh passed",
+      "count": 73,
+      "seconds": 89.76,
+      "receipt": ".artifacts/foreground-202609121842/target-02/admission/nominal-receipt-faults.json",
+      "sha256": "a2f919c52d5a797fd0c0a3f891f4a8caebce4f68bb9ec3d0215ca1db81e90fca",
+      "original_receipt_sha256": "25f2cd86e59f234f0eaa75ee9c9810efe70719d6e38a33c047bf17c29d1a0ee5",
+      "baseline_and_recovery_passed": true,
+      "restored": true,
+      "test_harness_sha256": "5beccbf7d5971f25302b2973ac74f0098b69701d68a5d523a666415c2ec1bae1"
+    },
+    "packaging": {
+      "status": "fresh deterministic preparation and strict verification passed",
+      "source": "0b5e982727a080761d14afd98e45199497acf87d",
+      "publication": "dry-run",
+      "seconds": 48.447965101,
+      "receipt": ".artifacts/foreground-202609121842/release-01/release-receipt.json",
+      "receipt_sha256": "ee327d71c036fc9fd95b9423a344b8bafb24d2aca420b6b5c7e013ff26c1b097",
+      "archive_sha256": "8874f8ffcd7b5f6dd8de321364200f78c14621313a4e0f5bfdf52a963003a4cc",
+      "archive_bytes": 10007046,
+      "checksums_sha256": "1ab342bb79ca8beab774bd5e8961d2069171eeb6e15bf33c98abe10bd1c90000",
+      "manifest_sha256": "872f0eb4e014528ef6afbb688c63c96cd10cb8e0b7aa5121e183860b2ad3ebe7",
+      "strict_verify_stdout_sha256": "164b4754430070416c522ab46429d98ccc4241598b8a6b9c5466dafab23cb8ef"
+    },
+    "unrun": [
+      "Hosted dry run completion and its authenticated handoff readers are pending.",
+      "New annotated tag, immutable publication and anonymous exact/latest public pair are pending.",
+      "Transferred/public-pair fault additions have no new completed hosted fixture yet; the 73 current target faults ran.",
+      "No redundant focused/changed profiles, local full public-pair rehearsal or additional platform claim selected."
+    ]
+  },
+  "performance": {
+    "status": "Fresh target admission passed",
+    "scope": "One-shot preparation/invocation/shutdown and whole process observations; source full overlapped initial target admission, and no owned compilation ran during the later target foreground cells. No matched evaluator speedup, memory savings, policy overhead estimate or provider billing claim. Both target trusted-versus-bounded samples and earlier unfavorable development cells remain retained.",
+    "environment": {
+      "rust": "1.98.0",
+      "kernel": "7.2.3-arch1-2",
+      "architecture": "x86_64",
+      "cpu": "AMD Ryzen 9 9955HX",
+      "logical_cpus": 12
+    },
+    "adverse_development": "N=1000 trusted one-shot was slower than bounded; all cells retained in package-08. Concurrent compilation prevents interpreting that pair as policy overhead.",
+    "target": {
+      "receipt": ".artifacts/foreground-202609121842/target-02/admission/offline-packages/receipt.json",
+      "sha256": "822ad4bbdfeb6c5efe2aa59ee56b0de70fd6d42553685ea7f88e4084f932de22",
+      "candidate_sha256": "b7a97d124617223306d22a5e2861a7110cdc5dbd76b894767b5b6d4ae7420689",
+      "verifier_sha256": "eadb3ea7336787ca44aea5c04400f1c668a6d0c5402f6b9efe70090e0653ec7f",
+      "package_seconds": 429.856284493,
+      "cells": [
+        {
+          "label": "initial-0",
+          "n": 0,
+          "prepare_ns": 43758581,
+          "invoke_ns": 18635892,
+          "shutdown_ns": 2685,
+          "process_ns": 76448393
+        },
+        {
+          "label": "initial-8193",
+          "n": 8193,
+          "prepare_ns": 44750422,
+          "invoke_ns": 77661881,
+          "shutdown_ns": 2936,
+          "process_ns": 137398354
+        }
+      ],
+      "loops": [
+        {
+          "label": "calibration-zero",
+          "n": 0,
+          "output": {
+            "position": 0,
+            "total": 0
+          },
+          "prepare_ns": 43451855,
+          "invoke_ns": 61114,
+          "shutdown_ns": 1453,
+          "work": {
+            "instructions": 44,
+            "allocated_bytes": 370004,
+            "capability_calls": 0,
+            "maximum_call_depth": 3
+          },
+          "process_ns": 55981925
+        },
+        {
+          "label": "calibration-thousand",
+          "n": 1000,
+          "output": {
+            "position": 1000,
+            "total": 499500
+          },
+          "prepare_ns": 53577542,
+          "invoke_ns": 5649135,
+          "shutdown_ns": 2254,
+          "work": {
+            "instructions": 32044,
+            "allocated_bytes": 3026004,
+            "capability_calls": 0,
+            "maximum_call_depth": 3
+          },
+          "process_ns": 75033127
+        },
+        {
+          "label": "past-ten-million",
+          "n": 312499,
+          "output": {
+            "position": 312499,
+            "total": 48827656251
+          },
+          "prepare_ns": 43198820,
+          "invoke_ns": 1729063993,
+          "shutdown_ns": 2625,
+          "work": {
+            "instructions": 10000012,
+            "allocated_bytes": 830367348,
+            "capability_calls": 0,
+            "maximum_call_depth": 3
+          },
+          "process_ns": 1782902004
+        },
+        {
+          "label": "bounded-equivalent",
+          "n": 1000,
+          "output": {
+            "position": 1000,
+            "total": 499500
+          },
+          "prepare_ns": 43864059,
+          "invoke_ns": 5623406,
+          "shutdown_ns": 1553,
+          "work": {
+            "instructions": 32044,
+            "allocated_bytes": 3026004,
+            "capability_calls": 0,
+            "maximum_call_depth": 3
+          },
+          "process_ns": 66359055
+        }
+      ]
+    }
+  },
+  "integration": {
+    "status": "normal push completed and remote main observed equal",
+    "source_commit": "0b5e982727a080761d14afd98e45199497acf87d",
+    "branch": "main",
+    "observed_utc": "2026-09-12T12:30Z",
+    "policy": "Push permission refreshed; main unprotected, no branch rules or rulesets; only release.yml present in both current trees, triggered by tag/manual dispatch. GitHub also lists two historical workflow registrations absent from current main. No active or queued runs observed before integration.",
+    "report_only": "Later reporting commit does not replace the accepted release source."
+  },
+  "publication": {
+    "tag": "v0.1.33",
+    "status": "Selected combined release pending hosted dry acceptance; no tag, release or control-variable write performed",
+    "previous": "Immutable v0.1.32 remains supported and unchanged; EFF-7 and its first public pair closed.",
+    "remaining": "Read run 34693887632/1 once at resumption; authenticate exact-source full/target/package/transferred handoffs after success. Then follow annotated-tag and scoped immutability control protocol, complete immutable publication and independently admitted anonymous exact/latest public pair including mandatory foreground child. Never substitute local packaging for public delivery.",
+    "hosted_dry_run": {
+      "id": 34693887632,
+      "attempt": 1,
+      "source_commit": "0b5e982727a080761d14afd98e45199497acf87d",
+      "created_utc": "2026-09-12T12:31:04Z",
+      "last_observed_state": "in_progress",
+      "last_observed_utc": "2026-09-12T12:35:15Z",
+      "url": "https://github.com/lkjsxc/lkjscript/actions/runs/34693887632",
+      "inputs": {
+        "publish": false,
+        "tag": "v0.1.33"
+      },
+      "job": {
+        "id": 103553906067,
+        "name": "Build, verify, and package",
+        "status": "in_progress",
+        "current_step": "Build the host verifier"
+      },
+      "observations": "Initial observation after dispatch and one handoff observation; no watch, polling, rerun or duplicate dispatch."
+    }
+  },
+  "disposition": {
+    "deployment": "Not selected; application effects only in owned disposable fixtures.",
+    "next": "Successful foreground package composition favors installation and explicit runtime selection as the next product-access campaign; no new affine/resource mechanism selected.",
+    "preserved": "August 31 stash, unrelated recovery artifacts, immutable releases and operational data."
+  },
+  "cleanup": {
+    "local": "No owned product, verifier, build process or container remained after acceptance and package preparation. The isolated fault checkout is clean.",
+    "hosted": "Required dry run remains owned external work; no cancellation or background-monitoring promise.",
+    "recovery": [
+      ".artifacts/foreground-202609121842/",
+      "/tmp/lkjscript-foreground-installed-QDvQdq2V",
+      "/tmp/lkjscript-effects-aXRzNu",
+      "/tmp/lkjscript-effects-oyct6L"
+    ],
+    "preserved": "Original mandate prefix, August 31 stash, unrelated pre-existing artifacts, immutable releases and operational data."
+  }
+}

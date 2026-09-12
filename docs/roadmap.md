@@ -42,7 +42,9 @@ aggregate observation bound within the pair. EFF-7 is complete at frozen source 
 Task iteration separately passed engineering, source/target acceptance and main integration at
 `3f25c3a7`. The [foreground campaign](campaigns/202609121842.md) now selects that named composition
 milestone and one combined release: ordinary command bundles execute once through an installed
-runtime with exact grants and joined cleanup. Its delivery gates remain explicit campaign work.
+runtime with exact grants and joined cleanup. Foreground source `0b5e9827` has passed fresh
+source/target acceptance and normal main integration. Selected v0.1.33 awaits hosted dry run
+`34693887632/1`, then annotated-tag publication and independent public exact/latest acceptance.
 After delivery, reassess installation and explicit runtime selection using these independent
 foreground applications; no installer, daemon or upgrade automation is selected here. Further
 infrastructure work needs a newly measured bottleneck.

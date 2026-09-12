@@ -2,6 +2,47 @@
 
 Measurements are observations, not promises.
 
+## Foreground commands, 2026-09-12
+
+The [foreground evidence](evidence/202609121842-foreground-commands.json) binds accepted source
+`0b5e9827`, host candidate `6d435dcf…`, static-musl candidate `b7a97d12…` and verifier
+`eadb3ea7…`. The designed package witness uses imported task iteration, a retained callback and
+recursive nominal reports. Each fresh process increments a persistent execution counter once.
+These are one-shot measurements of the exact musl candidate, with no owned compilation during
+the foreground cells:
+
+| Updates | Preparation | Invocation | Shutdown | Whole process |
+|---|---:|---:|---:|---:|
+| 0 | 43.758581 ms | 18.635892 ms | 0.002685 ms | 76.448393 ms |
+| 8,193 | 44.750422 ms | 77.661881 ms | 0.002936 ms | 137.398354 ms |
+
+The whole process includes argument/output handling and startup outside the other measured spans.
+These observations establish no evaluator speed ratio, RAM saving or provider charge reduction.
+The environment is Rust 1.98.0, Linux 7.2.3-arch1-2, x86-64 AMD Ryzen 9 9955HX with 12 available
+logical CPUs. Source full overlapped the earlier part of target admission.
+
+The scalar empty-row loop calibrates to 44+32N production instructions. Frozen N=312499 completed
+10,000,012 instructions in 1,729.06 ms of invocation time, returning position 312499 and sum
+48,827,656,251. It has no capability calls or growing collection and peaks at three call frames.
+Its 830,367,348 cumulative charged bytes are not live memory. All structural and per-grant bounds
+remain independent of the four omitted lifetime quotas.
+
+At N=1000 the same program and result use 32,044 instructions and 3,026,004 charged bytes under
+both trusted and explicit bounded policy. Trusted/bounded invocation samples were 5.649135 /
+5.623406 ms, with preparation 53.577542 / 43.864059 ms. The slower trusted sample and the earlier
+unfavorable development pair are retained. Single samples with preparation variability do not
+estimate policy overhead. Production-only foreground execution and differential project execution
+are different workflows, so their wall times are not a matched evaluator comparison.
+
+Fresh source full passed all 26 gates in 311.12 seconds after a separate 157-second verifier build.
+The earlier 554.35- and 643.68-second full attempts failed and remain separately recorded. The
+191.23-second musl build preceded a reader-only correction; the final fresh build command reused
+valid compiler outputs in 0.20 seconds and independently inspected the unchanged static bytes.
+Fresh target behavioral admission passed all six owners and both pinned userlands in 793.45
+seconds, including the 429.86-second offline-package child. Its 73 receipt faults and healthy
+restoration took 89.76 seconds. Deterministic preparation took 48.45 seconds. All have separate
+source-bound records; a compiler cache supplies no correctness certificate.
+
 ## Task iteration, 2026-09-12
 
 The [task-iteration evidence](evidence/202609121214-task-iteration.json) separates the identical

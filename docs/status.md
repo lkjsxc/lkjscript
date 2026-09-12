@@ -10,8 +10,12 @@ The active [foreground campaign](campaigns/202609121842.md) implements public
 `run --deployment PATH [--arguments JSON]` for exact artifact Command targets. A copied candidate
 has passed pure starters and fresh transported task-library consumers after their authoring paths
 were removed, including persistent once-only counters and dependency replacement/recovery.
-Source/full/target and selected combined public-release acceptance remain pending until the
-campaign records their exact receipts. This designed witness is separate from maintained adoption.
+Source `0b5e982727a080761d14afd98e45199497acf87d` passed 26 fresh full gates, exact static-musl
+admission in both pinned userlands and all six target owners, 73 receipt faults, and deterministic
+package verification. It is normally integrated on main. The selected combined v0.1.33 release
+is awaiting hosted dry run `34693887632/1`, initially observed in progress; tagging, publication
+and public exact/latest acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
+separates accepted source from later reporting. This designed witness is separate from maintained adoption.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
