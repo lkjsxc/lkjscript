@@ -1,24 +1,38 @@
 {
   "schema": "lkjscript-task-iteration-evidence-1",
   "campaign": "202609121214",
-  "status": "targeted implementation accepted; fresh full and exact target acceptance pending",
+  "status": "ITER-1–ITER-5 accepted; engineering and main integration complete; inherited EFF-7 delivered",
   "start": {
     "branch": "main",
     "commit": "5ae31821295f6f754437d54dad35c4caca54cc35",
     "archive_commit": "f385b7b60ad22257fcc46d09e83b34e8952caca0",
     "initial_mandate_sha256": "7bd7194eed457192b42327aaebc74ae9f5bfbf712ceca8b7e4f26f4d0553befe",
     "guidance": "supplied complete AGENTS.md already matches; no material revision",
-    "preserved": "August 31 stash, predecessor release source, operational data and prior recovery artifacts"
+    "preserved": "August 31 stash, predecessor release source, operational data and prior recovery artifacts",
+    "observed_utc": "2026-09-12T03:29Z",
+    "guidance_sha256": "bc9854af5859e24ab5ebb699157bd9add934fe0c0c1e177bfd44781c0ac037dc"
   },
   "implementation": {
-    "commit": null,
-    "tested_commit": null,
-    "integration": null,
-    "containing_record": "Final source and report-only containing identities are recorded after execution; no self hash.",
+    "commit": "bf75a50a2def45e7342df433fee4f26c7d5e789a",
+    "tested_commit": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+    "integration": {
+      "branch": "main",
+      "source_commit": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "remote": "origin",
+      "status": "pushed and observed equal",
+      "policy": "Refreshed main unprotected with no branch rules or required checks; normal history-preserving push.",
+      "report_only": "This evidence is a later containing record. Its actual commit is supplied by Git history and the final handoff, avoiding a self-referential hash."
+    },
+    "containing_record": "This report-only record follows verified source integration; its commit is supplied by Git history and final handoff, without a self hash.",
     "behavior": "Constant additional control space for terminal pure/task graph calls in both evaluators; outgoing allowance admission precedes replacement; invocation resources and lexical transactions retain their owners.",
     "correction": "Strict loading additionally compares canonical code, including evaluation order and transaction continuations, before deriving tail eligibility.",
     "encoding": "Graph 14, TypeObject 10, ordinary data, compiler bytecode and supported Artifact 18 bytes unchanged; offline receipt 7 now requires iteration; pure-tail receipt 6 preserved.",
-    "artifact_root": ".artifacts/iteration-202609121214/"
+    "artifact_root": ".artifacts/iteration-202609121214/",
+    "reconciliation_commits": [
+      "f297eac8515bd4cf62ce380fb20dba6f672923f5",
+      "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97"
+    ],
+    "capabilities_digest": "b2163f44221b52cdef7cf4d3e918de3c9a408fd5ace0393d029ad0f6ede9a1ad"
   },
   "library": {
     "standard_revision": "rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591",
@@ -56,7 +70,8 @@
     "compiler_tests": 33,
     "new_iteration_tests": 6,
     "terminal_analysis_tests": 3,
-    "clippy": "clippy-04 fresh passed"
+    "clippy": "clippy-04 fresh passed",
+    "historical_diagnostics": "An initial genuine non-tail debug fixture exhausted its 2 MiB native stack at frame policy 64; pending-work controls use policy 16 and hit that bound. Terminal chains retain the required policy 64 and bounded native stack. Earlier CLI/reader construction failures and their logs are retained in the campaign artifact root."
   },
   "control": {
     "fixed_nominal_state": {
@@ -94,7 +109,86 @@
         20051546
       ],
       "scope": "Equivalent scalar outputs and ordered neutral effects. The reference sequential allocation cell is unfavorable and retained; these are cumulative charges, not live memory."
-    }
+    },
+    "accepted_target": {
+      "schema": "lkjscript-offline-packages-acceptance-7",
+      "status": "fresh passed",
+      "candidate_sha256": "a99f2d540f8d79452cca1fdc9f958cd9ebe77e9197e6e9449ea08ef7fb1f282f",
+      "verifier_sha256": "96c200dd2360cbadab8771d4c980bd3bfa09ed589760726f8b0c8f099729a512",
+      "elapsed_nanoseconds": 374826229634,
+      "iteration_count": 40,
+      "authority": 2,
+      "preparation": {
+        "type_derivation_steps": 13508,
+        "type_metadata_bytes": 511525
+      },
+      "control": [
+        {
+          "tier": "production",
+          "output": {
+            "callbacks": 8194,
+            "updates": 8193,
+            "value": {
+              "position": 8193,
+              "total": 33558528
+            }
+          },
+          "frames": 3,
+          "locals": 9,
+          "types": 2,
+          "effects": null,
+          "allowances": 3,
+          "allocated_bytes": 23719773,
+          "capture_visits": 6,
+          "descendant_rescans": 0
+        },
+        {
+          "tier": "reference",
+          "output": {
+            "callbacks": 8194,
+            "updates": 8193,
+            "value": {
+              "position": 8193,
+              "total": 33558528
+            }
+          },
+          "frames": 3,
+          "locals": 7,
+          "types": 2,
+          "effects": 2,
+          "allowances": 3,
+          "allocated_bytes": 21377131,
+          "capture_visits": 6,
+          "descendant_rescans": 0
+        }
+      ]
+    },
+    "metric_scope": "Reported live-local/substitution peaks count installed activations. Transfer also stages at most one admitted incoming application/locals area, bounded by the fixed prepared program; cumulative charges and payload/resource retention remain separate.",
+    "accepted_source": {
+      "package_receipt": ".artifacts/offline-packages/run-wAuUKh/receipt.json",
+      "seconds": 268.316415659,
+      "preparation_steps": 13505,
+      "preparation_metadata_bytes": 511333
+    },
+    "accepted_target_fold": {
+      "count": 8192,
+      "result": 100773888,
+      "events": 16384,
+      "sequential_frames": 4,
+      "range_frames": 16,
+      "index_node_visits": 24777,
+      "full_list_materializations": 0,
+      "production_allocated_bytes": [
+        29817472,
+        35778240
+      ],
+      "reference_allocated_bytes": [
+        21790812,
+        20051546
+      ],
+      "scope": "Equivalent scalar fold and exact ordered neutral events. The concrete range body is a labeled comparison fixture; production standard range topology is retired."
+    },
+    "targeted_scope": "The initial fixed_nominal_state and fold_at_8192 observations are targeted debug measurements; accepted_source, accepted_target and accepted_target_fold are the later full/target observations."
   },
   "baseline": {
     "release_source": "67baaf0b081842e0e2e3745e8d5503e22cc791e4",
@@ -104,7 +198,36 @@
     "plain_public_receipt_sha256": "f6494b6143ff6ab68e085b944cfe940ae760a746470e2b324977207501e15b03",
     "frame_64": "Plain task frames grow and exhaust at 128/4097/8192; candidate stays at one/two frames.",
     "default_public": "Identical predecessor-authored artifact fails normalized_call_depth at 4097/8192; candidate returns complete sums.",
-    "matched_release_measurement": null
+    "matched_release_measurement": {
+      "source": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "candidate_sha256": "353162b7e533b09223a3a92699c19a806cab5951fa3befe3e19ce3dd27615602",
+      "receipt_sha256": "ba46c514a26c1315c9c57ebea16ca9e1d8fad74c9ab1dd8d723b5f2b806cb58f",
+      "warmups_per_cell": 1,
+      "samples_per_cell": 3,
+      "owned_builds_during_samples": 0,
+      "medians_ms": {
+        "predecessor_32": 0.14892,
+        "candidate_32": 0.180951,
+        "candidate_4097": 4.305725,
+        "candidate_8192": 8.54187
+      },
+      "unfavorable": "32-step candidate median is slower; all samples retained. Predecessor 4097/8192 fail, so their times are not completed-work comparisons.",
+      "prior_release_variant": {
+        "source": "bf75a50a2def45e7342df433fee4f26c7d5e789a",
+        "candidate_sha256": "957cbb9b6b0b51f649f7e699c8c29fea0d22eca7f2bbec2ec0079fdf107408eb",
+        "receipt_sha256": "a6f0c334ba5f5a5ad0826cda8040f6ac199d5b4dd459c8edfa68b0fc81d09933",
+        "scope": "Earlier workspace release build retained; final comparison selects the executable built by full's product release gate."
+      }
+    },
+    "environment": {
+      "rust": "1.98.0",
+      "kernel": "7.2.3-arch1-2",
+      "architecture": "x86_64",
+      "cpu": "AMD Ryzen 9 9955HX 16-Core Processor",
+      "available_logical_cpus": 12,
+      "profile": "release, one codegen unit, LTO, symbols stripped",
+      "timing": "HTTP request wall time under default policy; one warm-up and three samples per selected cell, neutral/no-live-effect plain task program, no owned builds during the final samples"
+    }
   },
   "faults": {
     "source_archive_sha256": "9f7aae6ce5f7735d06d2d0c112b37f71b791f16cee6e218c1a4b4b07fb211931",
@@ -112,13 +235,80 @@
     "reference_binary_sha256": "d5c9bdd474b3796ba4b006a56a353ffd6051a691f0453acb2b02d2521125c27e",
     "authority": "Both isolated outgoing-allowance faults fail the broad-ancestor/narrow-helper and shared-grant operation tests; forbidden second event observed.",
     "control": "Test-only restored ordinary calls hit 64 frames while canonical terminal evaluation succeeds.",
-    "published_fault_code": false
+    "published_fault_code": false,
+    "final_owner_sha256": {
+      "vm": "f2e76c6144cab44e9dc427f60cbf7079e8a33135067bc89c751cd40061fa665f",
+      "reference": "6c38c913badaef157968cc33017d899a0b1834709a3047b37065d4512e100370",
+      "binding": "Both exact files equal their pre-fault bytes in the retained source archive."
+    }
   },
   "acceptance": {
-    "full": null,
-    "target_build": null,
-    "target_admission": null,
-    "target_receipt_faults": null
+    "full": {
+      "status": "fresh passed",
+      "source": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "gates": 26,
+      "reused": 0,
+      "seconds": 305.0954074,
+      "receipt": ".artifacts/lkjscript-dev/check/1789193327172660837-1695360-0/receipt.json",
+      "sha256": "f9fda8807c431d5310dda746bcca4e6e92e88ce9760f24523ccab2afafbcc0ce",
+      "digest": "verification_021f53137e761a249805919d537eda3fb728b13428e9e6a7200669b64ec7228f",
+      "verifier_sha256": "96c200dd2360cbadab8771d4c980bd3bfa09ed589760726f8b0c8f099729a512",
+      "candidate_sha256": "353162b7e533b09223a3a92699c19a806cab5951fa3befe3e19ce3dd27615602",
+      "verifier_build_seconds": 145
+    },
+    "target_build": {
+      "status": "fresh passed",
+      "source": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "seconds": 214.335591297,
+      "sha256": "68940b40d26d509d3a8444d51ef48af0165417569f137c7137cb85bc251fc5ca",
+      "candidate_sha256": "a99f2d540f8d79452cca1fdc9f958cd9ebe77e9197e6e9449ea08ef7fb1f282f",
+      "candidate_bytes": 22104320,
+      "target": "x86_64-unknown-linux-musl",
+      "policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+      "overlap": "Build overlapped the latter part of full verification; selected timing samples ran afterward with no owned builds."
+    },
+    "target_admission": {
+      "status": "fresh passed",
+      "source": "3f25c3a7b9c0cec3e7672edacf2145feee3aaa97",
+      "seconds": 696.135075938,
+      "receipt": ".artifacts/iteration-202609121214/target-01/acceptance/receipt.json",
+      "sha256": "85c973f97cd8b2067dc6c80846036811e776f30f8525c36286d8596a17ed5af7",
+      "digest": "verification_9d56f5d306d648aed4c03bf6323a83dfcfe1448797ee735fa299bb44745b39ad",
+      "userlands": 2,
+      "behavioral_owners": 6,
+      "verifier_sha256": "96c200dd2360cbadab8771d4c980bd3bfa09ed589760726f8b0c8f099729a512",
+      "verifier_bytes": 26058640,
+      "verifier_mode_octal": "0750",
+      "cleanup_complete": true
+    },
+    "target_receipt_faults": {
+      "status": "passed",
+      "count": 69,
+      "seconds": 73.96,
+      "sha256": "078bb27c639f7f1ae6e1d2c73ba6b7c288339a9c67d0fb871807e8ea0e558de1",
+      "original_receipt_sha256": "85c973f97cd8b2067dc6c80846036811e776f30f8525c36286d8596a17ed5af7",
+      "baseline_and_recovery_passed": true,
+      "restored": true
+    },
+    "failed_full_attempts": [
+      {
+        "source": "bf75a50a2def45e7342df433fee4f26c7d5e789a",
+        "passed": 24,
+        "selected": 26,
+        "seconds": 445.997084118,
+        "sha256": "57574a8c1183f078e39ccf5510f5bc6f87c3923aeffc9b9dddc19da18077f706",
+        "failures": "Four historical/worker assertions and stale maintained-service artifact binding."
+      },
+      {
+        "source": "f297eac8515bd4cf62ce380fb20dba6f672923f5",
+        "passed": 25,
+        "selected": 26,
+        "seconds": 279.337382821,
+        "sha256": "c2e8cea44a12e8826bd8f68ec80df39831a00971a26cf007763ed4c63025b2c8",
+        "failures": "Two file-identity tests chose an oversized debug harness; bounded real executable fixtures preserve the production limit."
+      }
+    ],
+    "not_run": "No new hosted dry run, new transferred aggregate/public pair, redundant focused/changed profile or new increment publication. The current target/transferred boundaries use the strengthened common offline reader; the new target fault inventory ran. Frozen predecessor readers remain separate."
   },
   "inherited_release": {
     "source": "67baaf0b081842e0e2e3745e8d5503e22cc791e4",
@@ -126,8 +316,86 @@
     "tag_object": "562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf",
     "dry_run": "34626667719/1 authenticated original full/target/package/prepublication rereads",
     "publication_run": "34671245722/1",
-    "last_observed_utc": "2026-09-12T04:41:03Z",
-    "state": "build/package job 103492873519 in progress; release absent; public pair pending"
+    "last_observed_utc": "2026-09-12T06:05Z",
+    "state": "EFF-7 complete: immutable publication and fresh hosted public pair accepted",
+    "completed_utc": "2026-09-12T06:00:37Z",
+    "release_id": 387465958,
+    "immutable": true,
+    "archive_asset_id": 558679794,
+    "checksum_asset_id": 558679839,
+    "archive_sha256": "3beed341cbb315999531746d0f2ed197df4871ba9e6e0393666b1feaf11efa66",
+    "checksum_sha256": "219a8e77cbb1f262efe9ef7a7438cfe0fbba4bbd251c634103043fefe51bb888",
+    "hosted_verifier_sha256": "75e48711f15cbd26a086dbe425296635eb00b8473ae0610bec650fff08d11f92",
+    "public_artifact": {
+      "id": 10292268655,
+      "zip_sha256": "cc0f4377292a3a835951e1aea5713dadf129f08473d795445431d82cfb02879d"
+    },
+    "public_pair": {
+      "sha256": "edbbc9190b5ed71018c6b784169314abede06f594b04d4415241ec567e55a07a",
+      "digest": "verification_405bd89c51af8f477d9db81787ce904ddaf3c423402a8d249788d1949f1adb43",
+      "exact": "fresh route lifecycle and fresh five-owner suite",
+      "latest": "fresh route lifecycle; suite bound within the same pair",
+      "aggregate_sha256": "4f5e2e11d2e07aec67c88aa830285d69da0a0e771091e2bb7feb9b90b45cf3d5",
+      "seconds": 1871.119233641,
+      "exact_lifecycle_seconds": 7.125443453,
+      "latest_lifecycle_seconds": 6.163016041,
+      "aggregate_invocation_seconds": 1854.18448128,
+      "cleanup_complete": true
+    },
+    "local_reconciliation": "Both anonymous public routes independently downloaded and strictly admitted with the original verifier; its public five-child aggregate reread passes. Whole pair reread correctly rejects host kernel 7.2.3-arch1-2 versus recorded 6.17.0-1022-azure. The authenticated hosted pair-run includes the successful strict final reread; no kernel identity or receipt was rewritten. Local gh 2.45.0 lacks release verify, so attestation acceptance is the authenticated hosted observation.",
+    "hosted_cost_seconds": {
+      "run_elapsed": 8083,
+      "initial_queue": 3,
+      "build_job": 4301,
+      "host_verifier_build": 370,
+      "source_full": 1549.745135607,
+      "static_build": 322.140588742,
+      "target_admission": 1876.333391254,
+      "preparation": 139.456220249,
+      "prepublication_job": 1853,
+      "prepublication_suite": 1833.379690188,
+      "publish_job": 20,
+      "public_job": 1899
+    },
+    "monitoring": "Four tag-run state observations at startup, 04:41, 05:47 and 06:05 UTC; no watch, status loop or redispatch. Local read/download wall time was not separately measured; artifact bytes and hosted step timestamps are retained. No provider charge claim.",
+    "candidate_sha256": "863f337769a594a1961921f24bd278e23fbe52a689403f2c56b21986dce537ad",
+    "candidate_bytes": 21915904,
+    "archive_bytes": 9877724,
+    "published_utc": "2026-09-12T05:28:53Z",
+    "manifest_sha256": "fb6f026e7c4face353dd14b9b03e316d3acfb453c8732c840ef49919ee2e7960",
+    "authenticated_tag_handoffs": [
+      {
+        "id": 10292361555,
+        "name": "pre-publication",
+        "zip_sha256": "520119d76253cf15dc26f0efe987597eca072ee77e56ce2c129661b6b8f697fe"
+      },
+      {
+        "id": 10291524093,
+        "name": "release",
+        "zip_sha256": "53d0991f54362482f2aa2ebc692ddebd268eb8eb671b19b9d9d39712d02c9ca2"
+      },
+      {
+        "id": 10291394137,
+        "name": "verifier",
+        "zip_sha256": "0775ec8b8fd1c87b1d8f66530875ec01c83bc4ca2bc798f3b7dbba06397fb234"
+      },
+      {
+        "id": 10291309039,
+        "name": "target",
+        "zip_sha256": "7bc2e051dbd532af2063ed915dfaac93a41ea12d934e0419438bce2ac393bde1"
+      },
+      {
+        "id": 10291246864,
+        "name": "full",
+        "zip_sha256": "55a7f43d2588fb0965d9c199eb227244224b028c216ec65a08a3aca24fe5fcc0"
+      }
+    ],
+    "original_tag_receipts": {
+      "full_sha256": "65260cba57b5f5b388ad74aa89588c481021a70a092db85d5b81c33e40a79cdb",
+      "target_sha256": "447d0a4b77e71f0dab9019301f81e7ca1fc4474e0e86d41a83070ddb76065381",
+      "prepublication_sha256": "86f995d10a4e9860cb591970b2267d29a30eac59f5fdad2428a98d401edf8c5f",
+      "scope": "Original typed target, packaging and pre-publication rereads passed; full body binds 26 fresh hosted gates. Earlier dry-run release preparation also reread its full receipt with the original verifier."
+    }
   },
   "disposition": {
     "new_increment_publication": "intentionally deferred",
@@ -136,7 +404,21 @@
     "limitations": [
       "No constant payload memory, cumulative allocation, IO speed or termination promise.",
       "Existing effect, capability, affine signature, operational admission and cancellation policies remain.",
-      "Debug comparison timings are diagnostic; matched release samples and fresh full/target proof remain due."
-    ]
+      "Only x86_64-unknown-linux-musl is the supported target; the inherited public binary predates task iteration."
+    ],
+    "next_capability_decision": "Explicitly decide whether task iteration plus the next accepted capability forms the release; an unnamed future abstraction does not postpone that decision."
+  },
+  "cleanup": {
+    "processes": "No owned product/verifier/build process or container remained after acceptance and reader checks.",
+    "removed_superseded_fixtures": [
+      "/tmp/lkjscript-effects-g7eiM9",
+      "/tmp/lkjscript-effects-AUKMG1"
+    ],
+    "retained_recovery": [
+      ".artifacts/iteration-202609121214/",
+      "/tmp/lkjscript-effects-LsK0T1",
+      "/tmp/lkjscript-effects-4bB5xJ"
+    ],
+    "preserved": "Initial mandate prefix, complete root AGENTS.md, August 31 stash, immutable published identities, operational data, and prior recovery material."
   }
 }

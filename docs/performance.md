@@ -12,21 +12,57 @@ unchanged default frame policy for 4,097 and 8,192 calls, while the candidate re
 independently predicted sums. Initial debug/release observations are retained as diagnostic cells,
 not a matched timing comparison.
 
-The targeted nominal iteration fixture executes 8,193 updates and its final stopping callback.
+The accepted musl nominal iteration fixture executes 8,193 updates and its final stopping callback.
 Production/reference peaks are 3/3 frames, 9/7 local slots, 2/2 type bindings and 3/3 allowances;
 reference additionally peaks at two effect bindings. Each admits six captured values and performs
 zero internal descendant rescans throughout the geometric cases. Cumulative charged allocation
-at the large cell is 23,719,645 / 21,377,131 bytes. Prepared-program work is 13,506 steps and 511,397
-metadata bytes; neither figure grows with the runtime threshold of this fixed program.
+at the large cell is 23,719,773 / 21,377,131 bytes. Prepared-program work is 13,508 steps and 511,525
+metadata bytes on target, versus 13,505 / 511,333 in source-full's independently authored fixture;
+neither figure grows with the runtime threshold of its fixed program. Live-local/substitution
+peaks count installed activations. A transfer also stages at most one admitted incoming
+application and locals area, bounded by the fixed prepared program. Payloads, retained invocation
+resources and cumulative allocation have separate bounds.
 
 At 8,192 items the migrated fold and the labeled concrete range-fold comparison both return
 100,773,888 with the same 16,384 ordered configuration events. Both evaluators use four frames for
 the sequential fold versus sixteen for the range fixture. Production charged allocations are
-29,817,344 versus 35,778,112 bytes; reference allocations are 21,790,812 versus 20,051,546 bytes.
+29,817,472 versus 35,778,240 bytes; reference allocations are 21,790,812 versus 20,051,546 bytes.
 The unfavorable reference allocation result is retained: generic application accounting and
-cumulative allocation are separate from live control space. These are source-bound neutral debug
-observations, distinct from final source/target acceptance and the selected release-profile timing
-samples. They establish no IO speed ratio or constant payload/total-allocation bound.
+cumulative allocation are separate from live control space. Both folds make 24,777 list-node
+index visits and zero full-list materializations. The old range body exists only as a labeled
+comparison fixture. These deterministic observations establish no IO speed ratio or constant
+payload/total-allocation bound.
+
+The selected instrumentation-off comparison executes the identical old-authored artifact
+`d46a88bc…` under default policy, using frozen predecessor executable `532a9517…` and accepted
+source `3f25c3a7`'s host executable `353162b7…`. One warm-up and three timing samples per cell ran
+after builds completed, with no owned concurrent build. HTTP request wall-time medians are:
+
+| Terminal calls | Predecessor | Accepted candidate |
+|---|---:|---:|
+| 32 | 0.148920 ms | 0.180951 ms |
+| 4,097 | `normalized_call_depth` failure | 4.305725 ms |
+| 8,192 | `normalized_call_depth` failure | 8.541870 ms |
+
+The slower 32-call cell and every sample are retained. Failed predecessor cells do not provide
+equivalent completed-work timing comparisons. The host used Rust 1.98.0, Linux 7.2.3-arch1-2,
+AMD Ryzen 9 9955HX with 12 available logical CPUs, and release LTO/one codegen unit. The new
+graph library is measured separately from this unchanged program. Earlier mixed-profile
+diagnostics and the earlier release-variant comparison remain in the evidence owner.
+
+Final source full passed 26 fresh gates in 305.10 seconds, after a separate 145-second verifier
+build. Exact musl build took 214.34 seconds and admission took 696.14 seconds; the build overlapped
+the latter part of source full. All six behavioral owners and both pinned userlands passed.
+The 69 live target-receipt faults and healthy restoration took 73.96 seconds. Failed full attempts
+of 446.00 and 279.34 seconds remain failures with their repair and source bindings. These durations
+are separate local observations, not provider quota charges.
+
+The inherited effect-library release's first hosted public pair took 1,871.12 seconds: exact and
+latest small lifecycles took 7.13 and 6.16 seconds, while the one aggregate invocation including
+its reader took 1,854.18 seconds. The whole tag run took 8,083 seconds, including an initial
+3-second queue wait, 4,301-second build job, 1,853-second pre-publication job, 20-second publication
+job and 1,899-second public job. This is a first actual observation, without a matched hosted
+before/after speed claim. Local monitoring/download wall time was not separately measured.
 
 ## Parametric nominal preparation and forwarding
 

@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-11 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-12 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -54,15 +54,22 @@ task callbacks, recursive payloads, configuration, transaction commit/rollback, 
 and dependency replacement through a copied development executable. Its source-bound neutral probes
 separately measure both evaluators. EFF-1–EFF-6 passed fresh full and exact static target acceptance
 at `67baaf0b`; the successful hosted dry-run handoffs have been authenticated with their original
-verifier. Selected `v0.1.32` publication is proceeding independently from that exact source under
-tag run `34671245722/1`. Public acceptance remains due; dry-run success is not public delivery.
+verifier. EFF-7 is complete: immutable `v0.1.32` from that exact source passed tag run
+`34671245722/1`, including independent anonymous exact/latest acquisition and the first hosted
+public pair. Its two small lifecycles passed freshly; latest binds the one fresh five-owner suite
+within that pair. The [delivery evidence](evidence/202609121214-task-iteration.json) retains the
+original reader, archive and receipt bindings.
 
 The [task-iteration campaign](campaigns/202609121214.md) generalizes graph task tail transfer in
 both evaluators and adds ordinary `iteration-step`/`task-iterate` library meaning. Maintained
-fold/map preserve their public contracts through sequential task iteration. Targeted public and
-neutral observations pass, including a default-policy 8,193-update data-dependent state machine;
-source full and exact target acceptance remain due. Its separate publication is intentionally
-deferred to the next accepted composition milestone or verified public recovery need.
+fold/map preserve their public contracts through sequential task iteration. ITER-1–ITER-5 pass at
+integrated source `3f25c3a7`: 26 fresh full gates, separate exact musl build/admission with both
+pinned userlands and all six behavioral owners, and 69 rejected receipt faults with healthy
+recovery. Public and neutral observations include a default-policy 8,193-update data-dependent
+state machine. Its separate publication is intentionally deferred to the first subsequently
+accepted user-visible composition milestone building on iteration, or a verified compatibility/
+correctness need requiring public recovery. The next capability campaign must explicitly decide
+the combined release; published `v0.1.32` contains the predecessor effect library.
 
 The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.
@@ -109,8 +116,26 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
-[`v0.1.31`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.31) is the current supported immutable
-release, ID `386791231`, published at 2026-09-11T04:45:24Z. Annotated tag
+[`v0.1.32`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.32) is the current supported immutable
+release, ID `387465958`, published at 2026-09-12T05:28:53Z. Annotated tag
+`562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf` selects source
+`67baaf0b081842e0e2e3745e8d5503e22cc791e4`. Its 21,915,904-byte static-musl executable has SHA-256
+`863f337769a594a1961921f24bd278e23fbe52a689403f2c56b21986dce537ad`.
+The 9,877,724-byte archive has SHA-256
+`3beed341cbb315999531746d0f2ed197df4871ba9e6e0393666b1feaf11efa66`;
+its 109-byte checksum file has SHA-256
+`219a8e77cbb1f262efe9ef7a7438cfe0fbba4bbd251c634103043fefe51bb888`.
+Dry run `34626667719/1` and tag run `34671245722/1` passed. Hosted public acceptance completed
+at 2026-09-12T06:00:37Z with independent exact/latest downloads, strict admission, two fresh small
+lifecycles, equality and one fresh five-owner aggregate bound within the pair. Authentic ZIPs and
+the original verifier are retained. Local anonymous downloads and original aggregate rereading
+also passed; whole-pair local rereading correctly rejects the differing host kernel. The actual
+hosted pair includes its successful final strict reader. See the
+[effect-library delivery record](campaigns/202609111843.md#public-delivery-completion--2026-09-12)
+and [task-iteration evidence](evidence/202609121214-task-iteration.json) for exact bindings and costs.
+
+The preceding [`v0.1.31`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.31) remains immutable,
+release ID `386791231`, published at 2026-09-11T04:45:24Z. Annotated tag
 `4dc769dd28f443584571d325fb47ec2ec46d8694` selects source
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`. The static-musl executable has 21,408,000 bytes and SHA-256
 `4e1a46024b2e309458fb0ccfbdc72b5ca87623abcc6b5504a57568c5be05e97d`.
@@ -196,11 +221,12 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-The recursive-data source and supported immutable public release are `0.1.31`, from the exact release-input
-source commit named above. The product retains the exact-requirement-bound affine
+The supported immutable public release is `0.1.32`, from frozen effect-library source `67baaf0b`.
+Current main additionally contains accepted task iteration at `3f25c3a7`; that increment is
+deliberately unpublished. The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
-constant control space for eligible pure tail execution, and preparation-bound checked execution
+constant control space for eligible pure and task graph tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
 Graph 14, TypeObject 10 plus nominal application envelope 1 and task-function envelope 1,
@@ -214,14 +240,17 @@ current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, str
 HTTP-client adapter 1 retain their independent owners.
 The recursive-data validator contract advances its nominal and session feature identities to 2,
 and the semantic-summary validator identity to 4. Graph, TypeObject and typed-data bytes retain
-their existing domains for unchanged meaning. Offline-package acceptance is receipt 6. The current
-effect cutover is pending public release and does not rewrite v0.1.31 or preceding identities.
+their existing domains for unchanged meaning. Current offline-package acceptance is receipt 7,
+which requires iteration observations; pure-tail receipt 6 remains separate. The frozen effect
+release retains its original offline receipt 6 reader and does not rewrite preceding identities.
 
 The contributor pair owner independently admits and runs a small command lifecycle on both routes,
 then binds one freshly executed five-owner aggregate within that same invocation. Pair receipt 1
 distinguishes exact fresh execution from latest's bound full-suite observation. It retains old
-single-boundary receipt compatibility. This tooling campaign selects no publication or deployment;
-its first hosted public-pair observation belongs to the next selected user-visible milestone.
+single-boundary receipt compatibility. Its first hosted observation passed with the selected
+effect-library release `v0.1.32`: the complete pair took 1,871.12 seconds. Latest's aggregate is
+bound evidence, while both route lifecycles are fresh. The tooling campaign selected no separate
+publication or deployment.
 
 Pure-function binding provides immutable runtime prefixes and graph-owned standard composition.
 BND-1–BND-6 pass at the implementation boundary, including copied-public returned reducers,
@@ -245,7 +274,7 @@ operation names:
 `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. Discovery begins with the product
 name and product version and reports capabilities digest
-`6c44e52a0210e98bbb54971411d25b3203c15b66b109c6d34c3b015e228774f5` in current source.
+`b2163f44221b52cdef7cf4d3e918de3c9a408fd5ace0393d029ad0f6ede9a1ad` in current source.
 
 `CapabilityResource<ExactInterface>` values are accepted graph meaning acquired only by an
 exact-requirement capability call. Operation parameters canonically distinguish unrestricted,

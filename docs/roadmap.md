@@ -35,11 +35,15 @@ copied binary. Target admission additionally proved the
 maintained service/worker and both pinned userlands. The
 [recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11) binds their
 exact source, candidate, publication, and independent download boundaries.
-The bound-public-pair tooling change revises future public acceptance to two independent small
-route lifecycles plus one within-pair full suite. Its first hosted observation belongs to the
-selected exact-source effect-library release, EFF-7, now running as `34671245722/1`. Task iteration
-is a separate engineering/integration campaign whose publication is deferred to the first next
-accepted user-visible composition milestone or verified public recovery need. Further
+The bound-public-pair tooling change supplies two independent small route lifecycles plus one
+within-pair full suite. Its first hosted observation passed in effect-library release `v0.1.32`,
+run `34671245722/1`: both route lifecycles and the single aggregate were fresh, with latest's
+aggregate observation bound within the pair. EFF-7 is complete at frozen source `67baaf0b`.
+Task iteration separately passed engineering, source/target acceptance and main integration at
+`3f25c3a7`. Its publication is deferred to the first subsequently accepted user-visible composition
+milestone building on iteration, or a verified compatibility/correctness need requiring public
+recovery. At the next capability campaign, explicitly decide whether the accumulated iteration and
+capability form the release; an unnamed future abstraction cannot defer it again. Further
 infrastructure work needs a newly measured bottleneck.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
@@ -104,9 +108,12 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    Finite-instantiation recursive nominal data completed public library, persistence, session,
    target and immutable-delivery proof in the
    [recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
-   at `v0.1.31`. Explicit effects and reusable task libraries are the current
-   [selected campaign](campaigns/202609111843.md); its new public workload and selected publication
-   remain distinct from maintained application behavior. Expanding nominal schemes and expanding
+   at `v0.1.31`. Explicit effects and reusable task libraries completed
+   [public delivery](campaigns/202609111843.md#public-delivery-completion--2026-09-12) at `v0.1.32`.
+   Constant-space task calls and graph-owned task iteration are accepted on main in
+   [campaign 202609121214](campaigns/202609121214.md), with publication deferred under the trigger
+   above. Fresh public composition witnesses remain distinct from maintained application adoption.
+   Expanding nominal schemes and expanding
    ordinary-type function recursion remain outside that milestone.
    Explicit parametric nominal data is implemented in source through the
    [completed nominal campaign](campaigns/202609100459.md), with source and local target admission recorded there.
