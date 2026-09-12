@@ -3659,14 +3659,15 @@ mod tests {
     #[test]
     fn executable_observation_binds_bytes_mode_and_both_digests() {
         let temporary = tempfile::tempdir().expect("temporary executable fixtures");
-        let source = current_verifier().expect("current verifier");
         let candidate = temporary.path().join("candidate");
-        fs::copy(source, &candidate).expect("copy candidate fixture");
+        // This checks file identity, not verifier behavior. A growing debug test harness
+        // must not determine the production executable admission limit.
+        fs::copy("/bin/true", &candidate).expect("copy bounded executable fixture");
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))
             .expect("set candidate mode");
         let observed = executable_observation(
             &candidate,
-            "debug verifier fixture",
+            "bounded executable fixture",
             MAXIMUM_VERIFIER_EXECUTABLE_BYTES,
         )
         .expect("observe fixture");

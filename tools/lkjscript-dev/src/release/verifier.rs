@@ -469,7 +469,11 @@ mod tests {
     fn verifier_handoff_round_trips_and_rejects_identity_or_inventory_mutation() {
         let temporary = tempfile::tempdir().expect("temporary verifier handoff parent");
         let output = temporary.path().join("handoff");
-        let source = std::env::current_exe().expect("current test executable");
+        // The handoff reader verifies exact file/role bindings without executing this
+        // fixture. Keep it independent of debug-harness growth and the real size limit.
+        let source = temporary.path().join("source");
+        fs::copy("/bin/true", &source).expect("copy bounded executable fixture");
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o755)).expect("set fixture mode");
         prepare(PrepareOptions {
             executable: source,
             output: output.clone(),
