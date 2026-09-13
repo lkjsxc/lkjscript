@@ -48,14 +48,28 @@ The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes i
 deferral and selects a combined release, with candidate version v0.1.35. Current offline receipt 11
 adds the transported pure/task alternator, finite reset, strict hostile-artifact rejection and
 authentic historical/current validation repair through both copied and pinned absolute runtimes.
-The existing six target and five installed/public aggregate owners retain their boundaries. Source
-acceptance and immutable public delivery are pending; no tag has been pushed. Corrected source
+The existing six target and five installed/public aggregate owners retain their boundaries.
+Corrected source
 `0735cc78e41fc77166ca4fff61d0b1b5392c851c` passed 78 focused copied public commands and exact
-historical retry receipt identities. Its selected existing-workflow rehearsal `34779065098/1`
-(`publish=false`, `tag=v0.1.35`) is queued behind prior-source `34777722470/1`. The latter's frozen
-`9cf26ecd` inputs are preserved and cannot certify the receipt correction. Neither run is a publisher.
-Remote main integration, original-reader admission of required hosted proof and the actual immutable
-anonymous exact/latest installed public pair remain required; see the
+historical retry receipt identities. The 2026-09-13 reconciliation confirms that remote main
+`6b0c19beafafc40d859274dc057f6212372dc57d` already contains that correction. Prior-source rehearsal
+`34777722470/1` at `9cf26ecde03be6b77b3dc9e7e58628f17cd23c66` succeeded at
+2026-09-13T21:09:55Z, including full, target, package and the transferred installed pair. Its
+publication/public jobs were skipped. These original results remain source-specific and cannot
+certify the later accepted-retry correction. Corrected rehearsal `34779065098/1` failed at
+2026-09-13T21:10:08Z in **Validate workflow and release identity**; toolchain installation, builds,
+semantic/target/package checks and later jobs were skipped. The retrieved log prints the shell and
+exit 1 without tracing the exact failing command. Independently, the source and Git ancestry show
+that its old dry-run predicate rejects a frozen candidate when main has advanced beyond it.
+Earlier queued/running observations remain in their campaign records; neither run is a publisher.
+
+The [stable-candidate campaign](campaigns/202609140703-collision-1.md) repairs that admission policy
+and mutable-ref checkout while continuing the selected combined delivery. Its changed workflow and
+release owner require a new candidate and a new dispatch; rerunning `34779065098/1` retains the old
+inputs. v0.1.35 remains unused at reconciliation, and the scoped control still selects the completed
+v0.1.34 tag object. Fresh final-source full/target/package/installed proof, original-reader admission,
+ordinary integration of the admission repair, and immutable anonymous exact/latest installed public
+acceptance remain required. No new tag or publication is claimed; see the
 [campaign evidence](evidence/202609140057-finite-callable.json).
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
@@ -118,12 +132,50 @@ gh api repos/lkjsxc/lkjscript/immutable-releases
 gh run list --repo lkjsxc/lkjscript --workflow Release --limit 20
 ```
 
+Reconcile the exact remote main, current checkout and retained release clone with the relevant
+campaign's ending and resumption records. Refresh terminal job conclusions and their exact inputs;
+a previous pending label is not current state. Preserve healthy frozen sources and original
+handoffs, including their artifact IDs, digests, expiration and original verifier context. Observe
+local toolchain/resources and active jobs before starting expensive work. A previously failed
+workflow cannot acquire a repaired workflow definition through a same-input rerun.
+
 The immutable-release setting must report `enabled: true`. GitHub's settings endpoint requires
 repository administration authority, which is deliberately unavailable to the publication job.
 Immediately before tag push, an administrator binds the observed setting to the exact annotated
 tag-object SHA in the non-secret repository variable
 `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA`. The isolated publish job checks that value and uses
 only its ephemeral workflow token.
+
+Source selection precedes ancestry admission. The workflow has three explicit modes:
+
+| Mode | Selected product source and required identity |
+|---|---|
+| Manual dry run | Checkout the dispatch event's full commit SHA and require actual HEAD to equal it before toolchain installation. A dispatch branch is only a handle; later movement cannot change the candidate. |
+| Tag-push publication | Checkout the event's exact source SHA, require HEAD equality, and require the exact version's annotated tag to peel to that commit. A moved or mismatching tag rejects. |
+| Manual publication of an existing annotated tag | Checkout the requested validated tag and require HEAD to equal its peeled commit. This product source may differ from the dispatch event commit supplying the workflow definition; record both identities separately. |
+
+The workflow identity preflight and `release::source_facts` resolve candidate commit **S** and the
+fetched `origin/main` commit **M** to immutable commit IDs before evaluating this common policy:
+
+| Relation | Read-only dry run | Publication |
+|---|---|---|
+| S = M | Admit | Admit, subject to exact annotated tag and remaining gates |
+| M is a proper ancestor of S | Admit | Reject until ordinary integration makes S reachable from main |
+| S is a proper ancestor of M | Admit the frozen candidate | Admit, subject to exact annotated tag and remaining gates |
+| Diverged or disconnected history | Reject | Reject |
+| Missing main/history/object, invalid source, wrong repository origin or failed Git invocation | Reject with a source or infrastructure diagnostic | Reject |
+
+Read the main ref once per admission check and use its resolved ID in both ancestry directions.
+Git ancestry exit 1 means a false relation; other failures cannot become a successful alternate
+branch. Use the existing full-history checkout and reject history that cannot answer the check.
+The stricter publication rule still requires S to be reachable from M, plus the remote annotated
+tag-object and scoped-control checks in the isolated publication job.
+
+Ancestry never selects new bytes or transfers evidence between sources. Main may advance with
+reporting or implementation changes while S stays frozen; no filename whitelist applies. This
+admission does not establish the suitability of an old candidate for a new release. Preserve exact
+source, candidate, verifier, run/attempt and workload bindings, cleanliness, package/version/tag
+agreement and immutable release identities. Reconcile divergence normally without rewriting history.
 
 ## Pinned build and verification inputs
 
@@ -192,8 +244,10 @@ prove compatibility with every Linux kernel, CPU, container runtime, filesystem,
 
 ## Fresh source proof and deterministic package
 
-After every implementation, workflow, normative, generated, target, or release-procedure change is
-committed, run one fresh source profile and rebuild/re-admit the exact candidate from that commit:
+Commit final implementation, workflow, normative, generated, target and release-procedure inputs
+before freezing the candidate and verifier. Run the required fresh source profile and rebuild/admit
+that exact candidate once through the selected hosted rehearsal; these commands are the corresponding
+local entry points when local proof is needed:
 
 ```sh
 cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
@@ -209,6 +263,13 @@ target/release/lkjscript-dev release admit \
 The full-check driver uses Cargo's release profile so its frozen executable fits the existing
 verifier byte bound. This does not change the full profile's selected gates, their Cargo/test
 options, freshness policy, or required outcomes.
+
+Any candidate-changing edit selects a new source and refreshes affected proof. A later reporting
+commit may describe the frozen result without becoming its source or requiring a circular report/
+hash/retest loop. `check changed` selects from current Git status, so a clean committed checkout's
+narrow result cannot replace campaign acceptance. Keep copied candidates and verifiers immutable
+while other Cargo builds run. The publication workflow performs its own required fresh proof;
+rehearsal evidence is not promoted across runs in place of it.
 
 Prepare the release with both receipts:
 
@@ -291,10 +352,14 @@ container. Outbound verification uses a separate create-new root and determinist
 HTTP/TLS fixtures. All five child receipts must pass their complete current typed readers before the publication job
 can run.
 
-Dispatch a dry run against the final source commit:
+Set `release_dispatch_ref` to an existing ref that resolves to the final source and supplies its
+final workflow definition. Record that source before dispatch, then confirm the run's event
+`head_sha` equals it. The workflow checks out that immutable event SHA even if the dispatch ref
+later advances:
 
 ```sh
-gh workflow run Release --repo lkjsxc/lkjscript --ref main \
+release_source=$(git rev-parse --verify 'HEAD^{commit}')
+gh workflow run Release --repo lkjsxc/lkjscript --ref "$release_dispatch_ref" \
   -f publish=false -f tag="$release_tag"
 gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,jobs
 gh api repos/lkjsxc/lkjscript/actions/runs/RUN_ID --jq '{id,run_attempt,head_sha,status,conclusion}'
@@ -312,11 +377,14 @@ independent work while the run executes. If only external waiting remains, hand 
 commit, run/attempt, observed state, remaining required checks and the next `gh run view` action.
 Do not watch indefinitely, poll, fetch unchanged logs repeatedly or merge around pending protection.
 Download artifacts only after completion, and retain the explicit failing artifact-ID/digest checks.
+If the existing run used defective source-selection or admission code, preserve its failure and
+dispatch the corrected workflow source as a new run. Do not relabel old receipts or retarget a
+healthy frozen candidate merely because main advanced.
 
 The dry run must freshly pass build, full, all six named target oracles, package, and the
 installed pair and five-owner transferred operation. Its publish and post-release jobs must be
-skipped, and no tag, draft,
-release, or public asset may be created. Evidence from another commit, workflow, target policy,
+skipped, and no tag, draft, release, public asset or publication-control mutation may be created.
+Evidence from another commit, workflow, target policy,
 candidate, verifier, image, or run attempt is stale.
 
 The bounded transferred operation runs from the already verified two-file verifier handoff. It
@@ -350,7 +418,9 @@ without rewinding main. Create and push only the annotated tag:
 
 ```sh
 git fetch --prune origin
-git merge-base --is-ancestor HEAD origin/main
+release_source=$(git rev-parse --verify 'HEAD^{commit}')
+release_main=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
+git merge-base --is-ancestor "$release_source" "$release_main"
 git status --short
 release_tag="v$(cargo metadata --locked --no-deps --format-version 1 |
   jq -er '.packages[] | select(.name == "lkjscript") | .version')"
@@ -473,9 +543,18 @@ gh workflow run Release --repo lkjsxc/lkjscript --ref main \
   -f publish=true -f tag="$release_tag"
 ```
 
-Any source, workflow, target, verifier, package, or candidate change after tag push requires the
-smallest unused additive patch. Once a release is published, never edit, unpublish, replace, relabel,
-or delete it or its assets. Read-only propagation and verification may retry within the bounded
+Inspect matching runs and exact tag/control/asset state first; reuse healthy owning work. In this
+manual mode the tag's peeled commit remains the product source even when the workflow definition
+comes from a later dispatch event commit. Do not demand equality between those two distinct
+identities, and do not weaken the remote tag-object/control checks or any fresh proof boundary.
+Complete original-reader admission of full, target, package and installed evidence before continuing
+the selected publisher; delivery closes only after anonymous exact/latest installed acceptance and
+its original-reader admission.
+
+Any change to the selected product source, its workflow inputs, target, verifier, package, or
+candidate after tag push requires the smallest unused additive patch. Once a release is published,
+never edit, unpublish, replace, relabel, or delete it or its assets. Read-only propagation and
+verification may retry within the bounded
 workflow policy; a content defect recovers only through a new patch identity.
 
 Official actions remain pinned to full commit SHAs. Review changes to action SHAs, toolchain,

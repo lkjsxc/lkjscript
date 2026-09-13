@@ -73,9 +73,29 @@ complete valid candidate. Focused public alternator, reset, replacement and upgr
 at `0735cc78`, including original immutable receipt/record IDs on historical idempotent retries.
 The 100,100-owner baseline and candidate scale lifecycles pass; added validation work and timing
 limitations are retained in the [evidence](evidence/202609140057-finite-callable.json).
-Required corrected-source rehearsal `34779065098/1` is queued; full source, static-target and
-installed/public release acceptance and normal main integration remain pending. Candidate
-v0.1.35 is the next unused version observed for the selected combined delivery; it is not published.
+The 2026-09-13 reconciliation confirms that remote main `6b0c19be` already contains corrected
+implementation `0735cc78`; earlier reports of pending normal integration are superseded. Rehearsal
+`34777722470/1` at preceding source `9cf26ecd` succeeded at 2026-09-13T21:09:55Z with full, target,
+package and the transferred installed pair, while publication/public jobs were skipped. It predates
+the accepted-retry correction and cannot certify that correction. Corrected rehearsal
+`34779065098/1` failed at 2026-09-13T21:10:08Z in **Validate workflow and release identity**;
+toolchain installation, builds, semantic/target/package checks and later jobs were skipped. The
+retrieved log prints shell and exit 1 without the exact failing command. The source and Git graph
+independently establish that the old main-before-candidate predicate rejects this frozen ancestor;
+checkout also used the mutable dispatch ref. These are delivery defects, not failing language
+tests. Earlier pending observations are retained in the campaign and evidence records.
+
+The [stable-candidate campaign](campaigns/202609140703-collision-1.md) continues the combined
+named-reference/finite-callable/validator-repair release, with exact event-source checkout and
+comparable-ancestry dry-run admission. Publication retains its stricter integrated-source,
+annotated-tag and scoped-control requirements. The changed workflow/release owner require a new
+candidate, new dispatch, fresh full/static-target/package/installed proof and original-reader
+admission. Integration of that repair and immutable anonymous exact/latest installed public
+acceptance remain open. v0.1.35 is still unused at reconciliation; v0.1.33 and v0.1.34 remain closed
+predecessors. These changes do not alter language, graph, artifact or application-data formats.
+The designed witness still requires consumer-owned concrete operations and transactions; reusable
+operation-bearing requirement parameters and large historical-repository revalidation cost remain
+unresolved and unmeasured, respectively.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,

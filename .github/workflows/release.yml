@@ -61,7 +61,7 @@ jobs:
       - name: Check out the exact source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -73,6 +73,18 @@ jobs:
           REQUESTED_TAG: ${{ github.event.inputs.tag || '' }}
         run: |
           set -euo pipefail
+          fail() { echo "release identity: $*" >&2; exit 1; }
+          is_ancestor() {
+            local status
+            if git merge-base --is-ancestor "$1" "$2"; then
+              return 0
+            else
+              status=$?
+              if [[ "$status" -eq 1 ]]; then return 1; fi
+              echo "release identity: Git ancestry check failed (exit $status): $1 -> $2" >&2
+              exit "$status"
+            fi
+          }
           product_version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
           test -n "$product_version"
           expected_tag="v${product_version}"
@@ -81,24 +93,49 @@ jobs:
             publish=true
             tag="${GITHUB_REF_NAME}"
             test "${GITHUB_REF_TYPE}" = tag
-          elif [[ "$REQUESTED_PUBLISH" == "true" ]]; then
-            publish=true
-            tag="$REQUESTED_TAG"
-            test -n "$tag"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "$REQUESTED_PUBLISH" == "true" ]]; then
+              publish=true
+              tag="$REQUESTED_TAG"
+              test -n "$tag"
+            else
+              tag="${REQUESTED_TAG:-$expected_tag}"
+            fi
           else
-            tag="${REQUESTED_TAG:-$expected_tag}"
+            fail "unsupported workflow event"
           fi
           [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           test "$tag" = "$expected_tag"
-          commit_sha=$(git rev-parse HEAD)
-          test "${#commit_sha}" -eq 40
+          commit_sha=$(git rev-parse --verify 'HEAD^{commit}')
+          [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || fail "HEAD is not a full commit SHA"
+          # Manual publication selects the annotated tag's product source. Its workflow
+          # definition may come from a later dispatch commit; all other modes select GITHUB_SHA.
+          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" || "$publish" != "true" ]]; then
+            [[ "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || fail "selected event SHA is missing or invalid"
+            test "$commit_sha" = "$GITHUB_SHA" || fail "HEAD differs from selected event SHA $GITHUB_SHA"
+          fi
+          origin=$(git config --get remote.origin.url)
+          case "$origin" in
+            https://github.com/lkjsxc/lkjscript|https://github.com/lkjsxc/lkjscript.git|git@github.com:lkjsxc/lkjscript.git) ;;
+            *) fail "origin does not identify lkjsxc/lkjscript" ;;
+          esac
+          test "$(git rev-parse --is-shallow-repository)" = false || fail "complete source history is required"
+          main_sha=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || fail "origin/main is not a full commit SHA"
           if [[ "$publish" == "true" ]]; then
             test "$(git cat-file -t "refs/tags/${tag}")" = tag
-            test "$(git rev-parse "refs/tags/${tag}^{commit}")" = "$commit_sha"
-            git merge-base --is-ancestor HEAD origin/main
+            tag_commit=$(git rev-parse --verify "refs/tags/${tag}^{commit}")
+            test "$tag_commit" = "$commit_sha" || fail "annotated tag differs from selected source"
+            is_ancestor "$commit_sha" "$main_sha" || fail "release source $commit_sha is not reachable from main $main_sha"
             publication_mode=release
           else
-            git merge-base --is-ancestor origin/main HEAD
+            if is_ancestor "$commit_sha" "$main_sha"; then
+              : # The integrated candidate remains fixed while main advances.
+            elif is_ancestor "$main_sha" "$commit_sha"; then
+              : # An unintegrated fast-forward candidate may rehearse read-only.
+            else
+              fail "dry-run source $commit_sha and main $main_sha have diverged or disconnected history"
+            fi
             publication_mode=dry-run
           fi
           {

@@ -61,11 +61,17 @@ v0.1.34 contains only the frozen installer milestone.
 The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes the increment's
 expressly limited one-campaign deferral and selects their combined publication. It implements
 finite parameter-flow admission and current-executable repair across validator changes. Focused
-proof passes at `0735cc78`, including current-binary repair and original accepted retry evidence;
-required corrected-source rehearsal `34779065098/1`, full/target acceptance, normal main integration
-and immutable installed/public delivery remain open.
-The observed next unused candidate is v0.1.35. Do not defer this accepted authoring increment again
-to requirement parameters or another semantic campaign.
+proof passes at `0735cc78`, including current-binary repair and original accepted retry evidence.
+Reconciliation confirms that remote main `6b0c19be` already contains that source. Earlier rehearsal
+`34777722470/1` at `9cf26ecd` succeeded on 2026-09-13 at 21:09:55 UTC, but predates the retry
+correction. Corrected rehearsal `34779065098/1` failed at 21:10:08 UTC during workflow identity
+preflight; all semantic/target/package proof was skipped. It is no longer pending. The
+[stable-candidate campaign](campaigns/202609140703-collision-1.md) repairs exact dispatch-source
+selection and admits frozen integrated ancestors for rehearsal while preserving stricter publication
+authority. Its new candidate still requires fresh full/target/package/installed proof, original-reader
+admission, normal integration of the repair and immutable installed/public delivery. v0.1.35 remains
+unused at reconciliation. Do not defer this selected delivery to requirement parameters or another
+semantic campaign; later reporting/main progress must not retarget its frozen proof source.
 
 Remaining observed burden is ordered flat expression/type assembly and request-wide creator
 symbols. If exact capability policy must still be repeated across packages/components, the next
@@ -78,6 +84,8 @@ failed only at reference preparation exhaustion. The new canonical rule addresse
 Its designed task witness still places concrete Configuration/DataStore operations and explicit
 transaction ownership in the consumer; reusable operation-constrained requirements remain the
 strongest next semantic candidate after this selected delivery completes.
+Large historical-repository revalidation cost is not yet characterized and may revise that priority
+if measured. This outlook is revisable and authorizes no subsequent feature work.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

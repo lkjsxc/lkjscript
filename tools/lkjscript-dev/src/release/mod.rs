@@ -798,11 +798,16 @@ fn source_facts(
         )));
     }
     validate_strict_tag(tag, &product_version)?;
-    let commit_sha = command_text("git", &["rev-parse", "HEAD"], repository, 1024)?;
+    let commit_sha = command_text(
+        "git",
+        &["rev-parse", "--verify", "HEAD^{commit}"],
+        repository,
+        1024,
+    )?;
     validate_git_sha(&commit_sha, "HEAD commit")?;
     let timestamp = command_text(
         "git",
-        &["show", "-s", "--format=%ct", "HEAD"],
+        &["show", "-s", "--format=%ct", &commit_sha],
         repository,
         1024,
     )?;
@@ -820,17 +825,40 @@ fn source_facts(
             "origin '{origin}' does not identify {REPOSITORY_IDENTITY}"
         )));
     }
-    match publication_mode {
-        PublicationMode::DryRun => run_git_success(
-            repository,
-            &["merge-base", "--is-ancestor", "origin/main", "HEAD"],
-            "dry-run commit must be a fast-forward descendant of origin/main",
-        )?,
-        PublicationMode::Release => run_git_success(
-            repository,
-            &["merge-base", "--is-ancestor", "HEAD", "origin/main"],
-            "release commit must be reachable from origin/main",
-        )?,
+    if command_text(
+        "git",
+        &["rev-parse", "--is-shallow-repository"],
+        repository,
+        1024,
+    )? != "false"
+    {
+        return Err(DevError::infrastructure(
+            "release source admission requires complete Git history",
+        ));
+    }
+    // Ancestry admits the already selected commit; a moving main never selects its bytes.
+    let main_sha = command_text(
+        "git",
+        &["rev-parse", "--verify", "refs/remotes/origin/main^{commit}"],
+        repository,
+        1024,
+    )?;
+    validate_git_sha(&main_sha, "origin/main commit")?;
+    if !git_is_ancestor(repository, &commit_sha, &main_sha)? {
+        match publication_mode {
+            PublicationMode::DryRun => {
+                if !git_is_ancestor(repository, &main_sha, &commit_sha)? {
+                    return Err(DevError::corrupt(format!(
+                        "dry-run source {commit_sha} and main {main_sha} have diverged or disconnected history"
+                    )));
+                }
+            }
+            PublicationMode::Release => {
+                return Err(DevError::corrupt(format!(
+                    "release source {commit_sha} must be reachable from origin/main {main_sha}"
+                )));
+            }
+        }
     }
     let tag_object_sha = match publication_mode {
         PublicationMode::DryRun => None,
@@ -1637,18 +1665,27 @@ fn command_text(
     Ok(stdout.trim().to_owned())
 }
 
-fn run_git_success(repository: &Path, arguments: &[&str], failure: &str) -> Result<(), DevError> {
-    let status = Command::new("git")
-        .args(arguments)
+fn git_is_ancestor(repository: &Path, ancestor: &str, descendant: &str) -> Result<bool, DevError> {
+    let output = Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, descendant])
         .current_dir(repository)
         .env_clear()
         .envs(process::environment())
-        .status()
+        .output()
         .map_err(|error| DevError::infrastructure(format!("start git: {error}")))?;
-    if !status.success() {
-        return Err(DevError::corrupt(failure));
+    if output.stdout.len().saturating_add(output.stderr.len()) > 4096 {
+        return Err(DevError::infrastructure(
+            "Git ancestry output exceeded 4096 bytes",
+        ));
     }
-    Ok(())
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        status => Err(DevError::infrastructure(format!(
+            "Git ancestry check {ancestor} -> {descendant} failed with {status:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))),
+    }
 }
 
 fn origin_matches_repository(origin: &str) -> bool {
@@ -1693,6 +1730,9 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
 fn duration_nanoseconds(duration: Duration) -> u64 {
     u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
 }
+
+#[cfg(test)]
+mod source_tests;
 
 #[cfg(test)]
 mod tests {

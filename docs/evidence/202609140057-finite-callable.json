@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-finite-callable-evidence-1",
   "campaign": "202609140057",
-  "status": "implemented; corrected copied public proof passed at 0735cc78; required full/target/installed rehearsal 34779065098/1 pending, main integration and public delivery incomplete",
+  "status": "implemented and integrated through remote main 6b0c19be; corrected copied public proof passed at 0735cc78; its hosted rehearsal failed identity preflight; stable-source admission repair and new exact-source proof/public delivery selected by 202609140703",
   "source": {
     "starting": "15c0bfdf82697e1a8dd4df6085e867d4b109bbf7",
     "named_reference_ancestor": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
@@ -11,7 +11,7 @@
     "independent_raw_source": "9cf26ecde03be6b77b3dc9e7e58628f17cd23c66",
     "accepted_retry_evidence": "0735cc78e41fc77166ca4fff61d0b1b5392c851c",
     "focused_tested": "0735cc78e41fc77166ca4fff61d0b1b5392c851c",
-    "integrated_remote_main": null,
+    "integrated_remote_main": "6b0c19beafafc40d859274dc057f6212372dc57d",
     "reporting": "Containing documentation-only commits do not replace tested or release source bindings.",
     "mandate": "docs/campaigns/202609140057-collision-1.md",
     "original_archive": "docs/campaigns/202609140057.md",
@@ -137,12 +137,29 @@
       "inputs": {"publish": false, "tag": "v0.1.35"},
       "created_at": "2026-09-13T19:53:34Z",
       "observed_status": "pending",
+      "terminal_reconciliation": {
+        "observed_at": "2026-09-13T22:15:00Z",
+        "status": "completed",
+        "conclusion": "failure",
+        "updated_at": "2026-09-13T21:10:08Z",
+        "job": 103793246882,
+        "failed_step": "Validate workflow and release identity",
+        "skipped": "toolchain installation, build, all full/semantic/target/package checks and later jobs",
+        "log": "Raw job log obtained: printed identity Bash and exit 1, without executed-command trace. It does not establish a precise failing shell line. Source and disposable Git reproduction separately establish false rejection of an integrated frozen ancestor; mutable dispatch-ref checkout also reproduced."
+      },
       "url": "https://github.com/lkjsxc/lkjscript/actions/runs/34779065098",
       "initial_metadata": ".artifacts/finite-callable-202609140057/rehearsal-0735-initial.json",
       "policy": "Existing release-tag concurrency serializes behind the earlier run without cancellation. Isolated source branch advanced normally after refreshed authority/rules/divergence/matching-run inspection. Remote main, tags and immutable control remain unchanged."
     },
-    "remaining": "Exact corrected-source fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; target reader faults; normal main integration; immutable publication, attestations and anonymous exact/latest installed public pair.",
-    "resumption": "Read run 34779065098/1 at a useful boundary. On terminal completion, authenticate artifact metadata and retained original verifier/handoffs, reread full/target/package/installed pair with the archived context, and exercise target-reader omission faults without live replay. Diagnose any failed gate before integration or publication. Do not advance its frozen branch inputs while pending.",
+    "stable_source_reconciliation": {
+      "campaign": "docs/campaigns/202609140703-collision-1.md",
+      "starting_main": "6b0c19beafafc40d859274dc057f6212372dc57d",
+      "integration": "Both semantic corrections already integrated; historical pending-main labels superseded.",
+      "previous_rehearsal_terminal": "34777722470/1 succeeded at 2026-09-13T21:09:55Z at 9cf26ecd. Full/target/package/transferred installed pair passed; publish/public skipped. Original evidence cannot certify the accepted-retry correction or the new admission repair.",
+      "publication": "v0.1.35 still unused; control remains d96d1623495d8c13968d99f567ea77e79b158237; no publisher started."
+    },
+    "remaining": "New stable-source repair candidate: focused source-policy proof, new exact-source fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; target reader faults and original-reader admission; ordinary integration of the delivery repair; immutable publication, attestations and anonymous exact/latest installed public pair.",
+    "resumption": "Freeze and dispatch the corrected workflow source in campaign 202609140703; rerunning failed 34779065098 retains defective inputs. Authenticate original handoffs and reread final full/target/package/installed pair with archived context; exercise inherited target-reader omissions without live replay. Then perform normal integration and selected v0.1.35 publication through docs/release.md, preserving the original candidate while main advances.",
     "deployment": "Not selected; effects confined to owned disposable witnesses."
   },
   "preserved": "Unrelated August 31 stash, immutable releases, frozen release checkouts and reader inputs, operational state and unrelated services remain untouched. Failed attempts, authentic predecessor repositories, copied binaries and raw receipts are deliberately retained under existing .artifacts owners.",
