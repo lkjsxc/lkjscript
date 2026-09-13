@@ -72,6 +72,9 @@ authority. Its new candidate still requires fresh full/target/package/installed 
 admission, normal integration of the repair and immutable installed/public delivery. v0.1.35 remains
 unused at reconciliation. Do not defer this selected delivery to requirement parameters or another
 semantic campaign; later reporting/main progress must not retarget its frozen proof source.
+Repair candidate `4306ef64` has now passed focused release-owner proof and strict clippy;
+new exact-source rehearsal `34786835189/1` is selected. Its required full/target/installed and
+immutable/public boundaries remain the next delivery obligation, before further semantic work.
 
 Remaining observed burden is ordered flat expression/type assembly and request-wide creator
 symbols. If exact capability policy must still be repeated across packages/components, the next

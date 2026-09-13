@@ -97,6 +97,13 @@ The designed witness still requires consumer-owned concrete operations and trans
 operation-bearing requirement parameters and large historical-repository revalidation cost remain
 unresolved and unmeasured, respectively.
 
+The admission repair is now frozen at `4306ef64783462a8dda48f2a855a88482d1faec8` on pushed
+branch `codex/stable-release-202609140703`. All 47 focused release-owner tests (including 12
+actual-Git/workflow-shell cases) and strict clippy pass. New read-only rehearsal `34786835189/1`,
+created 2026-09-13T22:27:10Z, selects that exact event SHA. Final full/target/package/installed
+proof, ordinary integration of this repair and immutable/public delivery remain open. Subsequent
+reporting commits describe that frozen source and are not replacement proof inputs.
+
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
 and private staging/locking state. Accepted meaning is the exact revision and immutable object

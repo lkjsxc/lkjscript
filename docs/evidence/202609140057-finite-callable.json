@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-finite-callable-evidence-1",
   "campaign": "202609140057",
-  "status": "implemented and integrated through remote main 6b0c19be; corrected copied public proof passed at 0735cc78; its hosted rehearsal failed identity preflight; stable-source admission repair and new exact-source proof/public delivery selected by 202609140703",
+  "status": "language implementation integrated through main 6b0c19be; stable-source repair 4306ef64 passed focused proof and is frozen on its pushed branch; final rehearsal 34786835189/1 running; repair integration and selected immutable/public delivery remain open",
   "source": {
     "starting": "15c0bfdf82697e1a8dd4df6085e867d4b109bbf7",
     "named_reference_ancestor": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
@@ -63,7 +63,7 @@
     "normalized": "101 passed, one explicit predecessor acquisition ignored; reference-source-normalized-02.log. Initial constructor compile error and six deliberately corrupt runtime-fixture failures retained. Test-only readers preserve those downstream corruption probes after original source admission; product admission has no bypass.",
     "lint": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings passed; clippy-04.log.",
     "hostile_artifacts": "Two coherent, fully rehashed direct/named expanding artifacts reject semantically before effects. Separate forged compiled-argument tests retain valid canonical bodies and require instruction/meaning rejection. The frozen adversarial artifacts were never executed.",
-    "target_reader_faults": "76-observation existing target-reader omission matrix implemented; execution awaits an actual completed target fixture from the corrected source.",
+    "target_reader_faults": "Existing 76-case matrix now passed against retained successful 9cf26ecd target evidence with its original verifier; healthy baseline/recovery and receipt restoration passed. This is historical reader coverage. Final 4306ef64 target fixture/current original-reader admission remains required.",
     "current_public": {
       "classification": "Fresh passed corrected copied product and original retained reader at 0735cc78",
       "receipt": ".artifacts/finite-callable-202609140057/public-finite-14/receipt.json",
@@ -154,12 +154,52 @@
     "stable_source_reconciliation": {
       "campaign": "docs/campaigns/202609140703-collision-1.md",
       "starting_main": "6b0c19beafafc40d859274dc057f6212372dc57d",
+      "implementation": "4306ef64783462a8dda48f2a855a88482d1faec8",
+      "workflow_sha256": "dd10484e6e7429d5c1cdfe861579e5e19cc6b1e20bf5b003a5450895ae967986",
+      "focused": "Fresh 47 release-owner tests passed, including 12 real-Git/actual-workflow-shell source-policy cases; six existing evidence-dependent tests ignored. First run retained one fixture --delete/-d correction. Strict locked workspace/all-target/all-feature clippy, formatting and diff checks passed. No semantic owner changed; no duplicate local full/target run.",
       "integration": "Both semantic corrections already integrated; historical pending-main labels superseded.",
       "previous_rehearsal_terminal": "34777722470/1 succeeded at 2026-09-13T21:09:55Z at 9cf26ecd. Full/target/package/transferred installed pair passed; publish/public skipped. Original evidence cannot certify the accepted-retry correction or the new admission repair.",
+      "retained_original_evidence": {
+        "root": ".artifacts/stable-release-202609140703/inherited/",
+        "metadata": "retention-manifest.json",
+        "artifact_ids": [10324623970, 10325562168, 10325499525, 10324706211, 10324748300],
+        "authentication": "All five ZIP digests match refreshed authenticated API metadata; release/verifier expire 2026-09-14T20:40:27Z/29Z, the three behavioral/full/target artifacts expire 2026-09-20. Local original ZIPs retained unchanged.",
+        "verifier_sha256": "2a655facbea3e417760c5a3e5c3dd2846ec7752437fa71cac015e6a605ce664d",
+        "verifier_bytes": 27493760,
+        "package_target_pair": "Original package, all six target readers, and installed simulated pair with five children passed after archived path/mode/kernel reconstruction. No application effects replayed.",
+        "full": "Authenticated receipt SHA-256 3e531e6bb4f4ef3c12086aa328a95f56ec52ca6b4b6cfd9828ed40d076eab179 has 26 fresh gates at 9cf26ecd, with original successful preparation binding and log. The raw full reader is private to preparation; no new preparation/lifecycle was run solely for rereading.",
+        "target_omissions": {
+          "classification": "fresh reader-only exercise of retained historical evidence; not final-source acceptance",
+          "rejected_faults": 76,
+          "healthy_baseline_recovery": "passed",
+          "test_driver_sha256": "cef57b11ddf085a2a741f6bb275d08d2c11ebe0df51da1e2255b85bf10ae0673",
+          "original_reader_sha256": "2a655facbea3e417760c5a3e5c3dd2846ec7752437fa71cac015e6a605ce664d",
+          "summary_sha256": "335688e3f81e85d0ce085c5c4888ce0f62f05bfc51ba7f587a103143b8b93751",
+          "retention": "Mutated original receipts restored byte-for-byte; namespace/process cleanup joined. Post-test zsh status-capture error retained separately; completed passing test was not replayed."
+        }
+      },
       "publication": "v0.1.35 still unused; control remains d96d1623495d8c13968d99f567ea77e79b158237; no publisher started."
     },
-    "remaining": "New stable-source repair candidate: focused source-policy proof, new exact-source fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; target reader faults and original-reader admission; ordinary integration of the delivery repair; immutable publication, attestations and anonymous exact/latest installed public pair.",
-    "resumption": "Freeze and dispatch the corrected workflow source in campaign 202609140703; rerunning failed 34779065098 retains defective inputs. Authenticate original handoffs and reread final full/target/package/installed pair with archived context; exercise inherited target-reader omissions without live replay. Then perform normal integration and selected v0.1.35 publication through docs/release.md, preserving the original candidate while main advances.",
+    "stable_rehearsal": {
+      "run": 34786835189,
+      "attempt": 1,
+      "source": "4306ef64783462a8dda48f2a855a88482d1faec8",
+      "branch": "codex/stable-release-202609140703",
+      "created_at": "2026-09-13T22:27:10Z",
+      "inputs": {"publish": false, "tag": "v0.1.35"},
+      "initial_status": "in_progress",
+      "observed_at": "2026-09-13T22:30:03Z",
+      "observed_status": "in_progress",
+      "job": 103803736360,
+      "passed_steps": "Exact checkout, workflow/release identity, pinned toolchain, cargo-about acquisition, locked dependency fetch",
+      "active_step": "Build the host verifier",
+      "current_artifacts": "None uploaded at this observation; final full/target/package/installed readers not yet available.",
+      "url": "https://github.com/lkjsxc/lkjscript/actions/runs/34786835189",
+      "frozen_clone": ".artifacts/stable-release-202609140703/candidate-source/",
+      "policy": "New corrected-workflow dispatch after refreshing remote, permissions/rules and matching terminal runs. Event head_sha equals frozen source. Reporting descendants do not replace this source. No tag/control/publication mutation."
+    },
+    "remaining": "Final 4306ef64 fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; final target reader faults and original-reader admission; ordinary integration of the delivery repair; immutable publication, attestations and anonymous exact/latest installed public pair.",
+    "resumption": "Read run 34786835189/1 at a useful boundary. On completion authenticate original handoffs and final full/target/package/installed evidence with archived context, then exercise final target-reader omissions without live replay. Perform normal integration and selected v0.1.35 publication through docs/release.md; preserve candidate 4306ef64 and its branch/clone while reporting/main advances. Do not rerun 34779065098 or start a duplicate publisher.",
     "deployment": "Not selected; effects confined to owned disposable witnesses."
   },
   "preserved": "Unrelated August 31 stash, immutable releases, frozen release checkouts and reader inputs, operational state and unrelated services remain untouched. Failed attempts, authentic predecessor repositories, copied binaries and raw receipts are deliberately retained under existing .artifacts owners.",
