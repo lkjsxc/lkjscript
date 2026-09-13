@@ -37,18 +37,23 @@ and 77 pair receipt faults with healthy recovery. The accepted implementation is
 Hosted dry run `34706128684/1` passed at that exact source; its publish/public jobs were correctly
 skipped. Its original full, target, package and simulated-pair handoffs were authenticated and
 reread. Annotated v0.1.34 object `d96d1623495d8c13968d99f567ea77e79b158237` selects that source.
-Publisher `34760117554/1` passed build/full/target/packaging and was observed in transferred
-application acceptance on 2026-09-13. INS-7 still requires immutable three-asset publication and
-the anonymous bootstrap/application pair. Selection changes no graph, artifact, grant
+Publisher `34760117554/1` passed build/full/target/packaging, the pre-publication installed pair
+and immutable three-asset publication: release `387929218`, published 2026-09-13T14:42:22Z.
+Anonymous exact/latest acquisition and attestations passed. Public job `103740119904` was still
+executing the installed application pair at 2026-09-13T15:15:46Z; INS-7 awaits its complete success
+and cleanup. Selection changes no graph, artifact, grant
 or application data and never infers compatibility or invokes another runtime as fallback.
 
 The [typed named-reference campaign](campaigns/202609131008.md) adds reviewed package and owner
 bindings to compact requests. Existing local namespaces and legally exposed exact dependency
 children lower through typed authored intent; aliases never allocate selected owners or grant
-authority. The copied development candidate passes the literal generic cells/variant/helper,
+authority. The accepted copied candidate passes the literal generic cells/variant/helper,
 I64/Text, existing-parameter edit, same-request rename and dependency-repair witness; the existing
-foreground consumer now uses a literal prelude instead of host member-ID maps. Source acceptance
-and integration are recorded separately in its evidence owner. v0.1.34 does not contain these
+foreground consumer now uses a literal prelude instead of host member-ID maps. Source
+`5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed all 26 full gates freshly, including
+final copied named/foreground workflows, public CLI, maintained semantic/artifact equality and
+generated guides, and was pushed normally to main. Exact verifier/candidate bindings are recorded in its
+[evidence owner](evidence/202609131008-typed-named-references.json). v0.1.34 does not contain these
 bindings. Their additional release follows the explicit [roadmap trigger](roadmap.md). The older
 unprobed generic-recursion preparation versus ordered-substitution note remains unresolved; these
 nonrecursive cells do not close it.

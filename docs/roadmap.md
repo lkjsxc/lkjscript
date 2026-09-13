@@ -50,11 +50,13 @@ readers passed. Immutable v0.1.33 and publisher `34705135744/1` have now passed 
 anonymous exact/latest acquisition, attestations and the public pair. FG-7 closes the selected
 combined task-iteration/foreground milestone. The installation source `037a1348` is accepted and
 integrated; dry run `34706128684/1` passed. Its isolated annotated v0.1.34 publisher `34760117554/1`
-remains selected through anonymous bootstrap/application acceptance, independently of newer main.
+published immutable release `387929218`; its final anonymous installed application pair remains
+pending independently of newer main.
 
 The [named-reference increment](campaigns/202609131008.md) removes the exercised foreground
-consumer's host member-ID inventories through typed, reviewed exact-name addressing. Its source
-acceptance is recorded in that campaign; v0.1.34 contains only the frozen installer milestone.
+consumer's host member-ID inventories through typed, reviewed exact-name addressing. Accepted source
+`5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed all 26 full gates freshly and is integrated on main;
+v0.1.34 contains only the frozen installer milestone.
 Publish the named-reference increment with the **next accepted non-delivery capability campaign**.
 At most one such subsequent campaign may be accepted without selecting their combined publication.
 If none is chosen, the next architect must select an authoring release from this accepted source

@@ -30,12 +30,16 @@ The installation campaign separately selects v0.1.34 at accepted source
 `037a13483321497737a30ade6df88950bb19e0de`, receipt 9 and the third bootstrap asset. Matching hosted
 dry run `34706128684/1` passed; publication/public jobs were skipped. Its authenticated original
 handoffs passed their original readers. Annotated object `d96d1623495d8c13968d99f567ea77e79b158237`
-and the retained scoped control select publisher `34760117554/1`. Build/full/target/packaging passed;
-transferred application acceptance was observed in progress. INS-7 remains pending until actual
-immutable publication and anonymous bootstrap/application acceptance complete.
+and the retained scoped control select publisher `34760117554/1`. Build/full/target/packaging and the
+pre-publication installed pair passed. Immutable release `387929218` published all three assets at
+2026-09-13T14:42:22Z. Anonymous exact/latest acquisition and all attestations passed; public job
+`103740119904` was still executing the installed application pair at 2026-09-13T15:15:46Z. INS-7 remains pending until its
+actual application acceptance and joined cleanup complete.
 
 The newer typed named-reference source increment uses offline receipt 10. It is absent from the
-frozen installer release. Its additional publication is batched by the [roadmap trigger](roadmap.md);
+frozen installer release. Accepted source `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed 26
+fresh full gates and is integrated on main; later reporting commits do not replace that proof.
+Its additional publication is batched by the [roadmap trigger](roadmap.md);
 no new release rehearsal or tag is selected for that source acceptance.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from

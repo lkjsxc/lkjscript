@@ -1,6 +1,6 @@
 {
   "campaign": "202609122211",
-  "status": "INS-1–INS-6 accepted and integrated; inherited FG-7 closed; installer dry run passed and frozen tag publisher in progress",
+  "status": "INS-1–INS-6 accepted and integrated; FG-7 closed; v0.1.34 immutable publication passed, INS-7 anonymous installed pair pending",
   "starting_head": "21bee29a132bf25202ad056748a4324d6fde7795",
   "guidance_and_mandate_commit": "efdbb3e5",
   "integration": {
@@ -126,7 +126,7 @@
     "source_acceptance": "fresh-passed: 26 full gates at 037a1348",
     "target_acceptance": "fresh-passed: exact static-musl candidate, both pinned userlands and six owners at 037a1348",
     "package_acceptance": "fresh-passed: deterministic preparation, strict three-asset verification and complete installed pair at 037a1348",
-    "public_acceptance": "pending frozen tag publisher 34760117554/1; no simulated result is counted as anonymous acquisition",
+    "public_acceptance": "pending public application pair 34760117554/1 job 103740119904; anonymous acquisitions and attestations passed",
     "hosted_dry_run": {
       "run": 34706128684,
       "attempt": 1,
@@ -216,9 +216,9 @@
       "INS-2": "fresh-passed: real v0.1.32 and v0.1.34 slots, explicit selection, immutable/idempotent/conflict/corruption negatives and newer absolute-manager recovery; bundle/descriptor/graph bytes unchanged",
       "INS-3": "fresh-passed: native races, OS locks, substitution, ten I/O checkpoints, five fresh-initialization plus eight old-default killed-process cuts/recovery, cleanup faults and committed broken-output reporting; final full gate and 12 actual pair interruptions passed",
       "INS-4": "fresh-passed: independent strict fixtures, malformed gzip/tar/static-ELF/member identities, decompression bound, snapshot replacement, historical producer-policy separation and actual public predecessor payload equality; current producer policy remains strict",
-      "INS-5": "fresh pre-publication bootstrap routes, compound invocation and negative acquisition tests passed, including partial script and real-curl HTTP downgrade rejection; unchanged frozen script ran in both pinned userlands with asserted exact URLs and simulated moving latest; public acquisition unrun",
+      "INS-5": "Public anonymous exact/latest acquisition and three-asset attestations passed; installed application pair still pending. Earlier fresh bootstrap/negative/interruption proof remains accepted.",
       "INS-6": "fresh-passed: held old/new HTTP processes and recovery, two independent foreground bundles/data roots with existing once-only expectations through the actual installed slot; all five aggregate owners and cleanup passed",
-      "INS-7": "pending publisher 34760117554/1 at exact source 037a13483321497737a30ade6df88950bb19e0de; inherited FG-7 closed"
+      "INS-7": "pending public job 103740119904 at frozen source 037a1348; immutable release 387929218 published, actual pair not yet complete"
     },
     "historical_archive": {
       "tag": "v0.1.32",
@@ -273,12 +273,80 @@
       "publisher_run": 34760117554,
       "publisher_attempt": 1,
       "publisher_created_utc": "2026-09-13T13:32:17Z",
-      "publisher_observed": "build/full/target/package passed; transferred application acceptance in progress",
+      "publisher_observed": "build/full/target/package, pre-publication pair and immutable publication passed; anonymous installed application pair pending",
       "build_job": 103731356504,
       "transferred_job": 103737508364,
       "control": "Prior completed v0.1.33 value 9a4e1c065b7c20459e318b83e67bfd041b74e911 compared immediately before scoped write, new value verified, only selected tag pushed, binding retained; no concurrent publisher or settings/protection changes",
-      "remaining": "Authenticate immutable three-asset publication, attestations and actual anonymous bootstrap/application pair; keep source frozen",
+      "remaining": "Authenticate final public application pair and joined cleanup; no duplicate run or new tag",
       "evidence_owner": "docs/campaigns/202609131008.md"
+    },
+    "publication": {
+      "status": "immutable-published; anonymous installed application pair pending",
+      "source": "037a13483321497737a30ade6df88950bb19e0de",
+      "tag_object": "d96d1623495d8c13968d99f567ea77e79b158237",
+      "release_id": 387929218,
+      "published_utc": "2026-09-13T14:42:22Z",
+      "run": 34760117554,
+      "attempt": 1,
+      "public_job": 103740119904,
+      "publication_job": 103740084734,
+      "archive_bytes": 10167051,
+      "archive_sha256": "e3186620b6fe7f306084bcc150a305626727662c67e1953390aed199fda33a54",
+      "installer_bytes": 3566,
+      "installer_sha256": "c101b1f1688eec2252b48a7597736c531f7d62e239f4a7ead09e43c70854debf",
+      "checksums_bytes": 109,
+      "checksums_sha256": "4f8c200c77b99ee6b89e47642d57f343703e4e7185d087b8dad8e5b56749efc0",
+      "product_bytes": 22608256,
+      "product_sha256": "165be1e6c11c331fe7d8ec424d868c2054f3da2ae19cd6788d0c767d275f2d62",
+      "verifier_sha256": "927e6ebc1c01a7368436fb9f1fdad2397dcaf96e58516a92820ef362a85a8cc2",
+      "verifier_bytes": 26778456,
+      "local_original_readers": "Downloaded artifact verifier identity and immutable published archive/receipt passed. Original pre-publication pair reader passed in reconstructed archived paths/modes/kernel metadata, no effects replayed.",
+      "prepublication_pair_sha256": "19fd70679d8b76258f248bf97350e31c250d46aebd047c2a4e974c50ed3e25c6",
+      "prepublication_pair_digest": "verification_779bbe79df61654c1147013bbee24a62097cf088cef95523d4e426b8402781a7",
+      "anonymous_acquisition": "Both routes and all three-asset attestations completed successfully in the public job before application admission. Full installed pair is still pending.",
+      "retained_artifacts": [
+        {
+          "id": 10319811093,
+          "name": "release-handoff-34760117554-1",
+          "bytes": 10175802,
+          "sha256": "ebb0202961f6142226fbe6878f6b61596395211b8d0d547a3e9c2bc113a672ea",
+          "expires": "2026-09-14T14:21:40Z"
+        },
+        {
+          "id": 10319666484,
+          "name": "verifier-handoff-34760117554-1",
+          "bytes": 26779228,
+          "sha256": "7261e015b924d8b2d5b1c3187fa0d6c783c41e7d2d64c635ffaa879ac3f7e9c2",
+          "expires": "2026-09-14T14:21:41Z"
+        },
+        {
+          "id": 10319591481,
+          "name": "target-admission-evidence-34760117554-1",
+          "bytes": 38244996,
+          "sha256": "ee5fbab8f31c5fac123420efb3f80c5f1c287ae2cf303c1b931652852b655112",
+          "expires": "2026-09-20T14:19:53Z"
+        },
+        {
+          "id": 10319450183,
+          "name": "full-verification-evidence-34760117554-1",
+          "bytes": 37939796,
+          "sha256": "9745c1c1a1b71f67dda4f34b0404e76bdbe0c91f942e708da5be225db39e0784",
+          "expires": "2026-09-20T13:55:12Z"
+        },
+        {
+          "id": 10319292822,
+          "name": "pre-publication-application-evidence-34760117554-1",
+          "bytes": 142475323,
+          "sha256": "24c5ace74a56bedc31c098ca5e1e9caac649958c3350ef22a368facde234be7e",
+          "expires": "2026-09-20T14:41:56Z"
+        }
+      ],
+      "resumption": "Read run 34760117554/1 once after changed state; authenticate public evidence artifact and original pair reader at this source, close INS-7 only after installed application/cleanup success.",
+      "limitations": "Published manifest binds release context and differs from dry-run archive. No authoring increment, settings changes, asset overwrite or deployment.",
+      "observed_utc": "2026-09-13T15:15:46Z",
+      "publisher_state": "in_progress",
+      "public_job_state": "in_progress: Admit both public routes and bind one fresh application suite",
+      "retained_root": ".artifacts/named-references-202609131008/inherited/publisher-34760117554/"
     }
   }
 }

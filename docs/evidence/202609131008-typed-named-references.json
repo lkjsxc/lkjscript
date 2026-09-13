@@ -1,14 +1,18 @@
 {
   "schema": "lkjscript-typed-named-reference-evidence-1",
   "campaign": "202609131008",
-  "status": "implemented; focused and copied-product iterations passed; final frozen full/source integration pending",
+  "status": "source accepted and integrated on main: 26 fresh full gates at 5f49c68d; installer immutable publication complete, public pair pending",
   "source": {
     "startup": "99a00769c8e30d954d0df8c58f7a2f3f16f964ed",
     "branch": "main",
     "mandate": "docs/campaigns/202609131008.md",
     "guidance": "AGENTS.md",
-    "implementation": "The first containing implementation commit is supplied by Git history; exact accepted/tested source will be appended after the fresh full receipt.",
-    "installer_frozen": "037a13483321497737a30ade6df88950bb19e0de"
+    "implementation": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+    "installer_frozen": "037a13483321497737a30ade6df88950bb19e0de",
+    "tested": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+    "accepted": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+    "reporting": "Later documentation-only containing commits do not replace the tested source.",
+    "integrated": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847"
   },
   "contract": {
     "grammar": 19,
@@ -51,9 +55,27 @@
       "request": "request_830d6ab41626f47a43624d9ea8dfbdf7ab6cca711bcf411875222f84b1eba09b",
       "accepted_revision": "rev_3b82c7c5fb0d3b47b467ce31950c33814e8cfada1f41f74e55967ee8210c8709",
       "outcome": "Original candidate accepted; new candidate rejected original prepared token, re-planned retained historical base and returned already-accepted with identical HEAD and all four allocations.",
-      "supplier": "Changed embedded supplier is source-bound tested by altering its normalized exact expectation: commitment changes and preparation reports supplier mismatch. This is not a two-shipped-binary supplier-upgrade experiment."
+      "supplier": "Changed embedded supplier is source-bound tested by altering its normalized exact expectation: commitment changes and preparation reports supplier mismatch. This is not a two-shipped-binary supplier-upgrade experiment.",
+      "final_candidate_sha256": "129a9cd6cb7c2026f365239c88eb7ced2b44ec8db82decefa8497f1b447c787d",
+      "original_candidate_sha256": "12e29f4655186d9a8eb1b6c5c049225028d0bf5f44efdb83e043c4d756d44fa3",
+      "final_log": ".artifacts/named-references-202609131008/accepted-legacy-retry.txt",
+      "final_classification": "fresh public re-plan and already-accepted result through the frozen full candidate; exact historical HEAD preserved"
     },
-    "encodings": "No graph, type-object, artifact, bytecode, package-interface, transport or operational-data format change. Maintained semantic/generated assets are untouched; their final equality gates remain required."
+    "encodings": "All final generator/build/compare gates passed. Standard/lkjournal semantic owner/type and checked-in transport/artifact bytes remain unchanged from startup; no operational-data formats or migrations. The separate witness old artifact remains byte-identical after the accepted dependency replacement.",
+    "maintained_assets": {
+      "packages/standard/generated/standard.lkjp": {
+        "bytes": 389537,
+        "sha256": "7949278731fa2a9b860f79391df781c5c9550a7d08933d080f098e47a705a79b"
+      },
+      "packages/standard/generated/standard.lkja": {
+        "bytes": 537736,
+        "sha256": "bd0bba1b6c363fa8d39f10dbed2288a4ba82ea603dcd58cdd44d94d7b49eedd4"
+      },
+      "applications/lkjournal/generated/lkjournal.lkja": {
+        "bytes": 1296806,
+        "sha256": "1941459005944b1b9c27657544e39d31fa3c4c30bc63b7bf8ddee1e6e2554db1"
+      }
+    }
   },
   "proof": {
     "namespace": {
@@ -67,15 +89,20 @@
       "log": ".artifacts/named-references-202609131008/resolver-parent-fault.log",
       "manifest": ".artifacts/named-references-202609131008/resolver-parent-fault.json",
       "result": "Ignoring parent fails the namespace oracle. Original bytes restored. Healthy full library iteration: 600 passed, 8 explicitly ignored; subsequent nine named tests passed.",
-      "later_changes": "Subsequent diagnostic presentation and test additions do not alter parent lookup; final fresh full still required."
+      "later_changes": "Subsequent diagnostic presentation and test additions do not alter parent lookup; final fresh full still required.",
+      "final_binding": {
+        "status": "valid bound reuse at 5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+        "scope": "Entire resolve_binding function is byte-identical to the freshly fault-tested/restored implementation. Later changes affected diagnostic presentation and additional tests; final full runs the expanded healthy oracle.",
+        "resolver_sha256": "90100d0c4bb82a35c86d217e88cdc1607a20f19ea279bf045a6b8c7a2fa0510f"
+      }
     },
     "plan_tamper": {
       "classification": "fresh passed rejection",
       "scope": "Altered serialized resolution rejected by digest admission; a structurally consistent substituted parameter resolution produces a different reviewed token. Public apply independently re-prepares."
     },
     "public_cli": {
-      "classification": "focused corrections passed; full rerun pending",
-      "initial": "40 passed, two failed: added discovery records and old stale-plan expectation. Updated public contract expectations and explicit historical-key/replan/conflict/invalid-request negatives passed targeted retry test; discovery passed after complete descriptor expectations updated.",
+      "classification": "fresh passed in final full: 42 passed, 1 explicit scale-only ignored",
+      "initial": "Initial two failures and subsequent descriptor expectation/fixture-edit errors remain in development logs; final full includes both complete public contract expectations and historical re-plan, ordinary stale, key conflict and invalid-request negatives.",
       "retry_log": ".artifacts/named-references-202609131008/public-review-retry-02.log",
       "discovery_log": ".artifacts/named-references-202609131008/public-discovery-05.log"
     },
@@ -129,8 +156,83 @@
       "cleanup": "Joined command resources; exact owned disposable iteration root removed, evidence retained."
     },
     "full": {
-      "classification": "unrun at this pre-acceptance record",
-      "required": "One fresh full profile after code, tests, guides and this evidence stabilize. It includes final copied-product offline named/foreground proof and maintained graph/artifact equality."
+      "classification": "fresh passed",
+      "source": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+      "passed": 26,
+      "fresh": 26,
+      "reused": 0,
+      "unrun": [],
+      "input_stable": true,
+      "input_digest": "verification_fa6e2596802257fda87715573558e5b4e7f572f7c682fa30c1e157a41b6f8c53",
+      "seconds": 498.176322124,
+      "receipt": ".artifacts/lkjscript-dev/check/1789311314748178470-2409978-0/receipt.json",
+      "bytes": 61358,
+      "sha256": "30340caf3ee0a7fe54acdce2009978c0aad6df633572ea1ba62aa1559e794e7b",
+      "digest": "verification_1d855dd342435fb736a2ed744cebe3ef168d35258ad2104b20a9e0144970d7b7",
+      "runtime_digest": "verification_4648a8c1f8b9e486e4e769cc217c36e4f516dcf46398ce1d0269dd0fe63963c3",
+      "environment_digest": "verification_77d09d6d18e466f7a4ce7a7c4077b11001bbc9e5193523cd9b28a18a3638c6ed",
+      "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "platform": {
+        "operating_system": "linux",
+        "architecture": "x86_64",
+        "family": "unix",
+        "child_process_control": "linux_process_group_sigkill"
+      },
+      "maximum_workers": 4,
+      "candidate": {
+        "path": ".artifacts/named-references-202609131008/candidate-accepted",
+        "bytes": 22634040,
+        "sha256": "129a9cd6cb7c2026f365239c88eb7ced2b44ec8db82decefa8497f1b447c787d"
+      },
+      "verifier": {
+        "path": ".artifacts/named-references-202609131008/verifier-03",
+        "bytes": 26833528,
+        "sha256": "22ad12d2bea427e9fb4beaaab68f29a712afc780815af6eda356cd72a98c1331"
+      },
+      "note": "The full registry rebuilds the release executable after workspace feature unification. This frozen output, independently bound by the fresh copied children, differs from the earlier development candidate-03."
+    },
+    "accepted_offline": {
+      "classification": "fresh passed; existing complete offline-package owner, schema 10",
+      "receipt": ".artifacts/offline-packages/run-0tGEfj/receipt.json",
+      "sha256": "c040426abae83349e2adc0c42683ebe9da385571ead34132533e5a7bd1c0b5fd",
+      "digest": "verification_7b380d57a4344850ccc1608c7a54b454ac8ff574787db851c4012e49d84b4e2e",
+      "candidate_sha256": "129a9cd6cb7c2026f365239c88eb7ced2b44ec8db82decefa8497f1b447c787d",
+      "verifier_sha256": "22ad12d2bea427e9fb4beaaab68f29a712afc780815af6eda356cd72a98c1331",
+      "seconds": 253.606067623,
+      "commands": 532,
+      "named_commands": [
+        517,
+        518,
+        529,
+        530,
+        531
+      ],
+      "named_identities": {
+        "after": "package_revision_dc47ba14dffc0ce346d3c4d4e761ed8274399fcb55a62eb04a9894bcb7380939",
+        "before": "package_revision_7a2ffcd286abe8efcc9924f5e19bd75b4f78d1ca3a56e7072be4edd5a8b247f6",
+        "consumer": "pkg_01786ad2657d9975eee4b65bcf433522",
+        "field": "field_ad133f8c18b3f66d23c67a5e2418340b",
+        "function": "decl_c03f42c6d6890038c14b9d0b2692e9bb",
+        "member_ids_in_authored_inputs": 0,
+        "old_artifact": "d4307766addf272a6ceb78820279e214db6ee919ce3c43844335f0ce924659c0",
+        "parameters": [
+          "param_e8ad2c66e5851cecc93ea88e744ce292",
+          "param_f75a965d62dd33fad6c873b4ff06312c"
+        ],
+        "producer": "pkg_13c6996d1166cdaade49d6ef4e4a4944",
+        "repaired_artifact": "bde916f1d6caf304a3afd7bbf93c239f242c21d903ca4b1450eb2ef44a580cfc"
+      },
+      "expected_outputs": [
+        42,
+        "lkj",
+        42,
+        42,
+        "lkj"
+      ],
+      "cleanup_complete": true,
+      "original_root_absent": true,
+      "member_ids_in_named_authored_inputs": 0,
+      "scope": "Fresh literal producer/consumer/edit/replacement and migrated foreground path within the required existing aggregate; all prior exact controls preserved."
     }
   },
   "authoring_burden": {
@@ -173,12 +275,26 @@
   },
   "delivery": {
     "foreground": "FG-7 closed by authenticated original hosted public evidence and original-reader bound rereading; see predecessor owners.",
-    "installer": "v0.1.34 source 037a1348, annotated d96d1623495d8c13968d99f567ea77e79b158237, publisher 34760117554/1; exact frozen public bootstrap/application acceptance pending.",
-    "named_feature": "Not included in v0.1.34. Source integration authorized after fresh full; publish with next accepted non-delivery capability campaign, at most one subsequent acceptance. If none chosen, next architect selects authoring release instead of extending deferral. No tag preallocated; earlier verified recovery need may justify additive release.",
+    "installer": "Immutable v0.1.34 release 387929218 at 2026-09-13T14:42:22Z, source 037a1348, annotated d96d1623495d8c13968d99f567ea77e79b158237. Publisher 34760117554/1: publication and anonymous exact/latest acquisition/attestations passed; public job 103740119904 executing its installed application pair at the latest observed boundary. Still in progress at 2026-09-13T15:15:46Z; only final public pair/evidence/cleanup gate remains.",
+    "named_feature": "Accepted source 5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847. Absent from v0.1.34. Publish with next accepted non-delivery capability campaign, at most one subsequent acceptance; if none chosen, next architect selects authoring release. No later tag preallocated.",
     "target": "New authoring static-target/public release proof unrun and not selected for this source increment; inherited installer gates remain mandatory.",
     "deployment": "Not selected; all application effects confined to owned disposable fixtures."
   },
   "retained_failures": "Development parse/borrow/discovery test expectations, missing standard transport/stream descriptor and oversized debug observer identity failed before correction; original logs retained. These are not passing evidence.",
   "preserved": "Unrelated August 31 stash, existing recovery artifacts, immutable releases, frozen installer source/guidance and operational state untouched.",
-  "next": "Observed burden is expression assembly rather than per-member identity transfer. Requirement-parametric operation authority remains a separate possible campaign; older generic-recursion preparation versus ordered substitution note stays unresolved."
+  "next": "Observed burden is expression assembly rather than per-member identity transfer. Requirement-parametric operation authority remains a separate possible campaign; older generic-recursion preparation versus ordered substitution note stays unresolved.",
+  "integration": {
+    "status": "passed: accepted/tested source pushed normally to main and remote read back at that exact commit",
+    "source": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+    "prior_remote": "99a00769c8e30d954d0df8c58f7a2f3f16f964ed",
+    "policy": "Refreshed push authority; main unprotected, no rules/rulesets, one local commit ahead and zero behind; only unchanged tag/manual release workflow. Frozen installer publisher retains its own tag/control binding.",
+    "confirmed_utc": "2026-09-13T15:15:46Z",
+    "reporting": "Containing later reporting commit changes only campaign/evidence/status/roadmap/release prose; accepted implementation and proof inputs remain 5f49c68d."
+  },
+  "cleanup": {
+    "status": "complete for owned local work",
+    "disposable_roots": "Copied named/foreground/baseline/full application roots and temporary mount-namespace root removed; all owned local build and invocation processes joined.",
+    "retained": "Frozen source candidates, original verifier/ZIPs/published assets, immutable fixture slots and receipts retained under their existing .artifacts owners; no live effects replayed.",
+    "preserved": "August 31 stash and unrelated services/operational state preserved."
+  }
 }
