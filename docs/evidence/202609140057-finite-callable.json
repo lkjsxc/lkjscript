@@ -1,0 +1,150 @@
+{
+  "schema": "lkjscript-finite-callable-evidence-1",
+  "campaign": "202609140057",
+  "status": "implemented; corrected copied public proof passed at 0735cc78; required full/target/installed rehearsal 34779065098/1 pending, main integration and public delivery incomplete",
+  "source": {
+    "starting": "15c0bfdf82697e1a8dd4df6085e867d4b109bbf7",
+    "named_reference_ancestor": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
+    "implementation": "dff13968b978b9db9a2f1d7db469c9d18cfb0fcc",
+    "reader_faults": "b38030c6b492db86400b2fb73319db677f5e898d",
+    "authentic_old_token": "0e614b196c021cb46e3e1a64cb6fb0da20f43ff5",
+    "independent_raw_source": "9cf26ecde03be6b77b3dc9e7e58628f17cd23c66",
+    "accepted_retry_evidence": "0735cc78e41fc77166ca4fff61d0b1b5392c851c",
+    "focused_tested": "0735cc78e41fc77166ca4fff61d0b1b5392c851c",
+    "integrated_remote_main": null,
+    "reporting": "Containing documentation-only commits do not replace tested or release source bindings.",
+    "mandate": "docs/campaigns/202609140057-collision-1.md",
+    "original_archive": "docs/campaigns/202609140057.md",
+    "original_archive_sha256": "0d1aa100db8f707a75e254539c84f9567f1079b9ee57774e32bf29311323f101"
+  },
+  "baseline": {
+    "classification": "fresh public observations through authentic frozen predecessor before validator change",
+    "product_bytes": 22634040,
+    "product_sha256": "129a9cd6cb7c2026f365239c88eb7ced2b44ec8db82decefa8497f1b447c787d",
+    "reader_sha256": "22ad12d2bea427e9fb4beaaab68f29a712afc780815af6eda356cd72a98c1331",
+    "permutation": "Public plan/apply/check/build/run admitted the simultaneous two-parameter swap and returned 7.",
+    "expansion": "Public plan/apply/export admitted an untaken growing<T> -> growing<List<T>>. Check/run/build later rejected with Resource reference_instantiation_storage. The external five-second/one-GiB bound did not supply the diagnostic; no effects ran.",
+    "owner": "Normalized Call/FunctionValue inference checked signature applications but had no callable-cycle rule. Reference preparation discovered the expanding closure through its storage bound; inactive legacy semantic.rs was not the rejection owner.",
+    "fixtures": "tests/fixtures/finite-callable-predecessor/",
+    "logs": ".artifacts/finite-callable-202609140057/baseline/"
+  },
+  "contract": {
+    "rule": "Exact package/function/ordinary-parameter-slot flow includes every syntactic direct Call and named FunctionValue. A whole-parameter argument is plain; every enclosing canonical constructor makes its occurrence expanding. An expanding edge inside one SCC rejects; growth between SCCs, swaps, duplication, projection and closed resets are admitted.",
+    "diagnostic": "kernel_callable_expansion retains exact caller/target, expression, argument slot, type/constructor path, component size and an explicit bounded omission marker. A proved long cycle remains Semantic; analysis work/storage/depth exhaustion and cancellation are separate.",
+    "validation": "Full canonical and incremental publication, complete supplier bodies, strict artifact canonical/compiled correspondence, artifact-bound prepared admission, and independent raw-reference full source/DAG admission precede instance expansion.",
+    "incremental": "One forward callable closure from semantically affected roots includes unchanged helpers and their return edges; namespace-only controls avoid unrelated scans. The full oracle remains independent of incremental selection.",
+    "unchanged": "Graph 14 owner/type bytes, witness 9 encoding, artifact 18 encoding, declaration/package identities, immutable historical acceptance, deployment and installation formats. Nominal expansion, affine/resource restrictions, grants and effect semantics retain their separate owners.",
+    "validator_feature": "23: finite_generic_callable_instantiation, version 1",
+    "old_validator": "validator_contract_2517c93f6688670adef3087222f6649bef91ecafeb989375730b6a64d7cb077b",
+    "current_validator": "validator_contract_0f3694a3d6a97db3e1a735041761b25ef0e768394ec3885ae955d5e512edcdf7"
+  },
+  "upgrade": {
+    "ownership": "Original witness/certificate/root/revision/parent/receipt authenticate historical acceptance. A separate current context reconstructs canonical structural facts and full current proof. A validator mismatch causes no catalog repair, HEAD rewrite or new revision. Invalid history is inspectable; execution/export reject until a completely valid reviewed candidate publishes.",
+    "repair_request": "request base=rev_f3e49f1725234acd064a6938b764166d3696b13da570d6581302a9ba5a4e998d idempotency=finite-repair\nexpression.i64 as=$body value=7\nreplace.body function=probe/growing body=$body\n",
+    "historical_root": "semantic_root_3cd4637847259c7157ad5006c53b28825dcd53b4a1fe1b8de66deefc817b7ed7",
+    "diagnostic_source": "growing<T>, expr_22cd90869d77c0bab0195489ce09a718, type argument 0, constructor path [0], one-slot SCC with omitted return-path marker",
+    "transcript": "status preserves old authority and reports current invalidity; inspect --detail definition succeeds; check rejects kernel_callable_expansion; ordinary change plan/apply replaces the body; check succeeds; a later body edit succeeds; repair retry returns its original result without publishing; the original expanding request returns change_historical_request_incompatible retaining historical result information.",
+    "repaired_revision": "rev_4999cefa5a3000dd85f487feb527811dfab7571144361712c1baadf374fe8fa3",
+    "later_revision": "rev_c254afa0a3c77a93e22ab3b9c477a5264cf9c199c5d85737a204e6400f4e3a4c",
+    "repair_receipt": "receipt_object_c81f0ea0e5fff51c2514e52bc2a97a1b45aab4bcbcc696572fa18068ec45473b",
+    "repair_record": "revision_object_bafe2cb308a96ba07ec46fe16f7c5786c0c6e426b05a7ded26119eaa7d0726b3",
+    "repair_work": "Nine fully validated owners; zero reused semantic summaries. The invalid historical parent remains traversable.",
+    "retry_correction": "An actual transcript exposed CLI reporting of freshly prepared but unpersisted receipt/record IDs. The focused negative failed. Responses now use the publication owner's original accepted binding; seven upgrade tests and the final copied public reader pass exact original receipt/record assertions. Public commands 71 and 76 retain the same repair receipt and revision-record above. Historical storage never changed during the faulty response.",
+    "exact_public_transcript": ".artifacts/finite-callable-202609140057/public-finite-14/: commands 67 status, 68 definition inspection, 69 rejected check, 70 plan, 71 repair apply, 72 successful check, 73/74 later edit, 75/76 original repair retry, 77 targeted historical incompatibility. Prefix: /home/coder/workspace/lkjscript/.artifacts/finite-callable-202609140057/candidate16/lkjscript --project /tmp/lkjscript-offline-packages-hGy930/finite-upgrade-true-expanding. Literal repair input: finite-upgrade-70.lkjc; the owned project is now removed.",
+    "cache": "Only process-local proof constructed by this validator is reused, with a bounded 32-MiB retention estimate and complete authenticated canonical/dependency read set. New CLI processes rebuild old-validator contexts; accepted-current witnesses retain their normal path. No persistent second certificate ledger exists.",
+    "cold": {"canonical_bytes": 3003, "decoded_records": 18, "semantic_steps": 173},
+    "warm": {"canonical_bytes": 2896, "decoded_records": 0, "semantic_steps": 0},
+    "installed_slot": "Pending required hosted installed-pair execution; copied and pinned absolute source products alone are not installed-slot proof."
+  },
+  "focused_proof": {
+    "callable_oracle": "Ten affected callable tests passed after exact fault restoration. Independent simultaneous first-order term expansion and weighted reachability cover 625 small schemas; constructor, phantom, unused application and 513-slot diagnostic-cycle cases are included.",
+    "source_faults": "Suppress expansion rejection, omit named function values, omit incremental closure, and trust historical evidence without current validation: each made its intended independent oracle fail. Exact healthy backups restored and affected healthy proof rerun. Logs retained under .artifacts/finite-callable-202609140057/faults/.",
+    "upgrade": "Seven passed at the receipt correction; historical-receipt-healthy-01.log. Cancellation, stale/interrupted repair, invalid supplier replacement, original-token rejection and canonical corruption with cached proof are covered.",
+    "normalized": "101 passed, one explicit predecessor acquisition ignored; reference-source-normalized-02.log. Initial constructor compile error and six deliberately corrupt runtime-fixture failures retained. Test-only readers preserve those downstream corruption probes after original source admission; product admission has no bypass.",
+    "lint": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings passed; clippy-04.log.",
+    "hostile_artifacts": "Two coherent, fully rehashed direct/named expanding artifacts reject semantically before effects. Separate forged compiled-argument tests retain valid canonical bodies and require instruction/meaning rejection. The frozen adversarial artifacts were never executed.",
+    "target_reader_faults": "76-observation existing target-reader omission matrix implemented; execution awaits an actual completed target fixture from the corrected source.",
+    "current_public": {
+      "classification": "Fresh passed corrected copied product and original retained reader at 0735cc78",
+      "receipt": ".artifacts/finite-callable-202609140057/public-finite-14/receipt.json",
+      "bytes": 667585,
+      "sha256": "b519ddaf7e5ef054c5976334398e52a350bdbfb253433842e5278b484699c2ea",
+      "digest": "verification_82c6210e61ce119c33ce3643b24e3dae83af67e8c06b91c463c45e493e0d7484",
+      "product_bytes": 23245664,
+      "product_sha256": "8368b49e5a045204ab552e1c82c85dad3abb40c6d3ba2071c7ba05f46d981d45",
+      "verifier_bytes": 27513120,
+      "verifier_sha256": "562a59ede6a0b668e03a86b1254a392e6598971f89f982bb69f36e8391f9329f",
+      "commands": 78,
+      "neutral_cases": 10,
+      "elapsed_ns": 13692445581,
+      "cleanup_complete": true,
+      "original_root_absent": true,
+      "runtime": "Copied product plus a frozen absolute path; installed-slot and public-download proof remain distinct pending gates."
+    },
+    "previous_public": {
+      "classification": "Fresh passed original reader at 9cf26ecd; does not satisfy the later original-receipt-ID assertion",
+      "receipt": ".artifacts/finite-callable-202609140057/public-finite-13/receipt.json",
+      "digest": "verification_bb3ffb0f2f11664ccd191c9987c080f1acaa33de7ea97938f901aeb126e30b55",
+      "commands": 78,
+      "neutral_cases": 10,
+      "cleanup_complete": true
+    }
+  },
+  "public_composition": {
+    "scope": "Designed fresh transported library through literal compact records and accepted named references; no maintained-standard demo addition or private meaning writer.",
+    "pure": "Six alternating value-dependent callbacks yield I7;Tx;I7;Tx;I7;Tx; and zero yields empty text with no callback.",
+    "task": "Ordinary/effect arguments swap simultaneously through a private generic descriptor factory. The exact consumer command records six ordered callbacks; zero records none. A later callback trap preserves only earlier committed effects.",
+    "replacement": "Finite reset initially returns 7 and replacement returns 8. Producer is removed before consumer stage/review/edit; artifacts execute after producer and consumer removal.",
+    "neutral": "Separate deterministic adapters execute each evaluator at six, zero, trap, cancellation and quota cases. Cancellation/quota stop after two committed observations with exact transaction/rollback traces. Joined cleanup and zero live state are required; actual deployment effects are never replayed.",
+    "authoring": "164 producer, 291 consumer and 23 edit records (478 total) are a different workload from the predecessor's 490-record foreground witness; no throughput, token or billing comparison is claimed."
+  },
+  "scale": {
+    "workload": "Existing small-functions full lifecycle: 50000 functions, 100 modules, 100100 owners, 100000 relations, one type, 51 construction and 52 plan/apply batches; 115 commands. Normalized scenario/batch/public-count/validation-inventory/check-outcome fields agree independently.",
+    "baseline": {
+      "receipt": ".artifacts/finite-callable-202609140057/baseline-source/.artifacts/scale-100100/receipt.json",
+      "digest": "verification_2ba285211063a60bd104051a7a94265a776088ab8520fa8819ce1de4486af9d0",
+      "wall_ns": 951466707806, "child_cpu_ns": 910040000000, "peak_child_rss_kib": 830252,
+      "check_ns": 148634771892, "clean_build_ns": 150254756739, "exact_build_ns": 90019537914,
+      "validation_steps": 850502, "artifact_bytes": 60009218, "closure_objects": 175062,
+      "clean_exact_equal": true, "cleanup": "owned generated project removed",
+      "limitation": "Frozen original binaries are authentic. The old reader's source locator recorded the starting workspace with 6046 dirty-status bytes despite the detached evidence-root clone; this is not clean-source release proof."
+    },
+    "candidate": {
+      "source": "9cf26ecde03be6b77b3dc9e7e58628f17cd23c66",
+      "product_sha256": "81a20651001bca2d0359786b9c3c18766aef33ea3844301c1b097ac1d9eba192",
+      "reader_sha256": "e6e26ff79349c20e6755490591ae2e709bf6c95688cd5681351fdd3d528923aa",
+      "receipt": ".artifacts/finite-callable-202609140057/scale-candidate-100100/receipt.json",
+      "digest": "verification_1fb8db635ef211e2d99da3b5e9d257aa5ea242d12f682cd8d34c521955b26ecb",
+      "wall_ns": 954893691758, "child_cpu_ns": 912440000000, "peak_child_rss_kib": 829476,
+      "check_ns": 147374528215, "clean_build_ns": 148765376425, "exact_build_ns": 93965977271,
+      "validation_steps": 1050602, "artifact_bytes": 59965736, "closure_objects": 174906,
+      "clean_exact_equal": true, "cleanup": "owned generated project removed"
+    },
+    "ladder": {"functions": [1,8,32,128], "symbolic_exact_instances": [2,8,32,128], "slots_and_edges_each": [2,16,64,256], "analysis_steps": [36,285,1138,4548], "accounted_metadata_bytes": [2853,22824,91296,365184]},
+    "public_finite_preparation": {"receipt": "public-finite-14/finite-neutral.stdout", "preparation_ns": 407061351, "admitted_artifact_bytes": 417704, "type_derivation_steps": 7618, "type_metadata_bytes": 319002, "reference_source_admission_steps": 14892, "all_ten_cases_cleanup_complete": true, "live_effects_replayed": false},
+    "limitations": "Single sequential workload runs on Linux 7.2.3, 12 logical CPUs, 12 GiB memory and btrfs. Two small 10.67/13.51-second test compiles and formatting overlapped the candidate. Fresh authority identities and different proof/storage products mean artifact byte counts and whole shape digests differ. Added validation work is retained; no speedup, total-memory or cross-version byte-equality claim. The later receipt display correction does not change this measured workload."
+  },
+  "delivery": {
+    "INS-7": "Closed independently using final immutable v0.1.34 artifact 10320391118 and its original pair reader; see 202609122211-installation.json. No replay, publisher dispatch, retarget or release replacement.",
+    "FG-7": "Remains closed for immutable v0.1.33.",
+    "selected_version": "v0.1.35, observed unused; no tag pushed",
+    "branch": "codex/finite-callable-202609140057",
+    "previous_rehearsal": "34777722470/1 at 9cf26ecd, publish=false/tag=v0.1.35, created 2026-09-13T19:27:00Z; later boundary read observed fresh full verification running. Superseded for final delivery by the accepted-retry evidence correction; frozen inputs retained.",
+    "current_rehearsal": {
+      "run": 34779065098,
+      "attempt": 1,
+      "source": "0735cc78e41fc77166ca4fff61d0b1b5392c851c",
+      "inputs": {"publish": false, "tag": "v0.1.35"},
+      "created_at": "2026-09-13T19:53:34Z",
+      "observed_status": "pending",
+      "url": "https://github.com/lkjsxc/lkjscript/actions/runs/34779065098",
+      "initial_metadata": ".artifacts/finite-callable-202609140057/rehearsal-0735-initial.json",
+      "policy": "Existing release-tag concurrency serializes behind the earlier run without cancellation. Isolated source branch advanced normally after refreshed authority/rules/divergence/matching-run inspection. Remote main, tags and immutable control remain unchanged."
+    },
+    "remaining": "Exact corrected-source fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; target reader faults; normal main integration; immutable publication, attestations and anonymous exact/latest installed public pair.",
+    "resumption": "Read run 34779065098/1 at a useful boundary. On terminal completion, authenticate artifact metadata and retained original verifier/handoffs, reread full/target/package/installed pair with the archived context, and exercise target-reader omission faults without live replay. Diagnose any failed gate before integration or publication. Do not advance its frozen branch inputs while pending.",
+    "deployment": "Not selected; effects confined to owned disposable witnesses."
+  },
+  "preserved": "Unrelated August 31 stash, immutable releases, frozen release checkouts and reader inputs, operational state and unrelated services remain untouched. Failed attempts, authentic predecessor repositories, copied binaries and raw receipts are deliberately retained under existing .artifacts owners.",
+  "next_architect": "Operation-bearing requirement parameters and reusable transaction ownership remain the strongest next semantic candidate: finite alternation transports, while the consumer still supplies concrete operation requirements and transaction callbacks. Flat expression assembly remains visible authoring cost. No subsequent campaign is authorized here."
+}

@@ -49,7 +49,14 @@ deferral and selects a combined release, with candidate version v0.1.35. Current
 adds the transported pure/task alternator, finite reset, strict hostile-artifact rejection and
 authentic historical/current validation repair through both copied and pinned absolute runtimes.
 The existing six target and five installed/public aggregate owners retain their boundaries. Source
-acceptance, exact-source rehearsal and immutable public delivery are pending; no tag has been pushed.
+acceptance and immutable public delivery are pending; no tag has been pushed. Corrected source
+`0735cc78e41fc77166ca4fff61d0b1b5392c851c` passed 78 focused copied public commands and exact
+historical retry receipt identities. Its selected existing-workflow rehearsal `34779065098/1`
+(`publish=false`, `tag=v0.1.35`) is queued behind prior-source `34777722470/1`. The latter's frozen
+`9cf26ecd` inputs are preserved and cannot certify the receipt correction. Neither run is a publisher.
+Remote main integration, original-reader admission of required hosted proof and the actual immutable
+anonymous exact/latest installed public pair remain required; see the
+[campaign evidence](evidence/202609140057-finite-callable.json).
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

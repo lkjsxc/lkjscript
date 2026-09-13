@@ -69,8 +69,12 @@ probe; the expanding program failed later in reference preparation with
 Compatible historical acceptance is authenticated separately from current proof, without changing
 Graph 14, witness 9, Artifact 18, HEAD or historical identities. The current executable can inspect
 and repair newly invalid bodies or replace their exact supplier through ordinary plan/apply with a
-complete valid candidate. Focused public alternator, reset, replacement and upgrade witnesses pass;
-full source, static-target and installed/public release acceptance remain pending. Candidate
+complete valid candidate. Focused public alternator, reset, replacement and upgrade witnesses pass
+at `0735cc78`, including original immutable receipt/record IDs on historical idempotent retries.
+The 100,100-owner baseline and candidate scale lifecycles pass; added validation work and timing
+limitations are retained in the [evidence](evidence/202609140057-finite-callable.json).
+Required corrected-source rehearsal `34779065098/1` is queued; full source, static-target and
+installed/public release acceptance and normal main integration remain pending. Candidate
 v0.1.35 is the next unused version observed for the selected combined delivery; it is not published.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict

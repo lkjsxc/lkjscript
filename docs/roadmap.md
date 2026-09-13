@@ -61,7 +61,9 @@ v0.1.34 contains only the frozen installer milestone.
 The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes the increment's
 expressly limited one-campaign deferral and selects their combined publication. It implements
 finite parameter-flow admission and current-executable repair across validator changes. Focused
-proof passes; required full/target acceptance and immutable installed/public delivery remain open.
+proof passes at `0735cc78`, including current-binary repair and original accepted retry evidence;
+required corrected-source rehearsal `34779065098/1`, full/target acceptance, normal main integration
+and immutable installed/public delivery remain open.
 The observed next unused candidate is v0.1.35. Do not defer this accepted authoring increment again
 to requirement parameters or another semantic campaign.
 

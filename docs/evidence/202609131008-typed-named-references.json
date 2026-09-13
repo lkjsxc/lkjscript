@@ -1,7 +1,8 @@
 {
   "schema": "lkjscript-typed-named-reference-evidence-1",
   "campaign": "202609131008",
-  "status": "source accepted and integrated on main: 26 fresh full gates at 5f49c68d; installer immutable publication complete, public pair pending",
+  "status": "source accepted and integrated on main: 26 fresh full gates at 5f49c68d; INS-7 separately closed with original final public evidence; named-reference delivery selected with finite callable campaign",
+  "previous_status_observation": "source accepted and integrated on main: 26 fresh full gates at 5f49c68d; installer immutable publication complete, public pair pending",
   "source": {
     "startup": "99a00769c8e30d954d0df8c58f7a2f3f16f964ed",
     "branch": "main",
@@ -275,14 +276,16 @@
   },
   "delivery": {
     "foreground": "FG-7 closed by authenticated original hosted public evidence and original-reader bound rereading; see predecessor owners.",
-    "installer": "Immutable v0.1.34 release 387929218 at 2026-09-13T14:42:22Z, source 037a1348, annotated d96d1623495d8c13968d99f567ea77e79b158237. Publisher 34760117554/1: publication and anonymous exact/latest acquisition/attestations passed; public job 103740119904 executing its installed application pair at the latest observed boundary. Still in progress at 2026-09-13T15:15:46Z; only final public pair/evidence/cleanup gate remains.",
+    "installer_observation_20260913T151546Z": "Immutable v0.1.34 release 387929218 at 2026-09-13T14:42:22Z, source 037a1348, annotated d96d1623495d8c13968d99f567ea77e79b158237. Publisher 34760117554/1: publication and anonymous exact/latest acquisition/attestations passed; public job 103740119904 executing its installed application pair at the latest observed boundary. Still in progress at 2026-09-13T15:15:46Z; only final public pair/evidence/cleanup gate remains.",
+    "installer": "INS-7 closed separately: publisher 34760117554/1 completed successfully at 2026-09-13T15:17:53Z. Final public artifact 10320391118 and pair verification_f6ff1a63fc67f11d29993c115c460f2b892e1c55d015e4f8d50ef640d8a71d9b passed the original verifier under archived context. Exact fresh execution, latest bound within the same pair, five expensive aggregate children and complete cleanup are authenticated hosted observations, not fresh local acquisition or replay. Immutable source/tag/release unchanged; see 202609122211-installation.json.",
     "named_feature": "Accepted source 5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847. Absent from v0.1.34. Publish with next accepted non-delivery capability campaign, at most one subsequent acceptance; if none chosen, next architect selects authoring release. No later tag preallocated.",
     "target": "New authoring static-target/public release proof unrun and not selected for this source increment; inherited installer gates remain mandatory.",
     "deployment": "Not selected; all application effects confined to owned disposable fixtures."
   },
   "retained_failures": "Development parse/borrow/discovery test expectations, missing standard transport/stream descriptor and oversized debug observer identity failed before correction; original logs retained. These are not passing evidence.",
   "preserved": "Unrelated August 31 stash, existing recovery artifacts, immutable releases, frozen installer source/guidance and operational state untouched.",
-  "next": "Observed burden is expression assembly rather than per-member identity transfer. Requirement-parametric operation authority remains a separate possible campaign; older generic-recursion preparation versus ordered substitution note stays unresolved.",
+  "next_observation_before_finite_campaign": "Observed burden is expression assembly rather than per-member identity transfer. Requirement-parametric operation authority remains a separate possible campaign; older generic-recursion preparation versus ordered substitution note stays unresolved.",
+  "next": "The finite callable campaign established the missing admission boundary with authentic predecessor probes and selects combined delivery, consuming the one-campaign deferral. Its designed alternator still requires concrete consumer operations and transaction ownership; operation-bearing requirements remain a possible subsequent campaign after delivery.",
   "integration": {
     "status": "passed: accepted/tested source pushed normally to main and remote read back at that exact commit",
     "source": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
