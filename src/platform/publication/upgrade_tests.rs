@@ -175,6 +175,22 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
             assert!(cli::execute_check(args(&root, &["check"])).is_ok());
             let request =
                 include_str!("../../../tests/fixtures/finite-callable-predecessor/valid.request");
+            let old_token = include_str!(
+                "../../../tests/fixtures/finite-callable-predecessor/valid.plan-token"
+            )
+            .trim();
+            let before_retry = inventory(&root);
+            let errors = cli::execute_change(args(
+                &root,
+                &["change", "apply", "--input", request, "--plan", old_token],
+            ))
+            .unwrap_err();
+            assert_eq!(errors[0].code, "change_prepared_plan_mismatch");
+            assert_eq!(
+                inventory(&root),
+                before_retry,
+                "an old prepared token requires re-planning without changing its historical result"
+            );
             let token = plan(&root, request);
             assert_eq!(
                 field(&apply(&root, request, &token), "result", "status"),
