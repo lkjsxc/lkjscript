@@ -140,6 +140,9 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/observations/artifact-nominal-changed-body-exact",
                 "/observations/artifact-nominal-reordered-arguments-exact",
                 "/observations/artifact-nominal-replaced-template-case-bound-exact",
+                "/observations/finite_commands",
+                "/observations/finite_artifact_rejections",
+                "/observations/finite_installed_upgrade_commands",
             ],
         ),
         (
@@ -222,7 +225,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        73,
+        76,
         "complete nominal and recursive target fault inventory"
     );
     scratch.close().expect("owned log cleanup");
