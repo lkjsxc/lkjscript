@@ -974,9 +974,15 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "change.plan-record")
             .count(),
-        38
+        41
     );
-    for name in ["logical-plan.package-before", "logical-plan.package-after"] {
+    for name in [
+        "logical-plan.package-before",
+        "logical-plan.package-after",
+        "logical-plan.reference-package",
+        "logical-plan.reference-owner",
+        "logical-plan.reference-counts",
+    ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.plan-record" && compact_field(record, "name") == Some(name)
         }));
@@ -994,6 +1000,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         operations,
         vec![
+            "reference.package",
+            "reference.owner",
             "create.module",
             "create.record",
             "create.variant",
@@ -1033,7 +1041,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 129);
+    assert_eq!(operation_fields.len(), 139);
     assert_eq!(
         operation_fields
             .iter()
@@ -1046,6 +1054,12 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             })
             .collect::<Vec<_>>(),
         vec![
+            ("reference.package", "source"),
+            ("reference.package", "package"),
+            ("reference.package", "package-revision"),
+            ("reference.owner", "name"),
+            ("reference.owner", "parent"),
+            ("reference.owner", "owner"),
             ("create.target", "port"),
             ("add.case", "payload"),
             ("add.type-parameter", "constraint"),
@@ -1065,8 +1079,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 31);
+    assert_eq!(field_forms.len(), 36);
     for (name, syntax) in [
+        ("reference_alias", "$REFERENCE_ALIAS"),
+        ("exact_declaration", "decl_HEX"),
         ("exact_expression", "expr_HEX"),
         ("http_method", "ASCII_HTTP_TOKEN_1_TO_32_BYTES"),
         ("http_path", "/EXACT_PATH_1_TO_16384_BYTES"),
@@ -1267,7 +1283,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "operation") == Some("delete.owner")
             && compact_field(record, "name") == Some("owner")
             && compact_field(record, "required") == Some("true")
-            && compact_field(record, "form") == Some("exact_owner")
+            && compact_field(record, "form") == Some("existing_owner_reference")
     }));
     assert_eq!(
         change_section
@@ -1432,7 +1448,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "precondition") == Some("precondition.owner-exists")
             && compact_field(record, "name") == Some("owner")
             && compact_field(record, "required") == Some("true")
-            && compact_field(record, "form") == Some("exact_owner")
+            && compact_field(record, "form") == Some("existing_owner_reference")
     }));
     assert!(change_section.iter().any(|record| {
         record.operation == "change.precondition-field"
@@ -6134,7 +6150,7 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         Some("change_request_commitment_mismatch")
     );
 
-    let stale_output = command(&[
+    let retry_plan = compact_success(&[
         "--project",
         path(&project),
         "change",
@@ -6142,11 +6158,83 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         "--input-file",
         path(&request_path),
     ]);
+    assert_eq!(
+        compact_field(compact_record(&retry_plan, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    // Only an exact accepted idempotency key reopens its historical base. An ordinary stale
+    // request still rejects, and a changed request cannot inherit the accepted receipt.
+    let original_request = std::fs::read_to_string(&request_path).unwrap();
+    let stale_path = temporary.path().join("stale-without-key.lkjc");
+    std::fs::write(
+        &stale_path,
+        original_request.replace(" idempotency=connected-public-1", ""),
+    )
+    .unwrap();
+    let stale_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&stale_path),
+    ]);
     assert_eq!(stale_output.status.code(), Some(7));
     let stale = parse_records("stdout", &stale_output.stdout).expect("compact stale response");
     assert_eq!(
         compact_field(compact_record(&stale, "diagnostic"), "code"),
         Some("change_authored_stale_base")
+    );
+
+    let conflict_path = temporary.path().join("accepted-key-different-request.lkjc");
+    std::fs::write(
+        &conflict_path,
+        original_request.replace("name=Message", "name=Different"),
+    )
+    .unwrap();
+    let conflict = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&conflict_path),
+    ]);
+    let conflict_token = compact_field(compact_record(&conflict, "plan"), "token").unwrap();
+    let rejected = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&conflict_path),
+        "--plan",
+        conflict_token,
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("publication_repository_idempotency_conflict")
+    );
+    let invalid_path = temporary.path().join("accepted-key-invalid-request.lkjc");
+    std::fs::write(
+        &invalid_path,
+        original_request.replace("body=$body", "body=$missing"),
+    )
+    .unwrap();
+    compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&invalid_path),
+        "--plan",
+        &plan,
+    ]));
+    let unchanged = compact_success(&["--project", path(&project), "status"]);
+    assert_eq!(
+        compact_field(compact_record(&unchanged, "revision"), "id"),
+        Some(accepted_revision.as_str())
     );
 
     let function = planned_identities

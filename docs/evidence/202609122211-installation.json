@@ -1,6 +1,6 @@
 {
   "campaign": "202609122211",
-  "status": "INS-1–INS-6 locally accepted and integrated; inherited publication and INS-7 pending hosted work",
+  "status": "INS-1–INS-6 accepted and integrated; inherited FG-7 closed; installer dry run passed and frozen tag publisher in progress",
   "starting_head": "21bee29a132bf25202ad056748a4324d6fde7795",
   "guidance_and_mandate_commit": "efdbb3e5",
   "integration": {
@@ -69,14 +69,41 @@
       "cleanup_complete": true
     },
     "publication": {
-      "status": "tag-pushed; hosted publication and public acceptance pending",
+      "status": "immutable publication and anonymous public acceptance passed",
       "tag_object": "9a4e1c065b7c20459e318b83e67bfd041b74e911",
       "peeled_source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
       "run": 34705135744,
       "attempt": 1,
       "created_utc": "2026-09-12T16:24:37Z",
-      "observed": "in_progress",
-      "control": "Enabled immutability, permissions, branch rules, tag absence and no active publishers rechecked. Prior v0.1.32 value 562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf compared immediately before one scoped write; new value verified; only v0.1.33 pushed. Binding retained after push. No atomic-CAS claim or setting change."
+      "observed": "completed-success",
+      "control": "Enabled immutability, permissions, branch rules, tag absence and no active publishers rechecked. Prior v0.1.32 value 562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf compared immediately before one scoped write; new value verified; only v0.1.33 pushed. Binding retained after push. No atomic-CAS claim or setting change.",
+      "public_acceptance": {
+        "status": "passed-hosted-public; valid-bound original-reader reread",
+        "source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
+        "tag": "v0.1.33",
+        "tag_object": "9a4e1c065b7c20459e318b83e67bfd041b74e911",
+        "release_id": 387660511,
+        "published_utc": "2026-09-12T18:15:41Z",
+        "run": 34705135744,
+        "attempt": 1,
+        "conclusion": "success",
+        "public_job": 103598708262,
+        "product_bytes": 22223104,
+        "product_sha256": "a228404a9dd91d24d4a8eb1136836544528fa6341d9e19d356044730c0ab6692",
+        "archive_bytes": 10003436,
+        "archive_sha256": "4bb3ba53c01d1dff205e69bc7e692ad0239010ca6abea8c24d02834c546bdaec",
+        "checksums_sha256": "d5102b0ed6250c27e8129e2b480194d83e837f56d86ba90538580edb3e9b46f1",
+        "verifier_bytes": 26386456,
+        "verifier_sha256": "c5b0b15aeee66a915c0645d2083802f2fbfa8a569e2fab44d5685568af78c948",
+        "public_artifact_id": 10304150137,
+        "public_zip_sha256": "f2919ed2ae45f082e25806039e5adcbbd9b8fc4c506ab51494b04c998bb438cd",
+        "pair_sha256": "6b97c8636db94b72b25d47fc06a977ba87c90ca27c460e49619e265504fa141b",
+        "pair_digest": "verification_bcf5c45213c3c54a90ae6cc4e76800e6f840a6b3726f6224018c692b38ebefab",
+        "routes": "Two independently fresh anonymous acquisitions, attestations and small lifecycles; latest binds one freshly executed exact-route five-owner aggregate within the pair.",
+        "cleanup_complete": true,
+        "reconciliation": "2026-09-13: authenticated GitHub metadata, artifact digests and job logs. Original downloaded verifier reread unchanged receipts in reconstructed archived paths/modes/environment, including recorded kernel metadata. No local live-effect replay or fresh hosted execution claim.",
+        "evidence_owner": "docs/campaigns/202609131008.md"
+      }
     },
     "transferred_pair": {
       "status": "fresh-passed-local-simulated-pair",
@@ -99,18 +126,18 @@
     "source_acceptance": "fresh-passed: 26 full gates at 037a1348",
     "target_acceptance": "fresh-passed: exact static-musl candidate, both pinned userlands and six owners at 037a1348",
     "package_acceptance": "fresh-passed: deterministic preparation, strict three-asset verification and complete installed pair at 037a1348",
-    "public_acceptance": "unrun",
+    "public_acceptance": "pending frozen tag publisher 34760117554/1; no simulated result is counted as anonymous acquisition",
     "hosted_dry_run": {
       "run": 34706128684,
       "attempt": 1,
       "source": "037a13483321497737a30ade6df88950bb19e0de",
       "created_utc": "2026-09-12T16:44:02Z",
-      "observed": "in_progress",
+      "observed": "completed-success",
       "publish": false,
       "tag": "v0.1.34",
       "checkout": "Checkout and source identity steps completed at 2026-09-12T16:44:11Z while remote main remained 037a1348; later reporting push occurs afterward.",
-      "last_observed_job": "103586387309: Build the host verifier",
-      "scope": "Matching run dispatched after accepted main integration. No v0.1.34 tag/control write or public release exists; no concurrent tag publisher was started."
+      "last_observed_job": "all required dry-run jobs passed; publication/public skipped",
+      "scope": "Matching run at the exact accepted source; its original retained handoffs were authenticated on 2026-09-13 before selecting the separate tag publisher."
     },
     "final_frozen_candidate": {
       "source": "037a13483321497737a30ade6df88950bb19e0de",
@@ -151,7 +178,7 @@
         "transferred_seconds": 118.95,
         "transferred_results_sha256": "5990fc33e78039f1e1a9a831a1dafa7ef9a1bd75143f0add1c0b2a4a0abb832d",
         "pair": 77,
-        "pair_seconds": 21.20,
+        "pair_seconds": 21.2,
         "pair_results_sha256": "8373e4414066a6f5506152880e367bca15445ff4a65b2e65338851dfac9af41a",
         "sensitivity": "Installer/installed payload identity, omitted installation/recovery, pinned-runtime path and consistently rehashed installation/recovery children rejected; original complete receipts restored and healthy readers passed."
       }
@@ -191,7 +218,7 @@
       "INS-4": "fresh-passed: independent strict fixtures, malformed gzip/tar/static-ELF/member identities, decompression bound, snapshot replacement, historical producer-policy separation and actual public predecessor payload equality; current producer policy remains strict",
       "INS-5": "fresh pre-publication bootstrap routes, compound invocation and negative acquisition tests passed, including partial script and real-curl HTTP downgrade rejection; unchanged frozen script ran in both pinned userlands with asserted exact URLs and simulated moving latest; public acquisition unrun",
       "INS-6": "fresh-passed: held old/new HTTP processes and recovery, two independent foreground bundles/data roots with existing once-only expectations through the actual installed slot; all five aggregate owners and cleanup passed",
-      "INS-7": "unrun; inherited foreground delivery separately pending"
+      "INS-7": "pending publisher 34760117554/1 at exact source 037a13483321497737a30ade6df88950bb19e0de; inherited FG-7 closed"
     },
     "historical_archive": {
       "tag": "v0.1.32",
@@ -225,6 +252,33 @@
       "PATH is not edited",
       "no graph/artifact/deployment/grant/data migration or implicit fallback",
       "no performance or billing improvement claim"
-    ]
+    ],
+    "delivery_reconciliation": {
+      "observed_utc": "2026-09-13",
+      "source": "037a13483321497737a30ade6df88950bb19e0de",
+      "dry_run": 34706128684,
+      "dry_attempt": 1,
+      "dry_conclusion": "success",
+      "dry_publication": "skipped as required for publish=false",
+      "original_handoffs": "authenticated retained ZIPs; original full, target, archive and simulated installed-pair readers passed; archive bytes reproduced exactly after original catalog precondition restored",
+      "hosted_product_bytes": 22608256,
+      "hosted_product_sha256": "165be1e6c11c331fe7d8ec424d868c2054f3da2ae19cd6788d0c767d275f2d62",
+      "hosted_verifier_bytes": 26778456,
+      "hosted_verifier_sha256": "927e6ebc1c01a7368436fb9f1fdad2397dcaf96e58516a92820ef362a85a8cc2",
+      "hosted_dry_archive_sha256": "bf956fa58b82b7ad0eb5d8cf3f0a8b74bb5358e31d7473ea1948c1b0b44649e0",
+      "simulated_pair_sha256": "764422da58217ee329a7c2a5cb88e846b2db5d96f19ede6498394d5452ae64d9",
+      "simulated_pair_digest": "verification_28a7bfebfc664188ee2026956bb2a5638abb71cb1ccdb313c513570c612c9166",
+      "tag": "v0.1.34",
+      "tag_object": "d96d1623495d8c13968d99f567ea77e79b158237",
+      "publisher_run": 34760117554,
+      "publisher_attempt": 1,
+      "publisher_created_utc": "2026-09-13T13:32:17Z",
+      "publisher_observed": "build/full/target/package passed; transferred application acceptance in progress",
+      "build_job": 103731356504,
+      "transferred_job": 103737508364,
+      "control": "Prior completed v0.1.33 value 9a4e1c065b7c20459e318b83e67bfd041b74e911 compared immediately before scoped write, new value verified, only selected tag pushed, binding retained; no concurrent publisher or settings/protection changes",
+      "remaining": "Authenticate immutable three-asset publication, attestations and actual anonymous bootstrap/application pair; keep source frozen",
+      "evidence_owner": "docs/campaigns/202609131008.md"
+    }
   }
 }

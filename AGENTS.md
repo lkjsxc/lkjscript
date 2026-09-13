@@ -36,6 +36,8 @@ Run destructive tests only against explicitly owned disposable resources.
 Clean up owned processes, containers and temporary state without touching unrelated services or files.
 Keep logs, binaries, temporary checkouts and `.artifacts/` products out of tracked narrative.
 Archive the initial mandate unchanged and append concise execution/reconciliation/resumption records.
+When a full root-guidance candidate is supplied, reconcile it with current applicable instructions and
+install the complete file before substantive implementation. Keep frozen release inputs unchanged.
 
 ## Navigation and ownership
 
@@ -50,6 +52,8 @@ Archive the initial mandate unchanged and append concise execution/reconciliatio
 - `src/platform/execution/normalized/` owns prepared execution, codecs, values/types, resources and reference logic.
 - `src/platform/execution/control.rs`, `src/platform/runtime.rs` and `src/platform/deployment.rs`
   own execution policy, lifecycle and operational binding.
+- `src/platform/installation/` owns immutable runtime slots, selection, locking and recovery;
+  release tooling owns the bootstrap and its publication evidence.
 - `src/platform/project_creation/` owns recipe lowering and atomic auxiliary output;
   `src/platform/contract/` owns executable discovery and generated guides.
 - `src/platform/builtin_standard.rs` and the maintained accepted graph writer own built-in package integration.
@@ -62,6 +66,29 @@ Archive the initial mandate unchanged and append concise execution/reconciliatio
 Follow actual callers and contracts; names and directory placement are navigation aids, not proof.
 Keep temporary subsets, campaign matrices, commits, release identities and workflow IDs in their existing owners.
 Discover actual command grammar before use; a mandate's proposed command is unavailable until implemented.
+
+## Public authoring and reviewed references
+
+Request notation, name selectors and reference bindings must lower through the existing typed authored
+intent, preparation and publication owners. Do not introduce a second editable source authority,
+compiler-side alias meaning, runtime name lookup or string-substitution semantics.
+Read the current selector grammar in `docs/spec/semantic-cli.md` and executable capabilities;
+proposed campaign syntax is not implemented merely because this guidance describes its invariants.
+
+Existing-owner addressing must not allocate new owner identities or confer local mutation rights on
+foreign owners. Resolve local names in the exact accepted base and dependencies in their explicitly
+selected exact closure. Same-request renames must not redirect a selected existing identity.
+Names, matching interfaces and reused display labels do not establish compatibility or authority.
+Package selection does not import, stage, upgrade, execute or grant anything implicitly.
+Preserve owner kinds, lexical/generic scope, visibility, structural ownership and complete validation.
+
+Normalize notation deliberately without reordering meaningful authored operations. Preserve legacy
+request commitments, allocation and accepted-idempotency behavior unless the owning contract is
+explicitly revised with recovery. Bind exact resolutions through existing review/preparation;
+rederive them on apply rather than trusting display output or cached alias tables.
+A changed embedded supplier cannot silently change the package selected by a reviewed request.
+Retries follow the original accepted inputs under the idempotency owner, not mutable current names.
+Charge input and resolution work even when normalization erases notation; bound diagnostic output.
 
 ## Meaning, effects and resources
 
@@ -87,6 +114,8 @@ Valid immutable internal values may share checked proof without repeated descend
 Preserve language-order borrow, consume, branch joins, argument evaluation and cleanup.
 Earlier effects may remain visible after failure except where an applicable transaction rolls them back.
 Never replay live effects for differential evidence or silently retry an invocation.
+Current resource-signature and effect restrictions belong in their normative specification owners.
+A historical narrow witness is not a permanent ban on a more general, separately proved rule.
 
 ## Runtime, policy and cleanup
 
@@ -143,6 +172,10 @@ First-party contributor semantics belong in existing Rust tooling.
 Preserve no-Python and product-surface gates unless a mandate explicitly justifies an equivalent revision.
 Do not create a parallel Python/shell implementation, verification framework or evidence ledger.
 
+Discover ordinary product workflows through `lkjscript capabilities`, `lkjscript capabilities change`,
+`lkjscript status` and the applicable package/inspection commands. Product commands should work
+outside the source checkout; contributor build and proof tooling remains separate.
+
 Source-verified contributor entry points:
 
 ```sh
@@ -163,6 +196,8 @@ their owners and verify equality. Freeze copied candidates; concurrent builds mu
 New capability needs fresh public authoring and use through the candidate outside the checkout.
 Exercise relevant discovery/edit/check/build/transport/execution/recovery boundaries.
 Privileged fixtures, raw storage edits and hidden host helpers cannot substitute for product support.
+For authoring claims, retain literal public requests and identify any observer-only driver. Moving
+member-ID enumeration into a hidden contributor generator does not prove the product performs it.
 Keep growing graph projections complete through explicit revision-bound pagination.
 Distinguish maintained adoption from newly designed composition witnesses.
 Live effects execute once; use separate deterministic adapters for reference proof.
@@ -199,7 +234,9 @@ Deployment, destructive live-data changes, spending, credentials and broad admin
 Use only the release owner's scoped control protocol; do not change permissions/settings as a workaround.
 
 Publish at selected meaningful milestones, not automatically per campaign and not indefinitely later.
-Respect or explicitly reconcile inherited publication triggers.
+Respect or explicitly reconcile inherited publication triggers. A pending inherited release can use
+its frozen accepted ancestor while independent engineering proceeds on main; do not retarget it to
+newer work merely to combine milestones. Keep selected publishers serialized under their actual owner.
 When selected and ready, complete the existing release owner through public-download acceptance.
 Keep exact-source preparation, target admission, immutable publication and public behavior distinct.
 A build, upload, tag, dispatch or green subjob is not verified public delivery.

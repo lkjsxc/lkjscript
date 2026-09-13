@@ -76,7 +76,6 @@ pub(super) fn prepare(
     context: &mut Context,
     standard: &Package,
     library: &Package,
-    names: &BTreeMap<String, String>,
 ) -> Result<Vec<Consumer>, DevError> {
     context.receipt.effects.foreground.schema = "lkjscript-foreground-1".into();
     let mut consumers = Vec::new();
@@ -88,11 +87,13 @@ pub(super) fn prepare(
         context.apply(
             &mut package,
             &format!(
-                "{}{}{}{}",
+                "{}{}{}reference.package as=$library package={} package-revision={}\n{}",
                 binding("add", standard),
                 binding("add", library),
                 module(),
-                super::foreground_program::consumer(&standard.symbols, names)
+                library.id,
+                library.logical,
+                super::foreground_program::consumer()
             ),
         )?;
         context.cli(Some(&package.path), &["check"], true)?;
@@ -423,7 +424,14 @@ pub(super) fn replace(
     let consumer = &mut consumers[0];
     fs::rename(&consumer.recovery, &consumer.package.path)?;
     context.stage(&consumer.package, library)?;
-    context.apply(&mut consumer.package, &binding("replace", library))?;
+    context.apply(
+        &mut consumer.package,
+        &format!(
+            "{}{}",
+            binding("replace", library),
+            include_str!("foreground.edit.lkjc")
+        ),
+    )?;
     context.cli(Some(&consumer.package.path), &["check"], true)?;
     context.export(&mut consumer.package)?;
     let artifact = consumer.bundle.join("successor.lkja");

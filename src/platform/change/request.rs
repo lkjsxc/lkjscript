@@ -5,6 +5,13 @@ mod creation;
 mod deletion;
 mod extraction;
 mod precondition;
+mod references;
+
+pub use references::{
+    AuthoredOwnerReferenceSelection, AuthoredOwnerReferenceSelector, AuthoredReference,
+    AuthoredReferenceBindings, AuthoredReferenceOrigin, AuthoredReferencePackage,
+    ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
+};
 
 pub use creation::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
@@ -18,7 +25,9 @@ pub use creation::{
     AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference,
 };
-pub use precondition::{AuthoredOwnerParent, AuthoredPrecondition};
+pub use precondition::{
+    AuthoredExistingOwner, AuthoredOwnerParent, AuthoredPrecondition, AuthoredSelectedPrecondition,
+};
 
 use super::{
     AuthoredAllocation, CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork,
@@ -54,6 +63,9 @@ pub struct AuthoredChangeSet {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredChange {
+    ReferenceBindings {
+        bindings: AuthoredReferenceBindings,
+    },
     CreateModule {
         symbol: String,
         name: Name,
@@ -282,6 +294,7 @@ pub enum AuthoredChange {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OwnerSelector {
+    Selected { reference: AuthoredReference },
     Exact { owner: OwnerKey },
     ModuleName { name: Name },
     DeclarationName { module: ModuleSelector, name: Name },
@@ -290,6 +303,7 @@ pub enum OwnerSelector {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ModuleSelector {
+    Selected { reference: AuthoredReference },
     Id { module: ModuleId },
     Name { name: Name },
     Symbol { symbol: String },
@@ -297,6 +311,9 @@ pub enum ModuleSelector {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeclarationSelector {
+    Selected {
+        reference: AuthoredReference,
+    },
     Id {
         declaration: crate::platform::semantic_id::DeclarationId,
     },
@@ -483,6 +500,7 @@ impl AuthoredLoweringWork {
 
 #[derive(Clone, Debug)]
 pub struct AuthoredLowering {
+    pub resolutions: ResolvedReferenceBindings,
     pub edits: Vec<PrimitiveEdit>,
     pub allocated: BTreeMap<String, OwnerKey>,
     pub allocations: Vec<AuthoredAllocation>,
@@ -523,9 +541,11 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             format!("authored change requires 1 through {MAXIMUM_AUTHORED_CHANGES} operations"),
         ));
     }
+    let operation_count = references::admitted_operations(request)?;
+    let bindings = references::inventory(request)?;
     let budget = request
         .budget
-        .validate_request_counts(request.changes.len(), request.preconditions.len())?;
+        .validate_request_counts(operation_count, request.preconditions.len())?;
 
     let (definitions, total_identity_count) =
         collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
@@ -548,8 +568,12 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             budget,
         },
     )?;
-    lowerer.work.operations_lowered = u64::try_from(request.changes.len()).unwrap_or(u64::MAX);
+    lowerer.work.operations_lowered = u64::try_from(operation_count).unwrap_or(u64::MAX);
     lowerer.work.allocated_identities = u64::try_from(definition_count).unwrap_or(u64::MAX);
+    if let Some(bindings) = bindings {
+        lowerer.lower_dependency_changes(&request.changes, true)?;
+        lowerer.resolve_bindings(bindings)?;
+    }
     precondition::evaluate(&mut lowerer, &request.preconditions)?;
     lowerer.check_budget("authored preconditions")?;
     let extraction_count = request
@@ -771,38 +795,13 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
         }
         lowerer.check_budget("parameter addition lowering")?;
     }
-    for change in &request.changes {
-        match change {
-            AuthoredChange::AddDependency {
-                package,
-                semantic_revision,
-                package_revision,
-            } => lowerer.add_dependency(DependencyRecord {
-                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-                package: *package,
-                semantic_revision: *semantic_revision,
-                package_revision: *package_revision,
-            })?,
-            AuthoredChange::ReplaceDependency {
-                package,
-                semantic_revision,
-                package_revision,
-            } => lowerer.replace_dependency(DependencyRecord {
-                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-                package: *package,
-                semantic_revision: *semantic_revision,
-                package_revision: *package_revision,
-            })?,
-            AuthoredChange::DeleteDependency { package } => {
-                lowerer.delete_dependency(*package)?;
-            }
-            _ => {}
-        }
-        lowerer.check_budget("dependency lowering")?;
+    if bindings.is_none() {
+        lowerer.lower_dependency_changes(&request.changes, false)?;
     }
     for change in &request.changes {
         match change {
-            AuthoredChange::CreateModule { .. }
+            AuthoredChange::ReferenceBindings { .. }
+            | AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
             | AuthoredChange::CreateVariant { .. }
             | AuthoredChange::CreateInterface { .. }
@@ -929,6 +928,7 @@ fn collect_symbol_definitions(
     let mut definitions = SymbolDefinitions::new(maximum);
     for change in &request.changes {
         match change {
+            AuthoredChange::ReferenceBindings { .. } => {}
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
@@ -1057,6 +1057,20 @@ fn collect_symbol_definitions(
     });
     for (_, symbol) in routes {
         define_symbol(&mut definitions, symbol, SymbolKind::HttpRoute)?;
+    }
+    if let Some(bindings) = references::inventory(request)? {
+        for origin in &bindings.origins {
+            if definitions.entries.contains_key(&origin.alias) {
+                return Err(Diagnostic::source(
+                    "change_reference_symbol_collision",
+                    format!(
+                        "reference alias {} collides with a creation symbol",
+                        origin.alias
+                    ),
+                    origin.location.clone(),
+                ));
+            }
+        }
     }
     Ok(definitions.into_entries())
 }
@@ -1196,6 +1210,10 @@ fn logical_allocations(
 pub(crate) fn canonical_authored_intent_bytes(
     request: &AuthoredChangeSet,
 ) -> Result<Vec<u8>, Diagnostic> {
+    request.budget.validate_request_counts(
+        references::admitted_operations(request)?,
+        request.preconditions.len(),
+    )?;
     let (definitions, _) = collect_symbol_definitions(
         request,
         request.budget.authored.maximum_allocated_identities,
@@ -1250,6 +1268,7 @@ struct AuthoredLoweringInputs {
 }
 
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
+    resolutions: ResolvedReferenceBindings,
     base: &'a B,
     witness: &'a W,
     allocation_seed: [u8; 32],
@@ -1320,6 +1339,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 )
             })?;
         Ok(Self {
+            resolutions: ResolvedReferenceBindings::default(),
             base,
             witness,
             allocation_seed: inputs.allocation_seed,
@@ -1379,6 +1399,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn resolve_owner(&mut self, selector: &OwnerSelector) -> Result<OwnerKey, Diagnostic> {
         let owner = match selector {
+            OwnerSelector::Selected { reference } => self.selected(*reference, None, true)?.owner,
             OwnerSelector::Exact { owner } => *owner,
             OwnerSelector::ModuleName { name } => {
                 OwnerKey::Module(self.resolve_module(&ModuleSelector::Name { name: name.clone() })?)
@@ -1397,6 +1418,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn resolve_module(&mut self, selector: &ModuleSelector) -> Result<ModuleId, Diagnostic> {
         let owner = match selector {
+            ModuleSelector::Selected { reference } => {
+                self.selected(*reference, Some(NamespaceClass::Module), true)?
+                    .owner
+            }
             ModuleSelector::Id { module } => OwnerKey::Module(*module),
             ModuleSelector::Name { name } => self.namespace_owner(NamespaceKey {
                 parent: None,
@@ -1421,6 +1446,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &DeclarationSelector,
     ) -> Result<crate::platform::semantic_id::DeclarationId, Diagnostic> {
         let owner = match selector {
+            DeclarationSelector::Selected { reference } => {
+                self.selected(*reference, Some(NamespaceClass::Declaration), true)?
+                    .owner
+            }
             DeclarationSelector::Id { declaration } => OwnerKey::Declaration(*declaration),
             DeclarationSelector::Qualified { module, name } => {
                 let module = self.resolve_module(module)?;
@@ -1630,6 +1659,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredPortReference,
     ) -> Result<crate::platform::kernel::PortReference, Diagnostic> {
         match selector {
+            AuthoredPortReference::Selected { reference } => {
+                let selected = self.selected(*reference, Some(NamespaceClass::Port), false)?;
+                let OwnerKey::Port(port) = selected.owner else {
+                    return Err(references::wrong_domain());
+                };
+                Ok(crate::platform::kernel::PortReference {
+                    package: selected.package,
+                    port,
+                })
+            }
             AuthoredPortReference::Exact { package, port } => {
                 if *package == self.base.package_id() {
                     self.require_owner(OwnerKey::Port(*port))?;
@@ -2062,6 +2101,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             edits.push(PrimitiveEdit::InsertRetirement { record });
         }
         Ok(AuthoredLowering {
+            resolutions: self.resolutions,
             edits,
             allocated: self.allocated,
             allocations: {

@@ -1,6 +1,5 @@
 //! Public requests for two ordinary foreground consumers of the transported task library.
 use crate::pure_tail_program::Request;
-use std::collections::BTreeMap;
 
 fn task(
     r: &mut Request,
@@ -50,17 +49,17 @@ fn sequence(r: &mut Request, values: &[String]) -> String {
     expression
 }
 
-fn key(r: &mut Request, s: &BTreeMap<String, String>, text: &str, numbers: &[String]) -> String {
+fn key(r: &mut Request, text: &str, numbers: &[String]) -> String {
     let text = r.expression("text", &format!("value={text}"));
     let text = r.expression(
         "variant",
-        &format!("case={} payload={text}", s["DataKeyPart.Text"]),
+        &format!("case={} payload={text}", "$std-DataKeyPart-Text"),
     );
     let mut parts = vec![text];
     for number in numbers {
         parts.push(r.expression(
             "variant",
-            &format!("case={} payload={number}", s["DataKeyPart.I64"]),
+            &format!("case={} payload={number}", "$std-DataKeyPart-I64"),
         ));
     }
     let key = r.expression("list", "item=@KeyPart");
@@ -68,29 +67,24 @@ fn key(r: &mut Request, s: &BTreeMap<String, String>, text: &str, numbers: &[Str
     key
 }
 
-fn get(r: &mut Request, s: &BTreeMap<String, String>, key: String) -> String {
+fn get(r: &mut Request, key: String) -> String {
     let space = r.expression("static-text", "value=foreground");
-    r.capability("$data", &s["DataStore.get"], &[space, key])
+    r.capability("$data", "$std-DataStore-get", &[space, key])
 }
 
-fn write(
-    r: &mut Request,
-    s: &BTreeMap<String, String>,
-    key: String,
-    value: String,
-    ty: &str,
-) -> String {
-    let bytes = r.call(&s["json-encode"], &[ty], &[value]);
+fn write(r: &mut Request, key: String, value: String, ty: &str) -> String {
+    let bytes = r.call("$std-json-encode", &[ty], &[value]);
     r.call("$write", &[], &[key, bytes])
 }
 
-pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, String>) -> String {
+pub(super) fn consumer() -> String {
     let mut r = Request::default();
-    r.text.push_str(&format!("create.component as=$component module=$module name=application visibility=package\ncreate.component as=$empty-component module=$module name=ungranted visibility=package\ntype.named as=@State declaration={}\ntype.named as=@Output declaration={}\ntype.application as=@Job declaration={}\ntype.argument parent=@Job index=0 type=i64\ntype.named as=@KeyPart declaration={}\ntype.list as=@Key item=@KeyPart\ntype.named as=@Entry declaration={}\ntype.list as=@Entries item=@Entry\neffect.row as=@Empty\n", library["iteration-state"],library["iteration-output"],library["job"],s["DataKeyPart"],s["DataEntry"]));
+    r.text.push_str(include_str!("foreground.references.lkjc"));
+    r.text.push_str(&format!("create.component as=$component module=$module name=application visibility=package\ncreate.component as=$empty-component module=$module name=ungranted visibility=package\ntype.named as=@State declaration={}\ntype.named as=@Output declaration={}\ntype.application as=@Job declaration={}\ntype.argument parent=@Job index=0 type=i64\ntype.named as=@KeyPart declaration={}\ntype.list as=@Key item=@KeyPart\ntype.named as=@Entry declaration={}\ntype.list as=@Entries item=@Entry\neffect.row as=@Empty\n", "$lib-iteration-state","$lib-iteration-output","$lib-job","$std-DataKeyPart","$std-DataEntry"));
     for (requirement, interface) in [("config", "Configuration"), ("data", "DataStore")] {
-        r.text.push_str(&format!("add.requirement as=${requirement} component=$component name={requirement} interface={}\nrequirement.limit parent=${requirement} index=0 name=maximum_calls maximum=100000 unit=calls\n", s[interface]));
+        r.text.push_str(&format!("add.requirement as=${requirement} component=$component name={requirement} interface=$std-{interface}\nrequirement.limit parent=${requirement} index=0 name=maximum_calls maximum=100000 unit=calls\n"));
     }
-    r.text.push_str(&format!("requirement.operation parent=$config index=0 operation={}\neffect.row as=@Effects\neffect.requirement parent=@Effects index=0 requirement=$config\neffect.requirement parent=@Effects index=1 requirement=$data\neffect.row as=@Data\neffect.requirement parent=@Data index=0 requirement=$data\n",s["Configuration.i64"]));
+    r.text.push_str(&format!("requirement.operation parent=$config index=0 operation={}\neffect.row as=@Effects\neffect.requirement parent=@Effects index=0 requirement=$config\neffect.requirement parent=@Effects index=1 requirement=$data\neffect.row as=@Data\neffect.requirement parent=@Data index=0 requirement=$data\n","$std-Configuration-i64"));
     for (index, operation) in [
         "schema-read",
         "schema-set",
@@ -104,27 +98,26 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
     .enumerate()
     {
         r.text.push_str(&format!(
-            "requirement.operation parent=$data index={index} operation={}\n",
-            s[&format!("DataStore.{operation}")]
+            "requirement.operation parent=$data index={index} operation=$std-DataStore-{operation}\n"
         ));
     }
     r.text.push_str("create.record as=$report module=$module name=report visibility=public\ntype.named as=@Report declaration=$report\nadd.field as=$report-executions record=$report name=executions type=i64\nadd.field as=$report-result record=$report name=result type=@Output\nadd.field as=$report-payload record=$report name=payload type=@Job\n");
 
     let selected = r.local("$read-integer_key");
-    let entries = get(&mut r, s, selected);
+    let entries = get(&mut r, selected);
     let prior = r.local("$read-prior");
-    let count = r.call(&s["list-length"], &["@Entry"], &[prior]);
+    let count = r.call("$std-list-length", &["@Entry"], &[prior]);
     let zero = r.integer(0);
-    let empty = r.call(&s["i64-equal"], &[], &[count, zero]);
+    let empty = r.call("$std-i64-equal", &[], &[count, zero]);
     let prior = r.local("$read-prior");
     let zero = r.integer(0);
-    let entry = r.call(&s["list-get"], &["@Entry"], &[prior, zero]);
+    let entry = r.call("$std-list-get", &["@Entry"], &[prior, zero]);
     let bytes = r.expression(
         "field",
-        &format!("value={entry} field={}", s["DataEntry.value"]),
+        &format!("value={entry} field={}", "$std-DataEntry-value"),
     );
     let fallback = r.integer(-999);
-    let decoded = r.call(&s["json-decode-or"], &["i64"], &[bytes, fallback]);
+    let decoded = r.call("$std-json-decode-or", &["i64"], &[bytes, fallback]);
     let decoded = r.field(&decoded, "value");
     let zero = r.integer(0);
     let result = r.choose(&empty, &zero, &decoded);
@@ -139,30 +132,33 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
     );
 
     let selected = r.local("$write_key");
-    let entries = get(&mut r, s, selected);
+    let entries = get(&mut r, selected);
     let prior = r.local("$write-prior");
-    let count = r.call(&s["list-length"], &["@Entry"], &[prior]);
+    let count = r.call("$std-list-length", &["@Entry"], &[prior]);
     let zero = r.integer(0);
-    let empty = r.call(&s["i64-equal"], &[], &[count, zero]);
+    let empty = r.call("$std-i64-equal", &[], &[count, zero]);
     let prior = r.local("$write-prior");
     let zero = r.integer(0);
-    let entry = r.call(&s["list-get"], &["@Entry"], &[prior, zero]);
+    let entry = r.call("$std-list-get", &["@Entry"], &[prior, zero]);
     let revision = r.expression(
         "field",
-        &format!("value={entry} field={}", s["DataEntry.revision"]),
+        &format!("value={entry} field={}", "$std-DataEntry-revision"),
     );
     let exact = r.expression(
         "variant",
-        &format!("case={} payload={revision}", s["DataExpectation.Exact"]),
+        &format!("case={} payload={revision}", "$std-DataExpectation-Exact"),
     );
-    let missing = r.expression("variant", &format!("case={}", s["DataExpectation.Missing"]));
+    let missing = r.expression(
+        "variant",
+        &format!("case={}", "$std-DataExpectation-Missing"),
+    );
     let expected = r.choose(&empty, &missing, &exact);
     let space = r.expression("static-text", "value=foreground");
     let selected = r.local("$write_key");
     let bytes = r.local("$write_bytes");
     let put = r.capability(
         "$data",
-        &s["DataStore.put"],
+        "$std-DataStore-put",
         &[space, selected, bytes, expected],
     );
     let unit = r.expression("unit", "");
@@ -177,25 +173,25 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
         &["$data"],
     );
 
-    let tick_key = key(&mut r, s, "tick", &[]);
+    let tick_key = key(&mut r, "tick", &[]);
     let tick = r.call("$read-integer", &[], &[tick_key]);
     let execution = r.local("$observe_execution");
     let position = r.local("$tick");
-    let selected = key(&mut r, s, "trace", &[execution, position]);
+    let selected = key(&mut r, "trace", &[execution, position]);
     let cursor = r.local("$observe_cursor");
-    let trace = write(&mut r, s, selected, cursor, "i64");
-    let tick_key = key(&mut r, s, "tick", &[]);
+    let trace = write(&mut r, selected, cursor, "i64");
+    let tick_key = key(&mut r, "tick", &[]);
     let tick_value = r.local("$tick");
     let one = r.integer(1);
-    let next = r.call(&s["add"], &[], &[tick_value, one]);
-    let advance = write(&mut r, s, tick_key, next, "i64");
+    let next = r.call("$std-add", &[], &[tick_value, one]);
+    let advance = write(&mut r, tick_key, next, "i64");
     let body = sequence(&mut r, &[trace, advance]);
     let body = binding(&mut r, "tick", "i64", &tick, &body);
     // Keep the complete small-case trace inside the existing per-transaction mutation bound.
     // Large runs retain this ordered prefix and their independently checked final report.
     let cursor = r.local("$observe_cursor");
     let limit = r.integer(258);
-    let traced = r.call(&s["less"], &[], &[cursor, limit]);
+    let traced = r.call("$std-less", &[], &[cursor, limit]);
     let unit = r.expression("unit", "");
     let body = r.choose(&traced, &body, &unit);
     task(
@@ -207,37 +203,33 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
         &["$data"],
     );
 
-    let selected = key(&mut r, s, "executions", &[]);
+    let selected = key(&mut r, "executions", &[]);
     let prior = r.call("$read-integer", &[], &[selected]);
     let one = r.integer(1);
-    let executions = r.call(&s["add"], &[], &[prior, one]);
-    let selected = key(&mut r, s, "executions", &[]);
+    let executions = r.call("$std-add", &[], &[prior, one]);
+    let selected = key(&mut r, "executions", &[]);
     let value = r.local("$execution");
-    let increment = write(&mut r, s, selected, value, "i64");
-    let selected = key(&mut r, s, "tick", &[]);
+    let increment = write(&mut r, selected, value, "i64");
+    let selected = key(&mut r, "tick", &[]);
     let zero = r.integer(0);
-    let reset = write(&mut r, s, selected, zero, "i64");
+    let reset = write(&mut r, selected, zero, "i64");
     let observer = r.function_value("$observe");
     let execution = r.local("$execution");
     let observer = r.bind(&observer, &[execution]);
     let name = r.expression("static-text", "value=stride");
-    let stride = r.capability("$config", &s["Configuration.i64"], &[name]);
+    let stride = r.capability("$config", "$std-Configuration-i64", &[name]);
     let name = r.expression("static-text", "value=offset");
-    let offset = r.capability("$config", &s["Configuration.i64"], &[name]);
+    let offset = r.capability("$config", "$std-Configuration-i64", &[name]);
     let n = r.local("$batch_n");
-    let threshold = r.call(&s["add"], &[], &[n, offset]);
-    let callback = r.call(
-        &library["make-iteration"],
-        &[],
-        &[stride, threshold, observer],
-    );
+    let threshold = r.call("$std-add", &[], &[n, offset]);
+    let callback = r.call("$lib-make-iteration", &[], &[stride, threshold, observer]);
     r.effects(&callback, &["@Data"]);
     let zero_a = r.integer(0);
     let zero_b = r.integer(0);
-    let state = r.expression("record", &format!("type={}", library["iteration-state"]));
-    r.text.push_str(&format!("expression.record-field parent={state} index=0 field={} value={zero_a}\nexpression.record-field parent={state} index=1 field={} value={zero_b}\n",library["iteration-state-cursor"],library["iteration-state-sum"]));
+    let state = r.expression("record", &format!("type={}", "$lib-iteration-state"));
+    r.text.push_str(&format!("expression.record-field parent={state} index=0 field={} value={zero_a}\nexpression.record-field parent={state} index=1 field={} value={zero_b}\n","$lib-iteration-state-cursor","$lib-iteration-state-sum"));
     let iterated = r.call(
-        &library["task-iterate"],
+        "$lib-task-iterate",
         &["@State", "@Output"],
         &[state, callback],
     );
@@ -245,33 +237,33 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
     let out = r.local("$out");
     let sum = r.expression(
         "field",
-        &format!("value={out} field={}", library["iteration-output-total"]),
+        &format!("value={out} field={}", "$lib-iteration-output-total"),
     );
-    let payload = r.expression("record", &format!("type={}", library["payload"]));
+    let payload = r.expression("record", &format!("type={}", "$lib-payload"));
     r.types(&payload, &["i64"]);
     r.text.push_str(&format!(
         "expression.record-field parent={payload} index=0 field={} value={sum}\n",
-        library["payload-value"]
+        "$lib-payload-value"
     ));
     let item = r.expression(
         "variant",
-        &format!("case={} payload={payload}", library["job-item"]),
+        &format!("case={} payload={payload}", "$lib-job-item"),
     );
     r.types(&item, &["i64"]);
     let items = r.expression("list", "item=@Job");
     r.arguments(&items, &[item]);
     let payload = r.expression(
         "variant",
-        &format!("case={} payload={items}", library["job-children"]),
+        &format!("case={} payload={items}", "$lib-job-children"),
     );
     r.types(&payload, &["i64"]);
     let execution = r.local("$execution");
     let out = r.local("$out");
     let report = r.expression("record", "type=$report");
     r.text.push_str(&format!("expression.record-field parent={report} index=0 field=$report-executions value={execution}\nexpression.record-field parent={report} index=1 field=$report-result value={out}\nexpression.record-field parent={report} index=2 field=$report-payload value={payload}\n"));
-    let selected = key(&mut r, s, "report", &[]);
+    let selected = key(&mut r, "report", &[]);
     let value = r.local("$report-value");
-    let stored = write(&mut r, s, selected, value, "@Report");
+    let stored = write(&mut r, selected, value, "@Report");
     let value = r.local("$report-value");
     let body = sequence(&mut r, &[stored, value]);
     let body = binding(&mut r, "report-value", "@Report", &report, &body);
@@ -308,7 +300,7 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
         } else {
             let one = r.integer(1);
             let zero = r.integer(0);
-            let failure = r.call(&s["divide"], &[], &[one, zero]);
+            let failure = r.call("$std-divide", &[], &[one, zero]);
             sequence(&mut r, &[failure, value])
         };
         let body = binding(&mut r, &format!("{name}-result"), "@Report", &call, &body);
@@ -330,7 +322,7 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
         );
         target(&mut r, name, "$component", "@Report", "@Effects", &["i64"]);
     }
-    let selected = key(&mut r, s, "executions", &[]);
+    let selected = key(&mut r, "executions", &[]);
     let read = r.call("$read-integer", &[], &[selected]);
     task(&mut r, "count", "i64", &read, &[], &["$data"]);
     target(&mut r, "count", "$component", "i64", "@Data", &[]);
@@ -340,14 +332,14 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
     let observer = r.function_value("$noop");
     let stride = r.integer(1);
     let n = r.local("$loop_n");
-    let callback = r.call(&library["make-iteration"], &[], &[stride, n, observer]);
+    let callback = r.call("$lib-make-iteration", &[], &[stride, n, observer]);
     r.effects(&callback, &["@Empty"]);
     let zero_a = r.integer(0);
     let zero_b = r.integer(0);
-    let state = r.expression("record", &format!("type={}", library["iteration-state"]));
-    r.text.push_str(&format!("expression.record-field parent={state} index=0 field={} value={zero_a}\nexpression.record-field parent={state} index=1 field={} value={zero_b}\n",library["iteration-state-cursor"],library["iteration-state-sum"]));
+    let state = r.expression("record", &format!("type={}", "$lib-iteration-state"));
+    r.text.push_str(&format!("expression.record-field parent={state} index=0 field={} value={zero_a}\nexpression.record-field parent={state} index=1 field={} value={zero_b}\n","$lib-iteration-state-cursor","$lib-iteration-state-sum"));
     let body = r.call(
-        &library["task-iterate"],
+        "$lib-task-iterate",
         &["@State", "@Output"],
         &[state, callback],
     );
@@ -377,14 +369,14 @@ pub(super) fn consumer(s: &BTreeMap<String, String>, library: &BTreeMap<String, 
     r.text.push_str("type.function as=@pure-port result=i64\nadd.port as=$pure-port component=$component name=pure-requiring-component type=@pure-port function=$pure-requiring-component\ncreate.target as=$pure-target name=pure-requiring-component component=$component port=$pure-port runner=command\n");
     let count = r.local("$grow_count");
     let zero = r.integer(0);
-    let done = r.call(&s["i64-equal"], &[], &[count, zero]);
+    let done = r.call("$std-i64-equal", &[], &[count, zero]);
     let value = r.local("$grow_value");
     let left = r.local("$grow_value");
     let right = r.local("$grow_value");
-    let doubled = r.call(&s["text-concat"], &[], &[left, right]);
+    let doubled = r.call("$std-text-concat", &[], &[left, right]);
     let count = r.local("$grow_count");
     let one = r.integer(1);
-    let next = r.call(&s["subtract"], &[], &[count, one]);
+    let next = r.call("$std-subtract", &[], &[count, one]);
     let again = r.call("$grow", &[], &[next, doubled]);
     let body = r.choose(&done, &value, &again);
     task(

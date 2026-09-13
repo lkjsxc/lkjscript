@@ -11,6 +11,7 @@ mod effects_resources;
 mod effects_traversal;
 mod foreground;
 mod foreground_program;
+mod named;
 mod nominal;
 mod nominal_session;
 mod recursive;
@@ -149,7 +150,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-9".to_owned(),
+            schema: "lkjscript-offline-packages-acceptance-10".to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -308,7 +309,6 @@ impl Context {
         arguments: &[&str],
         passes: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
-        let index = self.receipt.commands.len();
         let executable = if project.is_none() && arguments.starts_with(&["run", "--deployment"]) {
             // Author through the isolated copy; invoke artifacts through the exact supplied runtime.
             // At the installed pair boundary this is the immutable installed executable itself.
@@ -316,6 +316,32 @@ impl Context {
         } else {
             self.binary.display().to_string()
         };
+        self.cli_using(cwd, project, arguments, passes, executable)
+    }
+
+    fn cli_copied_at(
+        &mut self,
+        cwd: &Path,
+        arguments: &[&str],
+    ) -> Result<Vec<CompactRecord>, DevError> {
+        self.cli_using(
+            cwd,
+            None,
+            arguments,
+            true,
+            self.binary.display().to_string(),
+        )
+    }
+
+    fn cli_using(
+        &mut self,
+        cwd: &Path,
+        project: Option<&Path>,
+        arguments: &[&str],
+        passes: bool,
+        executable: String,
+    ) -> Result<Vec<CompactRecord>, DevError> {
+        let index = self.receipt.commands.len();
         let mut command = vec![executable];
         if let Some(project) = project {
             command.extend(["--project".to_owned(), project.display().to_string()]);
@@ -1471,6 +1497,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     nominal::workflow(context, &mut standard)?;
     recursive::workflow(context, &mut standard)?;
     effects::workflow(context, &mut standard)?;
+    named::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1777,7 +1804,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-9"
+        receipt.schema == "lkjscript-offline-packages-acceptance-10"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1802,6 +1829,10 @@ pub(crate) fn read_transferred_receipt(
             "capture-safe;unsafe-empty-container-rejected",
         ),
         ("fixed_results", "11,11,12"),
+        (
+            "named_references",
+            "literal-prelude;I64=42;Text=lkj;parameter-and-rename-continuity;replacement-repaired;old-artifact-preserved",
+        ),
         ("diamond_package_ids_distinct", "true"),
         ("producers_absent_before_execution", "true"),
         (
@@ -1942,9 +1973,9 @@ pub(crate) fn read_transferred_receipt(
         "offline evidence inventory omitted or added a file",
     )?;
     require(
-        receipt.inventories.len() == 27
-            && receipt.transport_digests.len() == 27
-            && receipt.producer_inventories.len() == 27,
+        receipt.inventories.len() == 29
+            && receipt.transport_digests.len() == 29
+            && receipt.producer_inventories.len() == 29,
         "complete producer, replacement, HTTP and foreground source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -1980,13 +2011,24 @@ pub(crate) fn read_transferred_receipt(
         .map(|package| package.package_revision.as_str())
         .ok_or_else(|| DevError::corrupt("D2 source revision missing"))?;
     let mut missing_source_diagnostic = false;
+    let named_commands = named::validate(&receipt, &root)?;
+    let named_cwd = Path::new(&receipt.isolated_root)
+        .join("named-unrelated")
+        .display()
+        .to_string();
     for (index, command) in receipt.commands.iter().enumerate() {
+        let named = named_commands.contains(&index);
         require(
             command.cwd
-                == foreground::command_cwd(&receipt.effects.foreground, index)
-                    .unwrap_or(&receipt.isolated_root)
+                == (if named {
+                    Some(named_cwd.as_str())
+                } else {
+                    foreground::command_cwd(&receipt.effects.foreground, index)
+                })
+                .unwrap_or(&receipt.isolated_root)
                 && command.command.first().is_some_and(|binary| {
-                    if command.command.get(1).is_some_and(|v| v == "run")
+                    if !named
+                        && command.command.get(1).is_some_and(|v| v == "run")
                         && command.command.get(2).is_some_and(|v| v == "--deployment")
                     {
                         binary == &receipt.pinned_runtime_path

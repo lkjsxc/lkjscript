@@ -1,0 +1,48 @@
+reference.package as=$standard source=builtin
+reference.owner as=$module package=local class=module name=application
+reference.owner as=$add package=$standard class=declaration name=add
+reference.owner as=$cell package=$library class=declaration name=cell
+reference.owner as=$value package=$library class=field name=value parent=$cell
+reference.owner as=$packet package=$library class=declaration name=packet
+reference.owner as=$present package=$library class=case name=present parent=$packet
+reference.owner as=$empty package=$library class=case name=empty parent=$packet
+reference.owner as=$wrap package=$library class=declaration name=wrap
+reference.owner as=$unwrap package=$library class=declaration name=unwrap
+type.application as=@integer-cell declaration=$cell
+type.argument parent=@integer-cell index=0 type=i64
+expression.local as=$integer-input value=$main-input
+expression.call as=$integer-cell function=$wrap
+type.argument parent=$integer-cell index=0 type=i64
+expression.argument parent=$integer-cell index=0 expression=$integer-input
+expression.variant as=$packet-value case=$present payload=$integer-cell
+type.argument parent=$packet-value index=0 type=i64
+expression.local as=$cell-read value=$matched-cell
+expression.field as=$integer-value value=$cell-read field=$value
+expression.i64 as=$one value=1
+expression.call as=$added function=$add
+expression.argument parent=$added index=0 expression=$integer-value
+expression.argument parent=$added index=1 expression=$one
+expression.i64 as=$zero value=0
+expression.match as=$integer-body value=$packet-value
+expression.match-arm parent=$integer-body index=0 case=$present as=$matched-cell name=cell type=@integer-cell body=$added
+expression.match-arm parent=$integer-body index=1 case=$empty body=$zero
+create.function as=$main module=$module name=main visibility=private result=i64 effect=pure body=$integer-body
+add.parameter as=$main-input function=$main name=input type=i64
+expression.local as=$text-input value=$text-parameter
+expression.call as=$text-cell function=$wrap
+type.argument parent=$text-cell index=0 type=text
+expression.argument parent=$text-cell index=0 expression=$text-input
+expression.call as=$text-body function=$unwrap
+type.argument parent=$text-body index=0 type=text
+expression.argument parent=$text-body index=0 expression=$text-cell
+create.function as=$text module=$module name=text visibility=private result=text effect=pure body=$text-body
+add.parameter as=$text-parameter function=$text name=input type=text
+create.component as=$component module=$module name=application visibility=package
+type.function as=@integer-port result=i64
+type.argument parent=@integer-port index=0 type=i64
+type.function as=@text-port result=text
+type.argument parent=@text-port index=0 type=text
+add.port as=$main-port component=$component name=main type=@integer-port function=$main
+add.port as=$text-port component=$component name=text type=@text-port function=$text
+create.target as=$main-target name=main component=$component port=$main-port runner=command
+create.target as=$text-target name=text component=$component port=$text-port runner=command

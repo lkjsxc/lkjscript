@@ -1,5 +1,7 @@
 //! Typed graph declaration, type-object, effect-row and expression authoring builders.
 
+use crate::platform::kernel::NamespaceClass;
+
 #[cfg(test)]
 mod effect_admission_tests {
     use super::super::AuthoredLoweringInputs;
@@ -119,6 +121,9 @@ pub struct AuthoredEffectParameter {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredEffectParameterReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         parameter: crate::platform::semantic_id::EffectParameterId,
@@ -204,12 +209,16 @@ pub struct AuthoredStructuralTypeField {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredTypeParameterReference {
+    Selected { reference: super::AuthoredReference },
     Id { parameter: TypeParameterId },
     Symbol { symbol: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredDeclarationReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Local {
         declaration: DeclarationSelector,
     },
@@ -221,6 +230,9 @@ pub enum AuthoredDeclarationReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredFieldReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         field: FieldId,
@@ -232,6 +244,9 @@ pub enum AuthoredFieldReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredCaseReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         case: CaseId,
@@ -243,6 +258,9 @@ pub enum AuthoredCaseReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredOperationReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         operation: OperationId,
@@ -254,6 +272,9 @@ pub enum AuthoredOperationReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredRequirementReference {
+    Selected {
+        reference: super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         requirement: RequirementId,
@@ -265,6 +286,7 @@ pub enum AuthoredRequirementReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredLocalReference {
+    Selected { reference: super::AuthoredReference },
     FunctionParameter { parameter: ParameterId },
     OperationParameter { parameter: ParameterId },
     LexicalBinding { binding: BindingId },
@@ -780,6 +802,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         authored: &AuthoredEffectParameterReference,
     ) -> Result<crate::platform::kernel::EffectParameterReference, Diagnostic> {
         Ok(match authored {
+            AuthoredEffectParameterReference::Selected { reference } => {
+                let selected =
+                    self.selected(*reference, Some(NamespaceClass::EffectParameter), false)?;
+                let OwnerKey::EffectParameter(parameter) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                crate::platform::kernel::EffectParameterReference {
+                    package: selected.package,
+                    parameter,
+                }
+            }
             AuthoredEffectParameterReference::Exact { package, parameter } => {
                 crate::platform::kernel::EffectParameterReference {
                     package: *package,
@@ -1112,6 +1145,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredDeclarationReference,
     ) -> Result<DeclarationReference, Diagnostic> {
         match selector {
+            AuthoredDeclarationReference::Selected { reference } => {
+                let selected =
+                    self.selected(*reference, Some(NamespaceClass::Declaration), false)?;
+                let OwnerKey::Declaration(declaration) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(DeclarationReference {
+                    package: selected.package,
+                    declaration,
+                })
+            }
             AuthoredDeclarationReference::Local { declaration } => Ok(DeclarationReference {
                 package: self.base.package_id(),
                 declaration: self.resolve_creation_declaration(declaration)?,
@@ -1136,6 +1180,14 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredTypeParameterReference,
     ) -> Result<TypeParameterId, Diagnostic> {
         match selector {
+            AuthoredTypeParameterReference::Selected { reference } => {
+                let selected =
+                    self.selected(*reference, Some(NamespaceClass::TypeParameter), true)?;
+                let OwnerKey::TypeParameter(parameter) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(parameter)
+            }
             AuthoredTypeParameterReference::Id { parameter } => {
                 self.require_owner(OwnerKey::TypeParameter(*parameter))?;
                 Ok(*parameter)
@@ -1149,6 +1201,21 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredLocalReference,
     ) -> Result<LocalValueReference, Diagnostic> {
         let reference = match selector {
+            AuthoredLocalReference::Selected { reference } => {
+                let selected = self.selected(*reference, Some(NamespaceClass::Parameter), true)?;
+                let OwnerKey::Parameter(parameter) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                match selected.parent {
+                    Some(OwnerKey::Declaration(_)) => {
+                        LocalValueReference::FunctionParameter(parameter)
+                    }
+                    Some(OwnerKey::Operation(_)) => {
+                        LocalValueReference::OperationParameter(parameter)
+                    }
+                    _ => return Err(super::references::wrong_domain()),
+                }
+            }
             AuthoredLocalReference::FunctionParameter { parameter } => {
                 self.require_owner(OwnerKey::Parameter(*parameter))?;
                 LocalValueReference::FunctionParameter(*parameter)
@@ -1216,6 +1283,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredFieldReference,
     ) -> Result<FieldReference, Diagnostic> {
         match selector {
+            AuthoredFieldReference::Selected { reference } => {
+                let selected = self.selected(*reference, Some(NamespaceClass::Field), false)?;
+                let OwnerKey::Field(field) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(FieldReference {
+                    package: selected.package,
+                    field,
+                })
+            }
             AuthoredFieldReference::Exact { package, field } => {
                 if *package == self.base.package_id() {
                     self.require_owner(OwnerKey::Field(*field))?;
@@ -1237,6 +1314,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredCaseReference,
     ) -> Result<CaseReference, Diagnostic> {
         match selector {
+            AuthoredCaseReference::Selected { reference } => {
+                let selected = self.selected(*reference, Some(NamespaceClass::Case), false)?;
+                let OwnerKey::Case(case) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(CaseReference {
+                    package: selected.package,
+                    case,
+                })
+            }
             AuthoredCaseReference::Exact { package, case } => {
                 if *package == self.base.package_id() {
                     self.require_owner(OwnerKey::Case(*case))?;
@@ -1258,6 +1345,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredOperationReference,
     ) -> Result<OperationReference, Diagnostic> {
         match selector {
+            AuthoredOperationReference::Selected { reference } => {
+                let selected = self.selected(*reference, Some(NamespaceClass::Operation), false)?;
+                let OwnerKey::Operation(operation) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(OperationReference {
+                    package: selected.package,
+                    operation,
+                })
+            }
             AuthoredOperationReference::Exact { package, operation } => {
                 if *package == self.base.package_id() {
                     self.require_owner(OwnerKey::Operation(*operation))?;
@@ -1279,6 +1376,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         selector: &AuthoredRequirementReference,
     ) -> Result<RequirementReference, Diagnostic> {
         match selector {
+            AuthoredRequirementReference::Selected { reference } => {
+                let selected =
+                    self.selected(*reference, Some(NamespaceClass::Requirement), false)?;
+                let OwnerKey::Requirement(requirement) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                Ok(RequirementReference {
+                    package: selected.package,
+                    requirement,
+                })
+            }
             AuthoredRequirementReference::Exact {
                 package,
                 requirement,

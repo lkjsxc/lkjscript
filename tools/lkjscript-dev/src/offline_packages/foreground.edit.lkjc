@@ -1,0 +1,17 @@
+reference.owner as=$module package=local class=module name=library
+reference.owner as=$component package=local class=declaration name=application parent=$module
+reference.owner as=$config package=local class=requirement name=config parent=$component
+reference.owner as=$data package=local class=requirement name=data parent=$component
+reference.owner as=$main package=local class=declaration name=main parent=$module
+reference.owner as=$report package=local class=declaration name=report parent=$module
+reference.owner as=$port package=local class=port name=main parent=$component
+type.named as=@Report declaration=$report
+effect.row as=@Effects
+effect.requirement parent=@Effects index=0 requirement=$config
+effect.requirement parent=@Effects index=1 requirement=$data
+set.function-contract as=%main function=$main result=@Report effect=task
+effect.requirement parent=%main index=0 requirement=$config
+effect.requirement parent=%main index=1 requirement=$data
+type.task-function as=@Main result=@Report effect=@Effects
+type.argument parent=@Main index=0 type=i64
+set.port-contract port=$port type=@Main

@@ -1,0 +1,17 @@
+reference.package as=$standard source=builtin
+reference.owner as=$add package=$standard class=declaration name=add
+reference.owner as=$cell package=$library class=declaration name=cell
+reference.owner as=$contents package=$library class=field name=contents parent=$cell
+reference.owner as=$module package=local class=module name=application
+reference.owner as=$main package=local class=declaration name=calculate parent=$module
+reference.owner as=$input package=local class=parameter name=input parent=$main
+expression.local as=$input-read value=$input
+expression.record as=$constructed type=$cell
+type.argument parent=$constructed index=0 type=i64
+expression.record-field parent=$constructed index=0 field=$contents value=$input-read
+expression.field as=$projected value=$constructed field=$contents
+expression.i64 as=$one value=1
+expression.call as=$body function=$add
+expression.argument parent=$body index=0 expression=$projected
+expression.argument parent=$body index=1 expression=$one
+replace.body function=$main body=$body

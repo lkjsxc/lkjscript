@@ -96,6 +96,7 @@ pub struct HttpRoutePlanEvidence {
 /// values needed to interpret dependency and retirement digest edits.
 #[derive(Clone, Debug)]
 pub struct LogicalChangePlanEvidence {
+    pub resolutions: super::ResolvedReferenceBindings,
     pub budget: ChangeBudget,
     pub allocations: Vec<AuthoredAllocation>,
     pub dependencies: BTreeMap<crate::platform::kernel::PackageId, LogicalDependencyValues>,

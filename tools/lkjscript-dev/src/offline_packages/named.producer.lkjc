@@ -1,0 +1,30 @@
+create.module as=$cells name=cells
+create.record as=$cell module=$cells name=cell visibility=public
+add.type-parameter as=$cell-T declaration=$cell name=T
+type.parameter as=@cell-T parameter=$cell-T
+add.field as=$value record=$cell name=value type=@cell-T
+create.variant as=$packet module=$cells name=packet visibility=public
+add.type-parameter as=$packet-T declaration=$packet name=T
+type.parameter as=@packet-T parameter=$packet-T
+type.application as=@packet-cell declaration=$cell
+type.argument parent=@packet-cell index=0 type=@packet-T
+add.case as=$present variant=$packet name=present payload=@packet-cell
+add.case as=$empty variant=$packet name=empty
+add.type-parameter as=$wrap-T declaration=$wrap name=T
+type.parameter as=@wrap-T parameter=$wrap-T
+type.application as=@wrap-cell declaration=$cell
+type.argument parent=@wrap-cell index=0 type=@wrap-T
+expression.local as=$wrap-read value=$wrap-input
+expression.record as=$wrapped type=$cell
+type.argument parent=$wrapped index=0 type=@wrap-T
+expression.record-field parent=$wrapped index=0 field=$value value=$wrap-read
+create.function as=$wrap module=$cells name=wrap visibility=public result=@wrap-cell effect=pure body=$wrapped
+add.parameter as=$wrap-input function=$wrap name=input type=@wrap-T
+add.type-parameter as=$unwrap-T declaration=$unwrap name=T
+type.parameter as=@unwrap-T parameter=$unwrap-T
+type.application as=@unwrap-cell declaration=$cell
+type.argument parent=@unwrap-cell index=0 type=@unwrap-T
+expression.local as=$unwrap-read value=$unwrap-input
+expression.field as=$unwrapped value=$unwrap-read field=$value
+create.function as=$unwrap module=$cells name=unwrap visibility=public result=@unwrap-T effect=pure body=$unwrapped
+add.parameter as=$unwrap-input function=$unwrap name=input type=@unwrap-cell

@@ -1,0 +1,42 @@
+reference.package as=$std source=builtin
+reference.owner as=$std-Configuration package=$std class=declaration name=Configuration
+reference.owner as=$std-DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$std-DataExpectation package=$std class=declaration name=DataExpectation
+reference.owner as=$std-DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$std-DataStore package=$std class=declaration name=DataStore
+reference.owner as=$std-add package=$std class=declaration name=add
+reference.owner as=$std-divide package=$std class=declaration name=divide
+reference.owner as=$std-i64-equal package=$std class=declaration name=i64-equal
+reference.owner as=$std-json-decode-or package=$std class=declaration name=json-decode-or
+reference.owner as=$std-json-encode package=$std class=declaration name=json-encode
+reference.owner as=$std-less package=$std class=declaration name=less
+reference.owner as=$std-list-get package=$std class=declaration name=list-get
+reference.owner as=$std-list-length package=$std class=declaration name=list-length
+reference.owner as=$std-subtract package=$std class=declaration name=subtract
+reference.owner as=$std-text-concat package=$std class=declaration name=text-concat
+reference.owner as=$std-Configuration-i64 package=$std class=operation name=i64 parent=$std-Configuration
+reference.owner as=$std-DataEntry-revision package=$std class=field name=revision parent=$std-DataEntry
+reference.owner as=$std-DataEntry-value package=$std class=field name=value parent=$std-DataEntry
+reference.owner as=$std-DataExpectation-Exact package=$std class=case name=Exact parent=$std-DataExpectation
+reference.owner as=$std-DataExpectation-Missing package=$std class=case name=Missing parent=$std-DataExpectation
+reference.owner as=$std-DataKeyPart-I64 package=$std class=case name=I64 parent=$std-DataKeyPart
+reference.owner as=$std-DataKeyPart-Text package=$std class=case name=Text parent=$std-DataKeyPart
+reference.owner as=$std-DataStore-delete package=$std class=operation name=delete parent=$std-DataStore
+reference.owner as=$std-DataStore-get package=$std class=operation name=get parent=$std-DataStore
+reference.owner as=$std-DataStore-put package=$std class=operation name=put parent=$std-DataStore
+reference.owner as=$std-DataStore-scan package=$std class=operation name=scan parent=$std-DataStore
+reference.owner as=$std-DataStore-schema-read package=$std class=operation name=schema-read parent=$std-DataStore
+reference.owner as=$std-DataStore-schema-set package=$std class=operation name=schema-set parent=$std-DataStore
+reference.owner as=$std-DataStore-transaction package=$std class=operation name=transaction parent=$std-DataStore
+reference.owner as=$lib-iteration-output package=$library class=declaration name=iteration-output
+reference.owner as=$lib-iteration-output-total package=$library class=field name=total parent=$lib-iteration-output
+reference.owner as=$lib-iteration-state package=$library class=declaration name=iteration-state
+reference.owner as=$lib-iteration-state-cursor package=$library class=field name=cursor parent=$lib-iteration-state
+reference.owner as=$lib-iteration-state-sum package=$library class=field name=sum parent=$lib-iteration-state
+reference.owner as=$lib-job package=$library class=declaration name=job
+reference.owner as=$lib-job-children package=$library class=case name=children parent=$lib-job
+reference.owner as=$lib-job-item package=$library class=case name=item parent=$lib-job
+reference.owner as=$lib-make-iteration package=$library class=declaration name=make-iteration
+reference.owner as=$lib-payload package=$library class=declaration name=payload
+reference.owner as=$lib-payload-value package=$library class=field name=value parent=$lib-payload
+reference.owner as=$lib-task-iterate package=$library class=declaration name=task-iterate

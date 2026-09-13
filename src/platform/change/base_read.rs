@@ -51,6 +51,13 @@ pub struct CanonicalRead<T> {
     pub work: CanonicalReadWork,
 }
 
+/// One independently admitted exact dependency interface, shared by all selectors in a request.
+#[derive(Clone, Debug)]
+pub struct CanonicalReferenceInterface {
+    pub revision: crate::platform::package_transport::PackageRevision,
+    pub owners: std::collections::BTreeMap<OwnerKey, PackageInterfaceRecord>,
+}
+
 impl<T> CanonicalRead<T> {
     fn memory(value: T) -> Self {
         Self {
@@ -134,6 +141,21 @@ pub struct WitnessTestDependencyRead {
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
 /// delta. Implementations must pin one immutable base for the lifetime of a normalization.
 pub trait CanonicalBaseRead {
+    fn read_reference_interface(
+        &self,
+        dependency: &DependencyRecord,
+    ) -> Result<CanonicalRead<CanonicalReferenceInterface>, Diagnostic> {
+        self.read_reference_interface_admitted(dependency, CanonicalReadAdmission::unbounded())
+    }
+
+    fn read_reference_interface_admitted(
+        &self,
+        _dependency: &DependencyRecord,
+        _admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<CanonicalReferenceInterface>, Diagnostic> {
+        Err(admission_unsupported("exact reference interface"))
+    }
+
     fn semantic_root(&self) -> &SemanticRoot;
 
     fn repository_id(&self) -> RepositoryId;
@@ -439,6 +461,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized> BudgetedCanonicalBase<'a, B> {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for BudgetedCanonicalBase<'_, B> {
+    fn read_reference_interface(
+        &self,
+        dependency: &DependencyRecord,
+    ) -> Result<CanonicalRead<CanonicalReferenceInterface>, Diagnostic> {
+        self.read_admitted(|admission| {
+            self.base
+                .read_reference_interface_admitted(dependency, admission)
+        })
+    }
+
     fn semantic_root(&self) -> &SemanticRoot {
         self.base.semantic_root()
     }

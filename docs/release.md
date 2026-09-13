@@ -5,14 +5,14 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, bootstra
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-Immutable `v0.1.32`, release `387465958`, is the last verified supported release, from source
+Immutable `v0.1.32`, release `387465958`, remains a verified predecessor, from source
 `67baaf0b081842e0e2e3745e8d5503e22cc791e4`. Dry run `34626667719/1` and tag run
 `34671245722/1` passed. Both anonymous public routes independently acquired and admitted the
 candidate and ran their small lifecycles; one fresh suite was bound within that pair. EFF-7 and
 the first hosted pair are closed in the [iteration reconciliation](campaigns/202609121214.md).
 
 The [foreground campaign](campaigns/202609121842.md) selects one combined task-iteration and
-foreground-command release. Current offline-package receipt 9 requires the foreground child
+foreground-command release. Current offline-package receipt 10 retains the foreground child
 at source, target, transferred and public acceptance. Existing exact-source dry-run, annotated-tag,
 immutability control and public-pair gates still apply. A descriptor may omit command execution
 and runtime policy only on a matching foreground-capable executable; retain numeric descriptors
@@ -21,12 +21,22 @@ is part of publication. The failed original dry run `34693887632/1` reached its 
 deadline. Corrected two-asset source `c34114fc` passed fresh full, exact six-owner target and package
 proof and is integrated. Matching dry run `34700198909/1` passed, and its downloaded handoffs
 passed the original compatible readers. Annotated v0.1.33 tag object
-`9a4e1c065b7c20459e318b83e67bfd041b74e911` selects that source; tag run `34705135744/1` is in progress.
-Its immutable publication and public pair remain pending. This inherited source retains receipt 8
-and two assets. The installation campaign separately selects v0.1.34, receipt 9 and the verified
-third asset after the acceptance below. Its accepted implementation `037a1348` is integrated;
-matching hosted dry run `34706128684/1` is in progress. The bootstrap URLs are not available until
-that publication.
+`9a4e1c065b7c20459e318b83e67bfd041b74e911` selects that source. Tag run `34705135744/1` and public
+job `103598708262` passed. Immutable release `387660511` was published at 2026-09-12T18:15:41Z;
+its anonymous exact/latest pair and attestations are authenticated. v0.1.33 is the last verified
+public release. That frozen source retains receipt 8 and two assets.
+
+The installation campaign separately selects v0.1.34 at accepted source
+`037a13483321497737a30ade6df88950bb19e0de`, receipt 9 and the third bootstrap asset. Matching hosted
+dry run `34706128684/1` passed; publication/public jobs were skipped. Its authenticated original
+handoffs passed their original readers. Annotated object `d96d1623495d8c13968d99f567ea77e79b158237`
+and the retained scoped control select publisher `34760117554/1`. Build/full/target/packaging passed;
+transferred application acceptance was observed in progress. INS-7 remains pending until actual
+immutable publication and anonymous bootstrap/application acceptance complete.
+
+The newer typed named-reference source increment uses offline receipt 10. It is absent from the
+frozen installer release. Its additional publication is batched by the [roadmap trigger](roadmap.md);
+no new release rehearsal or tag is selected for that source acceptance.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

@@ -2156,7 +2156,7 @@ fn require_reviewed_change_request(
                 DiagnosticClass::Semantic,
                 "change_request_commitment_mismatch",
                 format!(
-                    "reviewed request commitment {} does not match normalized input {expected}",
+                    "reviewed request commitment {} does not match normalized input {expected}; no change was applied. A source=builtin binding expands to this executable's immutable supplier. Use the original matching supplier executable to retry, or explicitly select an exact package and re-plan with a new request",
                     reviewed.request
                 ),
             ))
@@ -2178,18 +2178,14 @@ fn execute_normalized_change(
     } = request;
     let request_commitment = normalized.request_commitment;
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
-    let retry_base = if action == ChangeAction::Apply {
-        normalized
-            .options
-            .idempotency_key
-            .as_deref()
-            .map(|key| repository.view_idempotency_base(key, normalized.semantic.base))
-            .transpose()
-            .map_err(single_diagnostic)?
-            .flatten()
-    } else {
-        None
-    };
+    let retry_base = normalized
+        .options
+        .idempotency_key
+        .as_deref()
+        .map(|key| repository.view_idempotency_base(key, normalized.semantic.base))
+        .transpose()
+        .map_err(single_diagnostic)?
+        .flatten();
     let base_view = match retry_base {
         Some(view) => view,
         None => repository.view_current().map_err(single_diagnostic)?,
@@ -2242,7 +2238,7 @@ fn execute_normalized_change(
             DiagnosticClass::Semantic,
             "change_prepared_plan_mismatch",
             format!(
-                "reviewed prepared-plan commitment {} does not match reprepared logical plan {}",
+                "reviewed prepared-plan commitment {} does not match reprepared logical plan {}; no change was applied. Review bindings include the executable capabilities and verifier contract. Run change plan again with the original request/base/idempotency inputs; an accepted retry uses its retained historical base and cannot publish a second change",
                 reviewed.prepared, encoding.token.prepared
             ),
         )));

@@ -1,5 +1,8 @@
 //! Closed compact-record adapter for normalized semantic changes.
 
+mod references;
+use references::ReferenceLookup;
+
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
     AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
@@ -29,8 +32,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-18";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 18;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-19";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 19;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-15";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 15;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -64,8 +67,36 @@ pub(crate) const COMPACT_NAMESPACE_CLASSES: &[(&str, NamespaceClass)] = &[
     ("target", NamespaceClass::Target),
 ];
 
+pub(crate) const COMPACT_REFERENCE_NAMESPACES: &[(&str, &str, &str)] = &[
+    ("module", "package-root", "unexposed"),
+    ("declaration", "module", "interface-root"),
+    (
+        "type-parameter",
+        "record|variant|function|external",
+        "declaring-exported-owner",
+    ),
+    (
+        "effect-parameter",
+        "function",
+        "declaring-exported-function",
+    ),
+    ("field", "record", "exported-record"),
+    ("case", "variant", "exported-variant"),
+    ("operation", "interface", "exported-interface"),
+    (
+        "parameter",
+        "function|external|operation",
+        "exported-function|external|operation",
+    ),
+    ("requirement", "component", "exported-component"),
+    ("port", "component", "exported-component"),
+    ("target", "package-root", "unexposed"),
+];
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum CompactChangeOperation {
+    ReferencePackage,
+    ReferenceOwner,
     CreateModule,
     CreateRecord,
     CreateVariant,
@@ -102,7 +133,9 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 33] = [
+    pub(crate) const ALL: [Self; 35] = [
+        Self::ReferencePackage,
+        Self::ReferenceOwner,
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
@@ -141,6 +174,11 @@ impl CompactChangeOperation {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum CompactChangeFieldForm {
+    ReferenceAlias,
+    ExactDeclaration,
+    ExistingOwnerReference,
+    ReferencePackageSelector,
+    ReferencePackageSource,
     RequestLocalSymbol,
     ModuleSelector,
     DeclarationSelector,
@@ -175,7 +213,12 @@ pub(crate) enum CompactChangeFieldForm {
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 31] = [
+    pub(crate) const ALL: [Self; 36] = [
+        Self::ReferenceAlias,
+        Self::ExactDeclaration,
+        Self::ExistingOwnerReference,
+        Self::ReferencePackageSelector,
+        Self::ReferencePackageSource,
         Self::RequestLocalSymbol,
         Self::ModuleSelector,
         Self::DeclarationSelector,
@@ -211,10 +254,15 @@ impl CompactChangeFieldForm {
 
     pub(crate) const fn name(self) -> &'static str {
         match self {
+            Self::ReferenceAlias => "reference_alias",
+            Self::ExactDeclaration => "exact_declaration",
+            Self::ReferencePackageSelector => "reference_package_selector",
+            Self::ReferencePackageSource => "reference_package_source",
             Self::RequestLocalSymbol => "request_local_symbol",
             Self::ModuleSelector => "module_selector",
             Self::DeclarationSelector => "declaration_selector",
             Self::OwnerSelector => "owner_selector",
+            Self::ExistingOwnerReference => "existing_owner_reference",
             Self::ExactOwner => "exact_owner",
             Self::Name => "name",
             Self::DeclarationVisibility => "declaration_visibility",
@@ -247,10 +295,15 @@ impl CompactChangeFieldForm {
 
     pub(crate) const fn syntax(self) -> &'static str {
         match self {
+            Self::ReferenceAlias => "$REFERENCE_ALIAS",
+            Self::ExactDeclaration => "decl_HEX",
+            Self::ReferencePackageSelector => "local|$PACKAGE_ALIAS",
+            Self::ReferencePackageSource => "builtin",
             Self::RequestLocalSymbol => "$NAME",
             Self::ModuleSelector => "$NAME|mod_HEX|MODULE_NAME",
             Self::DeclarationSelector => "$NAME|decl_HEX|MODULE/NAME",
             Self::OwnerSelector => "$NAME|DOMAIN_HEX",
+            Self::ExistingOwnerReference => "$REFERENCE_ALIAS|DOMAIN_HEX",
             Self::ExactOwner => "DOMAIN_HEX",
             Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
             Self::DeclarationVisibility => "private|package|public",
@@ -258,7 +311,7 @@ impl CompactChangeFieldForm {
             Self::TypeReference => "unit|bool|i64|bytes|text|static-text|secret|@NAME",
             Self::ExpressionReference => "$NAME",
             Self::DeletePolicy => "reject|owned-closure",
-            Self::OwnerParent => "package|DOMAIN_HEX",
+            Self::OwnerParent => "package|$REFERENCE_ALIAS|DOMAIN_HEX",
             Self::NamespaceClass => "change.namespace-class.name",
             Self::ExactPackage => "pkg_HEX",
             Self::ExactRevision => "rev_HEX",
@@ -306,6 +359,70 @@ pub(crate) struct CompactChangeOperationDescriptor {
 use CompactChangeFieldForm as FieldForm;
 
 pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationDescriptor] = &[
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::ReferencePackage,
+        name: "reference.package",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "source",
+                required: false,
+                form: FieldForm::ReferencePackageSource,
+            },
+            CompactChangeOperationField {
+                name: "package",
+                required: false,
+                form: FieldForm::ExactPackage,
+            },
+            CompactChangeOperationField {
+                name: "package-revision",
+                required: false,
+                form: FieldForm::ExactPackageRevision,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::ReferenceOwner,
+        name: "reference.owner",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "package",
+                required: true,
+                form: FieldForm::ReferencePackageSelector,
+            },
+            CompactChangeOperationField {
+                name: "class",
+                required: true,
+                form: FieldForm::NamespaceClass,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: false,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "parent",
+                required: false,
+                form: FieldForm::ReferenceAlias,
+            },
+            CompactChangeOperationField {
+                name: "owner",
+                required: false,
+                form: FieldForm::ExactDeclaration,
+            },
+        ],
+        direct: None,
+    },
     CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::CreateModule,
         name: "create.module",
@@ -1094,7 +1211,7 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             CompactChangeOperationField {
                 name: "owner",
                 required: true,
-                form: FieldForm::ExactOwner,
+                form: FieldForm::ExistingOwnerReference,
             },
             CompactChangeOperationField {
                 name: "policy",
@@ -1211,19 +1328,19 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
         record: "precondition.owner-exists",
         name: "owner",
         required: true,
-        form: FieldForm::ExactOwner,
+        form: FieldForm::ExistingOwnerReference,
     },
     CompactChangePreconditionField {
         record: "precondition.owner-absent",
         name: "owner",
         required: true,
-        form: FieldForm::ExactOwner,
+        form: FieldForm::ExistingOwnerReference,
     },
     CompactChangePreconditionField {
         record: "precondition.owner-name",
         name: "owner",
         required: true,
-        form: FieldForm::ExactOwner,
+        form: FieldForm::ExistingOwnerReference,
     },
     CompactChangePreconditionField {
         record: "precondition.owner-name",
@@ -1235,7 +1352,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
         record: "precondition.owner-parent",
         name: "owner",
         required: true,
-        form: FieldForm::ExactOwner,
+        form: FieldForm::ExistingOwnerReference,
     },
     CompactChangePreconditionField {
         record: "precondition.owner-parent",
@@ -1283,7 +1400,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
         record: "precondition.namespace-points-to",
         name: "owner",
         required: true,
-        form: FieldForm::ExactOwner,
+        form: FieldForm::ExistingOwnerReference,
     },
     CompactChangePreconditionField {
         record: "precondition.dependency-binding",
@@ -2304,7 +2421,8 @@ pub(crate) fn decode_compact_change(
     input: &[u8],
 ) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
     let records = parse_records(path, input)?;
-    Decoder::new(records)
+    let references = ReferenceLookup::decode(&records).map_err(|diagnostic| vec![diagnostic])?;
+    Decoder::new(records, references)
         .decode()
         .map_err(|diagnostic| vec![diagnostic])
 }
@@ -2323,6 +2441,7 @@ struct IndexedRecord {
 }
 
 struct Decoder {
+    references: ReferenceLookup,
     records: Vec<CompactRecord>,
     types: BTreeMap<String, CompactRecord>,
     effect_rows: BTreeMap<String, CompactRecord>,
@@ -2342,8 +2461,9 @@ struct Decoder {
 }
 
 impl Decoder {
-    fn new(records: Vec<CompactRecord>) -> Self {
+    fn new(records: Vec<CompactRecord>, references: ReferenceLookup) -> Self {
         Self {
+            references,
             records,
             types: BTreeMap::new(),
             effect_rows: BTreeMap::new(),
@@ -2367,6 +2487,7 @@ impl Decoder {
         let mut request = None;
         for record in std::mem::take(&mut self.records) {
             match record.operation.as_str() {
+                "reference.package" | "reference.owner" => {}
                 "request" => {
                     if request.is_some() {
                         return Err(record_error(
@@ -2530,7 +2651,7 @@ impl Decoder {
         let preconditions = self
             .preconditions
             .iter()
-            .map(decode_precondition)
+            .map(|record| self.decode_precondition(record))
             .collect::<Result<Vec<_>, _>>()?;
         let mut changes = Vec::with_capacity(self.changes.len());
         for (descriptor, record) in std::mem::take(&mut self.changes) {
@@ -2619,6 +2740,14 @@ impl Decoder {
             }
         }
 
+        if self.references.bindings.raw_records != 0 {
+            changes.insert(
+                0,
+                AuthoredChange::ReferenceBindings {
+                    bindings: self.references.bindings,
+                },
+            );
+        }
         let semantic = AuthoredChangeSet {
             base,
             preconditions,
@@ -2708,6 +2837,13 @@ impl Decoder {
     ) -> Result<AuthoredChange, Diagnostic> {
         check_operation_fields(record, descriptor.fields)?;
         match descriptor.operation {
+            CompactChangeOperation::ReferencePackage | CompactChangeOperation::ReferenceOwner => {
+                Err(record_error(
+                    record,
+                    "change_reference_lowering",
+                    "reference declarations must be expanded before authored changes",
+                ))
+            }
             CompactChangeOperation::CreateModule => Ok(AuthoredChange::CreateModule {
                 symbol: symbol(record, "as")?,
                 name: parse_name(record, "name")?,
@@ -2715,7 +2851,7 @@ impl Decoder {
             CompactChangeOperation::CreateRecord => Ok(AuthoredChange::CreateRecord {
                 type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
-                module: parse_module_selector(record, "module")?,
+                module: self.parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
                 visibility: parse_visibility(record, "visibility")?,
                 fields: Vec::new(),
@@ -2723,21 +2859,21 @@ impl Decoder {
             CompactChangeOperation::CreateVariant => Ok(AuthoredChange::CreateVariant {
                 type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
-                module: parse_module_selector(record, "module")?,
+                module: self.parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
                 visibility: parse_visibility(record, "visibility")?,
                 cases: Vec::new(),
             }),
             CompactChangeOperation::CreateInterface => Ok(AuthoredChange::CreateInterface {
                 symbol: symbol(record, "as")?,
-                module: parse_module_selector(record, "module")?,
+                module: self.parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
                 visibility: parse_visibility(record, "visibility")?,
                 operations: Vec::new(),
             }),
             CompactChangeOperation::CreateExternal => Ok(AuthoredChange::CreateExternal {
                 symbol: symbol(record, "as")?,
-                module: parse_module_selector(record, "module")?,
+                module: self.parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
                 visibility: parse_visibility(record, "visibility")?,
                 type_parameters: Vec::new(),
@@ -2750,7 +2886,7 @@ impl Decoder {
                 let body = required(record, "body")?.to_owned();
                 Ok(AuthoredChange::CreateFunction {
                     symbol: function_symbol.clone(),
-                    module: parse_module_selector(record, "module")?,
+                    module: self.parse_module_selector(record, "module")?,
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     type_parameters: Vec::new(),
@@ -2768,7 +2904,7 @@ impl Decoder {
                 let value = required(record, "value")?.to_owned();
                 Ok(AuthoredChange::CreateConstant {
                     symbol: symbol(record, "as")?,
-                    module: parse_module_selector(record, "module")?,
+                    module: self.parse_module_selector(record, "module")?,
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     ty: self.decode_type(required(record, "type")?)?,
@@ -2777,7 +2913,7 @@ impl Decoder {
             }
             CompactChangeOperation::CreateComponent => Ok(AuthoredChange::CreateComponent {
                 symbol: symbol(record, "as")?,
-                module: parse_module_selector(record, "module")?,
+                module: self.parse_module_selector(record, "module")?,
                 name: parse_name(record, "name")?,
                 visibility: parse_visibility(record, "visibility")?,
                 requirements: Vec::new(),
@@ -2788,7 +2924,7 @@ impl Decoder {
                 let expected = required(record, "expected")?.to_owned();
                 Ok(AuthoredChange::CreateTest {
                     symbol: symbol(record, "as")?,
-                    module: parse_module_selector(record, "module")?,
+                    module: self.parse_module_selector(record, "module")?,
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     actual: self.decode_expression(&actual)?,
@@ -2798,7 +2934,7 @@ impl Decoder {
             CompactChangeOperation::CreateTarget => {
                 let runner = parse_runner_kind(record, "runner")?;
                 let port = optional(record, "port")
-                    .map(|_| parse_port_reference(record, "port"))
+                    .map(|_| self.parse_port_reference(record, "port"))
                     .transpose()?;
                 if (runner == RunnerKind::Http) == port.is_some() {
                     return Err(record_error(
@@ -2810,13 +2946,13 @@ impl Decoder {
                 Ok(AuthoredChange::CreateTarget {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
-                    component: parse_declaration_reference(record, "component")?,
+                    component: self.parse_declaration_reference(record, "component")?,
                     port,
                     runner,
                 })
             }
             CompactChangeOperation::AddField => Ok(AuthoredChange::AddField {
-                record: parse_declaration_selector(record, "record")?,
+                record: self.parse_declaration_selector(record, "record")?,
                 field: AuthoredField {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
@@ -2824,7 +2960,7 @@ impl Decoder {
                 },
             }),
             CompactChangeOperation::AddCase => Ok(AuthoredChange::AddCase {
-                variant: parse_declaration_selector(record, "variant")?,
+                variant: self.parse_declaration_selector(record, "variant")?,
                 case: AuthoredCase {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
@@ -2834,7 +2970,7 @@ impl Decoder {
                 },
             }),
             CompactChangeOperation::AddOperation => Ok(AuthoredChange::AddOperation {
-                interface: parse_declaration_selector(record, "interface")?,
+                interface: self.parse_declaration_selector(record, "interface")?,
                 operation: crate::platform::change::AuthoredOperation {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
@@ -2845,14 +2981,14 @@ impl Decoder {
                 },
             }),
             CompactChangeOperation::AddEffectParameter => Ok(AuthoredChange::AddEffectParameter {
-                declaration: parse_declaration_selector(record, "declaration")?,
+                declaration: self.parse_declaration_selector(record, "declaration")?,
                 parameter: AuthoredEffectParameter {
                     symbol: required(record, "as")?.to_owned(),
                     name: parse_name(record, "name")?,
                 },
             }),
             CompactChangeOperation::AddTypeParameter => Ok(AuthoredChange::AddTypeParameter {
-                declaration: parse_declaration_selector(record, "declaration")?,
+                declaration: self.parse_declaration_selector(record, "declaration")?,
                 parameter: AuthoredTypeParameter {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
@@ -2861,16 +2997,16 @@ impl Decoder {
             }),
             CompactChangeOperation::SetTypeParameterConstraint => {
                 Ok(AuthoredChange::SetTypeParameterConstraint {
-                    parameter: parse_owner_selector(record, "parameter")?,
+                    parameter: self.parse_owner_selector(record, "parameter")?,
                     constraints: parse_type_parameter_constraint(record)?,
                 })
             }
             CompactChangeOperation::SetFieldType => Ok(AuthoredChange::SetFieldType {
-                field: parse_owner_selector(record, "field")?,
+                field: self.parse_owner_selector(record, "field")?,
                 ty: self.decode_type(required(record, "type")?)?,
             }),
             CompactChangeOperation::SetCasePayload => Ok(AuthoredChange::SetCasePayload {
-                case: parse_owner_selector(record, "case")?,
+                case: self.parse_owner_selector(record, "case")?,
                 payload: optional(record, "payload")
                     .map(|value| self.decode_type(value))
                     .transpose()?,
@@ -2878,10 +3014,10 @@ impl Decoder {
             CompactChangeOperation::AddParameter => {
                 let parent = match (optional(record, "function"), optional(record, "operation")) {
                     (Some(_), None) => ParameterParentSelector::Declaration {
-                        declaration: parse_declaration_selector(record, "function")?,
+                        declaration: self.parse_declaration_selector(record, "function")?,
                     },
                     (None, Some(_)) => ParameterParentSelector::Operation {
-                        operation: parse_owner_selector(record, "operation")?,
+                        operation: self.parse_owner_selector(record, "operation")?,
                     },
                     _ => {
                         return Err(record_error(
@@ -2902,7 +3038,7 @@ impl Decoder {
                             .transpose()?
                             .unwrap_or_default(),
                         resource_requirement: optional(record, "requirement")
-                            .map(|_| parse_requirement_reference(record, "requirement"))
+                            .map(|_| self.parse_requirement_reference(record, "requirement"))
                             .transpose()?,
                     },
                 })
@@ -2914,7 +3050,7 @@ impl Decoder {
                     .iter()
                     .map(|edge| {
                         required(&edge.record, "operation")?;
-                        parse_operation_reference(&edge.record, "operation")
+                        self.parse_operation_reference(&edge.record, "operation")
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let limits = self
@@ -2929,33 +3065,33 @@ impl Decoder {
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
                 Ok(AuthoredChange::AddRequirement {
-                    component: parse_declaration_selector(record, "component")?,
+                    component: self.parse_declaration_selector(record, "component")?,
                     requirement: AuthoredRequirement {
                         symbol: requirement_symbol,
                         name: parse_name(record, "name")?,
-                        interface: parse_declaration_reference(record, "interface")?,
+                        interface: self.parse_declaration_reference(record, "interface")?,
                         operations,
                         limits,
                     },
                 })
             }
             CompactChangeOperation::AddPort => Ok(AuthoredChange::AddPort {
-                component: parse_declaration_selector(record, "component")?,
+                component: self.parse_declaration_selector(record, "component")?,
                 port: AuthoredPort {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
                     function_type: self.decode_type(required(record, "type")?)?,
                     implementation: AuthoredPortImplementation::Function {
-                        function: parse_declaration_reference(record, "function")?,
+                        function: self.parse_declaration_reference(record, "function")?,
                     },
                 },
             }),
             CompactChangeOperation::AddHttpRoute => Ok(AuthoredChange::AddHttpRoute {
                 symbol: symbol(record, "as")?,
-                target: parse_owner_selector(record, "target")?,
+                target: self.parse_owner_selector(record, "target")?,
                 method: required(record, "method")?.to_owned(),
                 selector: parse_http_route_selector(record)?,
-                port: parse_port_reference(record, "port")?,
+                port: self.parse_port_reference(record, "port")?,
             }),
             CompactChangeOperation::AddDependency => {
                 let package = parse_field(record, "package")?;
@@ -2975,7 +3111,7 @@ impl Decoder {
             CompactChangeOperation::SetFunctionContract => {
                 let fragment = fragment(record, "as")?;
                 Ok(AuthoredChange::SetFunctionContract {
-                    function: parse_declaration_selector(record, "function")?,
+                    function: self.parse_declaration_selector(record, "function")?,
                     result: self.decode_type(required(record, "result")?)?,
                     effect: self.decode_function_effect(
                         record,
@@ -2985,7 +3121,7 @@ impl Decoder {
                 })
             }
             CompactChangeOperation::SetPortContract => Ok(AuthoredChange::SetPortContract {
-                port: parse_owner_selector(record, "port")?,
+                port: self.parse_owner_selector(record, "port")?,
                 function_type: self.decode_type(required(record, "type")?)?,
             }),
             CompactChangeOperation::SetRequirementContract => {
@@ -2993,7 +3129,7 @@ impl Decoder {
                 let operations = self
                     .ordered_record_edges("requirement.operation", &fragment)?
                     .iter()
-                    .map(|edge| parse_operation_reference(&edge.record, "operation"))
+                    .map(|edge| self.parse_operation_reference(&edge.record, "operation"))
                     .collect::<Result<Vec<_>, _>>()?;
                 let limits = self
                     .ordered_record_edges("requirement.limit", &fragment)?
@@ -3007,17 +3143,17 @@ impl Decoder {
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
                 Ok(AuthoredChange::SetRequirementContract {
-                    requirement: parse_owner_selector(record, "requirement")?,
-                    interface: parse_declaration_reference(record, "interface")?,
+                    requirement: self.parse_owner_selector(record, "requirement")?,
+                    interface: self.parse_declaration_reference(record, "interface")?,
                     operations,
                     limits,
                 })
             }
             CompactChangeOperation::SetHttpRoute => Ok(AuthoredChange::SetHttpRoute {
-                route: parse_owner_selector(record, "route")?,
+                route: self.parse_owner_selector(record, "route")?,
                 method: required(record, "method")?.to_owned(),
                 selector: parse_http_route_selector(record)?,
-                port: parse_port_reference(record, "port")?,
+                port: self.parse_port_reference(record, "port")?,
             }),
             CompactChangeOperation::DeleteOwner => {
                 let policy = required(record, "policy")?;
@@ -3036,30 +3172,33 @@ impl Decoder {
                     }
                 };
                 Ok(AuthoredChange::DeleteOwner {
-                    owner: OwnerSelector::Exact {
-                        owner: parse_field::<OwnerKey>(record, "owner")?,
+                    owner: match self.references.owner(record, "owner", None, true)? {
+                        Some(reference) => OwnerSelector::Selected { reference },
+                        None => OwnerSelector::Exact {
+                            owner: parse_field::<OwnerKey>(record, "owner")?,
+                        },
                     },
                     policy,
                 })
             }
             CompactChangeOperation::RenameOwner => Ok(AuthoredChange::RenameOwner {
-                owner: parse_owner_selector(record, "owner")?,
+                owner: self.parse_owner_selector(record, "owner")?,
                 name: parse_name(record, "name")?,
             }),
             CompactChangeOperation::MoveDeclaration => Ok(AuthoredChange::MoveDeclaration {
-                declaration: parse_declaration_selector(record, "declaration")?,
-                module: parse_module_selector(record, "module")?,
+                declaration: self.parse_declaration_selector(record, "declaration")?,
+                module: self.parse_module_selector(record, "module")?,
             }),
             CompactChangeOperation::ReplaceBody => {
                 let body = required(record, "body")?.to_owned();
                 Ok(AuthoredChange::ReplaceFunctionBody {
-                    function: parse_declaration_selector(record, "function")?,
+                    function: self.parse_declaration_selector(record, "function")?,
                     body: self.decode_expression(&body)?,
                 })
             }
             CompactChangeOperation::ExtractFunction => Ok(AuthoredChange::ExtractFunction {
                 symbol: symbol(record, "as")?,
-                function: parse_declaration_selector(record, "function")?,
+                function: self.parse_declaration_selector(record, "function")?,
                 expression: parse_field::<ExpressionId>(record, "expression")?,
                 name: parse_name(record, "name")?,
             }),
@@ -3078,14 +3217,16 @@ impl Decoder {
                 let requirements = self
                     .ordered_record_edges("effect.requirement", parent)?
                     .iter()
-                    .map(|edge| parse_requirement_reference(&edge.record, "requirement"))
+                    .map(|edge| self.parse_requirement_reference(&edge.record, "requirement"))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(AuthoredFunctionEffect::Task {
                     requirements,
                     effect_parameters: self
                         .ordered_record_edges("effect.parameter", parent)?
                         .iter()
-                        .map(|edge| parse_effect_parameter_reference(&edge.record, "parameter"))
+                        .map(|edge| {
+                            self.parse_effect_parameter_reference(&edge.record, "parameter")
+                        })
                         .collect::<Result<_, _>>()?,
                 })
             }
@@ -3109,12 +3250,12 @@ impl Decoder {
         let requirements = self
             .ordered_record_edges("effect.requirement", reference)?
             .iter()
-            .map(|edge| parse_requirement_reference(&edge.record, "requirement"))
+            .map(|edge| self.parse_requirement_reference(&edge.record, "requirement"))
             .collect::<Result<_, _>>()?;
         let parameters = self
             .ordered_record_edges("effect.parameter", reference)?
             .iter()
-            .map(|edge| parse_effect_parameter_reference(&edge.record, "parameter"))
+            .map(|edge| self.parse_effect_parameter_reference(&edge.record, "parameter"))
             .collect::<Result<_, _>>()?;
         Ok(AuthoredEffectRow {
             requirements,
@@ -3210,7 +3351,7 @@ impl Decoder {
             "type.named" => {
                 check_fields(&record, &["as", "declaration"])?;
                 AuthoredType::Named {
-                    declaration: parse_declaration_reference(&record, "declaration")?,
+                    declaration: self.parse_declaration_reference(&record, "declaration")?,
                 }
             }
             "type.application" => {
@@ -3221,14 +3362,14 @@ impl Decoder {
                     .map(|edge| self.decode_type(&edge.value))
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
                 AuthoredType::Applied {
-                    declaration: parse_declaration_reference(&record, "declaration")?,
+                    declaration: self.parse_declaration_reference(&record, "declaration")?,
                     arguments,
                 }
             }
             "type.capability-resource" => {
                 check_fields(&record, &["as", "interface"])?;
                 AuthoredType::CapabilityResource {
-                    interface: parse_declaration_reference(&record, "interface")?,
+                    interface: self.parse_declaration_reference(&record, "interface")?,
                 }
             }
             "type.structural-record" => {
@@ -3248,7 +3389,7 @@ impl Decoder {
             "type.parameter" => {
                 check_fields(&record, &["as", "parameter"])?;
                 AuthoredType::TypeParameter {
-                    parameter: parse_type_parameter_reference(&record, "parameter")?,
+                    parameter: self.parse_type_parameter_reference(&record, "parameter")?,
                 }
             }
             "type.task-function" => {
@@ -3348,13 +3489,13 @@ impl Decoder {
             "expression.local" => {
                 check_fields(&record, &["as", "value"])?;
                 AuthoredExpressionOperation::Local {
-                    value: parse_local_reference(&record, "value")?,
+                    value: self.parse_local_reference(&record, "value")?,
                 }
             }
             "expression.constant" => {
                 check_fields(&record, &["as", "declaration"])?;
                 AuthoredExpressionOperation::Constant {
-                    declaration: parse_declaration_reference(&record, "declaration")?,
+                    declaration: self.parse_declaration_reference(&record, "declaration")?,
                 }
             }
             "expression.if" => {
@@ -3378,7 +3519,7 @@ impl Decoder {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
                     effect_arguments: self.decode_effect_arguments(symbol)?,
-                    function: parse_declaration_reference(&record, "function")?,
+                    function: self.parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
                         .into_iter()
@@ -3391,7 +3532,7 @@ impl Decoder {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::FunctionValue {
                     effect_arguments: self.decode_effect_arguments(symbol)?,
-                    function: parse_declaration_reference(&record, "function")?,
+                    function: self.parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
                         .into_iter()
@@ -3438,11 +3579,11 @@ impl Decoder {
             "expression.record" => {
                 check_fields(&record, &["as", "type"])?;
                 let nominal_type = optional(&record, "type")
-                    .map(|_| parse_declaration_reference(&record, "type"))
+                    .map(|_| self.parse_declaration_reference(&record, "type"))
                     .transpose()?;
                 let mut fields = Vec::new();
                 for edge in self.ordered_record_edges("expression.record-field", symbol)? {
-                    let selector = parse_field_selector(&edge.record)?;
+                    let selector = self.parse_field_selector(&edge.record)?;
                     let value = required(&edge.record, "value")?.to_owned();
                     fields.push(AuthoredRecordExpressionField {
                         selector,
@@ -3465,7 +3606,7 @@ impl Decoder {
                     .map(|value| self.decode_expression(value).map(Box::new))
                     .transpose()?;
                 AuthoredExpressionOperation::Variant {
-                    case: parse_case_reference(&record, "case")?,
+                    case: self.parse_case_reference(&record, "case")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
                         .iter()
@@ -3479,7 +3620,7 @@ impl Decoder {
                 let value = required(&record, "value")?.to_owned();
                 AuthoredExpressionOperation::Field {
                     value: Box::new(self.decode_expression(&value)?),
-                    selector: parse_field_selector(&record)?,
+                    selector: self.parse_field_selector(&record)?,
                 }
             }
             "expression.list" => {
@@ -3531,7 +3672,7 @@ impl Decoder {
                     };
                     let body = required(&edge.record, "body")?.to_owned();
                     arms.push(AuthoredMatchExpressionArm {
-                        case: parse_case_reference(&edge.record, "case")?,
+                        case: self.parse_case_reference(&edge.record, "case")?,
                         payload_binding,
                         body: self.decode_expression(&body)?,
                     });
@@ -3544,8 +3685,8 @@ impl Decoder {
             "expression.capability-call" => {
                 check_fields(&record, &["as", "requirement", "operation"])?;
                 AuthoredExpressionOperation::CapabilityCall {
-                    requirement: parse_requirement_reference(&record, "requirement")?,
-                    operation: parse_operation_reference(&record, "operation")?,
+                    requirement: self.parse_requirement_reference(&record, "requirement")?,
+                    operation: self.parse_operation_reference(&record, "operation")?,
                     arguments: self.decode_expression_edges(symbol)?,
                 }
             }
@@ -3553,7 +3694,7 @@ impl Decoder {
                 check_fields(&record, &["as", "requirement", "binding", "name", "body"])?;
                 let body = required(&record, "body")?.to_owned();
                 AuthoredExpressionOperation::Transaction {
-                    requirement: parse_requirement_reference(&record, "requirement")?,
+                    requirement: self.parse_requirement_reference(&record, "requirement")?,
                     binding: AuthoredBindingDefinition {
                         symbol: symbol_field(&record, "binding")?,
                         name: parse_name(&record, "name")?,
@@ -4535,6 +4676,90 @@ fn field_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_named_reference_baseline_goldens() {
+        let temporary = tempfile::tempdir().unwrap();
+        let logical = crate::platform::kernel::tests::witness_snapshot();
+        let created = crate::platform::publication::GraphRepository::create(
+            &temporary.path().join("meaning"),
+            &logical,
+            None,
+        )
+        .unwrap();
+        let module = logical
+            .owners
+            .values()
+            .find_map(|record| match record {
+                crate::platform::kernel::OwnerRecord::Module(module) => Some(module),
+                _ => None,
+            })
+            .unwrap();
+        let expected = [
+            (
+                "330a169923709b56f66b37bf676c253ae44eb24845bab551cd29e6a4e9ae3bdc",
+                "request_31f2a6dd4de9dfa852781fa0ac358e5ae1e11400b94f93c34e83d3c3eb83672c",
+                "expr_43c455ea1455aee0e14675c714411863",
+                "decl_d64858b4298268a5373bc74b48056657",
+            ),
+            (
+                "9c5ce495613cb66644ba866a9bda4e97bb3df1d152adf96e1a59c3553ce8c478",
+                "request_aa58e1e64566470c7eee5db4dfb7a1a634e0151503e480c63d60cd73b72885c0",
+                "expr_7cd37aba479f619f0fd05c7a6e914478",
+                "decl_2cb205dcfb5e5a5afa190789e038c3e6",
+            ),
+        ];
+        for (selector, expected) in [
+            module.header.owner.to_string(),
+            module.name.as_str().to_owned(),
+        ]
+        .into_iter()
+        .zip(expected)
+        {
+            let input = format!(
+                "request base={} idempotency=legacy-reference-baseline\nexpression.i64 as=$body value=42\ncreate.function as=$new module={selector} name=legacy_reference_golden visibility=private result=i64 effect=pure body=$body\n",
+                created.current.head.revision,
+            );
+            let request = decode_compact_change("legacy.lkjc", input.as_bytes()).unwrap();
+            let bytes = crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
+                .unwrap();
+            let prepared = created
+                .repository
+                .prepare_authored_change(&request.semantic, request.options.clone())
+                .unwrap();
+            assert_eq!(
+                created.current.head.revision.to_string(),
+                "rev_57e6ec8691b2e78b6e6f5bbf721e1c637601ec2bd67bd88b0cf74c4044b1a5b2"
+            );
+            assert_eq!(blake3::hash(&bytes).to_hex().as_str(), expected.0);
+            assert_eq!(request.request_commitment.to_string(), expected.1);
+            assert_eq!(prepared.allocated["$body"].to_string(), expected.2);
+            assert_eq!(prepared.allocated["$new"].to_string(), expected.3);
+        }
+        let input = format!(
+            "request base={} idempotency=legacy-qualified-baseline\nexpression.unit as=$body\nreplace.body function=first/callee body=$body\n",
+            created.current.head.revision
+        );
+        let request = decode_compact_change("qualified.lkjc", input.as_bytes()).unwrap();
+        let bytes =
+            crate::platform::change::canonical_authored_intent_bytes(&request.semantic).unwrap();
+        let prepared = created
+            .repository
+            .prepare_authored_change(&request.semantic, request.options.clone())
+            .unwrap();
+        assert_eq!(
+            blake3::hash(&bytes).to_hex().as_str(),
+            "b481f04b0bb63a68f42b5b06f97ff773f411a8dc8479f611e7137fef24596b3c"
+        );
+        assert_eq!(
+            request.request_commitment.to_string(),
+            "request_82b03a0b580889d3b5a92372b903ced62853e7ef5e7d8008bcaa99d2f848a74a"
+        );
+        assert_eq!(
+            prepared.allocated["$body"].to_string(),
+            "expr_d1bf12cf47316157f6bf4a4fa6b3707a"
+        );
+    }
 
     fn revision() -> RevisionId {
         RevisionId::from_digest([7; 32])

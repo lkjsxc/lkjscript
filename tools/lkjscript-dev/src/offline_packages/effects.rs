@@ -1075,7 +1075,7 @@ pub(super) fn prepare_library(
 
 pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     let (mut library, names) = prepare_library(context, standard)?;
-    let mut foreground = super::foreground::prepare(context, standard, &library, &names)?;
+    let mut foreground = super::foreground::prepare(context, standard, &library)?;
     let path = context.root.join("effect-consumer");
     let created = context.cli(
         None,

@@ -744,6 +744,7 @@ fn logical_plan_evidence(
     }
 
     Ok(LogicalChangePlanEvidence {
+        resolutions: Default::default(),
         budget: analysis.budget,
         allocations,
         dependencies,
@@ -856,6 +857,7 @@ impl RepositoryView {
         let lowering = lower_authored_changes(&canonical, &witness, request)
             .map_err(|diagnostic| vec![diagnostic])?;
         let crate::platform::change::AuthoredLowering {
+            resolutions,
             edits,
             allocated,
             allocations,
@@ -873,7 +875,8 @@ impl RepositoryView {
             http_route_befores,
             extraction,
         )?;
-        if !logical_plan.dependencies.is_empty() {
+        logical_plan.resolutions = resolutions;
+        if !logical_plan.dependencies.is_empty() || !logical_plan.resolutions.packages.is_empty() {
             let mut overlay = ObjectStage::new(&self.store);
             for (key, bytes) in &prepared.publication.objects {
                 overlay
@@ -3068,6 +3071,37 @@ fn admit_decoded_records(
 }
 
 impl CanonicalBaseRead for RepositoryView {
+    fn read_reference_interface_admitted(
+        &self,
+        dependency: &DependencyRecord,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<crate::platform::change::CanonicalReferenceInterface>, Diagnostic>
+    {
+        let resolved = self.resolve_package_transport_admitted(
+            dependency.package_revision,
+            &mut RepositoryReadAdmission::canonical(admission),
+        )?;
+        resolved
+            .value
+            .root_revision
+            .matches_dependency(dependency.package_revision, dependency)?;
+        Ok(canonical_read(
+            self.read(
+                crate::platform::change::CanonicalReferenceInterface {
+                    revision: resolved.value.root_revision,
+                    owners: resolved
+                        .value
+                        .root_interface
+                        .owners
+                        .into_iter()
+                        .map(|(owner, value)| (owner, value.record))
+                        .collect(),
+                },
+                resolved.work,
+            ),
+        ))
+    }
+
     fn semantic_root(&self) -> &crate::platform::kernel::SemanticRoot {
         &self.current.semantic_root
     }

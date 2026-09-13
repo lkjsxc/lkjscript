@@ -46,14 +46,28 @@ runtime with exact grants and joined cleanup. Foreground source `0b5e9827` has p
 source/target acceptance and normal main integration. Dry run `34693887632/1` exhausted its
 offline-package deadline. Corrected source `c34114fc` passed fresh full, six-owner target and package
 acceptance and is normally integrated. Matching dry run `34700198909/1` and its original handoff
-readers passed. Selected v0.1.33 is now in tag run `34705135744/1`; immutable publication and
-independent public exact/latest acceptance remain pending.
-The installation campaign now selects immutable Linux runtime slots, a release-owned bootstrap,
-explicit default selection and retained-manager recovery using those foreground applications.
-It carries the inherited foreground publication and an additive installation milestone; no daemon,
-automatic update service or artifact-to-runtime resolver is selected. After installation delivery,
-reassess ordinary public authoring friction and the coherent resource/requirement abstraction. Further
-infrastructure work needs a newly measured bottleneck.
+readers passed. Immutable v0.1.33 and publisher `34705135744/1` have now passed independent
+anonymous exact/latest acquisition, attestations and the public pair. FG-7 closes the selected
+combined task-iteration/foreground milestone. The installation source `037a1348` is accepted and
+integrated; dry run `34706128684/1` passed. Its isolated annotated v0.1.34 publisher `34760117554/1`
+remains selected through anonymous bootstrap/application acceptance, independently of newer main.
+
+The [named-reference increment](campaigns/202609131008.md) removes the exercised foreground
+consumer's host member-ID inventories through typed, reviewed exact-name addressing. Its source
+acceptance is recorded in that campaign; v0.1.34 contains only the frozen installer milestone.
+Publish the named-reference increment with the **next accepted non-delivery capability campaign**.
+At most one such subsequent campaign may be accepted without selecting their combined publication.
+If none is chosen, the next architect must select an authoring release from this accepted source
+instead of extending deferral. A verified user-facing recovery need permits earlier additive
+release. No later tag is preallocated.
+
+Remaining observed burden is ordered flat expression/type assembly and request-wide creator
+symbols. If exact capability policy must still be repeated across packages/components, the next
+semantic candidate is explicit operation-bearing requirement parameters with exact interface and
+operation constraints, followed by a coherent resource-transfer contract. If expression assembly
+dominates instead, consider a structural request-block adapter over the same typed intent. These
+are contingent directions, not authorized work. The older generic-recursion preparation versus
+ordered-substitution note is still unprobed, not a proved defect.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

@@ -22,6 +22,15 @@ references bind the appropriate exact package and owner identities; they do not 
 from names, module coordinates, physical map positions, or Rust representation. Content digests,
 semantic revision IDs, dense runtime indexes, and filesystem paths occupy separate domains.
 
+Typed request bindings are a reviewed addressing layer over this authority. Local selectors read
+one exact accepted base before any same-request rename, creation or deletion. Dependency selectors
+read only the explicitly selected exact interface closure after normal dependency edits; names
+never select a dependency revision or expose a private owner. The normalized selector DAG and
+complete exact resolution inventory are bound by request/prepared review. Apply rederives them;
+labels, indexes and displayed resolutions confer no authority. Existing owners never enter new
+identity allocation. An embedded supplier shorthand commits its immutable inventory before
+repository access. See [public grammar and recovery](semantic-cli.md#reviewed-named-references).
+
 ## Logical model and validation
 
 A semantic snapshot contains one repository/package root and canonical typed maps for all owner,

@@ -1,0 +1,184 @@
+{
+  "schema": "lkjscript-typed-named-reference-evidence-1",
+  "campaign": "202609131008",
+  "status": "implemented; focused and copied-product iterations passed; final frozen full/source integration pending",
+  "source": {
+    "startup": "99a00769c8e30d954d0df8c58f7a2f3f16f964ed",
+    "branch": "main",
+    "mandate": "docs/campaigns/202609131008.md",
+    "guidance": "AGENTS.md",
+    "implementation": "The first containing implementation commit is supplied by Git history; exact accepted/tested source will be appended after the fresh full receipt.",
+    "installer_frozen": "037a13483321497737a30ade6df88950bb19e0de"
+  },
+  "contract": {
+    "grammar": 19,
+    "authored_codec": 15,
+    "authored_magic": "LKJACR14 retained; additive typed tags for bindings/selectors",
+    "canonical": "All declared typed selectors, including unused valid aliases, canonicalized independently of spelling/order. Equivalent paths share resolution; selected owners never enter allocation.",
+    "base": "Local accepted base before edits; dependencies from explicit add/replace/delete overlay. Compact dependency editing remains add/replace; the existing typed delete owner is separately tested.",
+    "interface": "Existing implementation-free exact interface; no foreign modules/targets or module metadata; ambiguous exported names require exact exported declaration alias.",
+    "authority": "No fetch, staging, import, grant, secret, adapter, execution or operational-data mutation from selection.",
+    "classes": [
+      "module",
+      "declaration",
+      "type-parameter",
+      "effect-parameter",
+      "field",
+      "case",
+      "operation",
+      "parameter",
+      "requirement",
+      "port",
+      "target"
+    ],
+    "positions": "Every corresponding typed reference or eligible local mutation/owner-parent precondition; complete candidate checking retains subtype, scope, visibility and authority.",
+    "bounds": "Raw compact bytes/records, raw authored bindings, canonical selector and admitted namespace reads charged by existing owners; one interface index per selected dependency and one resolution per canonical selector.",
+    "review": "Complete exact package/owner/parent/kind/revision/interface inventory in prepared commitment; apply re-prepares under the accepted publication/idempotency owners."
+  },
+  "compatibility": {
+    "legacy_goldens": {
+      "classification": "fresh passed before and after codec change",
+      "cases": "Exact, MODULE and MODULE/NAME intents/request commitments/fresh allocations; original codec golden retained",
+      "baseline_log": ".artifacts/named-references-202609131008/legacy-baseline-02.log",
+      "baseline_sha256": "d13883a291f7d995e7850a2f9da136184113efdd52f6a78c217383ccfed7dd0d",
+      "after_log": ".artifacts/named-references-202609131008/named-unit-11.log"
+    },
+    "review_transition": "Existing prepared token hashes capabilities and verifier registry, so new discovery requires explicit re-plan even for legacy requests. Authored bytes/request commitment/allocation/accepted history remain unchanged; no frozen obsolete review context.",
+    "cross_executable_retry": {
+      "classification": "fresh public pass",
+      "original_release_source": "037a13483321497737a30ade6df88950bb19e0de",
+      "candidate_sha256": "970b466c41c2d79f37d48e474c394a1264f2e504212b1382eb4f823587c26097",
+      "request": "request_830d6ab41626f47a43624d9ea8dfbdf7ab6cca711bcf411875222f84b1eba09b",
+      "accepted_revision": "rev_3b82c7c5fb0d3b47b467ce31950c33814e8cfada1f41f74e55967ee8210c8709",
+      "outcome": "Original candidate accepted; new candidate rejected original prepared token, re-planned retained historical base and returned already-accepted with identical HEAD and all four allocations.",
+      "supplier": "Changed embedded supplier is source-bound tested by altering its normalized exact expectation: commitment changes and preparation reports supplier mismatch. This is not a two-shipped-binary supplier-upgrade experiment."
+    },
+    "encodings": "No graph, type-object, artifact, bytecode, package-interface, transport or operational-data format change. Maintained semantic/generated assets are untouched; their final equality gates remain required."
+  },
+  "proof": {
+    "namespace": {
+      "classification": "fresh passed",
+      "log": ".artifacts/named-references-202609131008/named-unit-11.log",
+      "tests": 9,
+      "coverage": "Independent fixture/creation identities cover every local and legally exposed class, duplicate parents/exported names/exact escape/private negatives, type/effect/function/operation parameters, literal alias text, same-request base rename, alpha/order/duplicate/unused selectors, large fan-in/raw budget, invalid parent/revision, dependency deletion/duplicate edits, cancellation at an injected canonical read boundary and recovery."
+    },
+    "parent_fault": {
+      "classification": "fresh intended failure then healthy restoration",
+      "log": ".artifacts/named-references-202609131008/resolver-parent-fault.log",
+      "manifest": ".artifacts/named-references-202609131008/resolver-parent-fault.json",
+      "result": "Ignoring parent fails the namespace oracle. Original bytes restored. Healthy full library iteration: 600 passed, 8 explicitly ignored; subsequent nine named tests passed.",
+      "later_changes": "Subsequent diagnostic presentation and test additions do not alter parent lookup; final fresh full still required."
+    },
+    "plan_tamper": {
+      "classification": "fresh passed rejection",
+      "scope": "Altered serialized resolution rejected by digest admission; a structurally consistent substituted parameter resolution produces a different reviewed token. Public apply independently re-prepares."
+    },
+    "public_cli": {
+      "classification": "focused corrections passed; full rerun pending",
+      "initial": "40 passed, two failed: added discovery records and old stale-plan expectation. Updated public contract expectations and explicit historical-key/replan/conflict/invalid-request negatives passed targeted retry test; discovery passed after complete descriptor expectations updated.",
+      "retry_log": ".artifacts/named-references-202609131008/public-review-retry-02.log",
+      "discovery_log": ".artifacts/named-references-202609131008/public-discovery-05.log"
+    },
+    "copied_named": {
+      "classification": "fresh iteration pass, not a final acceptance receipt",
+      "candidate_sha256": "970b466c41c2d79f37d48e474c394a1264f2e504212b1382eb4f823587c26097",
+      "verifier_identity_sha256": "fff42dfac5dd572f9b9400e9bac5cfd690620d069a8f1f818a4e184e40dcb004",
+      "observer": "Existing ignored Rust offline-package iteration harness; verifier path supplies identity only for this iteration. Product command environment contains LANG only.",
+      "receipt": ".artifacts/named-references-202609131008/public-named-05/iteration.json",
+      "receipt_sha256": "414717f8d73fc6a05aee6e2dc70b7a79d68bdc2972779c1e48ef57fdf163e114",
+      "commands": 42,
+      "identities": {
+        "after": "package_revision_3217858a796bc6960544ff0f9d1eb260c67f990f02c2c21a481b06b430f3be34",
+        "before": "package_revision_12e754778b2f5a6b3a5b4097defa372383ae49b7f4099c7da781fbb77363417e",
+        "consumer": "pkg_244ebda45abdccfc481fce9c5d3e8907",
+        "field": "field_7651c7200763895a3336131853c7f1f5",
+        "function": "decl_f4aaae77caa2ebcb180d2bd907461283",
+        "member_ids_in_authored_inputs": 0,
+        "old_artifact": "369ca97086832e9f0744991c99c5282f66f3405791c85dbb85ff03abd0c906e0",
+        "parameters": [
+          "param_4c89f74dd92fd7eca1a767f3474b60b5",
+          "param_83541de9a2ea7ebc815ec868eabf521d"
+        ],
+        "producer": "pkg_a8112a69b85c416a007e493e3d345f67",
+        "repaired_artifact": "c08b6411e70a296f038443094099d96f03abd090aabb08f6d087ffec6e07794b"
+      },
+      "outputs": [
+        "42",
+        "lkj",
+        "42",
+        "42",
+        "lkj"
+      ],
+      "requests": [
+        "tools/lkjscript-dev/src/offline_packages/named.producer.lkjc",
+        "tools/lkjscript-dev/src/offline_packages/named.consumer.lkjc",
+        "tools/lkjscript-dev/src/offline_packages/named.edit.lkjc",
+        "tools/lkjscript-dev/src/offline_packages/named.rename.lkjc",
+        "tools/lkjscript-dev/src/offline_packages/named.repair.lkjc"
+      ],
+      "failure_recovery": "Old name at explicitly selected replacement fails without authority change; contents binding repairs the request. Original and repaired artifacts run after producer/consumer deletion. Observer-only ID reads check continuity and never populate authored inputs.",
+      "cleanup": "Copied named root removed; iteration receipt is deliberately not a final cleanup/acceptance receipt."
+    },
+    "foreground_adoption": {
+      "classification": "fresh copied iteration passed",
+      "receipt": ".artifacts/named-references-202609131008/public-foreground-01/iteration.json",
+      "receipt_sha256": "76edd395116d9fcfd95d8c9689d13081f4b6d3c31bc2930f762dc4645034b8cd",
+      "candidate_sha256": "970b466c41c2d79f37d48e474c394a1264f2e504212b1382eb4f823587c26097",
+      "commands": 113,
+      "scope": "Existing complete foreground arithmetic, ordered once-only persistence, policy/failure, dependency replacement, old bundle and recovery oracles. Two member-map arguments removed; literal prelude/edit requests replace that consumer path. Existing exact producer and other fixtures remain controls.",
+      "cleanup": "Joined command resources; exact owned disposable iteration root removed, evidence retained."
+    },
+    "full": {
+      "classification": "unrun at this pre-acceptance record",
+      "required": "One fresh full profile after code, tests, guides and this evidence stabilize. It includes final copied-product offline named/foreground proof and maintained graph/artifact equality."
+    }
+  },
+  "authoring_burden": {
+    "foreground": {
+      "before": {
+        "path": ".artifacts/named-references-202609131008/inherited/10304150137/public-verification/pair/full-suite/offline-packages/request-396.lkjc",
+        "sha256": "6745bd1e70bce8a7d9e322c37c714a948200345593d34caeb7e03dfe4aef47ad",
+        "bytes": 30187,
+        "records": 447,
+        "member_reference_uses": 70,
+        "distinct_member_references": 40,
+        "package_anchors": 2,
+        "semantic_revision_anchors": 3,
+        "logical_revision_anchors": 2
+      },
+      "after": {
+        "path": ".artifacts/named-references-202609131008/public-foreground-01/request-61.lkjc",
+        "sha256": "b226717a0f330d019cf09cdfdf350ad077cb48d5a6b14d5dfeb68009b50e41ac",
+        "bytes": 30344,
+        "records": 490,
+        "member_reference_uses": 0,
+        "distinct_member_references": 0,
+        "package_anchors": 2,
+        "semantic_revision_anchors": 3,
+        "logical_revision_anchors": 2
+      },
+      "scope": "Same maintained foreground consumer builder on original foreground public evidence versus fresh named candidate. Base/package/plan anchors are observer-substituted; request identities differ across fresh projects. Bytes/records are authoring burden, not token, billing or throughput measurements."
+    },
+    "simple_equivalent": {
+      "before": "function=pkg_10000000000000000000000000000001/decl_72b38e6cd864cb4239b329b7e337577f",
+      "after": "reference.package as=$standard source=builtin; reference.owner as=$add package=$standard class=declaration name=add; function=$add",
+      "member_ids": [
+        1,
+        0
+      ],
+      "anchors": "Same accepted base and existing selected standard; one plan per variant. Builtin addressing removes the manually copied package/declaration address but retains reviewed exact supplier identity. Base/plan anchors remain explicit.",
+      "discovery": "Both use public builtin declaration discovery. No total command-count or throughput reduction claimed; initial failed grammar/query attempts are retained in baseline-transcript."
+    },
+    "limitations": "Foreground literal request grows 447→490 records and 30187→30344 bytes while opaque member references fall 40→0. Stable names still need discovery; flat expression/type assembly, explicit applications and request-wide creator symbols remain. No model token/billing estimate."
+  },
+  "delivery": {
+    "foreground": "FG-7 closed by authenticated original hosted public evidence and original-reader bound rereading; see predecessor owners.",
+    "installer": "v0.1.34 source 037a1348, annotated d96d1623495d8c13968d99f567ea77e79b158237, publisher 34760117554/1; exact frozen public bootstrap/application acceptance pending.",
+    "named_feature": "Not included in v0.1.34. Source integration authorized after fresh full; publish with next accepted non-delivery capability campaign, at most one subsequent acceptance. If none chosen, next architect selects authoring release instead of extending deferral. No tag preallocated; earlier verified recovery need may justify additive release.",
+    "target": "New authoring static-target/public release proof unrun and not selected for this source increment; inherited installer gates remain mandatory.",
+    "deployment": "Not selected; all application effects confined to owned disposable fixtures."
+  },
+  "retained_failures": "Development parse/borrow/discovery test expectations, missing standard transport/stream descriptor and oversized debug observer identity failed before correction; original logs retained. These are not passing evidence.",
+  "preserved": "Unrelated August 31 stash, existing recovery artifacts, immutable releases, frozen installer source/guidance and operational state untouched.",
+  "next": "Observed burden is expression assembly rather than per-member identity transfer. Requirement-parametric operation authority remains a separate possible campaign; older generic-recursion preparation versus ordered substitution note stays unresolved."
+}

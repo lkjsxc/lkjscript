@@ -624,6 +624,9 @@ pub(in crate::platform::change::request) fn lower_annotation<
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPortReference {
+    Selected {
+        reference: super::super::AuthoredReference,
+    },
     Exact {
         package: crate::platform::kernel::PackageId,
         port: crate::platform::semantic_id::PortId,

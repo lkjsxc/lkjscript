@@ -1,5 +1,7 @@
 //! Canonical review-bound logical change-plan token and compact-record codec.
 
+mod references;
+
 use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
@@ -359,6 +361,35 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
         ]
     ),
     plan_record!(
+        "logical-plan.reference-package",
+        [
+            "index",
+            "scope",
+            "package",
+            "semantic-revision",
+            "package-revision",
+            "interface",
+            "supplier-bound"
+        ]
+    ),
+    plan_record!(
+        "logical-plan.reference-owner",
+        [
+            "index",
+            "package-index",
+            "parent",
+            "class",
+            "selection",
+            "name",
+            "declaration",
+            "package",
+            "owner",
+            "kind",
+            "parent-owner"
+        ]
+    ),
+    plan_record!("logical-plan.reference-counts", ["packages", "owners"]),
+    plan_record!(
         "logical-plan.counts",
         [
             "allocations",
@@ -411,7 +442,8 @@ const DEFAULT_HTTP_ROUTE_EVIDENCE: u64 = DEFAULT_SEMANTIC_OWNERS;
 /// Fixed plan-file admission covering every logical record possible under the current default
 /// change admissions. Requests may declare larger engine budgets, but their actual logical plan
 /// must still fit this independent complete-review boundary.
-pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
+pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = 20_001
+    + FIXED_LOGICAL_PLAN_RECORDS
     + DEFAULT_EXTRACTION_RECORDS
     + DEFAULT_ALLOCATIONS
     + DEFAULT_OWNER_CHANGES
@@ -447,7 +479,8 @@ const MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES: u64 = 528;
 const MAXIMUM_EXTRACTION_USE_RECORD_BYTES: u64 = 101;
 const MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES: u64 = 102;
 
-pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORDS_BYTES
+pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = 20_001 * 1_024
+    + MAXIMUM_FIXED_RECORDS_BYTES
     + MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES
     + MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS * MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES
     + MAXIMUM_FUNCTION_EXTRACTION_CAPTURES * MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES
@@ -967,6 +1000,7 @@ where
             )?;
         }
     }
+    references::encode(&evidence.resolutions, encoder)?;
     encoder.append(
         "logical-plan.counts",
         &[
@@ -1976,6 +2010,7 @@ pub fn decode_logical_change_plan<R: BufRead>(
 }
 
 struct PlanDecoder {
+    references: references::Decoder,
     hasher: blake3::Hasher,
     bytes: u64,
     records: u64,
@@ -2025,6 +2060,7 @@ struct PlanDecoder {
 impl PlanDecoder {
     fn new() -> Self {
         Self {
+            references: references::Decoder::default(),
             hasher: blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN),
             bytes: 0,
             records: 0,
@@ -2143,8 +2179,8 @@ impl PlanDecoder {
                 ));
             }
             self.next_fixed += 1;
-        } else if (16..=35).contains(&descriptor_index) {
-            if descriptor_index < self.phase || self.phase >= 36 {
+        } else if (16..=38).contains(&descriptor_index) {
+            if descriptor_index < self.phase || self.phase >= 39 {
                 return Err(plan_source_error(
                     "change_plan_file_order",
                     format!(
@@ -2154,22 +2190,22 @@ impl PlanDecoder {
                 ));
             }
             self.phase = descriptor_index;
-        } else if descriptor_index == 36 {
-            if self.phase >= 36 || self.declared_counts.is_some() {
+        } else if descriptor_index == 39 {
+            if self.phase >= 39 || self.declared_counts.is_some() {
                 return Err(plan_source_error(
                     "change_plan_file_counts_duplicate",
                     "logical plan contains a duplicate or misplaced counts record",
                 ));
             }
-            self.phase = 36;
-        } else if descriptor_index == 37 {
-            if self.phase != 36 || self.declared_counts.is_none() {
+            self.phase = 39;
+        } else if descriptor_index == 40 {
+            if self.phase != 39 || self.declared_counts.is_none() {
                 return Err(plan_source_error(
                     "change_plan_file_digest_order",
                     "logical plan digest must follow exactly one counts record",
                 ));
             }
-            self.phase = 37;
+            self.phase = 40;
             self.trailer_seen = true;
         } else {
             return Err(plan_source_error(
@@ -2181,7 +2217,7 @@ impl PlanDecoder {
             ));
         }
 
-        if descriptor_index != 37 {
+        if descriptor_index != 40 {
             self.hasher.update(line);
         }
         self.validate_typed(descriptor_index, record)
@@ -2241,7 +2277,9 @@ impl PlanDecoder {
             33 => self.decode_reason(record),
             34 => self.decode_package(record, false),
             35 => self.decode_package(record, true),
-            36 => {
+            36..=38 => self.references.accept(record, descriptor_index - 36),
+            39 => {
+                self.references.finish()?;
                 let counts = decode_counts(record)?;
                 if counts != self.counts {
                     return Err(plan_source_error(
@@ -2254,7 +2292,7 @@ impl PlanDecoder {
                 self.declared_counts = Some(counts);
                 Ok(())
             }
-            37 => self.decode_trailer(record),
+            40 => self.decode_trailer(record),
             _ => Err(plan_source_error(
                 "change_plan_file_record_unknown",
                 "logical plan descriptor has no typed decoder",
@@ -3030,7 +3068,7 @@ impl PlanDecoder {
     }
 
     fn finish(self) -> Result<DecodedLogicalPlan, Diagnostic> {
-        if !self.trailer_seen || self.phase != 37 {
+        if !self.trailer_seen || self.phase != 40 {
             return Err(plan_source_error(
                 "change_plan_file_incomplete",
                 "logical plan file is missing its counts or digest trailer",
@@ -3808,6 +3846,7 @@ fn validate_evidence(
     receipt: &crate::platform::publication::PublicationReceipt,
 ) -> Result<(), Diagnostic> {
     evidence.budget.validate()?;
+    references::validate(&evidence.resolutions)?;
     if let Some(extraction) = &evidence.extraction {
         validate_extraction_evidence(extraction, owners, &evidence.allocations)?;
     }
@@ -4406,8 +4445,8 @@ mod tests {
                 .maximum_relation_edges
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 812_790);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_626_381_560);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 832_791);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_646_862_584);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -4713,7 +4752,7 @@ mod tests {
         let six_digits = "999999";
         add(
             "logical-plan.counts",
-            &LOGICAL_PLAN_RECORD_DESCRIPTORS[36]
+            &LOGICAL_PLAN_RECORD_DESCRIPTORS[39]
                 .fields
                 .iter()
                 .map(|field| (*field, six_digits))

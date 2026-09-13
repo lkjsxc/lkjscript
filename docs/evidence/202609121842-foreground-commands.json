@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript-foreground-command-evidence-1",
   "campaign": "202609121842",
-  "status": "FG-1–FG-6 accepted and integrated; corrected hosted dry acceptance passed; FG-7 tag publication in progress",
+  "status": "FG-1–FG-7 accepted, integrated and delivered in immutable v0.1.33",
   "source": {
     "startup": "dc584d590c1bf74112d306a61eee2c5ef636a6fe",
     "archive_commit": "8cfaaf97d0888b147ef9e4595a05635700ddf110",
@@ -328,9 +328,9 @@
   },
   "publication": {
     "tag": "v0.1.33",
-    "status": "Corrected dry acceptance and original handoff readers passed; annotated tag pushed; publication and anonymous acceptance pending",
+    "status": "Immutable publication and anonymous public pair passed; original hosted evidence authenticated",
     "previous": "Immutable v0.1.32 remains supported and unchanged; EFF-7 and its first public pair closed.",
-    "remaining": "Resume tag run 34705135744/1 at c34114fc with its frozen two-asset workflow/readers. Complete immutable publication and authenticate the independently admitted anonymous exact/latest public pair, including the foreground child. Do not dispatch the newer installation workflow with old publication inputs.",
+    "remaining": "none for FG-7; original two-asset identities/readers preserved",
     "original_hosted_dry_run": {
       "disposition": "Failed at the offline-package outer 1200-second deadline, command 470 of 492; fields below retain the original handoff observation. No tag was acquired by this dry run.",
       "id": 34693887632,
@@ -366,9 +366,36 @@
       "tag_run": 34705135744,
       "tag_attempt": 1,
       "tag_run_created_utc": "2026-09-12T16:24:37Z",
-      "tag_run_observed": "in_progress",
+      "tag_run_observed": "completed-success",
       "control": "One authorized non-secret binding write after enabled immutability, permissions, rules, unused identity, no active publishers and immediate prior-value comparison; binding retained after tag push. No settings changed.",
       "bindings_owner": "docs/evidence/202609122211-installation.json inherited section"
+    },
+    "public_acceptance": {
+      "status": "passed-hosted-public; valid-bound original-reader reread",
+      "source": "c34114fc1b51f96f42c2b637fb9ad522b55b41f9",
+      "tag": "v0.1.33",
+      "tag_object": "9a4e1c065b7c20459e318b83e67bfd041b74e911",
+      "release_id": 387660511,
+      "published_utc": "2026-09-12T18:15:41Z",
+      "run": 34705135744,
+      "attempt": 1,
+      "conclusion": "success",
+      "public_job": 103598708262,
+      "product_bytes": 22223104,
+      "product_sha256": "a228404a9dd91d24d4a8eb1136836544528fa6341d9e19d356044730c0ab6692",
+      "archive_bytes": 10003436,
+      "archive_sha256": "4bb3ba53c01d1dff205e69bc7e692ad0239010ca6abea8c24d02834c546bdaec",
+      "checksums_sha256": "d5102b0ed6250c27e8129e2b480194d83e837f56d86ba90538580edb3e9b46f1",
+      "verifier_bytes": 26386456,
+      "verifier_sha256": "c5b0b15aeee66a915c0645d2083802f2fbfa8a569e2fab44d5685568af78c948",
+      "public_artifact_id": 10304150137,
+      "public_zip_sha256": "f2919ed2ae45f082e25806039e5adcbbd9b8fc4c506ab51494b04c998bb438cd",
+      "pair_sha256": "6b97c8636db94b72b25d47fc06a977ba87c90ca27c460e49619e265504fa141b",
+      "pair_digest": "verification_bcf5c45213c3c54a90ae6cc4e76800e6f840a6b3726f6224018c692b38ebefab",
+      "routes": "Two independently fresh anonymous acquisitions, attestations and small lifecycles; latest binds one freshly executed exact-route five-owner aggregate within the pair.",
+      "cleanup_complete": true,
+      "reconciliation": "2026-09-13: authenticated GitHub metadata, artifact digests and job logs. Original downloaded verifier reread unchanged receipts in reconstructed archived paths/modes/environment, including recorded kernel metadata. No local live-effect replay or fresh hosted execution claim.",
+      "evidence_owner": "docs/campaigns/202609131008.md"
     }
   },
   "disposition": {

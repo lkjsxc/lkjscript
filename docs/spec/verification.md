@@ -319,10 +319,27 @@ Built-in evidence has two independent byte owners: maintained standard package g
 embedded executable assets. Product verification exports both package transport and artifact and
 requires exact byte equality with the generated maintained files.
 
+Named-reference acceptance belongs to the existing library/public CLI and offline-package owners.
+The namespace oracle enumerates expected typed parents and exact fixture identities independently
+of the production resolver. It covers exported ambiguity and exact-declaration recovery, unexposed
+owners, local generic/effect/function/operation parameters, unused selectors, raw admission,
+scope, cancellation, request alpha/order invariance and bound-plan tampering. Legacy exact and
+MODULE/NAME intent, request and allocation goldens remain unchanged. A deliberate parent-resolution
+fault must fail this oracle, followed by healthy restoration.
+
+The copied-product offline owner retains literal cells-library and consumer requests. It observes
+I64 42 from input 41, Text `lkj`, existing function/parameter continuity through a same-request rename,
+transported artifact execution without authoring paths, and failed then repaired member-name
+selection during explicit dependency replacement. The frozen old artifact remains unchanged.
+The existing foreground consumer uses a literal reference prelude instead of host standard/library
+member inventories, retaining its once-only effect, transport and recovery oracles. Driver receipt
+and inventory observations are not application-side graph generators. Input/base/plan/package
+anchors remain explicit; flat expression assembly remains required.
+
 ## Command lifecycle requirements
 
 Foreground acceptance extends the existing offline-package effect child, required by current
-offline-package receipt 9 and all current target/transferred/public-pair readers. It freshly authors
+offline-package receipt 10 and all current target/transferred/public-pair readers. It freshly authors
 an exported task-iteration helper, a pure factory returning a bound callback, and two Command
 consumers with recursive nominal reports through the copied candidate. Both consumer and producer
 authoring paths are unavailable during execution; only the single executable, exact bundles,

@@ -19,6 +19,9 @@ pub enum AuthoredOwnerParent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPrecondition {
+    Selected {
+        condition: AuthoredSelectedPrecondition,
+    },
     OwnerExists {
         owner: OwnerKey,
     },
@@ -51,6 +54,94 @@ pub enum AuthoredPrecondition {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthoredExistingOwner {
+    Exact(OwnerKey),
+    Selected(super::AuthoredReference),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthoredSelectedPrecondition {
+    OwnerExists {
+        owner: AuthoredExistingOwner,
+    },
+    OwnerAbsent {
+        owner: AuthoredExistingOwner,
+    },
+    OwnerName {
+        owner: AuthoredExistingOwner,
+        equals: Name,
+    },
+    OwnerParent {
+        owner: AuthoredExistingOwner,
+        equals: Option<AuthoredExistingOwner>,
+    },
+    NamespaceAbsent {
+        parent: Option<AuthoredExistingOwner>,
+        class: NamespaceClass,
+        name: Name,
+    },
+    NamespacePointsTo {
+        parent: Option<AuthoredExistingOwner>,
+        class: NamespaceClass,
+        name: Name,
+        owner: AuthoredExistingOwner,
+    },
+}
+
+impl AuthoredSelectedPrecondition {
+    fn resolve<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+        &self,
+        lowerer: &AuthoredLowerer<'_, B, W>,
+    ) -> Result<AuthoredPrecondition, Diagnostic> {
+        let resolve = |owner: AuthoredExistingOwner| match owner {
+            AuthoredExistingOwner::Exact(owner) => Ok(owner),
+            AuthoredExistingOwner::Selected(reference) => lowerer
+                .selected(reference, None, true)
+                .map(|selected| selected.owner),
+        };
+        Ok(match self {
+            Self::OwnerExists { owner } => AuthoredPrecondition::OwnerExists {
+                owner: resolve(*owner)?,
+            },
+            Self::OwnerAbsent { owner } => AuthoredPrecondition::OwnerAbsent {
+                owner: resolve(*owner)?,
+            },
+            Self::OwnerName { owner, equals } => AuthoredPrecondition::OwnerName {
+                owner: resolve(*owner)?,
+                equals: equals.clone(),
+            },
+            Self::OwnerParent { owner, equals } => AuthoredPrecondition::OwnerParent {
+                owner: resolve(*owner)?,
+                equals: match equals {
+                    Some(owner) => AuthoredOwnerParent::Owner(resolve(*owner)?),
+                    None => AuthoredOwnerParent::Package,
+                },
+            },
+            Self::NamespaceAbsent {
+                parent,
+                class,
+                name,
+            } => AuthoredPrecondition::NamespaceAbsent {
+                parent: parent.map(resolve).transpose()?,
+                class: *class,
+                name: name.clone(),
+            },
+            Self::NamespacePointsTo {
+                parent,
+                class,
+                name,
+                owner,
+            } => AuthoredPrecondition::NamespacePointsTo {
+                parent: parent.map(resolve).transpose()?,
+                class: *class,
+                name: name.clone(),
+                owner: resolve(*owner)?,
+            },
+        })
+    }
+}
+
 pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     preconditions: &[AuthoredPrecondition],
@@ -58,8 +149,17 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
     let mut dependencies = BTreeMap::<PackageId, Option<DependencyRecord>>::new();
 
     for precondition in preconditions {
+        let resolved;
+        let precondition = match precondition {
+            AuthoredPrecondition::Selected { condition } => {
+                resolved = condition.resolve(lowerer)?;
+                &resolved
+            }
+            _ => precondition,
+        };
         lowerer.work.preconditions_checked = lowerer.work.preconditions_checked.saturating_add(1);
         match precondition {
+            AuthoredPrecondition::Selected { .. } => return Err(super::references::wrong_domain()),
             AuthoredPrecondition::OwnerExists { owner } => {
                 require(
                     read_owner(lowerer, *owner)?.is_some(),

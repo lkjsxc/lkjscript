@@ -275,6 +275,10 @@ impl Writer {
 
     fn precondition(&mut self, value: &AuthoredPrecondition) -> Result<(), Diagnostic> {
         match value {
+            AuthoredPrecondition::Selected { condition } => {
+                self.tag(255)?;
+                self.selected_precondition(condition)
+            }
             AuthoredPrecondition::OwnerExists { owner } => {
                 self.tag(1)?;
                 self.owner(*owner)
@@ -339,12 +343,81 @@ impl Writer {
         self.raw(&owner.bytes())
     }
 
+    fn existing_owner(&mut self, owner: AuthoredExistingOwner) -> Result<(), Diagnostic> {
+        match owner {
+            AuthoredExistingOwner::Exact(owner) => {
+                self.tag(1)?;
+                self.owner(owner)
+            }
+            AuthoredExistingOwner::Selected(reference) => self.selected_reference(reference),
+        }
+    }
+
+    fn selected_precondition(
+        &mut self,
+        value: &AuthoredSelectedPrecondition,
+    ) -> Result<(), Diagnostic> {
+        match value {
+            AuthoredSelectedPrecondition::OwnerExists { owner } => {
+                self.tag(1)?;
+                self.existing_owner(*owner)
+            }
+            AuthoredSelectedPrecondition::OwnerAbsent { owner } => {
+                self.tag(2)?;
+                self.existing_owner(*owner)
+            }
+            AuthoredSelectedPrecondition::OwnerName { owner, equals } => {
+                self.tag(3)?;
+                self.existing_owner(*owner)?;
+                self.name(equals)
+            }
+            AuthoredSelectedPrecondition::OwnerParent { owner, equals } => {
+                self.tag(4)?;
+                self.existing_owner(*owner)?;
+                self.optional(equals.as_ref(), |writer, owner| {
+                    writer.existing_owner(*owner)
+                })
+            }
+            AuthoredSelectedPrecondition::NamespaceAbsent {
+                parent,
+                class,
+                name,
+            } => {
+                self.tag(5)?;
+                self.optional(parent.as_ref(), |writer, owner| {
+                    writer.existing_owner(*owner)
+                })?;
+                self.tag(class.tag())?;
+                self.name(name)
+            }
+            AuthoredSelectedPrecondition::NamespacePointsTo {
+                parent,
+                class,
+                name,
+                owner,
+            } => {
+                self.tag(6)?;
+                self.optional(parent.as_ref(), |writer, owner| {
+                    writer.existing_owner(*owner)
+                })?;
+                self.tag(class.tag())?;
+                self.name(name)?;
+                self.existing_owner(*owner)
+            }
+        }
+    }
+
     fn change(
         &mut self,
         value: &AuthoredChange,
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredChange::ReferenceBindings { bindings } => {
+                self.tag(255)?;
+                self.list(&bindings.packages, Self::reference_package)?;
+                self.list(&bindings.owners, Self::reference_owner)
+            }
             AuthoredChange::CreateModule { symbol, name } => {
                 self.tag(1)?;
                 self.symbol(symbol, definitions)?;
@@ -786,12 +859,57 @@ impl Writer {
         }
     }
 
+    fn selected_reference(&mut self, reference: AuthoredReference) -> Result<(), Diagnostic> {
+        self.tag(255)?;
+        self.raw(&reference.0.to_be_bytes())
+    }
+
+    fn reference_package(&mut self, package: &AuthoredReferencePackage) -> Result<(), Diagnostic> {
+        match package {
+            AuthoredReferencePackage::Local => self.tag(1),
+            AuthoredReferencePackage::Exact {
+                package,
+                package_revision,
+                semantic_revision,
+            } => {
+                self.tag(2)?;
+                self.raw(&package.bytes())?;
+                self.raw(&package_revision.bytes())?;
+                self.optional(semantic_revision.as_ref(), |writer, revision| {
+                    writer.raw(&revision.bytes())
+                })
+            }
+        }
+    }
+
+    fn reference_owner(
+        &mut self,
+        selector: &AuthoredOwnerReferenceSelector,
+    ) -> Result<(), Diagnostic> {
+        self.raw(&selector.package.to_be_bytes())?;
+        self.optional(selector.parent.as_ref(), |writer, parent| {
+            writer.raw(&parent.0.to_be_bytes())
+        })?;
+        self.tag(selector.class.tag())?;
+        match &selector.selection {
+            AuthoredOwnerReferenceSelection::Name(name) => {
+                self.tag(1)?;
+                self.name(name)
+            }
+            AuthoredOwnerReferenceSelection::Declaration(owner) => {
+                self.tag(2)?;
+                self.raw(&owner.bytes())
+            }
+        }
+    }
+
     fn owner_selector(
         &mut self,
         value: &OwnerSelector,
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            OwnerSelector::Selected { reference } => self.selected_reference(*reference),
             OwnerSelector::Exact { owner } => {
                 self.tag(1)?;
                 self.owner(*owner)
@@ -825,6 +943,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            ModuleSelector::Selected { reference } => self.selected_reference(*reference),
             ModuleSelector::Id { module } => {
                 self.tag(1)?;
                 self.raw(&module.bytes())
@@ -846,6 +965,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            DeclarationSelector::Selected { reference } => self.selected_reference(*reference),
             DeclarationSelector::Id { declaration } => {
                 self.tag(1)?;
                 self.raw(&declaration.bytes())
@@ -909,6 +1029,9 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredEffectParameterReference::Selected { reference } => {
+                self.selected_reference(*reference)
+            }
             AuthoredEffectParameterReference::Symbol { symbol } => {
                 self.tag(1)?;
                 self.symbol(symbol, definitions)
@@ -1092,6 +1215,9 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredTypeParameterReference::Selected { reference } => {
+                self.selected_reference(*reference)
+            }
             AuthoredTypeParameterReference::Id { parameter } => {
                 self.tag(1)?;
                 self.raw(&parameter.bytes())
@@ -1109,6 +1235,9 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredDeclarationReference::Selected { reference } => {
+                self.selected_reference(*reference)
+            }
             AuthoredDeclarationReference::Local { declaration } => {
                 self.tag(1)?;
                 self.declaration_selector(declaration, definitions)
@@ -1130,6 +1259,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredFieldReference::Selected { reference } => self.selected_reference(*reference),
             AuthoredFieldReference::Exact { package, field } => {
                 self.tag(1)?;
                 self.raw(&package.bytes())?;
@@ -1148,6 +1278,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredCaseReference::Selected { reference } => self.selected_reference(*reference),
             AuthoredCaseReference::Exact { package, case } => {
                 self.tag(1)?;
                 self.raw(&package.bytes())?;
@@ -1166,6 +1297,9 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredOperationReference::Selected { reference } => {
+                self.selected_reference(*reference)
+            }
             AuthoredOperationReference::Exact { package, operation } => {
                 self.tag(1)?;
                 self.raw(&package.bytes())?;
@@ -1184,6 +1318,9 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredRequirementReference::Selected { reference } => {
+                self.selected_reference(*reference)
+            }
             AuthoredRequirementReference::Exact {
                 package,
                 requirement,
@@ -1205,6 +1342,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredPortReference::Selected { reference } => self.selected_reference(*reference),
             AuthoredPortReference::Exact { package, port } => {
                 self.tag(1)?;
                 self.raw(&package.bytes())?;
@@ -1223,6 +1361,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredLocalReference::Selected { reference } => self.selected_reference(*reference),
             AuthoredLocalReference::FunctionParameter { parameter } => {
                 self.tag(1)?;
                 self.raw(&parameter.bytes())

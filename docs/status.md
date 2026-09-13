@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-12 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-13 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -20,8 +20,11 @@ after reaching command 470 of 492; no semantic failure was established. Correcte
 fresh full profile passed all 26 gates; exact static target admission passed both userlands and all
 six owners, and deterministic packaging passed. It is normally integrated on main. Matching dry run
 `34700198909/1` passed; its full, target, package and transferred handoffs passed the original readers.
-Annotated tag `v0.1.33` selects that source; publication run `34705135744/1` is in progress.
-Immutable publication and anonymous public acceptance remain pending. The [evidence](evidence/202609121842-foreground-commands.json)
+Annotated tag `v0.1.33` selects that source. Publication run `34705135744/1` completed successfully;
+immutable release `387660511` was published on 2026-09-12 at 18:15:41 UTC. Public job `103598708262`
+actually acquired exact/latest assets anonymously, checked attestations, and completed the public
+pair with joined cleanup. Original authenticated hosted evidence and its original reader were
+reconciled on 2026-09-13; this is bound evidence, not a repeated local live execution. FG-7 is closed. The [evidence](evidence/202609121842-foreground-commands.json)
 separates accepted source from later reporting. This designed witness is separate from maintained adoption.
 
 The [installation campaign](campaigns/202609122211.md) adds project-independent native `runtime
@@ -31,9 +34,24 @@ Source `037a1348` passed 26 fresh full gates, both pinned userlands, all six tar
 authoring work with an empty PATH. Both simulated bootstrap routes, old-runtime recovery and the
 complete five-owner installed application pair passed, followed by 12 interruption, 268 transferred
 and 77 pair receipt faults with healthy recovery. The accepted implementation is integrated on main.
-Hosted dry run `34706128684/1` is in progress at that exact source; immutable publication and
-anonymous bootstrap acceptance remain pending. Selection changes no graph, artifact, grant
+Hosted dry run `34706128684/1` passed at that exact source; its publish/public jobs were correctly
+skipped. Its original full, target, package and simulated-pair handoffs were authenticated and
+reread. Annotated v0.1.34 object `d96d1623495d8c13968d99f567ea77e79b158237` selects that source.
+Publisher `34760117554/1` passed build/full/target/packaging and was observed in transferred
+application acceptance on 2026-09-13. INS-7 still requires immutable three-asset publication and
+the anonymous bootstrap/application pair. Selection changes no graph, artifact, grant
 or application data and never infers compatibility or invokes another runtime as fallback.
+
+The [typed named-reference campaign](campaigns/202609131008.md) adds reviewed package and owner
+bindings to compact requests. Existing local namespaces and legally exposed exact dependency
+children lower through typed authored intent; aliases never allocate selected owners or grant
+authority. The copied development candidate passes the literal generic cells/variant/helper,
+I64/Text, existing-parameter edit, same-request rename and dependency-repair witness; the existing
+foreground consumer now uses a literal prelude instead of host member-ID maps. Source acceptance
+and integration are recorded separately in its evidence owner. v0.1.34 does not contain these
+bindings. Their additional release follows the explicit [roadmap trigger](roadmap.md). The older
+unprobed generic-recursion preparation versus ordered-substitution note remains unresolved; these
+nonrecursive cells do not close it.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
@@ -95,9 +113,8 @@ fold/map preserve their public contracts through sequential task iteration. ITER
 integrated source `3f25c3a7`: 26 fresh full gates, separate exact musl build/admission with both
 pinned userlands and all six behavioral owners, and 69 rejected receipt faults with healthy
 recovery. Public and neutral observations include a default-policy 8,193-update data-dependent
-state machine. Its named composition trigger is selected by the foreground campaign, which must
-complete the combined release; published `v0.1.32` still contains the predecessor effect library
-until that delivery is verified.
+state machine. Its selected foreground composition trigger is now delivered in immutable
+`v0.1.33`; the predecessor effect release `v0.1.32` remains unchanged.
 
 The [finite-recursive-nominal campaign](campaigns/202609110659.md) is reconciled through v0.1.31. Its source
 replaces blanket generic/application-cycle rejection with the non-expansive parameter-slot rule.

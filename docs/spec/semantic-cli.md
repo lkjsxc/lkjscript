@@ -280,6 +280,80 @@ transactions. Nested shapes use ordered flat fragment records and explicit paren
 edges. Request-local labels are notation only; normalized authored intent owns stable allocation
 and request commitment.
 
+### Reviewed named references
+
+Names address exact accepted meaning through typed request bindings. They do not import a package,
+allocate an owner, confer mutation rights or grant execution authority. The compact forms are:
+
+```text
+reference.package as=$ALIAS source=builtin
+reference.package as=$ALIAS package=PACKAGE_ID package-revision=EXACT_PACKAGE_REVISION
+reference.owner as=$ALIAS package=local|$PACKAGE_ALIAS class=CLASS name=NAME [parent=$OWNER_ALIAS]
+reference.owner as=$ALIAS package=$PACKAGE_ALIAS class=declaration owner=DECLARATION_ID
+```
+
+The package forms are exclusive. Builtin selection normalizes to the executable's immutable
+embedded package, semantic revision and logical package revision before commitment, independently
+of a project. Every selected package must agree with the request's explicit dependency closure.
+The existing dependency owner still owns add/replace/delete; compact dependency records expose
+staged add/replace. Binding never fetches, stages,
+imports, upgrades or executes anything. An exact declaration alias excludes name/parent and admits
+only a declaration exposed by that same selected interface.
+
+| Class | Parent | Local coverage | Dependency coverage |
+| --- | --- | --- | --- |
+| `module` | Package root | Existing module | Rejected; interfaces expose no modules |
+| `declaration` | Local module; foreign interface root | Existing declaration | Unique exported name, or exact exported declaration ID |
+| `type-parameter`, `effect-parameter` | Declaring declaration | Existing named parameter | Only parameters exposed by the selected interface |
+| `field` | Record declaration | Exact field | Exposed exact field |
+| `case` | Variant declaration | Exact case | Exposed exact case |
+| `operation` | Interface declaration | Exact operation | Exposed exact operation |
+| `parameter` | Function, external declaration or operation | Exact parameter of that parent | Only exposed parameters; no local-read scope is conferred |
+| `requirement`, `port` | Component declaration | Exact component member | Only legally exposed interface members |
+| `target` | Package root | Existing target | Rejected |
+
+An alias is accepted in every existing reference or local mutation selector position of its
+corresponding type: declaration/type application, call/function value, field/case,
+operation/requirement/effect row, type/effect parameter, existing function parameter, and port.
+Local bindings also address owner/parent preconditions and existing-owner deletion. An
+owner-absent precondition on a successfully resolved alias necessarily fails: selecting a missing
+owner does not create an identity for the precondition.
+Foreign aliases cannot select local mutations; ordinary subtype, ownership, lexical/generic scope,
+visibility, effect and complete-candidate validation remain authoritative. Expressions, lexical
+bindings, match payload bindings, HTTP routes, annotations and documentation are not new named
+namespaces. Their existing access remains; literal names, text and documentation never expand.
+
+Bindings may precede or follow uses. Reference aliases share `$` collision detection with creator
+and expression symbols but have distinct typed values. All bindings, even unused ones, must resolve.
+Package/parent edges must form a finite DAG, with exact same-package parents and the class rules
+above. Multiple aliases may select one owner. Normalized selectors and their complete inventory
+are canonical independently of alias spelling or binding order; meaningful edit order is preserved.
+A binding-only request still lacks a semantic operation. Raw admission charges precede deduplication.
+
+Local selectors resolve in the exact accepted base before any same-request rename/create/delete.
+Dependency selectors resolve in the explicit candidate dependency selection regardless of record
+order. No fallback to an older revision, hidden declaration, fuzzy match or global name table is
+permitted. Duplicate exported declaration names are ambiguous because the interface carries no
+module metadata; the exact declaration-alias form disambiguates without widening visibility.
+
+Prepared review binds the complete canonical selector and exact-resolution inventory, including
+class, owner kind/identity, exact parent/package root, package/semantic/logical revision and foreign
+interface identity. Apply rederives it through preparation; presentation labels and displayed IDs
+are not trusted resolution inputs. Legacy requests retain their intent bytes, commitment domain,
+allocation and accepted-idempotency behavior. A changed embedded supplier requires an explicit
+re-plan or exact-package request; it cannot silently alter a reviewed selection or reuse an
+unrelated success receipt. Flat expression/type fragments, explicit application and expression
+symbol uniqueness remain unchanged.
+
+The prepared token also binds executable capabilities and the verifier registry. Changes to that
+review context reject an older prepared token, including one for a legacy request, with
+`change_prepared_plan_mismatch`. Re-plan the original request/base/idempotency inputs and review the
+new token. Both plan and apply may reopen the matching accepted-idempotency owner's retained
+historical base; publication returns the original acceptance instead of another revision. A changed
+or invalid request never inherits success from a matching key alone. Missing historical inputs or
+an embedded supplier mismatch require the classified recovery path; there is no implicit
+conversion of an accepted request to a new supplier.
+
 `type.capability-resource as=@TYPE interface=INTERFACE` authors one exact-interface resource type.
 `add.parameter ... use=unrestricted|borrow|consume [requirement=REQUIREMENT]` authors canonical
 parameter use and the optional exact function-resource binding. Omission means unrestricted and no

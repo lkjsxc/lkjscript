@@ -30,7 +30,9 @@ fn context() -> Context {
                 &std::env::var_os("LKJSCRIPT_EFFECTS_VERIFIER")
                     .map(PathBuf::from)
                     .unwrap_or_else(|| std::env::current_exe().unwrap()),
-                MAXIMUM_EXECUTABLE_BYTES,
+                // Test binaries retain debug sections; this observer admission is separate from
+                // the product/release executable limit, which remains unchanged.
+                1_073_741_824,
             )
             .unwrap(),
             copied_candidate_sha256: digest,
@@ -53,6 +55,47 @@ fn context() -> Context {
             failure: None,
         },
     }
+}
+
+#[test]
+#[ignore = "requires an explicitly frozen candidate and a fresh evidence directory"]
+fn copied_named_reference_iteration() {
+    let mut context = context();
+    let builtin = context
+        .cli(None, &["package", "builtin", "inspect"], true)
+        .unwrap();
+    let standard = Package {
+        path: PathBuf::new(),
+        id: field(&builtin, "package", "id").unwrap(),
+        revision: field(&builtin, "package", "revision").unwrap(),
+        logical: field(&builtin, "package", "package-revision").unwrap(),
+        transport: field(&builtin, "package", "transport").unwrap(),
+        container: context.root.join("standard.lkjp"),
+        symbols: BTreeMap::new(),
+    };
+    context
+        .cli(
+            None,
+            &[
+                "package",
+                "builtin",
+                "export",
+                "--kind",
+                "transport",
+                "--output",
+                &standard.container.display().to_string(),
+            ],
+            true,
+        )
+        .unwrap();
+    let result = super::named::workflow(&mut context, &standard);
+    fs::write(
+        context.evidence.join("iteration.json"),
+        serde_json::to_vec_pretty(&context.receipt).unwrap(),
+    )
+    .unwrap();
+    fs::remove_dir_all(&context.root).unwrap();
+    result.unwrap();
 }
 
 fn measure_plain(
@@ -257,8 +300,8 @@ fn copied_task_library_foreground_iteration() {
     let mut context = context();
     let mut standard = standard(&mut context);
     let result = (|| -> Result<(), DevError> {
-        let (mut library, names) = super::effects::prepare_library(&mut context, &mut standard)?;
-        let mut consumers = super::foreground::prepare(&mut context, &standard, &library, &names)?;
+        let (mut library, _) = super::effects::prepare_library(&mut context, &mut standard)?;
+        let mut consumers = super::foreground::prepare(&mut context, &standard, &library)?;
         let recovery = context.root.join("foreground-library-recovery");
         fs::rename(&library.path, &recovery)?;
         super::foreground::initial(&mut context, &consumers)?;

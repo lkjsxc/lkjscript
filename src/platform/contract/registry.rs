@@ -2996,13 +2996,49 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_request_commitment_mismatch",
             DiagnosticClass::Semantic,
             "The reviewed request commitment differs from normalized input.",
-            "Re-run change plan for the exact input before project discovery.",
+            "Re-plan exact inputs. A changed embedded supplier requires the original matching executable for an accepted retry, or a new exact-package request.",
+        ),
+        diagnostic(
+            "change_reference_ambiguous",
+            DiagnosticClass::Semantic,
+            "Several exported declarations share the selected exact interface name.",
+            "Bind the intended public declaration with owner=DECLARATION_ID, then name its members beneath that alias.",
+        ),
+        diagnostic(
+            "change_reference_not_exposed",
+            DiagnosticClass::Semantic,
+            "The selected exact interface exposes no owner at the typed parent/name path.",
+            "Inspect that exact package interface and repair the name or explicit dependency selection; private owners remain inaccessible.",
+        ),
+        diagnostic(
+            "change_reference_supplier_mismatch",
+            DiagnosticClass::Semantic,
+            "The normalized embedded supplier differs from the explicitly selected exact dependency.",
+            "Use the original matching supplier executable for the original retry, or explicitly select and re-plan an exact package revision.",
+        ),
+        diagnostic(
+            "change_reference_dependency_revision",
+            DiagnosticClass::Semantic,
+            "A package selector differs from the candidate's explicit dependency binding.",
+            "Select the exact staged revision using the normal dependency operation, or correct the addressing prelude.",
+        ),
+        diagnostic(
+            "change_reference_parent_kind",
+            DiagnosticClass::Semantic,
+            "The selected parent kind cannot own this named namespace.",
+            "Use the class/parent table in change.reference-namespace and the exact parent in the same selected package.",
+        ),
+        diagnostic(
+            "change_reference_symbol_collision",
+            DiagnosticClass::Source,
+            "A reference alias collides with a new-owner or expression symbol.",
+            "Give the reference a distinct request-local alias; alias labels do not change normalized intent.",
         ),
         diagnostic(
             "change_prepared_plan_mismatch",
             DiagnosticClass::Semantic,
             "The reviewed prepared-plan commitment differs from the reprepared logical plan.",
-            "Re-run change plan against the current exact base and review the complete logical plan.",
+            "Re-plan with the original request/base/idempotency inputs; accepted retries use their retained historical base. Review the complete logical plan under this executable's capabilities.",
         ),
         diagnostic(
             "change_plan_output_project_path",
@@ -5877,7 +5913,26 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     &[("name", (*name).to_owned())],
                 )?);
             }
-            for (name, syntax) in [("package", "package"), ("exact_owner", "DOMAIN_HEX")] {
+            for (name, local, foreign) in crate::platform::control::COMPACT_REFERENCE_NAMESPACES {
+                records.push(compact_record(
+                    "change.reference-namespace",
+                    &[
+                        ("class", (*name).to_owned()),
+                        ("local-parent", (*local).to_owned()),
+                        ("dependency-parent", (*foreign).to_owned()),
+                        (
+                            "resolution",
+                            "exact-base-or-explicit-dependency;all-declarations-reviewed"
+                                .to_owned(),
+                        ),
+                    ],
+                )?);
+            }
+            for (name, syntax) in [
+                ("package", "package"),
+                ("exact_owner", "DOMAIN_HEX"),
+                ("reference_alias", "$REFERENCE_ALIAS"),
+            ] {
                 records.push(compact_record(
                     "change.parent-form",
                     &[("name", name.to_owned()), ("syntax", syntax.to_owned())],
@@ -7217,6 +7272,12 @@ fn validate_compact_change_inventory(
             ));
         }
         let optional = [
+            ("reference.package", "source"),
+            ("reference.package", "package"),
+            ("reference.package", "package-revision"),
+            ("reference.owner", "name"),
+            ("reference.owner", "parent"),
+            ("reference.owner", "owner"),
             ("add.type-parameter", "constraint"),
             ("add.case", "payload"),
             ("set.case-payload", "payload"),

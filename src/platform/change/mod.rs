@@ -27,8 +27,9 @@ pub use authority::{
 };
 pub(crate) use authority::{prepare_owner_map_edits, stage_prepared_authority};
 pub use base_read::{
-    BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead,
-    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
+    BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork,
+    CanonicalReferenceInterface, WitnessBaseRead, WitnessRead, WitnessReadWork,
+    WitnessRelationRead, WitnessTestDependencyRead,
 };
 pub(crate) use base_read::{BudgetedCanonicalBase, BudgetedWitnessBase};
 pub use budget::{
@@ -57,15 +58,19 @@ pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
     AuthoredEffectParameter, AuthoredEffectParameterReference, AuthoredEffectRow,
-    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
-    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
-    AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
-    AuthoredOperation, AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter,
+    AuthoredExistingOwner, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperation, AuthoredOperationReference, AuthoredOwnerParent,
+    AuthoredOwnerReferenceSelection, AuthoredOwnerReferenceSelector, AuthoredParameter,
     AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
-    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredRecordExpressionField, AuthoredReference, AuthoredReferenceBindings,
+    AuthoredReferenceOrigin, AuthoredReferencePackage, AuthoredRequirement,
+    AuthoredRequirementReference, AuthoredResourceLimit, AuthoredSelectedPrecondition,
+    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
     MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
+    ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
     lower_authored_changes,
 };
 pub(crate) use request::{canonical_authored_budget_bytes, canonical_authored_intent_bytes};
