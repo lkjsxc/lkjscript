@@ -1,0 +1,21 @@
+request base=rev_ef982bad97e3e9d8d11b9c9c08bfdb2b8c8d14194a9587af04404b48c2bb35c9 idempotency=baseline-permutation
+create.module as=$module name=probe
+type.parameter as=@A parameter=$A
+type.parameter as=@B parameter=$B
+expression.bool as=$stop value=true
+expression.i64 as=$seven value=7
+expression.call as=$recursive function=$f
+type.argument parent=$recursive index=0 type=@B
+type.argument parent=$recursive index=1 type=@A
+expression.if as=$body condition=$stop when-true=$seven when-false=$recursive
+create.function as=$f module=$module name=swap visibility=public result=i64 effect=pure body=$body
+add.type-parameter as=$A declaration=$f name=A
+add.type-parameter as=$B declaration=$f name=B
+expression.call as=$entry-body function=$f
+type.argument parent=$entry-body index=0 type=text
+type.argument parent=$entry-body index=1 type=i64
+create.function as=$entry module=$module name=entry visibility=public result=i64 effect=pure body=$entry-body
+create.component as=$component module=$module name=command visibility=public
+type.function as=@entry result=i64
+add.port as=$port component=$component name=entry type=@entry function=$entry
+create.target as=$target name=main component=$component port=$port runner=command

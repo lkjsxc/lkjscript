@@ -27,6 +27,9 @@ pub struct PreparedChangeAnalysis {
     pub witness_read_work: WitnessReadWork,
     pub budget_work: ChangeBudgetWork,
     pub budget: ChangeBudget,
+    /// Complete post-change validation, used when historical acceptance cannot be an
+    /// incremental proof base. It never certifies the historical program.
+    pub(crate) full_candidate: Option<crate::platform::kernel::FullValidationReport>,
 }
 
 pub fn prepare_change_analysis<B: CanonicalBaseRead + ?Sized, W: WitnessMapBase + ?Sized>(
@@ -54,6 +57,13 @@ pub fn prepare_change_analysis_with_budget<
     initial_work: ChangeBudgetWork,
 ) -> Result<PreparedChangeAnalysis, Vec<Diagnostic>> {
     let declared_budget = budget;
+    if !base_witness.witness_contract_is_current() {
+        return Err(vec![crate::platform::diagnostic::Diagnostic::new(
+            crate::platform::diagnostic::DiagnosticClass::Semantic,
+            "change_current_validation_required",
+            "incremental preparation requires a current valid base; use full candidate repair",
+        )]);
+    }
     let mut budget = ChangeBudgetMeter::new(budget, initial_work).map_err(|error| vec![error])?;
     let canonical_base = BudgetedCanonicalBase::new(
         base,
@@ -113,6 +123,10 @@ pub fn prepare_change_analysis_with_budget<
     budget
         .observe_impact(&summaries.plan)
         .map_err(|error| vec![error])?;
+    let mut validation_admission = declared_budget.validation;
+    validation_admission.maximum_expression_steps = validation_admission
+        .maximum_expression_steps
+        .saturating_sub(initial_work.validation.expression_steps);
     let validation = validate_incremental_frontier_with_admission(
         &overlay,
         &canonical,
@@ -120,7 +134,7 @@ pub fn prepare_change_analysis_with_budget<
         &summaries.final_delta,
         &witness_base,
         structural,
-        declared_budget.validation,
+        validation_admission,
     )?;
     budget
         .observe_expression_validation(validation.work.expression_work, 0)
@@ -167,6 +181,7 @@ pub fn prepare_change_analysis_with_budget<
         .observe_canonical_reads(canonical_read_work)
         .map_err(|error| vec![error])?;
     Ok(PreparedChangeAnalysis {
+        full_candidate: None,
         canonical,
         derived,
         summaries,

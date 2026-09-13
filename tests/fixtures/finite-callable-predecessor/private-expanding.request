@@ -1,0 +1,18 @@
+request base=rev_2a4dc8bb55291195bafec70a836c71da54e10cc21c3cd20a60ff4e99779a9ce0 idempotency=baseline-private-expanding
+create.module as=$module name=probe
+type.parameter as=@T parameter=$T
+type.list as=@growing item=@T
+expression.function-value as=$unused function=$f
+type.argument parent=$unused index=0 type=@growing
+expression.i64 as=$seven value=7
+expression.sequence as=$body
+expression.argument parent=$body index=0 expression=$unused
+expression.argument parent=$body index=1 expression=$seven
+create.function as=$f module=$module name=private-growing visibility=private result=i64 effect=pure body=$body
+add.type-parameter as=$T declaration=$f name=T
+expression.i64 as=$entry-body value=7
+create.function as=$entry module=$module name=entry visibility=public result=i64 effect=pure body=$entry-body
+create.component as=$component module=$module name=command visibility=public
+type.function as=@entry result=i64
+add.port as=$port component=$component name=entry type=@entry function=$entry
+create.target as=$target name=main component=$component port=$port runner=command

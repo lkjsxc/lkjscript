@@ -9,6 +9,7 @@ mod effects_iteration_program;
 mod effects_program;
 mod effects_resources;
 mod effects_traversal;
+mod finite;
 mod foreground;
 mod foreground_program;
 mod named;
@@ -98,6 +99,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let mut binary = None;
     let mut output = None;
     let mut machine = false;
+    let mut selected_case = None;
     while let Some(option) = crate::next_utf8(&mut arguments, "option")? {
         match option.as_str() {
             "--binary" if binary.is_none() => {
@@ -113,6 +115,16 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 ))
             }
             "--machine" if !machine => machine = true,
+            "--case" if selected_case.is_none() => {
+                let selected = crate::next_utf8(&mut arguments, "case")?
+                    .ok_or_else(|| DevError::usage("missing --case name"))?;
+                if !matches!(selected.as_str(), "finite-callable" | "validator-upgrade") {
+                    return Err(DevError::usage(
+                        "offline-packages --case accepts finite-callable or validator-upgrade",
+                    ));
+                }
+                selected_case = Some(selected);
+            }
             _ => {
                 return Err(DevError::usage(format!(
                     "unknown or duplicate offline-packages option {option}"
@@ -150,7 +162,12 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         evidence: output.clone(),
         binary: copied,
         receipt: Receipt {
-            schema: "lkjscript-offline-packages-acceptance-10".to_owned(),
+            schema: match selected_case.as_deref() {
+                Some("finite-callable") => "lkjscript-offline-finite-callable-1",
+                Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
+                _ => "lkjscript-offline-packages-acceptance-11",
+            }
+            .to_owned(),
             status: "failed".to_owned(),
             copied_candidate_sha256: candidate_sha256.clone(),
             candidate_sha256,
@@ -174,7 +191,12 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             failure: None,
         },
     };
-    let outcome = workflow(&mut context).and_then(|()| {
+    let outcome = (match selected_case.as_deref() {
+        Some("finite-callable") => finite::focused(&mut context),
+        Some("validator-upgrade") => finite::upgrade(&mut context),
+        _ => workflow(&mut context),
+    })
+    .and_then(|()| {
         require(
             digest_file(&context.binary, MAXIMUM_EXECUTABLE_BYTES)?
                 == context.receipt.candidate_sha256
@@ -206,7 +228,11 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let receipt = evidence::publish_json(&output.join("receipt.json"), &context.receipt)?;
     let success = context.receipt.status == "fresh passed" && context.receipt.cleanup_complete;
     if success {
-        read_transferred_receipt(&receipt.path, &binary, &std::env::current_exe()?)?;
+        if selected_case.is_some() {
+            finite::read_focused(&receipt.path, &binary, &std::env::current_exe()?)?;
+        } else {
+            read_transferred_receipt(&receipt.path, &binary, &std::env::current_exe()?)?;
+        }
     }
     if machine {
         println!(
@@ -243,9 +269,19 @@ pub(crate) fn effect_probe_command(
 ) -> Result<u8, DevError> {
     let project = crate::next_utf8(&mut arguments, "project")?
         .ok_or_else(|| DevError::usage("effect-probe requires one owned project"))?;
-    require(arguments.next().is_none(), "effect-probe takes one project")?;
-    let observed = lkjscript::platform::contributor::effect_execution_probe(Path::new(&project))
-        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    let selected = crate::next_utf8(&mut arguments, "case option")?;
+    let observed = if selected.as_deref() == Some("--case") {
+        require(
+            crate::next_utf8(&mut arguments, "case")?.as_deref() == Some("finite-callable")
+                && arguments.next().is_none(),
+            "effect-probe --case accepts finite-callable",
+        )?;
+        lkjscript::platform::contributor::finite_callable_execution_probe(Path::new(&project))
+    } else {
+        require(selected.is_none(), "effect-probe takes one project")?;
+        lkjscript::platform::contributor::effect_execution_probe(Path::new(&project))
+    }
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
     println!("{}", serde_json::to_string(&observed)?);
     Ok(0)
 }
@@ -1498,6 +1534,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     recursive::workflow(context, &mut standard)?;
     effects::workflow(context, &mut standard)?;
     named::workflow(context, &standard)?;
+    finite::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1804,7 +1841,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-10"
+        receipt.schema == "lkjscript-offline-packages-acceptance-11"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1887,7 +1924,7 @@ pub(crate) fn read_transferred_receipt(
         )?;
     }
     require(
-        receipt.runners.len() == 8
+        receipt.runners.len() == 9
             && receipt
                 .runners
                 .iter()
@@ -1942,40 +1979,11 @@ pub(crate) fn read_transferred_receipt(
             "a body, argument or exact template change reused the predecessor artifact identity",
         )?;
     }
-    let mut previous = None;
-    for file in &receipt.files {
-        require(
-            file.kind == evidence::FileKind::File
-                && Path::new(&file.path).components().count() == 1
-                && !Path::new(&file.path).is_absolute()
-                && file.path != "receipt.json"
-                && previous.is_none_or(|previous: &str| previous < file.path.as_str()),
-            "offline evidence inventory is noncanonical",
-        )?;
-        require(
-            evidence::proof(&root.join(&file.path), file.path.clone())? == *file,
-            "offline evidence file changed after observation",
-        )?;
-        previous = Some(file.path.as_str());
-    }
-    let mut observed_files = fs::read_dir(&root)?
-        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
-        .collect::<Result<Vec<_>, _>>()?;
-    observed_files.retain(|name| name != "receipt.json");
-    observed_files.sort();
+    verify_file_inventory(&receipt, &root)?;
     require(
-        observed_files
-            == receipt
-                .files
-                .iter()
-                .map(|file| file.path.clone())
-                .collect::<Vec<_>>(),
-        "offline evidence inventory omitted or added a file",
-    )?;
-    require(
-        receipt.inventories.len() == 29
-            && receipt.transport_digests.len() == 29
-            && receipt.producer_inventories.len() == 29,
+        receipt.inventories.len() == 31
+            && receipt.transport_digests.len() == 31
+            && receipt.producer_inventories.len() == 31,
         "complete producer, replacement, HTTP and foreground source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -2012,6 +2020,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("D2 source revision missing"))?;
     let mut missing_source_diagnostic = false;
     let named_commands = named::validate(&receipt, &root)?;
+    let finite_installed_commands = finite::validate(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()
@@ -2027,9 +2036,10 @@ pub(crate) fn read_transferred_receipt(
                 })
                 .unwrap_or(&receipt.isolated_root)
                 && command.command.first().is_some_and(|binary| {
-                    if !named
-                        && command.command.get(1).is_some_and(|v| v == "run")
-                        && command.command.get(2).is_some_and(|v| v == "--deployment")
+                    if finite_installed_commands.contains(&index)
+                        || (!named
+                            && command.command.get(1).is_some_and(|v| v == "run")
+                            && command.command.get(2).is_some_and(|v| v == "--deployment"))
                     {
                         binary == &receipt.pinned_runtime_path
                     } else {
@@ -2216,6 +2226,42 @@ fn verify_producer_inventory(
             && imported.retirements == producer.retirements
             && imported.dependencies == producer.dependencies,
         "complete transported canonical owner/type/retirement/edge inventory differs from its accepted producer",
+    )
+}
+
+fn verify_file_inventory(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
+    let mut previous = None;
+    for file in &receipt.files {
+        require(
+            file.kind == evidence::FileKind::File
+                && matches!(
+                    Path::new(&file.path).components().next(),
+                    Some(std::path::Component::Normal(_))
+                )
+                && Path::new(&file.path).components().count() == 1
+                && file.path != "receipt.json"
+                && previous.is_none_or(|previous: &str| previous < file.path.as_str()),
+            "offline evidence inventory is noncanonical",
+        )?;
+        require(
+            evidence::proof(&root.join(&file.path), file.path.clone())? == *file,
+            "offline evidence file changed after observation",
+        )?;
+        previous = Some(file.path.as_str());
+    }
+    let mut observed_files = fs::read_dir(root)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()?;
+    observed_files.retain(|name| name != "receipt.json");
+    observed_files.sort();
+    require(
+        observed_files
+            == receipt
+                .files
+                .iter()
+                .map(|file| file.path.clone())
+                .collect::<Vec<_>>(),
+        "offline evidence inventory omitted or added a file",
     )
 }
 

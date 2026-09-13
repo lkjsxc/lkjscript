@@ -1,0 +1,9 @@
+request base=rev_881a348816a8469fd4e9fdaeed5b0245d95a0eed34a27b3ec0843340e68cf5dc idempotency=baseline-dependency
+add.dependency package=pkg_5e9b07f0d0a8a9608be2a4a16df31c7f semantic-revision=rev_f3e49f1725234acd064a6938b764166d3696b13da570d6581302a9ba5a4e998d package-revision=package_revision_58f9c15743c3ca53eb453d8fd2d1b38a49e48f856b15d5dbe458c0787d3e7435
+create.module as=$module name=consumer
+expression.i64 as=$body value=7
+create.function as=$entry module=$module name=entry visibility=public result=i64 effect=pure body=$body
+create.component as=$component module=$module name=command visibility=public
+type.function as=@entry result=i64
+add.port as=$port component=$component name=entry type=@entry function=$entry
+create.target as=$target name=main component=$component port=$port runner=command

@@ -1,0 +1,291 @@
+reference.package as=$std source=builtin
+reference.owner as=$text-concat package=$std class=declaration name=text-concat
+reference.owner as=$text-equal package=$std class=declaration name=text-equal
+reference.owner as=$i64-to-text package=$std class=declaration name=i64-to-text
+reference.owner as=$i64-equal package=$std class=declaration name=i64-equal
+reference.owner as=$list-length package=$std class=declaration name=list-length
+reference.owner as=$list-get package=$std class=declaration name=list-get
+reference.owner as=$json-encode package=$std class=declaration name=json-encode
+reference.owner as=$json-decode-or package=$std class=declaration name=json-decode-or
+reference.owner as=$divide package=$std class=declaration name=divide
+reference.owner as=$Configuration package=$std class=declaration name=Configuration
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$config-text package=$std class=operation parent=$Configuration name=text
+reference.owner as=$data-get package=$std class=operation parent=$DataStore name=get
+reference.owner as=$data-put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$data-schema-read package=$std class=operation parent=$DataStore name=schema-read
+reference.owner as=$data-schema-set package=$std class=operation parent=$DataStore name=schema-set
+reference.owner as=$data-scan package=$std class=operation parent=$DataStore name=scan
+reference.owner as=$data-delete package=$std class=operation parent=$DataStore name=delete
+reference.owner as=$data-transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
+reference.owner as=$entry-revision package=$std class=field parent=$DataEntry name=revision
+reference.owner as=$missing package=$std class=case parent=$DataExpectation name=Missing
+reference.owner as=$exact package=$std class=case parent=$DataExpectation name=Exact
+reference.owner as=$text-key package=$std class=case parent=$DataKeyPart name=Text
+reference.owner as=$alternate package=$library class=declaration name=alternate
+reference.owner as=$make-alternator package=$library class=declaration name=make-alternator
+reference.owner as=$finite-reset package=$library class=declaration name=finite-reset
+create.module as=$module name=consumer
+create.component as=$component module=$module name=application visibility=public
+type.named as=@Entry declaration=$DataEntry
+type.list as=@Entries item=@Entry
+type.named as=@KeyPart declaration=$DataKeyPart
+add.requirement as=$config component=$component name=config interface=$Configuration
+requirement.operation parent=$config index=0 operation=$config-text
+requirement.limit parent=$config index=0 name=maximum_calls maximum=100 unit=calls
+add.requirement as=$data component=$component name=data interface=$DataStore
+requirement.operation parent=$data index=0 operation=$data-get
+requirement.operation parent=$data index=1 operation=$data-put
+requirement.operation parent=$data index=2 operation=$data-schema-read
+requirement.operation parent=$data index=3 operation=$data-schema-set
+requirement.operation parent=$data index=4 operation=$data-scan
+requirement.operation parent=$data index=5 operation=$data-delete
+requirement.operation parent=$data index=6 operation=$data-transaction
+requirement.limit parent=$data index=0 name=maximum_calls maximum=100 unit=calls
+effect.row as=@Left
+effect.requirement parent=@Left index=0 requirement=$config
+effect.requirement parent=@Left index=1 requirement=$data
+effect.row as=@Right
+effect.requirement parent=@Right index=0 requirement=$data
+add.parameter as=$render-integer-value function=$render-integer name=value type=i64
+add.parameter as=$render-text-value function=$render-text name=value type=text
+add.parameter as=$main-count function=$main name=count type=i64
+add.parameter as=$reset-count function=$reset name=count type=i64
+effect.requirement parent=$trace index=0 requirement=$data
+add.parameter as=$record-label function=$record name=label type=text
+effect.requirement parent=$record index=0 requirement=$data
+add.parameter as=$left-value function=$left name=value type=i64
+effect.requirement parent=$left index=0 requirement=$config
+effect.requirement parent=$left index=1 requirement=$data
+add.parameter as=$right-value function=$right name=value type=text
+effect.requirement parent=$right index=0 requirement=$data
+add.parameter as=$task-count function=$task name=count type=i64
+add.parameter as=$task-value function=$task name=value type=text
+effect.requirement parent=$task index=0 requirement=$config
+effect.requirement parent=$task index=1 requirement=$data
+type.function as=@main-port result=text
+type.argument parent=@main-port index=0 type=i64
+add.port as=$main-port component=$component name=main type=@main-port function=$main
+create.target as=$main-target name=main component=$component port=$main-port runner=command
+type.function as=@reset-port result=i64
+type.argument parent=@reset-port index=0 type=i64
+add.port as=$reset-port component=$component name=reset type=@reset-port function=$reset
+create.target as=$reset-target name=reset component=$component port=$reset-port runner=command
+type.task-function as=@task-port result=text effect=@Left
+type.argument parent=@task-port index=0 type=i64
+type.argument parent=@task-port index=1 type=text
+add.port as=$task-port component=$component name=task type=@task-port function=$task
+create.target as=$task-target name=task component=$component port=$task-port runner=command
+type.task-function as=@trace-port result=text effect=@Right
+add.port as=$trace-port component=$component name=trace type=@trace-port function=$trace
+create.target as=$trace-target name=trace component=$component port=$trace-port runner=command
+expression.call as=$v5 function=$text-concat
+expression.call as=$v3 function=$text-concat
+expression.text as=$v0 value="I"
+expression.argument parent=$v3 index=0 expression=$v0
+expression.call as=$v2 function=$i64-to-text
+expression.local as=$v1 value=$render-integer-value
+expression.argument parent=$v2 index=0 expression=$v1
+expression.argument parent=$v3 index=1 expression=$v2
+expression.argument parent=$v5 index=0 expression=$v3
+expression.text as=$v4 value=";"
+expression.argument parent=$v5 index=1 expression=$v4
+expression.call as=$v10 function=$text-concat
+expression.call as=$v8 function=$text-concat
+expression.text as=$v6 value="T"
+expression.argument parent=$v8 index=0 expression=$v6
+expression.local as=$v7 value=$render-text-value
+expression.argument parent=$v8 index=1 expression=$v7
+expression.argument parent=$v10 index=0 expression=$v8
+expression.text as=$v9 value=";"
+expression.argument parent=$v10 index=1 expression=$v9
+expression.call as=$v17 function=$alternate
+expression.local as=$v11 value=$main-count
+expression.argument parent=$v17 index=0 expression=$v11
+expression.i64 as=$v12 value=7
+expression.argument parent=$v17 index=1 expression=$v12
+expression.text as=$v13 value="x"
+expression.argument parent=$v17 index=2 expression=$v13
+expression.function-value as=$v14 function=$render-integer
+expression.argument parent=$v17 index=3 expression=$v14
+expression.function-value as=$v15 function=$render-text
+expression.argument parent=$v17 index=4 expression=$v15
+expression.text as=$v16 value=""
+expression.argument parent=$v17 index=5 expression=$v16
+type.argument parent=$v17 index=0 type=i64
+type.argument parent=$v17 index=1 type=text
+expression.call as=$v19 function=$finite-reset
+expression.local as=$v18 value=$reset-count
+expression.argument parent=$v19 index=0 expression=$v18
+type.argument parent=$v19 index=0 type=text
+type.argument parent=$v19 index=1 type=i64
+expression.call as=$v23 function=$i64-equal
+expression.call as=$v21 function=$list-length
+expression.local as=$v20 value=$trace-entries
+expression.argument parent=$v21 index=0 expression=$v20
+type.argument parent=$v21 index=0 type=@Entry
+expression.argument parent=$v23 index=0 expression=$v21
+expression.i64 as=$v22 value=0
+expression.argument parent=$v23 index=1 expression=$v22
+expression.text as=$v31 value=""
+expression.call as=$v29 function=$json-decode-or
+expression.call as=$v26 function=$list-get
+expression.local as=$v24 value=$trace-entries
+expression.argument parent=$v26 index=0 expression=$v24
+expression.i64 as=$v25 value=0
+expression.argument parent=$v26 index=1 expression=$v25
+type.argument parent=$v26 index=0 type=@Entry
+expression.field as=$v27 value=$v26 field=$entry-value
+expression.argument parent=$v29 index=0 expression=$v27
+expression.text as=$v28 value=""
+expression.argument parent=$v29 index=1 expression=$v28
+type.argument parent=$v29 index=0 type=text
+expression.field as=$v30 value=$v29 name=value
+expression.if as=$v32 condition=$v23 when-true=$v31 when-false=$v30
+expression.let as=$v38 body=$v32
+expression.capability-call as=$v37 requirement=$data operation=$data-get
+expression.static-text as=$v33 value=finite-callable
+expression.argument parent=$v37 index=0 expression=$v33
+expression.list as=$v36 item=@KeyPart
+expression.text as=$v34 value="observations"
+expression.variant as=$v35 case=$text-key payload=$v34
+expression.argument parent=$v36 index=0 expression=$v35
+expression.argument parent=$v37 index=1 expression=$v36
+expression.binding parent=$v38 index=0 as=$trace-entries name=trace-entries type=@Entries value=$v37
+expression.sequence as=$v64
+expression.capability-call as=$v63 requirement=$data operation=$data-put
+expression.static-text as=$v59 value=finite-callable
+expression.argument parent=$v63 index=0 expression=$v59
+expression.list as=$v62 item=@KeyPart
+expression.text as=$v60 value="observations"
+expression.variant as=$v61 case=$text-key payload=$v60
+expression.argument parent=$v62 index=0 expression=$v61
+expression.argument parent=$v63 index=1 expression=$v62
+expression.call as=$v54 function=$json-encode
+expression.call as=$v53 function=$text-concat
+expression.call as=$v42 function=$i64-equal
+expression.call as=$v40 function=$list-length
+expression.local as=$v39 value=$record-entries
+expression.argument parent=$v40 index=0 expression=$v39
+type.argument parent=$v40 index=0 type=@Entry
+expression.argument parent=$v42 index=0 expression=$v40
+expression.i64 as=$v41 value=0
+expression.argument parent=$v42 index=1 expression=$v41
+expression.text as=$v50 value=""
+expression.call as=$v48 function=$json-decode-or
+expression.call as=$v45 function=$list-get
+expression.local as=$v43 value=$record-entries
+expression.argument parent=$v45 index=0 expression=$v43
+expression.i64 as=$v44 value=0
+expression.argument parent=$v45 index=1 expression=$v44
+type.argument parent=$v45 index=0 type=@Entry
+expression.field as=$v46 value=$v45 field=$entry-value
+expression.argument parent=$v48 index=0 expression=$v46
+expression.text as=$v47 value=""
+expression.argument parent=$v48 index=1 expression=$v47
+type.argument parent=$v48 index=0 type=text
+expression.field as=$v49 value=$v48 name=value
+expression.if as=$v51 condition=$v42 when-true=$v50 when-false=$v49
+expression.argument parent=$v53 index=0 expression=$v51
+expression.local as=$v52 value=$record-label
+expression.argument parent=$v53 index=1 expression=$v52
+expression.argument parent=$v54 index=0 expression=$v53
+type.argument parent=$v54 index=0 type=text
+expression.argument parent=$v63 index=2 expression=$v54
+expression.call as=$tree0 function=$i64-equal
+expression.call as=$tree1 function=$list-length
+expression.local as=$tree2 value=$record-entries
+expression.argument parent=$tree1 index=0 expression=$tree2
+type.argument parent=$tree1 index=0 type=@Entry
+expression.argument parent=$tree0 index=0 expression=$tree1
+expression.i64 as=$tree3 value=0
+expression.argument parent=$tree0 index=1 expression=$tree3
+expression.variant as=$v57 case=$missing
+expression.call as=$tree4 function=$list-get
+expression.local as=$tree5 value=$record-entries
+expression.argument parent=$tree4 index=0 expression=$tree5
+expression.i64 as=$tree6 value=0
+expression.argument parent=$tree4 index=1 expression=$tree6
+type.argument parent=$tree4 index=0 type=@Entry
+expression.field as=$v55 value=$tree4 field=$entry-revision
+expression.variant as=$v56 case=$exact payload=$v55
+expression.if as=$v58 condition=$tree0 when-true=$v57 when-false=$v56
+expression.argument parent=$v63 index=3 expression=$v58
+expression.argument parent=$v64 index=0 expression=$v63
+expression.local as=$v65 value=$record-label
+expression.argument parent=$v64 index=1 expression=$v65
+expression.let as=$v71 body=$v64
+expression.capability-call as=$v70 requirement=$data operation=$data-get
+expression.static-text as=$v66 value=finite-callable
+expression.argument parent=$v70 index=0 expression=$v66
+expression.list as=$v69 item=@KeyPart
+expression.text as=$v67 value="observations"
+expression.variant as=$v68 case=$text-key payload=$v67
+expression.argument parent=$v69 index=0 expression=$v68
+expression.argument parent=$v70 index=1 expression=$v69
+expression.binding parent=$v71 index=0 as=$record-entries name=record-entries type=@Entries value=$v70
+expression.call as=$v79 function=$record
+expression.call as=$v78 function=$text-concat
+expression.call as=$v76 function=$text-concat
+expression.capability-call as=$v73 requirement=$config operation=$config-text
+expression.static-text as=$v72 value=left-prefix
+expression.argument parent=$v73 index=0 expression=$v72
+expression.argument parent=$v76 index=0 expression=$v73
+expression.call as=$v75 function=$i64-to-text
+expression.local as=$v74 value=$left-value
+expression.argument parent=$v75 index=0 expression=$v74
+expression.argument parent=$v76 index=1 expression=$v75
+expression.argument parent=$v78 index=0 expression=$v76
+expression.text as=$v77 value=";"
+expression.argument parent=$v78 index=1 expression=$v77
+expression.argument parent=$v79 index=0 expression=$v78
+expression.call as=$v82 function=$text-equal
+expression.local as=$v80 value=$right-value
+expression.argument parent=$v82 index=0 expression=$v80
+expression.text as=$v81 value="trap"
+expression.argument parent=$v82 index=1 expression=$v81
+expression.call as=$v86 function=$i64-to-text
+expression.call as=$v85 function=$divide
+expression.i64 as=$v83 value=1
+expression.argument parent=$v85 index=0 expression=$v83
+expression.i64 as=$v84 value=0
+expression.argument parent=$v85 index=1 expression=$v84
+expression.argument parent=$v86 index=0 expression=$v85
+expression.call as=$v89 function=$record
+expression.call as=$v88 function=$render-text
+expression.local as=$v87 value=$right-value
+expression.argument parent=$v88 index=0 expression=$v87
+expression.argument parent=$v89 index=0 expression=$v88
+expression.if as=$v90 condition=$v82 when-true=$v86 when-false=$v89
+expression.call as=$v91 function=$make-alternator
+type.argument parent=$v91 index=0 type=i64
+type.argument parent=$v91 index=1 type=text
+effect.argument parent=$v91 index=0 effect=@Left
+effect.argument parent=$v91 index=1 effect=@Right
+expression.invoke as=$v92 function=$v91
+expression.local as=$v93 value=$task-count
+expression.argument parent=$v92 index=0 expression=$v93
+expression.i64 as=$v94 value=7
+expression.argument parent=$v92 index=1 expression=$v94
+expression.local as=$v95 value=$task-value
+expression.argument parent=$v92 index=2 expression=$v95
+expression.function-value as=$v96 function=$left
+expression.argument parent=$v92 index=3 expression=$v96
+expression.function-value as=$v97 function=$right
+expression.argument parent=$v92 index=4 expression=$v97
+expression.text as=$v98 value=""
+expression.argument parent=$v92 index=5 expression=$v98
+create.function as=$render-integer module=$module name=render-integer visibility=private result=text effect=pure body=$v5
+create.function as=$render-text module=$module name=render-text visibility=private result=text effect=pure body=$v10
+create.function as=$main module=$module name=main visibility=private result=text effect=pure body=$v17
+create.function as=$reset module=$module name=reset visibility=private result=i64 effect=pure body=$v19
+create.function as=$trace module=$module name=trace visibility=private result=text effect=task body=$v38
+expression.transaction as=$record-transaction requirement=$data binding=$record-tx name=record-transaction body=$v71
+create.function as=$record module=$module name=record visibility=private result=text effect=task body=$record-transaction
+create.function as=$left module=$module name=left visibility=private result=text effect=task body=$v79
+create.function as=$right module=$module name=right visibility=private result=text effect=task body=$v90
+create.function as=$task module=$module name=task visibility=private result=text effect=task body=$v92

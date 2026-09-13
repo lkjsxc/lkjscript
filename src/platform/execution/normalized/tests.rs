@@ -3581,9 +3581,9 @@ fn normalized_preparation_rejects_http_handler_requirement_closure_drift() {
     }
     assert_eq!(
         NormalizedProgram::prepare(loaded)
-            .expect_err("preparation must reconstruct HTTP handler capability closure")
+            .expect_err("changed HTTP capability input must lose its current admission binding")
             .code,
-        "normalized_http_route_requirement_closure"
+        "artifact_current_admission_binding"
     );
 }
 

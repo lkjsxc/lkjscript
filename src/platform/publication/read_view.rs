@@ -1,5 +1,6 @@
 //! Revision-pinned, bounded reads over accepted Graph 10 authority and its committed witness.
 
+use super::validation::{RevalidatedBase, ViewStore};
 use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
 };
@@ -343,17 +344,13 @@ impl RepositoryReadAdmission {
 /// Read-only adapter that carries one package-closure object and decoder admission through APIs
 /// whose transport-neutral store boundary predates change-budget enforcement.
 struct AdmittedRepositoryStore<'a> {
-    base: &'a PackDirectoryStore,
+    base: &'a ViewStore,
     store: Cell<StoreReadAdmission>,
     canonical_records: Cell<u64>,
 }
 
 impl<'a> AdmittedRepositoryStore<'a> {
-    const fn new(
-        base: &'a PackDirectoryStore,
-        store: StoreReadAdmission,
-        canonical_records: u64,
-    ) -> Self {
+    const fn new(base: &'a ViewStore, store: StoreReadAdmission, canonical_records: u64) -> Self {
         Self {
             base,
             store: Cell::new(store),
@@ -768,30 +765,189 @@ fn logical_plan_evidence(
 /// before it may coexist with these views.
 #[derive(Debug)]
 pub struct RepositoryView {
+    control: crate::platform::execution::ExecutionControl,
     current: CurrentPublication,
-    store: PackDirectoryStore,
+    store: ViewStore,
+    revalidated: Option<std::sync::Arc<RevalidatedBase>>,
+    validation_reused: bool,
+    validation_read_work: CanonicalReadWork,
+    validation_steps: u64,
+    idempotent_result: Option<super::HeadRecord>,
     hidden_type_objects: BTreeSet<TypeObjectDigest>,
 }
 
 impl RepositoryView {
-    pub(super) const fn new(current: CurrentPublication, store: PackDirectoryStore) -> Self {
+    pub(super) fn new(current: CurrentPublication, store: PackDirectoryStore) -> Self {
         Self {
+            control: crate::platform::execution::ExecutionControl::uncancelled(),
             current,
-            store,
+            store: ViewStore::new(store),
+            revalidated: None,
+            validation_reused: false,
+            validation_read_work: CanonicalReadWork {
+                point_reads: 0,
+                map_pages_read: 0,
+                map_entries_visited: 0,
+                catalog_lookups: 0,
+                objects_read: 0,
+                bytes_read: 0,
+                canonical_records_decoded: 0,
+            },
+            validation_steps: 0,
+            idempotent_result: None,
             hidden_type_objects: BTreeSet::new(),
         }
     }
 
-    pub(super) const fn new_idempotency_base(
+    pub(super) fn new_idempotency_base(
         current: CurrentPublication,
         store: PackDirectoryStore,
         hidden_type_objects: BTreeSet<TypeObjectDigest>,
+        idempotent_result: super::HeadRecord,
     ) -> Self {
         Self {
+            control: crate::platform::execution::ExecutionControl::uncancelled(),
             current,
-            store,
+            store: ViewStore::new(store),
+            revalidated: None,
+            validation_reused: false,
+            validation_read_work: CanonicalReadWork {
+                point_reads: 0,
+                map_pages_read: 0,
+                map_entries_visited: 0,
+                catalog_lookups: 0,
+                objects_read: 0,
+                bytes_read: 0,
+                canonical_records_decoded: 0,
+            },
+            validation_steps: 0,
+            idempotent_result: Some(idempotent_result),
             hidden_type_objects,
         }
+    }
+
+    pub(super) fn reconcile_validation(mut self) -> Result<Self, Diagnostic> {
+        self.validation_checkpoint()?;
+        if !self.current.witness.contract_is_current() {
+            let key = super::validation::CurrentValidationKey {
+                root: self.current.accepted.semantic_root,
+                revision: self.revision(),
+                validator: crate::platform::witness::contract::validator_contract_digest(),
+            };
+            let validation = if let Some((validation, work)) =
+                super::validation::cached(key, &self.store, &|| self.validation_checkpoint())?
+            {
+                self.validation_reused = true;
+                self.validation_read_work = CanonicalReadWork {
+                    catalog_lookups: work.catalog_lookups,
+                    objects_read: work.objects_read,
+                    bytes_read: work.bytes_read,
+                    ..CanonicalReadWork::default()
+                };
+                validation
+            } else {
+                self.store.bound_current_rebuild(true);
+                let snapshot = self.reconstruct_full_oracle();
+                let dependencies = if snapshot.is_ok() {
+                    super::repository::validate_dependency_sources(
+                        &self.store,
+                        &self.store,
+                        &self.current.semantic_root,
+                    )
+                } else {
+                    Ok(0)
+                };
+                let rebuild_work = self.store.rebuild_work();
+                self.store.bound_current_rebuild(false);
+                let snapshot = snapshot?;
+                let read_bytes = rebuild_work.bytes_read;
+                self.validation_read_work = CanonicalReadWork {
+                    point_reads: snapshot.work.items_returned,
+                    map_pages_read: snapshot.work.map.pages_read,
+                    map_entries_visited: snapshot.work.map.entries_visited,
+                    canonical_records_decoded: snapshot.work.canonical_records_decoded,
+                    catalog_lookups: rebuild_work.catalog_lookups,
+                    objects_read: rebuild_work.objects_read,
+                    bytes_read: rebuild_work.bytes_read,
+                };
+                let mut validation =
+                    RevalidatedBase::rebuild(snapshot.value, &|| self.validation_checkpoint())?;
+                self.validation_steps = validation
+                    .semantic_work
+                    .saturating_add(dependencies.as_ref().copied().unwrap_or_default());
+                if let Err(error) = dependencies {
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Semantic
+                            | DiagnosticClass::Resource
+                            | DiagnosticClass::Cancelled
+                    ) {
+                        validation.current = Err(vec![error]);
+                    } else {
+                        return Err(error);
+                    }
+                }
+                let validation = std::sync::Arc::new(validation);
+                super::validation::retain(
+                    key,
+                    read_bytes,
+                    self.store.take_rebuild_objects(),
+                    validation.clone(),
+                );
+                validation
+            };
+            self.store.install(&validation)?;
+            self.revalidated = Some(validation);
+        }
+        Ok(self)
+    }
+
+    pub(super) fn with_control(
+        mut self,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Self {
+        self.control = control.clone();
+        self
+    }
+
+    pub(crate) const fn idempotent_result(&self) -> Option<super::HeadRecord> {
+        self.idempotent_result
+    }
+
+    pub(crate) const fn validation_origin(&self) -> &'static str {
+        if self.validation_reused {
+            "reused"
+        } else if self.revalidated.is_some() {
+            "rebuilt"
+        } else {
+            "accepted-current"
+        }
+    }
+
+    pub(crate) const fn validation_work(&self) -> (CanonicalReadWork, u64) {
+        (self.validation_read_work, self.validation_steps)
+    }
+
+    fn witness_roots(&self) -> crate::platform::witness::WitnessRoots {
+        self.revalidated
+            .as_ref()
+            .map_or(self.current.witness.roots, |base| base.facts.roots)
+    }
+
+    /// Executable and export owners must ask for current validity, independently of the
+    /// immutable historical witness exposed by current().
+    pub(crate) fn require_current_validation(&self) -> Result<(), Diagnostic> {
+        if let Some(base) = &self.revalidated {
+            base.require_current()?;
+        }
+        if !self.witness_contract_is_current() {
+            return Err(read_error(
+                DiagnosticClass::Semantic,
+                "publication_current_validation",
+                "current semantic validation is required before execution or export",
+            ));
+        }
+        Ok(())
     }
 
     pub const fn revision(&self) -> RevisionId {
@@ -828,7 +984,10 @@ impl RepositoryView {
         self.prepare_change_with_prior_work(
             edits,
             options,
-            AuthoredLoweringWork::default(),
+            AuthoredLoweringWork {
+                canonical: self.validation_read_work,
+                ..AuthoredLoweringWork::default()
+            },
             ChangeBudget::default(),
         )
         .map(|prepared| prepared.publication)
@@ -845,7 +1004,7 @@ impl RepositoryView {
         let canonical = BudgetedCanonicalBase::new(
             self,
             request.budget.canonical_reads,
-            CanonicalReadWork::default(),
+            self.validation_read_work,
         )
         .map_err(|diagnostic| vec![diagnostic])?;
         let witness = BudgetedWitnessBase::new(
@@ -910,6 +1069,7 @@ impl RepositoryView {
         prior_work: AuthoredLoweringWork,
         budget: ChangeBudget,
     ) -> Result<PreparedChangeWithAnalysis, Vec<Diagnostic>> {
+        self.validation_checkpoint().map_err(|error| vec![error])?;
         let canonical =
             BudgetedCanonicalBase::new(self, budget.canonical_reads, prior_work.canonical)
                 .map_err(|diagnostic| vec![diagnostic])?;
@@ -922,9 +1082,10 @@ impl RepositoryView {
                 "canonical normalization did not retain the pinned repository revision",
             )]);
         }
+        let mut repaired_interfaces = BTreeMap::new();
         for edit in normalization.canonical.dependencies.values() {
             if let Some((_, dependency)) = &edit.after {
-                canonical
+                let resolved = canonical
                     .read_admitted(|read_admission| {
                         self.resolve_package_transport_admitted(
                             dependency.package_revision,
@@ -933,18 +1094,57 @@ impl RepositoryView {
                         .map(canonical_read)
                     })
                     .map_err(|diagnostic| vec![diagnostic])?;
+                repaired_interfaces
+                    .insert(dependency.package_revision, resolved.value.root_interface);
             }
         }
         let mut budget_reads = prior_work;
         budget_reads.canonical = canonical.work();
-        let initial_budget_work = budget_reads.budget_work();
-        let mut analysis = prepare_change_analysis_with_budget(
-            self,
-            self,
-            normalization.canonical,
-            budget,
-            initial_budget_work,
-        )?;
+        let mut initial_budget_work = budget_reads.budget_work();
+        initial_budget_work.validation.expression_steps = initial_budget_work
+            .validation
+            .expression_steps
+            .saturating_add(self.validation_steps);
+        let mut analysis = if let Some(base) = self
+            .revalidated
+            .as_ref()
+            .filter(|base| base.current.is_err())
+        {
+            let mut repair_base;
+            let snapshot = if repaired_interfaces.is_empty() {
+                &base.snapshot
+            } else {
+                repair_base = base.snapshot.clone();
+                for (revision, interface) in repaired_interfaces {
+                    repair_base.dependency_interfaces.insert(
+                        revision,
+                        interface
+                            .owners
+                            .into_iter()
+                            .map(|(key, value)| (key, value.record))
+                            .collect(),
+                    );
+                    repair_base.dependency_types.extend(interface.type_objects);
+                }
+                &repair_base
+            };
+            crate::platform::change::prepare_repair_analysis(
+                snapshot,
+                &base.facts,
+                self,
+                normalization.canonical,
+                budget,
+                initial_budget_work,
+            )?
+        } else {
+            prepare_change_analysis_with_budget(
+                self,
+                self,
+                normalization.canonical,
+                budget,
+                initial_budget_work,
+            )?
+        };
         analysis.canonical_read_work.add(budget_reads.canonical);
         analysis.witness_read_work.add(prior_work.witness);
         let publication = prepare_change_publication(
@@ -1203,6 +1403,7 @@ impl RepositoryView {
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
+        self.validation_checkpoint()?;
         let declared_records = self
             .current
             .semantic_root
@@ -1231,6 +1432,7 @@ impl RepositoryView {
 
         let mut owners = BTreeMap::new();
         work.add(self.for_each_owner_record(|owner, record| {
+            self.validation_checkpoint()?;
             if owners.insert(owner, record.clone()).is_some() {
                 return Err(read_error(
                     DiagnosticClass::Corrupt,
@@ -1286,6 +1488,7 @@ impl RepositoryView {
             .flat_map(OwnerRecord::type_roots)
             .collect::<BTreeSet<_>>();
         while let Some(digest) = pending_types.pop_first() {
+            self.validation_checkpoint()?;
             if types.contains_key(&digest) {
                 continue;
             }
@@ -1319,6 +1522,7 @@ impl RepositoryView {
         }
         let mut blobs = BTreeMap::new();
         for (digest, expected_bytes) in declared_blobs {
+            self.validation_checkpoint()?;
             consume_full_oracle_work(&mut consumed, 1)?;
             let bytes = self.read_required_object(
                 ObjectDomain::Blob,
@@ -1348,6 +1552,7 @@ impl RepositoryView {
         let mut dependency_interfaces = BTreeMap::new();
         let mut dependency_types = BTreeMap::new();
         for dependency in dependencies.values() {
+            self.validation_checkpoint()?;
             let resolved = self.resolve_package_transport(dependency.package_revision)?;
             work.add(resolved.work);
             let validated = resolved.value;
@@ -1449,6 +1654,7 @@ impl RepositoryView {
     }
 
     pub(crate) fn build_package_revision(&self) -> Result<BuiltPackageRevision, Diagnostic> {
+        self.require_current_validation()?;
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
         let mut interactive_ports = BTreeSet::new();
@@ -1628,6 +1834,7 @@ impl RepositoryView {
 
     /// Builds one logical package revision and its separate physical acceptance transport.
     pub fn export_package_transport(&self) -> Result<ExportedPackageTransport, Diagnostic> {
+        self.require_current_validation()?;
         let BuiltPackageRevision {
             revision,
             revision_digest,
@@ -1948,7 +2155,7 @@ impl RepositoryView {
     ) -> Result<RevisionRead<Option<OwnerKey>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
         let value = self.lookup_map_admitted(
-            self.current.witness.roots.namespaces,
+            self.witness_roots().namespaces,
             &key.encode(),
             &mut work,
             admission,
@@ -1974,7 +2181,7 @@ impl RepositoryView {
     ) -> Result<RevisionRead<Option<OwnershipEntry>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
         let value = self.lookup_map_admitted(
-            self.current.witness.roots.ownership,
+            self.witness_roots().ownership,
             &owner_key_bytes(owner),
             &mut work,
             admission,
@@ -2127,7 +2334,7 @@ impl RepositoryView {
         let mut map_work = MapWork::default();
         let mut owners = Vec::new();
         let mut captured = None;
-        let result = PersistentMap::from_root(self.current.witness.roots.owner_summaries).for_each(
+        let result = PersistentMap::from_root(self.witness_roots().owner_summaries).for_each(
             &reader,
             &mut map_work,
             |key, value| {
@@ -2170,7 +2377,7 @@ impl RepositoryView {
             RepositoryReadWork {
                 map: map_work,
                 store: reader.work(),
-                witness_records_decoded: self.current.witness.roots.owner_summaries.entries(),
+                witness_records_decoded: self.witness_roots().owner_summaries.entries(),
                 items_returned,
                 ..RepositoryReadWork::default()
             },
@@ -2191,7 +2398,7 @@ impl RepositoryView {
     ) -> Result<RevisionRead<Option<BoundOwnerSummary>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
         let Some(binding_bytes) = self.lookup_map_admitted(
-            self.current.witness.roots.owner_summaries,
+            self.witness_roots().owner_summaries,
             &owner_key_bytes(owner),
             &mut work,
             admission,
@@ -2241,7 +2448,7 @@ impl RepositoryView {
     ) -> Result<RevisionRead<bool>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
         let value = self.lookup_map_admitted(
-            self.current.witness.roots.forward_relations,
+            self.witness_roots().forward_relations,
             &crate::platform::witness::forward_relation_key(edge),
             &mut work,
             admission,
@@ -2275,7 +2482,7 @@ impl RepositoryView {
             }),
         );
         let mut update = update_witness_maps_from(
-            &self.current.witness,
+            self.witness_manifest(),
             &reader,
             derived,
             summaries,
@@ -2338,9 +2545,9 @@ impl RepositoryView {
             forward_relation_prefix(endpoint, kind)
         };
         let root = if incoming {
-            self.current.witness.roots.reverse_relations
+            self.witness_roots().reverse_relations
         } else {
-            self.current.witness.roots.forward_relations
+            self.witness_roots().forward_relations
         };
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
@@ -2477,7 +2684,7 @@ impl RepositoryView {
         let mut truncated = false;
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
-        let result = PersistentMap::from_root(self.current.witness.roots.reverse_relations)
+        let result = PersistentMap::from_root(self.witness_roots().reverse_relations)
             .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
                 if !value.is_empty() {
                     return Err(MapError {
@@ -2577,7 +2784,7 @@ impl RepositoryView {
         let mut truncated = false;
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
-        let result = PersistentMap::from_root(self.current.witness.roots.test_dependencies)
+        let result = PersistentMap::from_root(self.witness_roots().test_dependencies)
             .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
                 if !value.is_empty() {
                     return Err(MapError {
@@ -2658,9 +2865,9 @@ impl RepositoryView {
             forward_relation_prefix(endpoint, kind)
         };
         let root = if reverse {
-            self.current.witness.roots.reverse_relations
+            self.witness_roots().reverse_relations
         } else {
-            self.current.witness.roots.forward_relations
+            self.witness_roots().forward_relations
         };
         let mut work = RepositoryReadWork::default();
         let mut keys = Vec::with_capacity(maximum_items.min(64));
@@ -3071,6 +3278,11 @@ fn admit_decoded_records(
 }
 
 impl CanonicalBaseRead for RepositoryView {
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.control
+            .check()
+            .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
+    }
     fn read_reference_interface_admitted(
         &self,
         dependency: &DependencyRecord,
@@ -3220,7 +3432,10 @@ impl CanonicalBaseRead for RepositoryView {
 
 impl WitnessBaseRead for RepositoryView {
     fn witness_manifest(&self) -> &crate::platform::witness::ValidationWitnessManifest {
-        &self.current.witness
+        self.revalidated
+            .as_ref()
+            .and_then(|base| base.current.as_ref().ok())
+            .map_or(&self.current.witness, |current| &current.manifest)
     }
 
     fn witness_repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
@@ -3232,11 +3447,15 @@ impl WitnessBaseRead for RepositoryView {
     }
 
     fn witness_contract_is_current(&self) -> bool {
-        self.current.witness.contract_is_current()
+        self.witness_manifest().contract_is_current()
+    }
+
+    fn canonical_facts_are_current(&self) -> bool {
+        self.revalidated.is_some() || self.witness_contract_is_current()
     }
 
     fn owner_summary_count(&self) -> u64 {
-        self.current.witness.roots.owner_summaries.entries()
+        self.witness_roots().owner_summaries.entries()
     }
 
     fn read_namespace(

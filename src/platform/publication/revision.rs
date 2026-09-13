@@ -145,9 +145,12 @@ impl ValidationEvidenceBinding {
         witness_digest: ValidationWitnessDigest,
         witness: &ValidationWitnessManifest,
     ) -> Result<(), Diagnostic> {
+        let (authenticated, _) =
+            crate::platform::witness::encode_witness_manifest_content(witness)?;
         if self.semantic_state != core.semantic_state
             || self.witness_contract_version != witness.contract_version
             || self.witness != witness_digest
+            || authenticated != witness_digest
             || self.certificate != witness.certificate
             || self.validator_contract != witness.validator_contract
             || semantic_root != witness.semantic_root
@@ -159,13 +162,8 @@ impl ValidationEvidenceBinding {
                 "revision meaning and validation evidence do not form one exact acceptance binding",
             ));
         }
-        if !witness.contract_is_current() {
-            return Err(revision_error(
-                DiagnosticClass::Source,
-                "publication_current_witness_contract",
-                "accepted witness uses a predecessor or foreign contract",
-            ));
-        }
+        // This binding authenticates what was accepted at this revision. Current semantic
+        // admission is derived separately and must never rewrite this historical binding.
         Ok(())
     }
 }

@@ -6,17 +6,64 @@ use super::prepare::{
 };
 use super::reference::{NormalizedReferenceReadWork, reference_error, reference_resource};
 use super::value_schema::NormalizedValueSchema;
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
 use crate::platform::kernel::{
-    CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference, FieldReference,
-    KernelSnapshot, Name, OwnerKey, OwnerRecord, PackageId, StructuralTypeField, TypeForm,
-    TypeObject, TypeObjectDigest, encode_type_object,
+    CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference, ExpressionRead,
+    FieldReference, KernelSnapshot, Name, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
+    StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::semantic_id::{TargetId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
+// This public reconstruction route accepts canonical snapshots without a loaded-artifact token.
+// Admit explicit applications before reference type closure can expand any exact instance.
+struct CallableSource<'a> {
+    snapshot: &'a KernelSnapshot,
+    control: &'a crate::platform::execution::ExecutionControl,
+}
+
+impl ExpressionRead for CallableSource<'_> {
+    fn package_id(&self) -> PackageId {
+        self.snapshot.root.package_id
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        ExpressionRead::owner(self.snapshot, owner)
+    }
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        ExpressionRead::type_object(self.snapshot, digest)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        ExpressionRead::package_interface_owner(self.snapshot, package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        ExpressionRead::has_dependency(self.snapshot, package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.control
+            .check()
+            .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
+    }
+}
+
+fn callable_error(error: Diagnostic) -> ExecutionError {
+    use crate::platform::execution::ExecutionFailureClass;
+    let class = match error.class {
+        DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
+        DiagnosticClass::Resource => ExecutionFailureClass::Resource,
+        DiagnosticClass::Semantic => ExecutionFailureClass::Trap,
+        _ => ExecutionFailureClass::Infrastructure,
+    };
+    ExecutionError::new(class, error.code, error.message)
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
+    pub(super) callable_admission_steps: u64,
     pub(super) type_derivation_steps: u64,
     pub(super) type_metadata_bytes: u64,
     pub(super) affine_variants: Vec<bool>,
@@ -57,12 +104,21 @@ impl NormalizedReferenceSchema {
         let mut variants = BTreeMap::new();
         let mut visited = 0_usize;
         let mut inputs = Vec::new();
+        let mut callable_work = 0_usize;
         for snapshot in snapshots {
             control.check()?;
             let package = snapshot.root.package_id;
             if !packages.insert(package) || packages.len() > 10_000 {
                 return Err(inventory_error("duplicate or excessive canonical packages"));
             }
+            crate::platform::kernel::callable_flow::validate_callable_flow(
+                &CallableSource { snapshot, control },
+                snapshot.owners.keys().copied(),
+                &mut callable_work,
+                crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            )
+            .map_err(callable_error)?;
+            schema.callable_admission_steps = callable_work as u64;
             inputs.push(snapshot);
             visited = visited
                 .checked_add(snapshot.owners.len())

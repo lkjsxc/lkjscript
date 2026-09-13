@@ -79,6 +79,17 @@ pub fn decode_witness_manifest(
     bytes: &[u8],
     expected_digest: ValidationWitnessDigest,
 ) -> Result<ValidationWitnessManifest, Diagnostic> {
+    let manifest = decode_historical_witness_manifest(bytes, expected_digest)?;
+    validate_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+/// Authenticates the supported canonical witness envelope and its original certificate.
+/// Historical acceptance is not a proof that this root satisfies the current validator.
+pub(crate) fn decode_historical_witness_manifest(
+    bytes: &[u8],
+    expected_digest: ValidationWitnessDigest,
+) -> Result<ValidationWitnessManifest, Diagnostic> {
     if ValidationWitnessDigest::of(bytes) != expected_digest {
         return Err(codec_error(
             "witness_manifest_digest",
@@ -91,8 +102,8 @@ pub fn decode_witness_manifest(
         WITNESS_ENVELOPE_DOMAIN,
         MAXIMUM_WITNESS_MANIFEST_BYTES,
     )?;
-    validate_manifest(&manifest)?;
-    let (digest, canonical) = encode_witness_manifest(&manifest)?;
+    validate_manifest_content(&manifest)?;
+    let (digest, canonical) = encode_witness_manifest_content(&manifest)?;
     if digest != expected_digest || canonical != bytes {
         return Err(codec_error(
             "witness_manifest_canonical",

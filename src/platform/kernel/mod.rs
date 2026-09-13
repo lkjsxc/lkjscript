@@ -11,6 +11,7 @@
 mod affine;
 #[cfg(test)]
 mod affine_reference;
+pub(crate) mod callable_flow;
 mod codec;
 pub mod contract;
 mod digest;
@@ -68,8 +69,8 @@ pub use root::*;
 pub(crate) use scoped::*;
 pub use state::{semantic_state_digest, semantic_state_digest_from_root};
 pub use type_object::*;
-pub(crate) use validate::validate_full_with_limit;
 pub use validate::{FullValidationReport, KernelSnapshot, validate_full};
+pub(crate) use validate::{validate_full_checked, validate_full_with_limit};
 
 #[cfg(test)]
 pub(crate) mod tests;

@@ -23,8 +23,8 @@ proof and is integrated. Matching dry run `34700198909/1` passed, and its downlo
 passed the original compatible readers. Annotated v0.1.33 tag object
 `9a4e1c065b7c20459e318b83e67bfd041b74e911` selects that source. Tag run `34705135744/1` and public
 job `103598708262` passed. Immutable release `387660511` was published at 2026-09-12T18:15:41Z;
-its anonymous exact/latest pair and attestations are authenticated. v0.1.33 is the last verified
-public release. That frozen source retains receipt 8 and two assets.
+its anonymous exact/latest pair and attestations are authenticated. That frozen source retains
+receipt 8 and two assets.
 
 The installation campaign separately selects v0.1.34 at accepted source
 `037a13483321497737a30ade6df88950bb19e0de`, receipt 9 and the third bootstrap asset. Matching hosted
@@ -33,14 +33,23 @@ handoffs passed their original readers. Annotated object `d96d1623495d8c13968d99
 and the retained scoped control select publisher `34760117554/1`. Build/full/target/packaging and the
 pre-publication installed pair passed. Immutable release `387929218` published all three assets at
 2026-09-13T14:42:22Z. Anonymous exact/latest acquisition and all attestations passed; public job
-`103740119904` was still executing the installed application pair at 2026-09-13T15:15:46Z. INS-7 remains pending until its
-actual application acceptance and joined cleanup complete.
+`103740119904` completed its installed application pair and final evidence upload. Publisher
+`34760117554/1` completed successfully at 2026-09-13T15:17:53Z. Final artifact `10320391118`
+and pair receipt `verification_f6ff1a63fc67f11d29993c115c460f2b892e1c55d015e4f8d50ef640d8a71d9b`
+passed the retained original reader after archived path/mode/environment reconstruction. The exact
+route ran the five aggregate children freshly; latest was bound within that same pair. Cleanup is
+complete. This is authenticated hosted evidence rereading, not fresh local acquisition or execution.
+INS-7 is closed; v0.1.34 is the last verified public release.
 
 The newer typed named-reference source increment uses offline receipt 10. It is absent from the
 frozen installer release. Accepted source `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed 26
 fresh full gates and is integrated on main; later reporting commits do not replace that proof.
-Its additional publication is batched by the [roadmap trigger](roadmap.md);
-no new release rehearsal or tag is selected for that source acceptance.
+The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes its one-campaign
+deferral and selects a combined release, with candidate version v0.1.35. Current offline receipt 11
+adds the transported pure/task alternator, finite reset, strict hostile-artifact rejection and
+authentic historical/current validation repair through both copied and pinned absolute runtimes.
+The existing six target and five installed/public aggregate owners retain their boundaries. Source
+acceptance, exact-source rehearsal and immutable public delivery are pending; no tag has been pushed.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

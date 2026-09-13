@@ -25,6 +25,24 @@ recreated only after the accepted `HEAD` and its immutable closure validate; a n
 nonempty, or symlinked lock rejects. Missing or inconsistent accepted `HEAD`, pack, object,
 revision, receipt, root, or witness bindings are corruption.
 
+Compatible historical acceptance and current validation are separate claims. A supported canonical
+historical witness authenticates its original envelope, certificate, semantic root, revision,
+parents and idempotency receipt even when its validator differs. Opening it must not replace HEAD,
+rewrite history, or invoke catalog repair merely for that difference. Unknown graph/witness schemas
+and structural corruption retain explicit rejection and matching-executable recovery.
+
+Current execution, semantic export and incremental proof require a current validation context bound
+to the same exact root, dependency closure and validator. Rebuilding that context uses full canonical
+validation and does not mint a semantic revision. Derived facts and current proof are distinct: an
+invalid historical body may still have authenticated, newly reconstructed names and ownership for
+read-only inspection and request resolution. A failed current proof never authorizes execution.
+
+When no valid current base proof exists, ordinary reviewed edits use complete post-change validation
+and fresh witness maps within the existing publication owner. Only the valid candidate can publish;
+the lock rechecks the exact historical parent before visibility. Earlier history and idempotency
+bindings remain intact. A historical retry returns its original result when it can be revalidated;
+otherwise it reports targeted incompatibility with that original result, without freeing its key.
+
 A predecessor `.lkjscript` marker is not a storage edition. Project discovery rejects it before
 opening derived state or mutating the destination. A root containing both current and predecessor
 markers is rejected as ambiguous; it never selects a fallback.

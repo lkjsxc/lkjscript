@@ -1768,7 +1768,8 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         return Err(usage_error("status accepts no additional arguments"));
     }
     let repository = open_normalized_repository(project)?;
-    let current = repository.current()?;
+    let view = repository.view_current()?;
+    let current = view.current();
     let capabilities = capabilities_snapshot().map_err(capabilities_projection_error)?;
 
     let mut output = compact_response_writer()?;
@@ -1829,6 +1830,38 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 current.accepted.validation_certificate.to_string(),
             ),
             ("validator", current.accepted.validator_contract.to_string()),
+        ],
+    )?;
+    let validity = view.require_current_validation();
+    append_compact_record(
+        &mut output,
+        "current-validation",
+        &[
+            (
+                "status",
+                match &validity {
+                    Ok(()) => "valid",
+                    Err(error) if error.class == DiagnosticClass::Semantic => "invalid",
+                    Err(_) => "unavailable",
+                }
+                .to_owned(),
+            ),
+            ("proof", view.validation_origin().to_owned()),
+            (
+                "canonical-bytes-read",
+                view.validation_work().0.bytes_read.to_string(),
+            ),
+            ("semantic-work", view.validation_work().1.to_string()),
+            (
+                "validator",
+                crate::platform::witness::contract::validator_contract_digest().to_string(),
+            ),
+            (
+                "code",
+                validity
+                    .err()
+                    .map_or_else(|| "none".to_owned(), |error| error.code),
+            ),
         ],
     )?;
     append_compact_record(
@@ -2190,8 +2223,20 @@ fn execute_normalized_change(
         Some(view) => view,
         None => repository.view_current().map_err(single_diagnostic)?,
     };
-    let mut prepared =
-        base_view.prepare_authored_change(&normalized.semantic, normalized.options)?;
+    let mut prepared = base_view
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .map_err(|mut errors| {
+            if let Some(result) = base_view.idempotent_result()
+                && errors.iter().any(|error| error.class == DiagnosticClass::Semantic)
+            {
+                errors.insert(0, Diagnostic::new(
+                    DiagnosticClass::Semantic,
+                    "change_historical_request_incompatible",
+                    format!("this accepted request cannot be revalidated under the current validator; its original result {} (record {}) and idempotency binding are retained. Inspect and repair the current canonical program with a new reviewed request; the existing key cannot publish again", result.revision, result.record),
+                ));
+            }
+            errors
+        })?;
     if let Some(extraction) = &mut prepared.logical_plan.extraction {
         extraction.base_definition = Some(
             function_definition_digest_for_extraction(&base_view, extraction.function)

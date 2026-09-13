@@ -142,6 +142,26 @@ inspect owner KIND ID --detail definition \
   [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]
 ```
 
+Compatible historical repositories remain inspectable when the current semantic validator rejects
+their accepted program. `status` retains the original `evidence` record and separately reports
+`current-validation status=valid|invalid|unavailable`, the current validator, diagnostic code, and
+proof origin. `invalid` denotes semantic rejection; resource or other incomplete admission is
+`unavailable`. Neither status nor revalidation rewrites HEAD, parents, or the catalog. Current proof
+can be reused within the process only for its exact immutable root and dependencies; an on-disk
+producer assertion alone is not a current admission token.
+
+Use the same `change plan --input-file REQUEST` and `change apply --input-file REQUEST --plan TOKEN`
+to repair a newly invalid historical body. Request names and local preconditions are resolved from
+authenticated canonical facts. Without a current valid base witness, the entire post-change candidate
+must pass full validation and receive fresh proof before any pure candidate test or publication.
+An ordinary compact dependency replacement can participate in that repair when its exact source and local
+preconditions can be established. Supplier bodies receive independent current admission before
+publication. Check, build, current export, and executable loading reject an
+invalid current program. No unsafe option, implicit source migration, or alternate validator exists.
+Historical idempotent retries retain their original result; incompatible retries report
+`change_historical_request_incompatible` with that result and require a new reviewed repair.
+Old prepared tokens require re-planning under the current capability and validation context.
+
 `KIND` must be `pure_function` or `task_function`, the owner must be live in the selected local
 package, and it must have a body. Summary inspection is unchanged. A dependency package, a
 non-function, a missing or retired function, or a dependency implementation request rejects.

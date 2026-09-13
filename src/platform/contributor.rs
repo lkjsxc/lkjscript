@@ -131,6 +131,11 @@ pub fn effect_execution_probe(project: &Path) -> Result<serde_json::Value, Diagn
     super::execution::normalized::effect_probe::observe(project)
 }
 
+/// Disjoint deterministic adapters observe the already authored finite callable fixture.
+pub fn finite_callable_execution_probe(project: &Path) -> Result<serde_json::Value, Diagnostic> {
+    super::execution::normalized::finite_callable_probe::observe(project)
+}
+
 /// One disposable production invocation, cancelled after a callback stages data in its caller's transaction.
 pub fn effect_transaction_probe(
     deployment: &Path,

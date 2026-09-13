@@ -232,9 +232,40 @@ Generic application is explicit and order-independent:
 - omitted or excess arguments, an out-of-scope type parameter, duplicate parameter name, or missing
   substitution rejects.
 
-Recursive generic cycles may pass their own type parameters in the
-same order; a cycle that changes ordered type arguments rejects as polymorphic recursion. There is
-no constraint dictionary, higher-rank quantification, implicit generic application, specialization in
+Ordinary recursive generic applications obey finite parameter flow. Each vertex is one exact
+package/function/ordered ordinary type-parameter slot. For every syntactic direct call and named
+function value, each caller-parameter occurrence in target argument position j contributes an edge
+to target slot j. The edge is plain only when the entire argument is that parameter; a canonical
+constructor enclosing it makes the edge expanding. Closed arguments contribute no source edge.
+All argument arities, kinds, scopes and capture-safe constraints remain checked, including unused
+parameters, private functions, unused descriptors and untaken branches. Bind and Invoke use already
+instantiated monomorphic descriptors and introduce no further type-application syntax.
+
+Admission rejects an expanding edge whose endpoints lie in the same strongly connected slot
+component. Permutation, duplication, projection and closed resets are allowed. For example,
+`f<A,B> -> f<B,A>`, `f<A,B> -> f<A,A>` and `f<A,B> -> f<I64,List<A>>` are finite; the last grows
+along an acyclic slot edge and then resets. Mutual `f<T> -> g<List<T>>`, `g<U> -> f<I64>` is also
+finite. `f<T> -> f<List<T>>` and `f<A,B> -> f<B,List<A>>` reject. Every child type participates,
+including structural fields, containers, nominal arguments (even phantom arguments), and pure/task
+function parameter and result types. Variance does not cancel constructor growth. Substitution is
+simultaneous from the caller's original ordered vector; same-spelled parameters of different
+declarations have distinct identities.
+
+Finite syntax supplies finitely many ground seeds and constructors. Inside a strongly connected
+component only plain forwarding remains, and growth can cross only finitely many components.
+Thus exact callable instantiation is finite for the current rank-one type language. Nominal member
+expansion retains its separate finite-flow rule: nominal types cannot synthesize callable applications
+or feed computed type projections back into arguments. Finite exact effect unions multiply this
+closure by a finite set, preserving simultaneous type/effect permutation and union. Exact package
+dependencies are acyclic, so local callable SCC admission requires no foreign private bodies;
+complete suppliers are independently admitted for execution. An interface alone proves no body closure.
+
+The rule is semantic admission before publication and executable loading, independent of runtime
+reachability or execution fuel. A large finite closure may still exhaust preparation work/storage;
+this is distinct from `kernel_callable_expansion`. Once an expanding SCC is proved, bounded witness
+rendering retains semantic rejection and explicit omission information. This guarantees neither
+runtime termination nor constant memory, affine/resource eligibility, additional effects or grants,
+or hostile-code isolation. There is no constraint dictionary, higher-rank quantification, implicit generic application, specialization in
 accepted meaning, or order-dependent inference. Compiler/runtime erasure or specialization is
 derived and cannot change graph meaning or artifact determinism.
 
@@ -466,7 +497,7 @@ terms. Finite roots therefore generate finitely many complete canonical applicat
 permutation and many roots can still exhaust distinct work/storage limits. Preparation visits each
 exact instance once and retains recurrence edges. Structural TypeObjects and immutable runtime
 values remain finite; this does not add heap cycles, infinite values, structural recursive equality,
-polymorphically recursive generic calls, or change execution fuel and resource policy.
+unbounded generic callable instantiation, or change execution fuel and resource policy.
 
 An instance layout and its preparation provenance bind the complete canonical application, including
 phantom arguments. Same-template instances with identical fields but different arguments are distinct.

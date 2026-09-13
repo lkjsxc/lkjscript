@@ -4,6 +4,34 @@ use crate::platform::kernel::{EffectParameterRecord, EffectRow, FunctionEffect};
 use crate::platform::semantic_id::EffectParameterId;
 
 #[test]
+fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
+    // These complete containers have coherent canonical and compiled applications and all
+    // outer hashes. A recorded, temporary rejected-rule producer made them without execution.
+    // The independent loader must reject their bodies even when every producer assertion agrees.
+    for (name, bytes) in [
+        (
+            "direct",
+            include_bytes!(
+                "../../../tests/fixtures/finite-callable-predecessor/expanding-direct.lkja"
+            )
+            .as_slice(),
+        ),
+        (
+            "named",
+            include_bytes!(
+                "../../../tests/fixtures/finite-callable-predecessor/expanding-named.lkja"
+            )
+            .as_slice(),
+        ),
+    ] {
+        let error = load_artifact(bytes).unwrap_err();
+        assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
+        assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
+        println!("strict-expanding-artifact {name}: {}", error.code);
+    }
+}
+
+#[test]
 fn exact_effect_predecessor_artifact_rejects_before_preparation() {
     let bytes = include_bytes!("../../../tests/fixtures/graph13-standard.lkja");
     let error = load_artifact(bytes).unwrap_err();
@@ -65,6 +93,92 @@ fn fixture() -> LoadedArtifact {
     .unwrap();
     let linked = link_artifact(&created.repository, compiled.manifest_digest, &[]).unwrap();
     load_artifact(&linked.artifact.bytes).unwrap()
+}
+
+#[test]
+fn strict_callable_applications_match_canonical_bodies_after_rehashing() {
+    let loaded = load_artifact(include_bytes!(
+        "../../../packages/standard/generated/standard.lkja"
+    ))
+    .unwrap();
+    for named in [false, true] {
+        let (old, mut unit) = loaded
+            .objects
+            .iter()
+            .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+            .find_map(|(key, bytes)| {
+                let unit = CompilationUnit::decode(bytes, *key).unwrap();
+                if unit.tables.types.len() < 2 {
+                    return None;
+                }
+                let CompilationPayload::Function { code, .. } = &unit.payload else {
+                    return None;
+                };
+                code.instructions
+                    .iter()
+                    .any(|instruction| match instruction {
+                        CompiledInstruction::Call { type_arguments, .. } if !named => {
+                            !type_arguments.is_empty()
+                        }
+                        CompiledInstruction::FunctionValue { type_arguments, .. } if named => {
+                            !type_arguments.is_empty()
+                        }
+                        _ => false,
+                    })
+                    .then_some((*key, unit))
+            })
+            .expect("generic direct and named applications");
+        let CompilationPayload::Function { code, .. } = &mut unit.payload else {
+            unreachable!()
+        };
+        let arguments = code
+            .instructions
+            .iter_mut()
+            .find_map(|instruction| match instruction {
+                CompiledInstruction::Call { type_arguments, .. }
+                    if !named && !type_arguments.is_empty() =>
+                {
+                    Some(type_arguments)
+                }
+                CompiledInstruction::FunctionValue { type_arguments, .. }
+                    if named && !type_arguments.is_empty() =>
+                {
+                    Some(type_arguments)
+                }
+                _ => None,
+            })
+            .unwrap();
+        arguments[0] = u32::from(arguments[0] == 0);
+        let bytes = replace_unit(&loaded, old, &unit, vec![]);
+        let error = load_artifact(&bytes).unwrap_err();
+        assert!(
+            !error.code.contains("checksum") && !error.code.contains("closure_digest"),
+            "{error:?}"
+        );
+        assert!(
+            error.code.starts_with("artifact_compiled_")
+                || error.code == "artifact_runtime_owner_semantics"
+                || error.code == "artifact_nominal_instruction_meaning",
+            "{error:?}"
+        );
+    }
+}
+
+#[test]
+fn normalized_input_cannot_reuse_admission_after_in_memory_mutation() {
+    let mut loaded = fixture();
+    loaded.require_current_admission(|| Ok(())).unwrap();
+    let key = *loaded
+        .objects
+        .keys()
+        .find(|key| key.domain == ObjectDomain::CompilerUnit)
+        .unwrap();
+    let bytes = loaded.objects.get_mut(&key).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    let error =
+        crate::platform::execution::normalized::NormalizedProgram::prepare(loaded).unwrap_err();
+    assert_eq!(error.code, "artifact_current_admission_binding");
 }
 
 fn replace_unit(

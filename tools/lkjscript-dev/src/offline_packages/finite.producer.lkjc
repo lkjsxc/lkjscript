@@ -1,0 +1,164 @@
+reference.package as=$std source=builtin
+reference.owner as=$subtract package=$std class=declaration name=subtract
+reference.owner as=$i64-equal package=$std class=declaration name=i64-equal
+reference.owner as=$text-concat package=$std class=declaration name=text-concat
+create.module as=$module name=alternation
+type.parameter as=@alternate-A parameter=$alternate-A
+type.parameter as=@alternate-B parameter=$alternate-B
+type.function as=@alternate-on-left result=text
+type.argument parent=@alternate-on-left index=0 type=@alternate-A
+type.function as=@alternate-on-right result=text
+type.argument parent=@alternate-on-right index=0 type=@alternate-B
+add.type-parameter as=$alternate-A declaration=$alternate name=A constraint=capture-safe
+add.type-parameter as=$alternate-B declaration=$alternate name=B constraint=capture-safe
+add.parameter as=$alternate-remaining function=$alternate name=remaining type=i64
+add.parameter as=$alternate-left function=$alternate name=left type=@alternate-A
+add.parameter as=$alternate-right function=$alternate name=right type=@alternate-B
+add.parameter as=$alternate-on-left function=$alternate name=on-left type=@alternate-on-left
+add.parameter as=$alternate-on-right function=$alternate name=on-right type=@alternate-on-right
+add.parameter as=$alternate-output function=$alternate name=output type=text
+type.parameter as=@task-alternate-A parameter=$task-alternate-A
+type.parameter as=@task-alternate-B parameter=$task-alternate-B
+effect.row as=@task-alternate-left
+effect.parameter parent=@task-alternate-left index=0 parameter=$task-alternate-Eleft
+effect.row as=@task-alternate-right
+effect.parameter parent=@task-alternate-right index=0 parameter=$task-alternate-Eright
+type.task-function as=@task-alternate-on-left result=text effect=@task-alternate-left
+type.argument parent=@task-alternate-on-left index=0 type=@task-alternate-A
+type.task-function as=@task-alternate-on-right result=text effect=@task-alternate-right
+type.argument parent=@task-alternate-on-right index=0 type=@task-alternate-B
+add.type-parameter as=$task-alternate-A declaration=$task-alternate name=A constraint=capture-safe
+add.type-parameter as=$task-alternate-B declaration=$task-alternate name=B constraint=capture-safe
+add.effect-parameter as=$task-alternate-Eleft declaration=$task-alternate name=Eleft
+effect.parameter parent=$task-alternate index=0 parameter=$task-alternate-Eleft
+add.effect-parameter as=$task-alternate-Eright declaration=$task-alternate name=Eright
+effect.parameter parent=$task-alternate index=1 parameter=$task-alternate-Eright
+add.parameter as=$task-alternate-remaining function=$task-alternate name=remaining type=i64
+add.parameter as=$task-alternate-left function=$task-alternate name=left type=@task-alternate-A
+add.parameter as=$task-alternate-right function=$task-alternate name=right type=@task-alternate-B
+add.parameter as=$task-alternate-on-left function=$task-alternate name=on-left type=@task-alternate-on-left
+add.parameter as=$task-alternate-on-right function=$task-alternate name=on-right type=@task-alternate-on-right
+add.parameter as=$task-alternate-output function=$task-alternate name=output type=text
+type.parameter as=@factory-A parameter=$factory-A
+type.parameter as=@factory-B parameter=$factory-B
+effect.row as=@factory-left
+effect.parameter parent=@factory-left index=0 parameter=$factory-Eleft
+effect.row as=@factory-right
+effect.parameter parent=@factory-right index=0 parameter=$factory-Eright
+effect.row as=@factory-both
+effect.parameter parent=@factory-both index=0 parameter=$factory-Eleft
+effect.parameter parent=@factory-both index=1 parameter=$factory-Eright
+type.task-function as=@factory-on-left result=text effect=@factory-left
+type.argument parent=@factory-on-left index=0 type=@factory-A
+type.task-function as=@factory-on-right result=text effect=@factory-right
+type.argument parent=@factory-on-right index=0 type=@factory-B
+type.task-function as=@factory-result result=text effect=@factory-both
+type.argument parent=@factory-result index=0 type=i64
+type.argument parent=@factory-result index=1 type=@factory-A
+type.argument parent=@factory-result index=2 type=@factory-B
+type.argument parent=@factory-result index=3 type=@factory-on-left
+type.argument parent=@factory-result index=4 type=@factory-on-right
+type.argument parent=@factory-result index=5 type=text
+add.type-parameter as=$factory-A declaration=$factory name=A constraint=capture-safe
+add.type-parameter as=$factory-B declaration=$factory name=B constraint=capture-safe
+add.effect-parameter as=$factory-Eleft declaration=$factory name=Eleft
+add.effect-parameter as=$factory-Eright declaration=$factory name=Eright
+type.parameter as=@reset-A parameter=$reset-A
+type.parameter as=@reset-B parameter=$reset-B
+type.list as=@reset-grown item=@reset-A
+add.type-parameter as=$reset-A declaration=$reset name=A
+add.type-parameter as=$reset-B declaration=$reset name=B
+add.parameter as=$reset-n function=$reset name=remaining type=i64
+expression.call as=$alternate-stop function=$i64-equal
+expression.local as=$alternate-remaining-value value=$alternate-remaining
+expression.argument parent=$alternate-stop index=0 expression=$alternate-remaining-value
+expression.i64 as=$alternate-zero value=0
+expression.argument parent=$alternate-stop index=1 expression=$alternate-zero
+expression.local as=$alternate-output-value value=$alternate-output
+expression.call as=$alternate-recur function=$alternate
+type.argument parent=$alternate-recur index=0 type=@alternate-B
+type.argument parent=$alternate-recur index=1 type=@alternate-A
+expression.call as=$alternate-next function=$subtract
+expression.local as=$tree0 value=$alternate-remaining
+expression.argument parent=$alternate-next index=0 expression=$tree0
+expression.i64 as=$alternate-one value=1
+expression.argument parent=$alternate-next index=1 expression=$alternate-one
+expression.argument parent=$alternate-recur index=0 expression=$alternate-next
+expression.local as=$alternate-right-value value=$alternate-right
+expression.argument parent=$alternate-recur index=1 expression=$alternate-right-value
+expression.local as=$alternate-left-value value=$alternate-left
+expression.argument parent=$alternate-recur index=2 expression=$alternate-left-value
+expression.local as=$alternate-on-right-value value=$alternate-on-right
+expression.argument parent=$alternate-recur index=3 expression=$alternate-on-right-value
+expression.local as=$alternate-on-left-value value=$alternate-on-left
+expression.argument parent=$alternate-recur index=4 expression=$alternate-on-left-value
+expression.call as=$alternate-appended function=$text-concat
+expression.local as=$tree1 value=$alternate-output
+expression.argument parent=$alternate-appended index=0 expression=$tree1
+expression.local as=$tree2 value=$alternate-on-left
+expression.invoke as=$alternate-rendered function=$tree2
+expression.local as=$tree3 value=$alternate-left
+expression.argument parent=$alternate-rendered index=0 expression=$tree3
+expression.argument parent=$alternate-appended index=1 expression=$alternate-rendered
+expression.argument parent=$alternate-recur index=5 expression=$alternate-appended
+expression.if as=$alternate-body condition=$alternate-stop when-true=$alternate-output-value when-false=$alternate-recur
+expression.call as=$task-alternate-stop function=$i64-equal
+expression.local as=$task-alternate-remaining-value value=$task-alternate-remaining
+expression.argument parent=$task-alternate-stop index=0 expression=$task-alternate-remaining-value
+expression.i64 as=$task-alternate-zero value=0
+expression.argument parent=$task-alternate-stop index=1 expression=$task-alternate-zero
+expression.local as=$task-alternate-output-value value=$task-alternate-output
+expression.call as=$task-alternate-recur function=$task-alternate
+type.argument parent=$task-alternate-recur index=0 type=@task-alternate-B
+type.argument parent=$task-alternate-recur index=1 type=@task-alternate-A
+effect.argument parent=$task-alternate-recur index=0 effect=@task-alternate-right
+effect.argument parent=$task-alternate-recur index=1 effect=@task-alternate-left
+expression.call as=$task-alternate-next function=$subtract
+expression.local as=$tree4 value=$task-alternate-remaining
+expression.argument parent=$task-alternate-next index=0 expression=$tree4
+expression.i64 as=$task-alternate-one value=1
+expression.argument parent=$task-alternate-next index=1 expression=$task-alternate-one
+expression.argument parent=$task-alternate-recur index=0 expression=$task-alternate-next
+expression.local as=$task-alternate-right-value value=$task-alternate-right
+expression.argument parent=$task-alternate-recur index=1 expression=$task-alternate-right-value
+expression.local as=$task-alternate-left-value value=$task-alternate-left
+expression.argument parent=$task-alternate-recur index=2 expression=$task-alternate-left-value
+expression.local as=$task-alternate-on-right-value value=$task-alternate-on-right
+expression.argument parent=$task-alternate-recur index=3 expression=$task-alternate-on-right-value
+expression.local as=$task-alternate-on-left-value value=$task-alternate-on-left
+expression.argument parent=$task-alternate-recur index=4 expression=$task-alternate-on-left-value
+expression.call as=$task-alternate-appended function=$text-concat
+expression.local as=$tree5 value=$task-alternate-output
+expression.argument parent=$task-alternate-appended index=0 expression=$tree5
+expression.local as=$tree6 value=$task-alternate-on-left
+expression.invoke as=$task-alternate-rendered function=$tree6
+expression.local as=$tree7 value=$task-alternate-left
+expression.argument parent=$task-alternate-rendered index=0 expression=$tree7
+expression.argument parent=$task-alternate-appended index=1 expression=$task-alternate-rendered
+expression.argument parent=$task-alternate-recur index=5 expression=$task-alternate-appended
+expression.if as=$task-alternate-body condition=$task-alternate-stop when-true=$task-alternate-output-value when-false=$task-alternate-recur
+expression.function-value as=$factory-descriptor function=$task-alternate
+type.argument parent=$factory-descriptor index=0 type=@factory-A
+type.argument parent=$factory-descriptor index=1 type=@factory-B
+effect.argument parent=$factory-descriptor index=0 effect=@factory-left
+effect.argument parent=$factory-descriptor index=1 effect=@factory-right
+expression.call as=$reset-stop function=$i64-equal
+expression.local as=$reset-n-value value=$reset-n
+expression.argument parent=$reset-stop index=0 expression=$reset-n-value
+expression.i64 as=$reset-zero value=0
+expression.argument parent=$reset-stop index=1 expression=$reset-zero
+expression.i64 as=$reset-seven value=7
+expression.call as=$reset-recursive function=$reset
+type.argument parent=$reset-recursive index=0 type=i64
+type.argument parent=$reset-recursive index=1 type=@reset-grown
+expression.call as=$reset-next function=$subtract
+expression.local as=$tree8 value=$reset-n
+expression.argument parent=$reset-next index=0 expression=$tree8
+expression.i64 as=$reset-one value=1
+expression.argument parent=$reset-next index=1 expression=$reset-one
+expression.argument parent=$reset-recursive index=0 expression=$reset-next
+expression.if as=$reset-body condition=$reset-stop when-true=$reset-seven when-false=$reset-recursive
+create.function as=$alternate module=$module name=alternate visibility=public result=text effect=pure body=$alternate-body
+create.function as=$task-alternate module=$module name=task-alternate visibility=private result=text effect=task body=$task-alternate-body
+create.function as=$factory module=$module name=make-alternator visibility=public result=@factory-result effect=pure body=$factory-descriptor
+create.function as=$reset module=$module name=finite-reset visibility=public result=i64 effect=pure body=$reset-body

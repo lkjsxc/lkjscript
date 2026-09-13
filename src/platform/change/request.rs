@@ -522,7 +522,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             "authored change base is not the exact pinned repository revision",
         ));
     }
-    if !witness.witness_contract_is_current()
+    if !witness.canonical_facts_are_current()
         || witness.witness_repository_id() != base.repository_id()
         || witness.witness_package_id() != base.package_id()
         || witness.witness_manifest().semantic_root

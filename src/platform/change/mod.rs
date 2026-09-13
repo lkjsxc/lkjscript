@@ -15,6 +15,7 @@ mod logical_plan;
 mod overlay;
 mod prepare;
 mod relation_view;
+mod repair;
 mod request;
 mod summary_delta;
 mod test_delta;
@@ -54,6 +55,7 @@ pub use overlay::KernelOverlay;
 pub use prepare::{
     PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
 };
+pub(crate) use repair::prepare_repair_analysis;
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,

@@ -55,13 +55,14 @@ struct ResourceFunctionParameter {
 
 pub(super) fn validate_affine_meaning(
     snapshot: &super::KernelSnapshot,
+    read: &impl ExpressionRead,
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
     maximum_steps: usize,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
     let _ = validate_affine_roots_with_limits(
-        snapshot,
+        read,
         roots,
         diagnostics,
         work,

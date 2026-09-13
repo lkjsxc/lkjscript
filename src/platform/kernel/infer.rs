@@ -78,6 +78,42 @@ pub(crate) trait ExpressionRead {
     }
 }
 
+/// Adds an owning operation's cancellation checkpoint to immutable, possibly cached reads.
+pub(crate) struct CheckedExpressionRead<'a, R: ?Sized> {
+    pub read: &'a R,
+    pub checkpoint: &'a dyn Fn() -> Result<(), Diagnostic>,
+}
+
+impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R> {
+    fn package_id(&self) -> PackageId {
+        self.read.package_id()
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.owner(owner)
+    }
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.type_object(digest)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.package_interface_owner(package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.has_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        (self.checkpoint)()?;
+        self.read.validation_checkpoint()
+    }
+}
+
 /// Request-local deterministic admissions owned by expression validation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ExpressionValidationLimits {
@@ -133,13 +169,14 @@ impl ExpressionRead for KernelSnapshot {
 
 pub(super) fn validate_expression_meaning(
     snapshot: &KernelSnapshot,
+    read: &impl ExpressionRead,
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
     maximum_steps: usize,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
     if validate_expression_roots_with_limits(
-        snapshot,
+        read,
         roots,
         diagnostics,
         work,

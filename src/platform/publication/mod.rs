@@ -15,6 +15,7 @@ mod receipt;
 mod repository;
 mod revision;
 mod transaction;
+mod validation;
 
 pub(crate) use diff::validate_owner_entry;
 pub use diff::{
@@ -61,3 +62,5 @@ pub use transaction::{
 mod repository_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod upgrade_tests;

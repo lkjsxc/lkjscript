@@ -141,6 +141,10 @@ pub struct WitnessTestDependencyRead {
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
 /// delta. Implementations must pin one immutable base for the lifetime of a normalization.
 pub trait CanonicalBaseRead {
+    /// Interrupt in-memory analysis as well as physical reads at the owning operation's boundary.
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        Ok(())
+    }
     fn read_reference_interface(
         &self,
         dependency: &DependencyRecord,
@@ -250,6 +254,12 @@ pub trait WitnessBaseRead {
     fn witness_package_id(&self) -> PackageId;
 
     fn witness_contract_is_current(&self) -> bool;
+
+    /// Canonical namespace/ownership/summary projections may be rebuilt for repair even when
+    /// semantic admission fails. This grants no incremental-validation or execution proof.
+    fn canonical_facts_are_current(&self) -> bool {
+        self.witness_contract_is_current()
+    }
 
     fn owner_summary_count(&self) -> u64;
 
@@ -461,6 +471,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized> BudgetedCanonicalBase<'a, B> {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for BudgetedCanonicalBase<'_, B> {
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.base.validation_checkpoint()
+    }
     fn read_reference_interface(
         &self,
         dependency: &DependencyRecord,
@@ -616,6 +629,10 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
 
     fn witness_contract_is_current(&self) -> bool {
         self.base.witness_contract_is_current()
+    }
+
+    fn canonical_facts_are_current(&self) -> bool {
+        self.base.canonical_facts_are_current()
     }
 
     fn owner_summary_count(&self) -> u64 {

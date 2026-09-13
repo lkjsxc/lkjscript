@@ -1,0 +1,18 @@
+request base=rev_898a6fcab133d87bb672990930732f8813cccefc1ce5f37a557d1cad6952c107 idempotency=baseline-expanding
+create.module as=$module name=probe
+type.parameter as=@T parameter=$T
+type.list as=@growing item=@T
+expression.bool as=$stop value=true
+expression.i64 as=$seven value=7
+expression.call as=$recursive function=$f
+type.argument parent=$recursive index=0 type=@growing
+expression.if as=$body condition=$stop when-true=$seven when-false=$recursive
+create.function as=$f module=$module name=growing visibility=public result=i64 effect=pure body=$body
+add.type-parameter as=$T declaration=$f name=T
+expression.call as=$entry-body function=$f
+type.argument parent=$entry-body index=0 type=text
+create.function as=$entry module=$module name=entry visibility=public result=i64 effect=pure body=$entry-body
+create.component as=$component module=$module name=command visibility=public
+type.function as=@entry result=i64
+add.port as=$port component=$component name=entry type=@entry function=$entry
+create.target as=$target name=main component=$component port=$port runner=command

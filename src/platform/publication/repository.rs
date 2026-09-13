@@ -31,9 +31,7 @@ use crate::platform::storage::object::{
     StoreErrorClass, StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
-use crate::platform::witness::{
-    ValidationWitnessManifest, decode_witness_manifest, encode_witness_manifest,
-};
+use crate::platform::witness::{ValidationWitnessManifest, encode_witness_manifest};
 use fs2::FileExt;
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
 use std::collections::{BTreeMap, BTreeSet};
@@ -588,6 +586,16 @@ impl GraphRepository {
     /// observation; immutable append-only packs keep that observed revision readable after the
     /// lock is released and later publications advance HEAD.
     pub fn view_current(&self) -> Result<RepositoryView, Diagnostic> {
+        self.view_current_with_control(&crate::platform::execution::ExecutionControl::uncancelled())
+    }
+
+    pub(crate) fn view_current_with_control(
+        &self,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<RepositoryView, Diagnostic> {
+        control.check().map_err(|error| {
+            Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+        })?;
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_shared(&lock).map_err(|error| {
@@ -601,7 +609,9 @@ impl GraphRepository {
                 "Graph 10 repository has no accepted HEAD",
             )
         })?;
-        Ok(RepositoryView::new(current, store))
+        RepositoryView::new(current, store)
+            .with_control(control)
+            .reconcile_validation()
     }
 
     /// Reopens the exact accepted base bound to an already accepted idempotency key. This is a
@@ -681,11 +691,15 @@ impl GraphRepository {
                 ));
             }
         };
-        Ok(Some(RepositoryView::new_idempotency_base(
-            base_publication,
-            store,
-            hidden_type_objects,
-        )))
+        Ok(Some(
+            RepositoryView::new_idempotency_base(
+                base_publication,
+                store,
+                hidden_type_objects,
+                binding.result,
+            )
+            .reconcile_validation()?,
+        ))
     }
 
     /// Prepares one exact change against the currently observed revision without publishing it.
@@ -1126,7 +1140,10 @@ fn read_publication(
         revision.publication.validation.witness.bytes(),
         &mut store_work,
     )?;
-    let witness = decode_witness_manifest(&witness_bytes, revision.publication.validation.witness)?;
+    let witness = crate::platform::witness::decode_historical_witness_manifest(
+        &witness_bytes,
+        revision.publication.validation.witness,
+    )?;
     let accepted = AcceptedBinding::verify(
         head,
         &revision,
@@ -1226,7 +1243,10 @@ fn load_parent_binding(
         revision.publication.validation.witness.bytes(),
         work,
     )?;
-    let witness = decode_witness_manifest(&witness_bytes, revision.publication.validation.witness)?;
+    let witness = crate::platform::witness::decode_historical_witness_manifest(
+        &witness_bytes,
+        revision.publication.validation.witness,
+    )?;
     if semantic_state != revision.core.semantic_state
         || root.repository_id != repository_id
         || root.package_id != witness.package_id
@@ -1608,13 +1628,7 @@ pub(super) fn validate_prepared_dependency_sources(
     store: &PackDirectoryStore,
     prepared: &PreparedPublication,
 ) -> Result<(), Diagnostic> {
-    use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
-    use crate::platform::package_transport::source::{
-        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, collect_with_budget, entries,
-        required,
-    };
-    let root = &prepared.authority.semantic.root;
-    if root.dependencies.entries() == 0 {
+    if prepared.authority.semantic.root.dependencies.entries() == 0 {
         return Ok(());
     }
     let mut overlay = ObjectStage::new(store);
@@ -1624,7 +1638,24 @@ pub(super) fn validate_prepared_dependency_sources(
             .stage(*key, bytes, &mut work)
             .map_err(store_diagnostic)?;
     }
-    let overlay = crate::platform::package_transport::source::CollectingStore::new(&overlay);
+    validate_dependency_sources(&overlay, store, &prepared.authority.semantic.root).map(|_| ())
+}
+
+pub(super) fn validate_dependency_sources<S: ImmutableObjectStore + ?Sized>(
+    source: &S,
+    store: &PackDirectoryStore,
+    root: &crate::platform::kernel::SemanticRoot,
+) -> Result<u64, Diagnostic> {
+    use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
+    use crate::platform::package_transport::source::{
+        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, collect_with_budget, entries,
+        required,
+    };
+    if root.dependencies.entries() == 0 {
+        return Ok(0);
+    }
+    let mut work = StoreWork::default();
+    let overlay = crate::platform::package_transport::source::CollectingStore::new(source);
     let mut direct = Vec::new();
     for (key, bytes) in entries(&overlay, root.dependencies)? {
         let package = key
@@ -1766,7 +1797,7 @@ pub(super) fn validate_prepared_dependency_sources(
             })?;
         checked.extend(admitted.packages.keys().copied());
     }
-    Ok(())
+    Ok(semantic_visits.saturating_add(overlay.visits()))
 }
 
 pub(super) fn logical_dependency_inventory<S: ImmutableObjectStore + ?Sized>(

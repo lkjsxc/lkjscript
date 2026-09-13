@@ -66,14 +66,80 @@ pub(crate) fn rebuild_full_witness_with_limit(
     snapshot: &KernelSnapshot,
     maximum_work: usize,
 ) -> Result<FullWitness, Vec<Diagnostic>> {
-    let validation = crate::platform::kernel::validate_full_with_limit(snapshot, maximum_work)?;
-    build_validated_witness(snapshot, validation).map_err(|diagnostic| vec![diagnostic])
+    rebuild_full_witness_checked(snapshot, maximum_work, &|| Ok(()))
+}
+
+pub(crate) fn rebuild_full_witness_checked(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<FullWitness, Vec<Diagnostic>> {
+    let validation =
+        crate::platform::kernel::validate_full_checked(snapshot, maximum_work, &mut 0, checkpoint)?;
+    let witness =
+        build_validated_witness(snapshot, validation).map_err(|diagnostic| vec![diagnostic])?;
+    checkpoint().map_err(|error| vec![error])?;
+    Ok(witness)
 }
 
 fn build_validated_witness(
     snapshot: &KernelSnapshot,
     full_validation: FullValidationReport,
 ) -> Result<FullWitness, Diagnostic> {
+    let CanonicalWitnessFacts {
+        summaries,
+        summary_objects,
+        entries,
+        pages,
+        map_work,
+        roots,
+    } = rebuild_canonical_facts(snapshot)?;
+    let (semantic_root, _) = crate::platform::kernel::encode_root(&snapshot.root)?;
+    let (manifest, manifest_digest, manifest_bytes) = bind_witness_manifest(
+        snapshot.root.repository_id,
+        snapshot.root.package_id,
+        semantic_root,
+        roots,
+    )?;
+    let report = WitnessBuildReport {
+        full_validation,
+        owners_summarized: summaries.len() as u64,
+        namespace_entries: entries.namespaces.len() as u64,
+        ownership_entries: entries.ownership.len() as u64,
+        relation_edges: entries.relations.len() as u64,
+        test_dependency_entries: entries.test_dependencies.len() as u64,
+        summary_objects: summary_objects.len() as u64,
+        map_pages: pages.object_count() as u64,
+        map_bytes: pages.stored_bytes() as u64,
+        map_work,
+    };
+    Ok(FullWitness {
+        manifest,
+        manifest_digest,
+        manifest_bytes,
+        summaries,
+        summary_objects,
+        entries,
+        pages,
+        report,
+    })
+}
+
+/// Canonical projections without a semantic certificate. They support inspection and repair of
+/// authentic historical programs which the current validator may reject.
+#[derive(Debug)]
+pub(crate) struct CanonicalWitnessFacts {
+    pub summaries: BTreeMap<OwnerKey, OwnerSummary>,
+    pub summary_objects: BTreeMap<OwnerSummaryDigest, Vec<u8>>,
+    pub entries: WitnessEntries,
+    pub pages: MemoryPageStore,
+    pub map_work: MapWork,
+    pub roots: WitnessRoots,
+}
+
+pub(crate) fn rebuild_canonical_facts(
+    snapshot: &KernelSnapshot,
+) -> Result<CanonicalWitnessFacts, Diagnostic> {
     let relations = extract_relations(
         snapshot.root.package_id,
         &snapshot.owners,
@@ -123,34 +189,14 @@ fn build_validated_witness(
     let mut pages = MemoryPageStore::default();
     let mut map_work = MapWork::default();
     let roots = build_witness_maps(&entries, &summaries, &mut pages, &mut map_work)?;
-    let (semantic_root, _) = crate::platform::kernel::encode_root(&snapshot.root)?;
-    let (manifest, manifest_digest, manifest_bytes) = bind_witness_manifest(
-        snapshot.root.repository_id,
-        snapshot.root.package_id,
-        semantic_root,
-        roots,
-    )?;
-    let report = WitnessBuildReport {
-        full_validation,
-        owners_summarized: summaries.len() as u64,
-        namespace_entries: entries.namespaces.len() as u64,
-        ownership_entries: entries.ownership.len() as u64,
-        relation_edges: entries.relations.len() as u64,
-        test_dependency_entries: entries.test_dependencies.len() as u64,
-        summary_objects: summary_objects.len() as u64,
-        map_pages: pages.object_count() as u64,
-        map_bytes: pages.stored_bytes() as u64,
-        map_work,
-    };
-    Ok(FullWitness {
-        manifest,
-        manifest_digest,
-        manifest_bytes,
+
+    Ok(CanonicalWitnessFacts {
         summaries,
         summary_objects,
         entries,
         pages,
-        report,
+        map_work,
+        roots,
     })
 }
 

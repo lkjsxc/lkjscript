@@ -396,9 +396,27 @@ pub struct LoadedArtifact {
     pub segment_count: u64,
     pub work: ArtifactLoadWork,
     pub(crate) objects: BTreeMap<ObjectKey, Vec<u8>>,
+    // Minted only by strict loading, after canonical bodies and compiled correspondence pass.
+    // Cloning is safe; mutating even an in-memory input invalidates this exact binding.
+    admission: [u8; 32],
 }
 
 impl LoadedArtifact {
+    pub(crate) fn require_current_admission(
+        &self,
+        checkpoint: impl FnMut() -> Result<(), Diagnostic>,
+    ) -> Result<u64, Diagnostic> {
+        let (binding, bytes) = admission_binding(&self.manifest, &self.objects, checkpoint)?;
+        if self.admission != binding {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_current_admission_binding",
+                "normalized input differs from its exact current admitted templates, applications, or dependencies; reload the artifact through strict admission",
+            ));
+        }
+        Ok(bytes)
+    }
+
     pub fn package(&self, package: PackageId) -> Option<&ArtifactPackage> {
         self.manifest
             .packages
@@ -912,6 +930,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     work.object_bytes = objects.values().fold(0_u64, |total, value| {
         total.saturating_add(value.len() as u64)
     });
+    let (admission, _) = admission_binding(&manifest, &objects, || Ok(()))?;
     Ok(LoadedArtifact {
         manifest,
         manifest_digest,
@@ -919,7 +938,42 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         segment_count: segment_count as u64,
         work,
         objects,
+        admission,
     })
+}
+
+fn admission_binding(
+    manifest: &ArtifactManifest,
+    objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    mut checkpoint: impl FnMut() -> Result<(), Diagnostic>,
+) -> Result<([u8; 32], u64), Diagnostic> {
+    checkpoint()?;
+    let (digest, _) = manifest.encode()?;
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.current-artifact-admission.v1");
+    hasher.update(&crate::platform::witness::contract::validator_contract_digest().bytes());
+    hasher.update(&digest.bytes());
+    let mut visited = 0_u64;
+    for (key, bytes) in objects {
+        checkpoint()?;
+        visited = visited
+            .checked_add(bytes.len() as u64)
+            .filter(|count| *count <= MAXIMUM_ARTIFACT_BUNDLE_BYTES)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_admission_bytes",
+                    "current artifact admission exceeds its checked byte bound",
+                )
+            })?;
+        hasher.update(&[key.domain.tag()]);
+        hasher.update(&key.digest.bytes());
+        hasher.update(&(bytes.len() as u64).to_be_bytes());
+        for chunk in bytes.chunks(64 * 1024) {
+            checkpoint()?;
+            hasher.update(chunk);
+        }
+    }
+    Ok((*hasher.finalize().as_bytes(), visited))
 }
 
 pub(crate) fn closure_facts(
@@ -2666,7 +2720,7 @@ fn validate_artifact_nominal_meaning(
         let mut diagnostics = Vec::new();
         let exhausted = crate::platform::kernel::validate_expression_roots_with_limits(
             &read,
-            roots,
+            roots.iter().copied(),
             &mut diagnostics,
             &mut work,
             crate::platform::kernel::ExpressionValidationLimits {
@@ -2691,6 +2745,12 @@ fn validate_artifact_nominal_meaning(
                 "artifact nominal validation exhausted its existing work budget",
             ));
         }
+        crate::platform::kernel::callable_flow::validate_callable_flow(
+            &read,
+            roots,
+            &mut work,
+            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+        )?;
     }
     Ok(())
 }

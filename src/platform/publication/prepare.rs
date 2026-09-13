@@ -156,7 +156,12 @@ pub fn prepare_change_publication<
     store: &S,
     options: PublicationOptions,
 ) -> Result<PreparedPublication, Vec<Diagnostic>> {
-    validate_base(base, base_snapshot, base_witness)?;
+    validate_base(
+        base,
+        base_snapshot,
+        base_witness,
+        analysis.full_candidate.is_some(),
+    )?;
     if analysis.canonical.is_empty() {
         return Err(vec![publication_error(
             DiagnosticClass::Semantic,
@@ -682,21 +687,29 @@ fn validate_base<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     accepted: AcceptedBinding,
     snapshot: &B,
     witness: &W,
+    full_candidate: bool,
 ) -> Result<(), Vec<Diagnostic>> {
     let root = snapshot.semantic_root();
     let manifest = witness.witness_manifest();
     let (semantic_root, _) = encode_root(root).map_err(single)?;
     let semantic_state = semantic_state_digest_from_root(root).map_err(single)?;
-    let (witness_digest, _) = encode_witness_manifest(manifest).map_err(single)?;
+    if !witness.witness_contract_is_current() && !full_candidate {
+        return Err(vec![publication_error(
+            DiagnosticClass::Semantic,
+            "publication_current_validation_required",
+            "historical acceptance requires full candidate validation before repair publication",
+        )]);
+    }
     if accepted.head.repository_id != root.repository_id
         || accepted.semantic_root != semantic_root
         || accepted.semantic_state != semantic_state
         || snapshot
             .exact_revision()
             .is_some_and(|revision| revision != accepted.head.revision)
-        || accepted.validation_witness != witness_digest
-        || accepted.validation_certificate != manifest.certificate
-        || accepted.validator_contract != manifest.validator_contract
+        || manifest.semantic_root != semantic_root
+        || manifest.repository_id != root.repository_id
+        || manifest.package_id != root.package_id
+        || !witness.canonical_facts_are_current()
     {
         return Err(vec![publication_error(
             DiagnosticClass::Corrupt,
@@ -1018,6 +1031,20 @@ fn change_counts(analysis: &PreparedChangeAnalysis) -> ChangeCounts {
 }
 
 fn change_validation(analysis: &PreparedChangeAnalysis) -> ValidationEvidence {
+    if let Some(report) = &analysis.full_candidate {
+        return ValidationEvidence {
+            profile: ValidationProfile::FullRebuild,
+            structurally_checked: report.owners_checked,
+            semantically_checked: report.owners_checked,
+            summaries_reused: 0,
+            reverse_edges_visited: 0,
+            tests_selected: analysis.validation.tests_selected,
+            tests_executed: 0,
+            tests_passed: 0,
+            compiler_units_planned: analysis.summaries.plan.compiler_units.len() as u64,
+            full_oracle: FullOracleStatus::NotApplicable,
+        };
+    }
     ValidationEvidence {
         profile: ValidationProfile::IncrementalOwnerFrontier,
         structurally_checked: analysis.validation.structurally_checked.len() as u64,

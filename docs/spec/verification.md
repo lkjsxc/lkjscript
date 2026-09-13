@@ -697,6 +697,46 @@ structured summaries and digests.
 
 ## Performance evidence
 
+The finite callable increment extends the existing offline-package aggregate (receipt contract 11).
+`offline-packages --case finite-callable` selects its focused child; `--case validator-upgrade`
+selects only authentic predecessor recovery. Neither child receipt substitutes for the aggregate.
+The designed transported alternator uses literal compact records and named references, swaps two
+ordinary type arguments and two callback effect rows, and returns a private task descriptor through
+a public pure factory. A finite reset supplies `I64,List<A>` without an expanding slot cycle.
+Producer/consumer removal, consumer edit, supplier replacement and subsequent installed invocation
+retain their independent public command evidence. This library is a designed composition witness,
+not a maintained standard addition.
+
+Six value-dependent callbacks must produce `I7;Tx;I7;Tx;I7;Tx;`, in that order, with no duplicate
+effects. Zero iterations call neither callback. Each actual DataStore callback owns its transaction;
+a later callback trap leaves only earlier committed observations. A disjoint neutral adapter script
+checks both evaluators, exact transaction events, cancellation and capability quota stopping. It
+never loads the actual deployment or replays its effects. Actual public invocation and neutral
+reference execution are separately bound to the same artifact identity.
+
+Supported historical witness bytes and current semantic proof are tested separately. Authentic
+predecessor repositories retain HEAD, parent/root identities, original accepted requests and
+idempotency results. The current executable inspects, revalidates and repairs a newly invalid body
+through ordinary reviewed edits. A complete historical supplier that now expands is rejected for
+execution and can be replaced with an exact valid supplier through full-candidate repair. Stale or
+interrupted repair cannot publish; corrupt canonical objects cannot be hidden by cached current
+proof. Installed absolute-path proof repeats this upgrade through the existing installed owners.
+
+The small first-order term oracle uses independent simultaneous substitution and weighted
+reachability; it does not call the production SCC helper. It covers finite permutations, projection,
+reset, mutual cycles, every constructor child and syntactically unused applications. A cycle longer
+than the diagnostic rendering bound remains a semantic expansion rejection with an explicit
+omission marker. Work, type-depth, storage and cancellation failures retain separate classifications.
+Focused fault sensitivity disables expanding-edge rejection, named applications and incremental
+closure analysis independently, then restores exact source and reruns the affected healthy proof.
+An additional fault incorrectly trusts historical acceptance without fresh current validation; the
+authentic expanding predecessor must then fail the upgrade oracle. Complete private source bodies
+include unused named applications. Coherent hostile artifacts retain valid enclosing hashes and
+corresponding canonical/compiled applications, so public loading must reject their expansion before
+adapter construction. Separate compiled-argument forgery tests keep valid canonical bodies and
+require instruction/meaning correspondence rejection. Retained readers check exact neutral events,
+failure classes, live-state counters, candidate paths and complete input/output inventories.
+
 Release measurements cover copied command creation, first check, clean build, exact-current build,
 post-change incremental plus equal clean rebuild, pure run, standard clean check/build, and
 `lkjournal` clean check/build.

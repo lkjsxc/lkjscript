@@ -1174,6 +1174,35 @@ mod tests {
         assert!(crate::platform::package_transport::oracle::reconstruct(&container).is_ok());
     }
 
+    #[test]
+    fn authentic_predecessor_expanding_supplier_rejects_before_readiness() {
+        let cases: &[(&[u8], &str)] = &[
+            (
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-predecessor/expanding.lkjp"
+                ),
+                "package_transport_eadf507fa02900fdc122d45b325cab3d123d329af444fd4542501e55d3a45421",
+            ),
+            (
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-predecessor/private-expanding.lkjp"
+                ),
+                "package_transport_f204ee9a82e5a6bb7ff502db3d2254722d80ae09a768412ec39375536a3c2b9f",
+            ),
+        ];
+        for (bytes, digest) in cases {
+            let digest = digest.parse().unwrap();
+            let container = PackageContainer::decode(bytes, digest).unwrap();
+            let error = container.admit().unwrap_err();
+            assert!(
+                error.message.contains("kernel_callable_expansion")
+                    || error.code == "kernel_callable_expansion",
+                "{error:?}"
+            );
+            assert_not_ready(bytes, digest);
+        }
+    }
+
     fn assert_not_ready(bytes: &[u8], transport: PackageTransportDigest) {
         let temporary = tempfile::tempdir().unwrap();
         let target = GraphRepository::create(

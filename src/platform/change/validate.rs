@@ -110,6 +110,13 @@ pub fn validate_incremental_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBa
     base_witness: &W,
     structural: StructuralValidationReport,
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
+    if !base_witness.witness_contract_is_current() {
+        return Err(vec![Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "change_current_validation_required",
+            "incremental validation requires current proof; repair must fully validate the candidate",
+        )]);
+    }
     validate_incremental_frontier_with_admission(
         overlay,
         canonical,
@@ -137,6 +144,13 @@ pub(crate) fn validate_incremental_frontier_with_admission<
     mut structural: StructuralValidationReport,
     admission: ValidationAdmission,
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
+    if !base_witness.witness_contract_is_current() {
+        return Err(vec![Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "change_current_validation_required",
+            "incremental proof requires current validation; rebuild the base or validate the complete repair candidate",
+        )]);
+    }
     let mut diagnostics = Vec::new();
     let mut work = 0_usize;
     let http_routes = match validate_http_topology_frontier(
@@ -195,7 +209,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
     }
     let exhaustion = validate_affine_roots_with_limits(
         overlay,
-        live_semantic_roots,
+        live_semantic_roots.iter().copied(),
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
@@ -224,6 +238,21 @@ pub(crate) fn validate_incremental_frontier_with_admission<
             ),
         };
         return Err(vec![validation_budget_error(code, message)]);
+    }
+    if diagnostics.is_empty() {
+        crate::platform::kernel::callable_flow::validate_callable_flow(
+            overlay,
+            live_semantic_roots,
+            &mut work,
+            usize::try_from(admission.maximum_expression_steps).unwrap_or(usize::MAX),
+        )
+        .map_err(|mut diagnostic| {
+            if diagnostic.code == "kernel_callable_flow_work" {
+                diagnostic.code = "change_budget_validation_expression_steps".to_owned();
+            }
+            vec![diagnostic]
+        })?;
+        structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
     }
     if summaries.selected != impact.summary_owners {
         push_bounded_diagnostic(
@@ -262,7 +291,10 @@ pub(crate) fn validate_incremental_frontier_with_admission<
     }
 }
 
-fn validate_http_topology_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+pub(super) fn validate_http_topology_frontier<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
     overlay: &KernelOverlay<'_, B>,
     impact: &ImpactPlan,
     canonical: &CanonicalDelta,
@@ -1166,6 +1198,9 @@ fn validation_budget_error(code: &'static str, message: impl Into<String>) -> Di
 }
 
 impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        KernelOverlay::validation_checkpoint(self)
+    }
     fn package_id(&self) -> PackageId {
         KernelOverlay::package_id(self)
     }

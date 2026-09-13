@@ -26,6 +26,9 @@ pub struct KernelOverlay<'a, B: ?Sized = KernelSnapshot> {
 }
 
 impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
+    pub(crate) fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.base.validation_checkpoint()
+    }
     pub fn new(base: &'a B, delta: &'a CanonicalDelta) -> Self {
         Self {
             base,

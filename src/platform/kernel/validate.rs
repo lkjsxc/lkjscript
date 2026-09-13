@@ -83,8 +83,31 @@ pub(crate) fn validate_full_with_limit(
     snapshot: &KernelSnapshot,
     maximum_work: usize,
 ) -> Result<FullValidationReport, Vec<Diagnostic>> {
+    validate_full_observed(snapshot, maximum_work, &mut 0)
+}
+
+pub(crate) fn validate_full_observed(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+    consumed: &mut u64,
+) -> Result<FullValidationReport, Vec<Diagnostic>> {
+    validate_full_checked(snapshot, maximum_work, consumed, &|| Ok(()))
+}
+
+pub(crate) fn validate_full_checked(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+    consumed: &mut u64,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<FullValidationReport, Vec<Diagnostic>> {
+    checkpoint().map_err(|error| vec![error])?;
     let mut validator = FullValidator {
         snapshot,
+        read: super::infer::CheckedExpressionRead {
+            read: snapshot,
+            checkpoint,
+        },
+        interrupted: false,
         diagnostics: Vec::new(),
         work: 0,
         maximum_work: maximum_work.min(MAXIMUM_VALIDATION_WORK),
@@ -94,6 +117,7 @@ pub(crate) fn validate_full_with_limit(
         binding_containers: BTreeMap::new(),
     };
     validator.validate();
+    *consumed = validator.work as u64;
     validator
         .diagnostics
         .sort_by(|left, right| (&left.code, &left.message).cmp(&(&right.code, &right.message)));
@@ -119,6 +143,8 @@ pub(crate) fn validate_full_with_limit(
 
 struct FullValidator<'a> {
     snapshot: &'a KernelSnapshot,
+    read: super::infer::CheckedExpressionRead<'a, KernelSnapshot>,
+    interrupted: bool,
     diagnostics: Vec<Diagnostic>,
     work: usize,
     maximum_work: usize,
@@ -330,6 +356,7 @@ impl FullValidator<'_> {
         if self.diagnostics.is_empty() {
             validate_expression_meaning(
                 self.snapshot,
+                &self.read,
                 &mut self.diagnostics,
                 &mut self.work,
                 self.maximum_work,
@@ -338,12 +365,23 @@ impl FullValidator<'_> {
         if self.diagnostics.is_empty() {
             validate_affine_meaning(
                 self.snapshot,
+                &self.read,
                 &mut self.diagnostics,
                 &mut self.work,
                 self.maximum_work,
             );
         }
         self.validate_relations();
+        if self.diagnostics.is_empty()
+            && let Err(diagnostic) = super::callable_flow::validate_callable_flow(
+                &self.read,
+                self.snapshot.owners.keys().copied(),
+                &mut self.work,
+                self.maximum_work,
+            )
+        {
+            self.diagnostics.push(diagnostic);
+        }
     }
 
     fn validate_root_and_records(&mut self) {
@@ -2613,6 +2651,14 @@ impl FullValidator<'_> {
     }
 
     fn consume_work(&mut self) -> bool {
+        if self.interrupted {
+            return false;
+        }
+        if let Err(error) = (self.read.checkpoint)() {
+            self.diagnostics.push(error);
+            self.interrupted = true;
+            return false;
+        }
         self.work = self.work.saturating_add(1);
         if self.work > self.maximum_work {
             if !self
@@ -2620,10 +2666,11 @@ impl FullValidator<'_> {
                 .iter()
                 .any(|diagnostic| diagnostic.code == "kernel_full_work")
             {
-                self.error(
+                self.diagnostics.push(Diagnostic::new(
+                    DiagnosticClass::Resource,
                     "kernel_full_work",
                     "full validation exhausted its explicit work budget",
-                );
+                ));
             }
             return false;
         }
@@ -2631,7 +2678,7 @@ impl FullValidator<'_> {
     }
 
     fn exhausted(&self) -> bool {
-        self.work > self.maximum_work
+        self.work > self.maximum_work || self.interrupted
     }
 
     fn error(&mut self, code: &str, message: impl Into<String>) {

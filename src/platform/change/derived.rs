@@ -60,7 +60,7 @@ pub(crate) fn derive_local_delta_with_admission<
     maximum_ownership_steps: u64,
     maximum_relation_edges: u64,
 ) -> Result<DerivedDelta, Diagnostic> {
-    if !base_witness.witness_contract_is_current()
+    if !base_witness.canonical_facts_are_current()
         || base_witness.witness_repository_id() != overlay.repository_id()
         || base_witness.witness_package_id() != overlay.package_id()
     {

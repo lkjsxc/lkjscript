@@ -39,9 +39,11 @@ skipped. Its original full, target, package and simulated-pair handoffs were aut
 reread. Annotated v0.1.34 object `d96d1623495d8c13968d99f567ea77e79b158237` selects that source.
 Publisher `34760117554/1` passed build/full/target/packaging, the pre-publication installed pair
 and immutable three-asset publication: release `387929218`, published 2026-09-13T14:42:22Z.
-Anonymous exact/latest acquisition and attestations passed. Public job `103740119904` was still
-executing the installed application pair at 2026-09-13T15:15:46Z; INS-7 awaits its complete success
-and cleanup. Selection changes no graph, artifact, grant
+Anonymous exact/latest acquisition and attestations passed. Public job `103740119904` completed
+the installed application pair and evidence upload; publisher `34760117554/1` completed successfully
+at 2026-09-13T15:17:53Z. Its final retained artifact and pair receipt passed the original verifier
+under the archived context. This is evidence rereading, not another live execution. INS-7 is closed.
+Selection changes no graph, artifact, grant
 or application data and never infers compatibility or invokes another runtime as fallback.
 
 The [typed named-reference campaign](campaigns/202609131008.md) adds reviewed package and owner
@@ -54,9 +56,22 @@ foreground consumer now uses a literal prelude instead of host member-ID maps. S
 final copied named/foreground workflows, public CLI, maintained semantic/artifact equality and
 generated guides, and was pushed normally to main. Exact verifier/candidate bindings are recorded in its
 [evidence owner](evidence/202609131008-typed-named-references.json). v0.1.34 does not contain these
-bindings. Their additional release follows the explicit [roadmap trigger](roadmap.md). The older
-unprobed generic-recursion preparation versus ordered-substitution note remains unresolved; these
-nonrecursive cells do not close it.
+bindings. Their additional release is selected together with the finite-callable campaign below,
+consuming the one-campaign deferral in the [roadmap trigger](roadmap.md).
+
+The [finite callable campaign](campaigns/202609140057-collision-1.md) implements explicit
+parameter-flow admission for direct calls and named function values. Permutation, duplication and
+acyclic growth followed by a closed reset are permitted; an expanding edge within a parameter SCC
+rejects with `kernel_callable_expansion` before publication and independently during complete
+source/artifact admission. The frozen predecessor accepted both the swap and untaken expanding
+probe; the expanding program failed later in reference preparation with
+`reference_instantiation_storage`. That startup observation closes the previously unprobed note.
+Compatible historical acceptance is authenticated separately from current proof, without changing
+Graph 14, witness 9, Artifact 18, HEAD or historical identities. The current executable can inspect
+and repair newly invalid bodies or replace their exact supplier through ordinary plan/apply with a
+complete valid candidate. Focused public alternator, reset, replacement and upgrade witnesses pass;
+full source, static-target and installed/public release acceptance remain pending. Candidate
+v0.1.35 is the next unused version observed for the selected combined delivery; it is not published.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,

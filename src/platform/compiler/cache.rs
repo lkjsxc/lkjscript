@@ -182,6 +182,7 @@ pub fn build_clean(
     optimization: OptimizationPolicy,
 ) -> Result<CompilationBuildReceipt, Diagnostic> {
     let view = repository.view_current()?;
+    view.require_current_validation()?;
     let inventory = view.compilation_unit_owners(MAXIMUM_COMPILATION_UNITS)?;
     let mut work = CompilationBuildWork {
         inventory_map_pages: inventory.work.map.pages_read,

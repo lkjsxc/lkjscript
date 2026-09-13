@@ -1,0 +1,23 @@
+reference.package as=$std source=builtin
+reference.owner as=$module package=local class=module name=consumer
+reference.owner as=$main package=local class=declaration parent=$module name=main
+reference.owner as=$count package=local class=parameter parent=$main name=count
+reference.owner as=$integer package=local class=declaration parent=$module name=render-integer
+reference.owner as=$text package=local class=declaration parent=$module name=render-text
+reference.owner as=$alternate package=$library class=declaration name=alternate
+expression.local as=$count-value value=$count
+expression.i64 as=$seven value=7
+expression.text as=$x value=x
+expression.text as=$output value=edited:
+expression.function-value as=$left function=$integer
+expression.function-value as=$right function=$text
+expression.call as=$body function=$alternate
+type.argument parent=$body index=0 type=i64
+type.argument parent=$body index=1 type=text
+expression.argument parent=$body index=0 expression=$count-value
+expression.argument parent=$body index=1 expression=$seven
+expression.argument parent=$body index=2 expression=$x
+expression.argument parent=$body index=3 expression=$left
+expression.argument parent=$body index=4 expression=$right
+expression.argument parent=$body index=5 expression=$output
+replace.body function=$main body=$body

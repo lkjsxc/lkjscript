@@ -1,6 +1,6 @@
 {
   "campaign": "202609122211",
-  "status": "INS-1–INS-6 accepted and integrated; FG-7 closed; v0.1.34 immutable publication passed, INS-7 anonymous installed pair pending",
+  "status": "INS-1–INS-7 accepted; FG-7 closed; immutable v0.1.34 anonymous installed public pair and original-reader admission passed",
   "starting_head": "21bee29a132bf25202ad056748a4324d6fde7795",
   "guidance_and_mandate_commit": "efdbb3e5",
   "integration": {
@@ -126,7 +126,7 @@
     "source_acceptance": "fresh-passed: 26 full gates at 037a1348",
     "target_acceptance": "fresh-passed: exact static-musl candidate, both pinned userlands and six owners at 037a1348",
     "package_acceptance": "fresh-passed: deterministic preparation, strict three-asset verification and complete installed pair at 037a1348",
-    "public_acceptance": "pending public application pair 34760117554/1 job 103740119904; anonymous acquisitions and attestations passed",
+    "public_acceptance": "passed hosted 34760117554/1 job 103740119904; final authenticated artifact admitted by the original retained verifier without replay",
     "hosted_dry_run": {
       "run": 34706128684,
       "attempt": 1,
@@ -216,9 +216,9 @@
       "INS-2": "fresh-passed: real v0.1.32 and v0.1.34 slots, explicit selection, immutable/idempotent/conflict/corruption negatives and newer absolute-manager recovery; bundle/descriptor/graph bytes unchanged",
       "INS-3": "fresh-passed: native races, OS locks, substitution, ten I/O checkpoints, five fresh-initialization plus eight old-default killed-process cuts/recovery, cleanup faults and committed broken-output reporting; final full gate and 12 actual pair interruptions passed",
       "INS-4": "fresh-passed: independent strict fixtures, malformed gzip/tar/static-ELF/member identities, decompression bound, snapshot replacement, historical producer-policy separation and actual public predecessor payload equality; current producer policy remains strict",
-      "INS-5": "Public anonymous exact/latest acquisition and three-asset attestations passed; installed application pair still pending. Earlier fresh bootstrap/negative/interruption proof remains accepted.",
+      "INS-5": "Public anonymous exact/latest acquisition, all three-asset attestations and installed application pair passed with joined cleanup. Earlier bootstrap/negative/interruption proof remains accepted.",
       "INS-6": "fresh-passed: held old/new HTTP processes and recovery, two independent foreground bundles/data roots with existing once-only expectations through the actual installed slot; all five aggregate owners and cleanup passed",
-      "INS-7": "pending public job 103740119904 at frozen source 037a1348; immutable release 387929218 published, actual pair not yet complete"
+      "INS-7": "closed: frozen source 037a1348, immutable release 387929218, actual anonymous exact/latest installed pair and original-reader admission passed"
     },
     "historical_archive": {
       "tag": "v0.1.32",
@@ -281,7 +281,7 @@
       "evidence_owner": "docs/campaigns/202609131008.md"
     },
     "publication": {
-      "status": "immutable-published; anonymous installed application pair pending",
+      "status": "immutable-published; anonymous installed public pair passed; original retained reader passed",
       "source": "037a13483321497737a30ade6df88950bb19e0de",
       "tag_object": "d96d1623495d8c13968d99f567ea77e79b158237",
       "release_id": 387929218,
@@ -303,7 +303,7 @@
       "local_original_readers": "Downloaded artifact verifier identity and immutable published archive/receipt passed. Original pre-publication pair reader passed in reconstructed archived paths/modes/kernel metadata, no effects replayed.",
       "prepublication_pair_sha256": "19fd70679d8b76258f248bf97350e31c250d46aebd047c2a4e974c50ed3e25c6",
       "prepublication_pair_digest": "verification_779bbe79df61654c1147013bbee24a62097cf088cef95523d4e426b8402781a7",
-      "anonymous_acquisition": "Both routes and all three-asset attestations completed successfully in the public job before application admission. Full installed pair is still pending.",
+      "anonymous_acquisition": "Both anonymous routes, three-asset attestations, installed application acceptance and joined cleanup passed in the original public job.",
       "retained_artifacts": [
         {
           "id": 10319811093,
@@ -341,12 +341,45 @@
           "expires": "2026-09-20T14:41:56Z"
         }
       ],
-      "resumption": "Read run 34760117554/1 once after changed state; authenticate public evidence artifact and original pair reader at this source, close INS-7 only after installed application/cleanup success.",
+      "resumption": "none for INS-7; preserve immutable release and original evidence; newer named-reference/finite-callable delivery is separate",
       "limitations": "Published manifest binds release context and differs from dry-run archive. No authoring increment, settings changes, asset overwrite or deployment.",
       "observed_utc": "2026-09-13T15:15:46Z",
       "publisher_state": "in_progress",
       "public_job_state": "in_progress: Admit both public routes and bind one fresh application suite",
-      "retained_root": ".artifacts/named-references-202609131008/inherited/publisher-34760117554/"
+      "retained_root": ".artifacts/named-references-202609131008/inherited/publisher-34760117554/",
+      "previous_pending_observation": {
+        "status": "immutable-published; anonymous installed application pair pending",
+        "anonymous_acquisition": "Both routes and all three-asset attestations completed successfully in the public job before application admission. Full installed pair is still pending.",
+        "resumption": "Read run 34760117554/1 once after changed state; authenticate public evidence artifact and original pair reader at this source, close INS-7 only after installed application/cleanup success.",
+        "observed_utc": "2026-09-13T15:15:46Z"
+      },
+      "final_reconciliation": {
+        "campaign": "docs/campaigns/202609140057-collision-1.md",
+        "publisher_completed_utc": "2026-09-13T15:17:53Z",
+        "artifact": {
+          "id": 10320391118,
+          "name": "public-application-verification-evidence-34760117554-1",
+          "bytes": 142476944,
+          "sha256": "ec9e637cefc134792f128427db5dde1709e7f1941c3e839a66c2759850c441c4"
+        },
+        "pair": {
+          "bytes": 104778,
+          "sha256": "18eb122b82d1c7cdb0e96be7188a5538794fc3414a6f961eb3775f22b525bee5",
+          "digest": "verification_f6ff1a63fc67f11d29993c115c460f2b892e1c55d015e4f8d50ef640d8a71d9b",
+          "exact": "fresh-execution",
+          "latest": "bound-within-same-pair",
+          "expensive_executions": 5,
+          "cleanup_complete": true
+        },
+        "original_verifier": {
+          "bytes": 26778456,
+          "sha256": "927e6ebc1c01a7368436fb9f1fdad2397dcaf96e58516a92820ef362a85a8cc2"
+        },
+        "reader": "release transferred pair-verify",
+        "retained_log": ".artifacts/named-references-202609131008/inherited/publisher-34760117554/public-pair-reread-01.log",
+        "admission": "passed after reconstructing archived paths, modes and environment in an owned mount namespace",
+        "classification": "authenticated historical hosted execution; evidence rereading only, no local live replay, new acquisition, publication or retargeting"
+      }
     }
   }
 }

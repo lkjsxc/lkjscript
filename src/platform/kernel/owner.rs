@@ -318,7 +318,7 @@ impl DeclarationRecord {
         }
     }
 
-    fn expression_roots(&self) -> Vec<ExpressionId> {
+    pub(crate) fn expression_roots(&self) -> Vec<ExpressionId> {
         match &self.payload {
             DeclarationPayload::Function(function) => vec![function.body],
             DeclarationPayload::Constant { value, .. } => vec![*value],

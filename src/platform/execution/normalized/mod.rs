@@ -10,6 +10,7 @@ mod data_codec_reference;
 mod deployment;
 pub(crate) mod effect_probe;
 pub(crate) mod effect_transaction_probe;
+pub(crate) mod finite_callable_probe;
 mod http;
 mod http_client;
 mod list;

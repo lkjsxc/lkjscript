@@ -2138,6 +2138,42 @@ const fn package_source_diagnostic(code: &'static str) -> DiagnosticDescriptor {
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
         diagnostic(
+            "kernel_callable_expansion",
+            DiagnosticClass::Semantic,
+            "An explicit call or named function value places constructor growth on a cycle of exact ordinary parameter slots.",
+            "Use plain parameter forwarding within the cycle, or break the return flow with a closed type. Inspect the expression, ordered argument, and bounded constructor-path witness. Runtime branch reachability does not remove the application.",
+        ),
+        diagnostic(
+            "kernel_callable_flow_work",
+            DiagnosticClass::Resource,
+            "Finite-callable analysis exhausted its checked work admission before a decision.",
+            "Reduce the candidate application graph or adjust the owning work admission. This is separate from semantic expansion rejection.",
+        ),
+        diagnostic(
+            "kernel_callable_flow_storage",
+            DiagnosticClass::Resource,
+            "Callable parameter-flow metadata exceeds its independent storage admission.",
+            "Reduce the candidate application graph; no candidate was accepted.",
+        ),
+        diagnostic(
+            "change_historical_request_incompatible",
+            DiagnosticClass::Semantic,
+            "An authenticated accepted request cannot be revalidated under the current validator; its original result and idempotency binding remain intact.",
+            "Inspect the historical result and repair the current canonical program through a new reviewed request. Re-plan old prepared tokens; the existing key cannot publish a second result.",
+        ),
+        diagnostic(
+            "publication_current_validation",
+            DiagnosticClass::Semantic,
+            "Historical acceptance does not provide current semantic admission for this exact root.",
+            "Rebuild current validation with this executable. If the program is newly invalid, inspect it and use change plan / change apply to publish a completely valid repair.",
+        ),
+        diagnostic(
+            "artifact_current_admission_binding",
+            DiagnosticClass::Corrupt,
+            "Normalized preparation input differs from its exact current admitted templates, applications, dependencies, or validator.",
+            "Reload the immutable artifact through strict canonical and compiled-meaning admission before preparation.",
+        ),
+        diagnostic(
             "runtime_prefix",
             DiagnosticClass::Source,
             "The prefix is not an admitted absolute user path.",
@@ -6694,6 +6730,40 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     (
                         "preparation-accounting",
                         "cumulative-steps-and-metadata-bytes-before-growth".to_owned(),
+                    ),
+                ],
+            )?);
+            records.push(compact_record(
+                "execution.callable-instantiation",
+                &[
+                    (
+                        "rule",
+                        "no-expanding-edge-within-exact-parameter-slot-scc".to_owned(),
+                    ),
+                    (
+                        "applications",
+                        "every-direct-call-and-named-function-value".to_owned(),
+                    ),
+                    (
+                        "substitution",
+                        "simultaneous-ordered-type-and-effect-arguments".to_owned(),
+                    ),
+                    (
+                        "finite",
+                        "permutation-duplication-projection-closed-reset-acyclic-growth".to_owned(),
+                    ),
+                    (
+                        "admission",
+                        "publication-complete-source-strict-artifact-normalized-input".to_owned(),
+                    ),
+                    (
+                        "history",
+                        "authenticate-old-acceptance-rebuild-current-proof-full-candidate-repair"
+                            .to_owned(),
+                    ),
+                    (
+                        "limits",
+                        "finite-closure-still-subject-to-preparation-work-and-storage".to_owned(),
                     ),
                 ],
             )?);

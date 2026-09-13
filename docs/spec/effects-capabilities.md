@@ -40,6 +40,14 @@ rows and has no effect subtyping. Signature traversal substitutes task rows nest
 types, aggregates and nominal applications. Unknown symbolic rows permit forwarding and invocation
 of equally typed callbacks, not guessed capability operations.
 
+Ordinary generic calls and named function values obey the finite parameter-flow rule in
+[language.md](language.md). A recursive task may permute both ordinary type arguments and ordered
+effect arguments simultaneously, including swapping callbacks with different rows. Every new
+activation still checks its substituted allowance and exact grants. Effect unions range over the
+finite exact requirements in the closure; they do not create ordinary type constructors or cancel
+an expanding ordinary-parameter cycle. This rule changes no resource-signature, capture, transaction
+or pure/task restriction.
+
 Three checks stay separate: the target's declared resolved row, the current activation's declared
 resolved allowance, and the selected component's actual checked grants. Every nested activation
 receives its own allowance. A concrete required atom is covered by itself or a validated requirement

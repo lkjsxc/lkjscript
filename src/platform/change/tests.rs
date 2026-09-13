@@ -706,8 +706,21 @@ fn request_expression_and_declared_type_admission_stops_before_exact_limit() {
         diagnostics[0].code,
         "change_budget_validation_expression_steps"
     );
+    let complete = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta.clone(),
+        ChangeBudget::default(),
+        ChangeBudgetWork::default(),
+    )
+    .expect("complete signature, expression and callable-flow proof");
+    let steps = complete.validation.work.expression_work;
+    assert!(
+        steps > 4,
+        "callable flow must participate in the same work admission"
+    );
     let mut exact = ChangeBudget::default();
-    exact.validation.maximum_expression_steps = 3;
+    exact.validation.maximum_expression_steps = steps - 1;
     assert_eq!(
         prepare_change_analysis_with_budget(
             &base,
@@ -716,12 +729,12 @@ fn request_expression_and_declared_type_admission_stops_before_exact_limit() {
             exact,
             ChangeBudgetWork::default()
         )
-        .expect_err("one less than the complete four-step proof rejects")[0]
+        .expect_err("one less than the complete proof rejects")[0]
             .code,
         "change_budget_validation_expression_steps"
     );
     let mut exact = ChangeBudget::default();
-    exact.validation.maximum_expression_steps = 4;
+    exact.validation.maximum_expression_steps = steps;
     let prepared = prepare_change_analysis_with_budget(
         &base,
         &base_witness,
@@ -729,8 +742,8 @@ fn request_expression_and_declared_type_admission_stops_before_exact_limit() {
         exact,
         ChangeBudgetWork::default(),
     )
-    .expect("parameter owner, parameter type, result type and body fit exactly four steps");
-    assert_eq!(prepared.validation.work.expression_work, 4);
+    .expect("signature, body and callable-flow work fit exactly");
+    assert_eq!(prepared.validation.work.expression_work, steps);
 }
 
 #[test]

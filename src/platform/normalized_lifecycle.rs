@@ -180,7 +180,9 @@ pub(crate) fn prepare_repository_with_control(
         .check()
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))?;
     let current = repository.current()?;
-    let closure = repository.export_package_container()?;
+    let closure = repository
+        .view_current_with_control(control)?
+        .export_package_container()?;
     let oracle = super::package_transport::oracle::reconstruct(&closure.container)?;
     let mut schema =
         super::execution::normalized::NormalizedReferenceSchema::reconstruct_with_control(

@@ -7,6 +7,119 @@ use crate::platform::storage::memory::MemoryPackedStore;
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
 
 #[test]
+fn historical_acceptance_retains_identity_but_requires_rebuilt_current_proof() {
+    use crate::platform::witness::{
+        ValidationCertificateDigest, ValidatorContractDigest, decode_historical_witness_manifest,
+        decode_witness_manifest, encode_witness_manifest_content,
+    };
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let mut store = MemoryPackedStore::default();
+    let initial = prepare_initial_publication(&logical, &store, None).unwrap();
+    install(&mut store, &initial.publication);
+    let mut old = initial.witness.manifest.clone();
+    old.validator_contract = ValidatorContractDigest::from_bytes([0x5a; 32]);
+    // Independent neutral rehash models historical acceptance, not current semantic proof.
+    old.certificate = ValidationCertificateDigest::of(
+        &bincode::encode_to_vec(
+            old.core(),
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .unwrap(),
+    );
+    let (digest, bytes) = encode_witness_manifest_content(&old).unwrap();
+    assert_eq!(
+        decode_historical_witness_manifest(&bytes, digest).unwrap(),
+        old
+    );
+    assert_eq!(
+        decode_witness_manifest(&bytes, digest).unwrap_err().code,
+        "witness_validator_contract"
+    );
+    let mut record = initial.publication.revision.clone();
+    record.publication.validation.witness = digest;
+    record.publication.validation.certificate = old.certificate;
+    record.publication.validation.validator_contract = old.validator_contract;
+    let (record_digest, record_bytes) = record.encode().unwrap();
+    let head = HeadRecord {
+        record: record_digest,
+        ..initial.publication.head
+    };
+    let accepted = AcceptedBinding::verify(head, &record, digest, &old).unwrap();
+    assert_eq!(accepted.head.revision, initial.publication.head.revision);
+    assert_eq!(
+        accepted.semantic_root,
+        initial.publication.accepted.semantic_root
+    );
+    assert_eq!(
+        accepted.semantic_state,
+        initial.publication.accepted.semantic_state
+    );
+    store
+        .stage(
+            ObjectKey::from_digest(ObjectDomain::ValidationWitness, digest.bytes()),
+            &bytes,
+            &mut StoreWork::default(),
+        )
+        .unwrap();
+    store
+        .stage(
+            ObjectKey::from_digest(ObjectDomain::Revision, record_digest.bytes()),
+            &record_bytes,
+            &mut StoreWork::default(),
+        )
+        .unwrap();
+
+    let rebuilt =
+        super::validation::RevalidatedBase::rebuild(initial.snapshot.clone(), &|| Ok(())).unwrap();
+    let current = rebuilt.require_current().unwrap();
+    assert_eq!(current.manifest, initial.witness.manifest);
+    assert_eq!(
+        current.report.owners_checked,
+        initial.snapshot.owners.len() as u64
+    );
+    let body = function_body(&initial.snapshot, "callee");
+    let mut replacement = initial.snapshot.owners[&body].clone();
+    let OwnerRecord::Expression(expression) = &mut replacement else {
+        panic!("expression")
+    };
+    expression.operation = ExpressionOperation::Unit {};
+    let delta = CanonicalDelta::normalize(
+        &initial.snapshot,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected: encode_owner(&initial.snapshot.owners[&body]).unwrap().0,
+            record: replacement,
+        }],
+    )
+    .unwrap();
+    let analysis = prepare_change_analysis(&initial.snapshot, &initial.witness, delta).unwrap();
+    let prepared = prepare_change_publication(
+        accepted,
+        &initial.snapshot,
+        &initial.witness,
+        &analysis,
+        &store,
+        PublicationOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        prepared.revision.publication.parents,
+        vec![accepted.parent()]
+    );
+    assert!(prepared.authority.witness.manifest.contract_is_current());
+    assert_eq!(
+        decode_historical_witness_manifest(&bytes, digest).unwrap(),
+        old
+    );
+    let mut corrupt = bytes;
+    corrupt[16] ^= 1;
+    assert!(decode_historical_witness_manifest(&corrupt, digest).is_err());
+    old.contract_version = u16::MAX;
+    assert!(encode_witness_manifest_content(&old).is_err());
+}
+
+#[test]
 fn initial_history_binds_every_layer_and_reopens_from_packs() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let mut store = MemoryPackedStore::default();

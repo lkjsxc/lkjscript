@@ -57,6 +57,7 @@ struct TargetPreparationInputs<'a> {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NormalizedPreparationWork {
+    pub admission_bytes: u64,
     pub packages: u64,
     pub compiler_units: u64,
     pub runtime_owners: u64,
@@ -370,8 +371,16 @@ impl NormalizedProgram {
         control.check().map_err(|error| {
             Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
         })?;
+        let admission_bytes = artifact.require_current_admission(|| {
+            control.check().map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+            })
+        })?;
         let artifact = Arc::new(artifact);
-        let mut work = NormalizedPreparationWork::default();
+        let mut work = NormalizedPreparationWork {
+            admission_bytes,
+            ..NormalizedPreparationWork::default()
+        };
         let LoadedCompilationInputs { units, manifests } = load_units(&artifact, &mut work)?;
         let root_compilation = manifests
             .get(&artifact.manifest.root_package)

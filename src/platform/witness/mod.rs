@@ -18,6 +18,7 @@ mod summary;
 mod summary_build;
 
 pub(crate) use codec::bind_witness_manifest;
+pub(crate) use codec::decode_historical_witness_manifest;
 pub(crate) use codec::encode_witness_manifest_content;
 pub use codec::{
     decode_owner_summary, decode_witness_manifest, encode_owner_summary, encode_witness_manifest,
@@ -28,8 +29,9 @@ pub use digest::{
     ValidatorContractDigest,
 };
 pub use entry::*;
-pub(crate) use full::rebuild_full_witness_with_limit;
+pub(crate) use full::{CanonicalWitnessFacts, rebuild_canonical_facts};
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
+pub(crate) use full::{rebuild_full_witness_checked, rebuild_full_witness_with_limit};
 pub(crate) use ownership::ownership_contributions;
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
 pub(crate) use summary_build::{

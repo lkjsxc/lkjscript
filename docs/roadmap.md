@@ -50,26 +50,32 @@ readers passed. Immutable v0.1.33 and publisher `34705135744/1` have now passed 
 anonymous exact/latest acquisition, attestations and the public pair. FG-7 closes the selected
 combined task-iteration/foreground milestone. The installation source `037a1348` is accepted and
 integrated; dry run `34706128684/1` passed. Its isolated annotated v0.1.34 publisher `34760117554/1`
-published immutable release `387929218`; its final anonymous installed application pair remains
-pending independently of newer main.
+published immutable release `387929218`; its final anonymous installed application pair passed,
+including joined cleanup. Final artifact `10320391118` passed its original reader with the archived
+context. INS-7 is closed independently of newer main.
 
 The [named-reference increment](campaigns/202609131008.md) removes the exercised foreground
 consumer's host member-ID inventories through typed, reviewed exact-name addressing. Accepted source
 `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed all 26 full gates freshly and is integrated on main;
 v0.1.34 contains only the frozen installer milestone.
-Publish the named-reference increment with the **next accepted non-delivery capability campaign**.
-At most one such subsequent campaign may be accepted without selecting their combined publication.
-If none is chosen, the next architect must select an authoring release from this accepted source
-instead of extending deferral. A verified user-facing recovery need permits earlier additive
-release. No later tag is preallocated.
+The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes the increment's
+expressly limited one-campaign deferral and selects their combined publication. It implements
+finite parameter-flow admission and current-executable repair across validator changes. Focused
+proof passes; required full/target acceptance and immutable installed/public delivery remain open.
+The observed next unused candidate is v0.1.35. Do not defer this accepted authoring increment again
+to requirement parameters or another semantic campaign.
 
 Remaining observed burden is ordered flat expression/type assembly and request-wide creator
 symbols. If exact capability policy must still be repeated across packages/components, the next
 semantic candidate is explicit operation-bearing requirement parameters with exact interface and
 operation constraints, followed by a coherent resource-transfer contract. If expression assembly
 dominates instead, consider a structural request-block adapter over the same typed intent. These
-are contingent directions, not authorized work. The older generic-recursion preparation versus
-ordered-substitution note is still unprobed, not a proved defect.
+are contingent directions, not authorized work. The finite campaign's actual predecessor probes
+established that a swap was admitted and ran, while an untaken expanding call was published and
+failed only at reference preparation exhaustion. The new canonical rule addresses that boundary.
+Its designed task witness still places concrete Configuration/DataStore operations and explicit
+transaction ownership in the consumer; reusable operation-constrained requirements remain the
+strongest next semantic candidate after this selected delivery completes.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

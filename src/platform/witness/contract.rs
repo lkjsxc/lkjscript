@@ -44,7 +44,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 22] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 23] = [
+    ValidatorFeatureDescriptor {
+        name: "finite_generic_callable_instantiation",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "parametric_nominal_data",
         version: 2,
