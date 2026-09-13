@@ -2299,8 +2299,8 @@ fn execute_normalized_change(
     let outcome = repository
         .publish(&prepared.publication)
         .map_err(single_diagnostic)?;
-    let (status, cache) = match &outcome {
-        GraphPublicationOutcome::Accepted { .. } => {
+    let (status, cache, accepted) = match &outcome {
+        GraphPublicationOutcome::Accepted { current, .. } => {
             let cache = match base_cache {
                 DerivedCacheHandoff::Available(base) => {
                     match build_incremental(&repository, base, &prepared.publication) {
@@ -2320,9 +2320,9 @@ fn execute_normalized_change(
                     DerivedCacheObservation::failed(diagnostic)
                 }
             };
-            ("accepted", cache)
+            ("accepted", cache, current.accepted)
         }
-        GraphPublicationOutcome::AlreadyAccepted { .. } => (
+        GraphPublicationOutcome::AlreadyAccepted { accepted, .. } => (
             "already-accepted",
             DerivedCacheObservation {
                 status: "not-attempted-replay",
@@ -2332,6 +2332,7 @@ fn execute_normalized_change(
                 removed: None,
                 diagnostic: None,
             },
+            accepted.accepted,
         ),
         GraphPublicationOutcome::Stale { expected, current } => {
             return Err(single_diagnostic(Diagnostic::new(
@@ -2356,7 +2357,10 @@ fn execute_normalized_change(
         encoding,
         None,
         None,
-        Some(&cache),
+        Some(AppliedChangeResponse {
+            cache: &cache,
+            accepted,
+        }),
     )
     .map_err(single_diagnostic)
 }
@@ -2374,6 +2378,11 @@ struct DerivedCacheObservation {
     reused: Option<u64>,
     removed: Option<u64>,
     diagnostic: Option<(String, String)>,
+}
+
+struct AppliedChangeResponse<'a> {
+    cache: &'a DerivedCacheObservation,
+    accepted: super::publication::AcceptedBinding,
 }
 
 impl DerivedCacheObservation {
@@ -2603,7 +2612,7 @@ fn compact_change_response(
     plan: LogicalPlanEncoding,
     input_file: Option<&str>,
     plan_output: Option<&LogicalPlanOutputPublication>,
-    cache: Option<&DerivedCacheObservation>,
+    applied: Option<AppliedChangeResponse<'_>>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let publication = &prepared.publication;
     let [base] = publication.receipt.bases.as_slice() else {
@@ -2825,15 +2834,23 @@ fn compact_change_response(
             ),
         ],
     )?;
+    // Re-preparation supplies current review evidence, but an idempotent retry must identify
+    // the original immutable publication returned by the publication owner, not an unpersisted
+    // record rebuilt with this invocation's validation-work observations.
+    let (receipt, revision_record) = applied.as_ref().map_or(
+        (publication.receipt_digest, publication.revision_digest),
+        |result| (result.accepted.receipt, result.accepted.head.record),
+    );
     append_compact_record(
         &mut output,
         "receipt",
         &[
-            ("digest", publication.receipt_digest.to_string()),
-            ("revision-record", publication.revision_digest.to_string()),
+            ("digest", receipt.to_string()),
+            ("revision-record", revision_record.to_string()),
         ],
     )?;
-    if let Some(cache) = cache {
+    if let Some(applied) = applied {
+        let cache = applied.cache;
         let mut fields = vec![("status", cache.status.to_owned())];
         if let Some(manifest) = &cache.manifest {
             fields.push(("manifest", manifest.clone()));

@@ -192,9 +192,15 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
                 "an old prepared token requires re-planning without changing its historical result"
             );
             let token = plan(&root, request);
+            let retry = apply(&root, request, &token);
+            assert_eq!(field(&retry, "result", "status"), "already-accepted");
             assert_eq!(
-                field(&apply(&root, request, &token), "result", "status"),
-                "already-accepted"
+                field(&retry, "receipt", "digest"),
+                old.accepted.receipt.to_string()
+            );
+            assert_eq!(
+                field(&retry, "receipt", "revision-record"),
+                old.head.record.to_string()
             );
             assert_eq!(repository.current().unwrap().head, old.head);
         } else {
@@ -234,9 +240,15 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
             let later_token = plan(&root, &later);
             apply(&root, &later, &later_token);
             let later_head = repository.current().unwrap().head;
+            let retry = apply(&root, &request, &token);
+            assert_eq!(field(&retry, "result", "status"), "already-accepted");
             assert_eq!(
-                field(&apply(&root, &request, &token), "result", "status"),
-                "already-accepted"
+                field(&retry, "receipt", "digest"),
+                repaired.accepted.receipt.to_string()
+            );
+            assert_eq!(
+                field(&retry, "receipt", "revision-record"),
+                repaired.head.record.to_string()
             );
             assert_eq!(repository.current().unwrap().head, later_head);
             let original = include_str!(

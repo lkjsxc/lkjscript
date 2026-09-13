@@ -263,7 +263,11 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                 let retry = change(context, &project, VALID, installed, &mut installed_commands)?;
                 require(
                     field(&retry, "result", "status")? == "already-accepted"
-                        && field(&retry, "revision", "result")? == original_result,
+                        && field(&retry, "revision", "result")? == original_result
+                        && field(&retry, "receipt", "digest")?
+                            == field(&status, "receipt", "digest")?
+                        && field(&retry, "receipt", "revision-record")?
+                            == field(&status, "revision", "record")?,
                     "historical valid retry changed result identity",
                 )?;
             } else {
@@ -318,7 +322,11 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                 require(
                     field(&retry, "result", "status")? == "already-accepted"
                         && field(&retry, "revision", "result")?
-                            == field(&repair, "revision", "result")?,
+                            == field(&repair, "revision", "result")?
+                        && field(&retry, "receipt", "digest")?
+                            == field(&repair, "receipt", "digest")?
+                        && field(&retry, "receipt", "revision-record")?
+                            == field(&repair, "receipt", "revision-record")?,
                     "repair retry lost original result",
                 )?;
                 let path = context
@@ -417,6 +425,45 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                     == "rev_f3e49f1725234acd064a6938b764166d3696b13da570d6581302a9ba5a4e998d",
             "repair did not start from authentic invalid historical result",
         )?;
+        let read = |index: usize| -> Result<Vec<CompactRecord>, DevError> {
+            let command = receipt
+                .commands
+                .get(index)
+                .ok_or_else(|| DevError::corrupt("upgrade history command absent"))?;
+            let bytes = process::read_bounded(
+                &root.join(&command.observation.stdout.path),
+                MAXIMUM_OUTPUT_BYTES,
+            )?;
+            parse_records("upgrade-history", &bytes)
+                .map_err(|e| DevError::corrupt(format!("upgrade history: {e:?}")))
+        };
+        let valid_status = read(
+            index
+                .checked_sub(9)
+                .ok_or_else(|| DevError::corrupt("upgrade history index"))?,
+        )?;
+        let valid_retry = read(index - 5)?;
+        let repair_retry = read(index + 5)?;
+        for (retry, original, revision_field, record_operation, record_field) in [
+            (&valid_retry, &valid_status, "id", "revision", "record"),
+            (
+                &repair_retry,
+                &records,
+                "result",
+                "receipt",
+                "revision-record",
+            ),
+        ] {
+            require(
+                field(retry, "result", "status")? == "already-accepted"
+                    && field(retry, "revision", "result")?
+                        == field(original, "revision", revision_field)?
+                    && field(retry, "receipt", "digest")? == field(original, "receipt", "digest")?
+                    && field(retry, "receipt", "revision-record")?
+                        == field(original, record_operation, record_field)?,
+                "upgrade retry did not retain the original accepted publication evidence",
+            )?;
+        }
     }
     Ok(indexes)
 }

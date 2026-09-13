@@ -482,8 +482,9 @@ nothing.
 An apply retry carrying the same valid idempotency key, normalized request, exact base, and reviewed
 plan is reprepared against that request's historical base and reconciles to the one already accepted
 revision. The retry path hides physical type objects introduced by the accepted child so append-only
-storage growth cannot change the logical plan. `change plan` still observes the current revision and
-rejects a stale base; idempotency is not a historical planning cursor.
+storage growth cannot change the logical plan. Plan and apply reopen an exact matching accepted
+request's retained base; other stale-base requests reject. Current revalidation cannot rewrite the
+historical publication: an accepted retry reports its original receipt and revision-record identities.
 
 When apply accepts, its semantic records are final before any compiler-cache handoff. A
 `derived-cache` record reports `updated`, `not-available`, `not-attempted-replay`, or `failed`, plus
