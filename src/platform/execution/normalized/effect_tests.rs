@@ -477,6 +477,7 @@ fn assert_factory_invocation(snapshot: &KernelSnapshot) {
 #[test]
 fn task_invocation_checks_activation_even_when_the_component_has_the_grant() {
     let snapshot = library_composition();
+    let schema = super::super::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
     let (_temporary, _repository, mut program) = prepare_repository(&snapshot);
     let wrapper = declaration_named(&snapshot, "apply-task");
     // The independent tier reads a separately narrowed canonical test fixture. It does not
@@ -496,8 +497,12 @@ fn task_invocation_checks_activation_even_when_the_component_has_the_grant() {
         effect_parameters: Vec::new(),
     };
     let (capabilities, calls) = bind_fixture_capability(&program, 10);
-    let error = super::super::reference::NormalizedReferenceInterpreter::new(
-        &narrowed,
+    let reference = super::FaultedReferenceRead {
+        source: &narrowed,
+        schema: Arc::new(schema),
+    };
+    let error = super::super::reference::NormalizedReferenceInterpreter::from_reader(
+        &reference,
         &program,
         NormalizedRunPolicy::default(),
     )
@@ -1526,6 +1531,7 @@ fn shared_grant_allowance(direct: bool) {
         effect_arguments: Arc::from([]),
         bound_arguments: Some(Arc::new(vec![NormalizedValue::Unit])),
     };
+    let schema = super::super::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
     // Canonical rejection and the two raw activation probes independently narrow the allowance.
     let mut narrowed = snapshot.clone();
     let OwnerRecord::Declaration(owner) = narrowed
@@ -1550,8 +1556,12 @@ fn shared_grant_allowance(direct: bool) {
         "narrow calling context must fail universal validation"
     );
     let (capabilities, calls) = bind_fixture_capability(&program, 1);
-    let error = super::super::reference::NormalizedReferenceInterpreter::new(
-        &narrowed,
+    let reference = super::FaultedReferenceRead {
+        source: &narrowed,
+        schema: Arc::new(schema),
+    };
+    let error = super::super::reference::NormalizedReferenceInterpreter::from_reader(
+        &reference,
         &program,
         NormalizedRunPolicy::default(),
     )

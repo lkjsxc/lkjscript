@@ -479,6 +479,6 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
         let mut rows = Vec::new();
         for reference in [false, true] { for fault in ["none", "empty", "trap", "cancelled", "quota"] { rows.push(invoke(&prepared, reference, fault)?); } }
         let schema = prepared.reference.schema().map_err(execution)?;
-        Ok(json!({"package":prepared.package.to_string(), "revision":prepared.revision.to_string(), "artifact":prepared.artifact_bundle.to_string(), "preparation_nanoseconds":preparation, "admission_bytes":prepared.program.work.admission_bytes, "type_derivation_steps":prepared.program.work.type_derivation_steps, "type_metadata_bytes":prepared.program.work.type_metadata_bytes, "reference_callable_admission_steps":schema.callable_admission_steps, "rows":rows, "live_effects_replayed":false, "cleanup_complete":true}))
+        Ok(json!({"package":prepared.package.to_string(), "revision":prepared.revision.to_string(), "artifact":prepared.artifact_bundle.to_string(), "preparation_nanoseconds":preparation, "admission_bytes":prepared.program.work.admission_bytes, "type_derivation_steps":prepared.program.work.type_derivation_steps, "type_metadata_bytes":prepared.program.work.type_metadata_bytes, "reference_source_admission_steps":schema.source_admission_steps, "rows":rows, "live_effects_replayed":false, "cleanup_complete":true}))
     }).map_err(|error| failure(error.to_string()))?.join().map_err(|_| failure("finite observation thread failed"))?
 }

@@ -736,6 +736,10 @@ corresponding canonical/compiled applications, so public loading must reject the
 adapter construction. Separate compiled-argument forgery tests keep valid canonical bodies and
 require instruction/meaning correspondence rejection. Retained readers check exact neutral events,
 failure classes, live-state counters, candidate paths and complete input/output inventories.
+Raw reference snapshots have no artifact admission token: full current validation and a complete,
+acyclic package-body inventory must pass before exact type derivation. Missing supplier bodies and
+cycles between otherwise locally valid packages reject at this boundary. Reference observations
+charge this work as source admission, separately from subsequent type derivation.
 
 Release measurements cover copied command creation, first check, clean build, exact-current build,
 post-change incremental plus equal clean rebuild, pure run, standard clean check/build, and

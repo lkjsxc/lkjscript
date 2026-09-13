@@ -381,6 +381,26 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
+// Runtime corruption probes deliberately alter a previously admitted inventory, just as their
+// production counterparts mutate a prepared program. This test-only reader preserves that
+// boundary; raw snapshot reconstruction itself always requires full current source admission.
+pub(crate) struct FaultedReferenceRead<'a> {
+    pub source: &'a crate::platform::kernel::KernelSnapshot,
+    pub schema: Arc<super::NormalizedReferenceSchema>,
+}
+
+impl NormalizedReferenceRead for FaultedReferenceRead<'_> {
+    fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+        NormalizedReferenceRead::binding(self.source)
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+        NormalizedReferenceRead::owner(self.source, owner)
+    }
+    fn schema(&self) -> Result<Arc<super::NormalizedReferenceSchema>, ExecutionError> {
+        Ok(self.schema.clone())
+    }
+}
+
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
     name: &str,
@@ -854,6 +874,61 @@ fn empty_normalized_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnap
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
     }
+}
+
+#[test]
+fn raw_reference_inputs_require_complete_acyclic_current_source() {
+    use crate::platform::kernel::{DependencyRecord, KernelSnapshot, PackageRevisionDigest};
+    let mut left = empty_normalized_snapshot(b"raw-reference-left");
+    let mut right = empty_normalized_snapshot(b"raw-reference-right");
+    let add_dependency = |snapshot: &mut KernelSnapshot, package| {
+        snapshot.dependencies.insert(
+            package,
+            DependencyRecord {
+                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                package,
+                semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([1; 32]),
+                package_revision: PackageRevisionDigest::from_bytes([2; 32]),
+            },
+        );
+        snapshot.root.dependencies = MapRoot::from_parts(
+            snapshot.root.dependencies.page(),
+            snapshot.dependencies.len() as u64,
+            snapshot.root.dependencies.content(),
+        );
+    };
+    add_dependency(&mut left, right.root.package_id);
+    let missing = super::NormalizedReferenceSchema::reconstruct([&left]).unwrap_err();
+    assert_eq!(missing.code, "normalized_reference_inventory");
+    assert!(missing.message.contains("dependency body is unavailable"));
+    assert!(super::NormalizedReferenceSchema::reconstruct([&left, &right]).is_ok());
+    add_dependency(&mut right, left.root.package_id);
+    // Every local body graph can be valid while the prerequisite for omitting foreign SCC
+    // edges is false. No reference type expansion is allowed to discover this by exhaustion.
+    crate::platform::kernel::validate_full(&left).unwrap();
+    crate::platform::kernel::validate_full(&right).unwrap();
+    let cycle = super::NormalizedReferenceSchema::reconstruct([&right, &left]).unwrap_err();
+    assert_eq!(cycle.code, "normalized_reference_inventory");
+    assert!(cycle.message.contains("cyclic"));
+    let mut malformed = empty_normalized_snapshot(b"raw-reference-malformed");
+    malformed.types.insert(
+        crate::platform::kernel::TypeObjectDigest::from_bytes([3; 32]),
+        crate::platform::kernel::TypeObject::new(TypeForm::Unit).unwrap(),
+    );
+    assert_eq!(
+        super::NormalizedReferenceSchema::reconstruct([&malformed])
+            .unwrap_err()
+            .code,
+        "kernel_full_type_digest"
+    );
+    let control = ExecutionControl::uncancelled();
+    control.cancel();
+    assert_eq!(
+        super::NormalizedReferenceSchema::reconstruct_with_control([&left, &right], &control)
+            .unwrap_err()
+            .class,
+        ExecutionFailureClass::Cancelled,
+    );
 }
 
 fn linked_pure_program() -> (

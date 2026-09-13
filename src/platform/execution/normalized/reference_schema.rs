@@ -9,48 +9,14 @@ use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
 use crate::platform::kernel::{
-    CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference, ExpressionRead,
-    FieldReference, KernelSnapshot, Name, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
-    StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference, FieldReference,
+    KernelSnapshot, Name, OwnerKey, OwnerRecord, PackageId, StructuralTypeField, TypeForm,
+    TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::semantic_id::{TargetId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
-// This public reconstruction route accepts canonical snapshots without a loaded-artifact token.
-// Admit explicit applications before reference type closure can expand any exact instance.
-struct CallableSource<'a> {
-    snapshot: &'a KernelSnapshot,
-    control: &'a crate::platform::execution::ExecutionControl,
-}
-
-impl ExpressionRead for CallableSource<'_> {
-    fn package_id(&self) -> PackageId {
-        self.snapshot.root.package_id
-    }
-    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
-        ExpressionRead::owner(self.snapshot, owner)
-    }
-    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
-        ExpressionRead::type_object(self.snapshot, digest)
-    }
-    fn package_interface_owner(
-        &self,
-        package: PackageId,
-        owner: OwnerKey,
-    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
-        ExpressionRead::package_interface_owner(self.snapshot, package, owner)
-    }
-    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
-        ExpressionRead::has_dependency(self.snapshot, package)
-    }
-    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
-        self.control
-            .check()
-            .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
-    }
-}
-
-fn callable_error(error: Diagnostic) -> ExecutionError {
+fn source_error(error: Diagnostic) -> ExecutionError {
     use crate::platform::execution::ExecutionFailureClass;
     let class = match error.class {
         DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
@@ -63,7 +29,7 @@ fn callable_error(error: Diagnostic) -> ExecutionError {
 
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
-    pub(super) callable_admission_steps: u64,
+    pub(super) source_admission_steps: u64,
     pub(super) type_derivation_steps: u64,
     pub(super) type_metadata_bytes: u64,
     pub(super) affine_variants: Vec<bool>,
@@ -104,21 +70,34 @@ impl NormalizedReferenceSchema {
         let mut variants = BTreeMap::new();
         let mut visited = 0_usize;
         let mut inputs = Vec::new();
-        let mut callable_work = 0_usize;
+        let mut source_work = 0_usize;
         for snapshot in snapshots {
             control.check()?;
             let package = snapshot.root.package_id;
             if !packages.insert(package) || packages.len() > 10_000 {
                 return Err(inventory_error("duplicate or excessive canonical packages"));
             }
-            crate::platform::kernel::callable_flow::validate_callable_flow(
-                &CallableSource { snapshot, control },
-                snapshot.owners.keys().copied(),
-                &mut callable_work,
-                crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            // Raw snapshots carry no current artifact admission token. Check complete local
+            // meaning, including nominal/callable flow and foreign application scope, before
+            // deriving any exact instances. The work allowance is shared across packages.
+            let report = crate::platform::kernel::validate_full_checked(
+                snapshot,
+                crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK - source_work,
+                &mut 0,
+                &|| {
+                    control.check().map_err(|error| {
+                        Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+                    })
+                },
             )
-            .map_err(callable_error)?;
-            schema.callable_admission_steps = callable_work as u64;
+            .map_err(|errors| {
+                errors.into_iter().next().map_or_else(
+                    || inventory_error("canonical source validation failed without a diagnostic"),
+                    source_error,
+                )
+            })?;
+            source_work += report.work_consumed as usize;
+            schema.source_admission_steps = source_work as u64;
             inputs.push(snapshot);
             visited = visited
                 .checked_add(snapshot.owners.len())
@@ -257,6 +236,8 @@ impl NormalizedReferenceSchema {
                 }
             }
         }
+        validate_dependency_closure(&inputs, control, &mut source_work)?;
+        schema.source_admission_steps = source_work as u64;
         schema.functions = functions.into_iter().collect();
         schema.records = records.into_values().collect();
         schema.variants = variants.into_values().collect();
@@ -382,6 +363,83 @@ impl NormalizedReferenceSchema {
         let (resolved, _) = encode_type_object(&TypeObject::new(form).ok()?).ok()?;
         Some(resolved)
     }
+}
+
+// Local callable SCCs exclude foreign applications only because complete package closures are
+// acyclic. Establish that premise for raw reference inputs too; an interface is not a body proof.
+fn validate_dependency_closure(
+    snapshots: &[&KernelSnapshot],
+    control: &crate::platform::execution::ExecutionControl,
+    work: &mut usize,
+) -> Result<(), ExecutionError> {
+    let mut tick = || {
+        control.check()?;
+        *work = work
+            .checked_add(1)
+            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_inventory_bound",
+                    "canonical source admission work is exhausted",
+                )
+            })?;
+        Ok::<_, ExecutionError>(())
+    };
+    let mut remaining = snapshots
+        .iter()
+        .map(|snapshot| (snapshot.root.package_id, snapshot.dependencies.len()))
+        .collect::<BTreeMap<_, _>>();
+    let mut parents = BTreeMap::<PackageId, Vec<PackageId>>::new();
+    let mut edges = 0_usize;
+    for snapshot in snapshots {
+        tick()?;
+        for dependency in snapshot.dependencies.keys() {
+            tick()?;
+            edges += 1;
+            if edges > 100_000 {
+                return Err(reference_resource(
+                    "normalized_reference_inventory_bound",
+                    "canonical reference dependency inventory exceeds 100000 edges",
+                ));
+            }
+            if !remaining.contains_key(dependency) {
+                return Err(inventory_error(
+                    "complete canonical dependency body is unavailable",
+                ));
+            }
+            parents
+                .entry(*dependency)
+                .or_default()
+                .push(snapshot.root.package_id);
+        }
+    }
+    let mut ready = remaining
+        .iter()
+        .filter_map(|(package, count)| (*count == 0).then_some(*package))
+        .collect::<Vec<_>>();
+    let mut admitted = 0_usize;
+    while let Some(package) = ready.pop() {
+        tick()?;
+        admitted += 1;
+        for parent in parents.remove(&package).unwrap_or_default() {
+            tick()?;
+            let count = remaining
+                .get_mut(&parent)
+                .ok_or_else(|| inventory_error("unknown canonical dependency parent"))?;
+            *count = count
+                .checked_sub(1)
+                .ok_or_else(|| inventory_error("duplicate canonical dependency edge"))?;
+            if *count == 0 {
+                ready.push(parent);
+            }
+        }
+    }
+    if admitted != snapshots.len() {
+        return Err(inventory_error(
+            "canonical source dependency closure is cyclic",
+        ));
+    }
+    Ok(())
 }
 
 impl NormalizedValueSchema for NormalizedReferenceSchema {

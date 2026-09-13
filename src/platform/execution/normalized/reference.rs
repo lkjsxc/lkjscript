@@ -44,7 +44,7 @@ pub struct NormalizedReferenceObservation {
     pub allocated_bytes: u64,
     pub allocation_charges: u64,
     pub type_derivation_steps: u64,
-    pub callable_admission_steps: u64,
+    pub source_admission_steps: u64,
     pub type_metadata_bytes: u64,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
@@ -526,7 +526,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         });
         let schema_work = schema.work;
         let type_derivation_steps = schema.type_derivation_steps;
-        let callable_admission_steps = schema.callable_admission_steps;
+        let source_admission_steps = schema.source_admission_steps;
         let type_metadata_bytes = schema.type_metadata_bytes;
         let list_work = super::list::Work::current();
         let mut state = ReferenceState {
@@ -559,7 +559,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 allocated_bytes: 0,
                 allocation_charges: 0,
                 type_derivation_steps,
-                callable_admission_steps,
+                source_admission_steps,
                 type_metadata_bytes,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,

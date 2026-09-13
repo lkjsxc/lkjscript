@@ -34,6 +34,24 @@ fn fixture() -> (NormalizedProgram, KernelSnapshot) {
     (program, snapshot)
 }
 
+fn boundary_reader<'a>(
+    snapshot: &'a KernelSnapshot,
+    admitted: &NormalizedReferenceSchema,
+) -> super::super::super::tests::FaultedReferenceRead<'a> {
+    let mut schema = admitted.clone();
+    schema.types.extend(snapshot.types.clone());
+    super::super::super::reference_types::complete(
+        &mut schema,
+        &[snapshot],
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    super::super::super::tests::FaultedReferenceRead {
+        source: snapshot,
+        schema: Arc::new(schema),
+    }
+}
+
 #[test]
 fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
     let (mut program, mut snapshot) = fixture();
@@ -191,17 +209,19 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         }
         value
     };
+    let reference_reader = boundary_reader(&snapshot, &schema);
     let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
         let arguments = vec![NormalizedValue::list(vec![value]).expect("bounded raw list")];
         if reference {
             let sink = std::sync::Mutex::new(None);
-            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-                .observing(
-                    &sink,
-                    &super::super::super::reference::CoreNormalizedReferenceHost,
-                )
-                .invoke_instantiated(length_declaration, &[ty], arguments, control)
-                .map(|(value, _)| value);
+            let result =
+                NormalizedReferenceInterpreter::from_reader(&reference_reader, &program, policy)
+                    .observing(
+                        &sink,
+                        &super::super::super::reference::CoreNormalizedReferenceHost,
+                    )
+                    .invoke_instantiated(length_declaration, &[ty], arguments, control)
+                    .map(|(value, _)| value);
             let observation = sink.into_inner().unwrap().unwrap();
             assert_eq!(
                 observation.live_call_frames_after
@@ -942,6 +962,7 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
 #[test]
 fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reuse() {
     let (mut program, mut snapshot) = fixture();
+    let schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
     let (index, declaration) = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
         .map(|(index, function)| (FunctionIndex(u32::try_from(index).unwrap(), program.value_origin), function.declaration)).unwrap();
     let integer = program
@@ -961,16 +982,18 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
         ty = digest;
         nested_types.push(ty);
     }
+    let reference_reader = boundary_reader(&snapshot, &schema);
     let invoke = |reference: bool, ty, raw: NormalizedValue, policy, control: &ExecutionControl| {
         if reference {
             let sink = std::sync::Mutex::new(None);
-            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-                .observing(
-                    &sink,
-                    &super::super::super::reference::CoreNormalizedReferenceHost,
-                )
-                .invoke_instantiated(declaration, &[ty], vec![raw], control)
-                .map(|(value, _)| value);
+            let result =
+                NormalizedReferenceInterpreter::from_reader(&reference_reader, &program, policy)
+                    .observing(
+                        &sink,
+                        &super::super::super::reference::CoreNormalizedReferenceHost,
+                    )
+                    .invoke_instantiated(declaration, &[ty], vec![raw], control)
+                    .map(|(value, _)| value);
             let observation = sink.into_inner().unwrap().unwrap();
             assert_eq!(
                 observation.live_call_frames_after
@@ -1272,6 +1295,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
         ty,
     ));
     snapshot.types = program.types.clone();
+    let reference_reader = boundary_reader(&snapshot, &schema);
     let (length, declaration) = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
         .map(|(i, f)| (FunctionIndex(u32::try_from(i).unwrap(), program.value_origin), f.declaration)).unwrap();
     for (value, ty) in cases {
@@ -1294,10 +1318,13 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
                 &control,
             )
             .unwrap();
-        let reference =
-            NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
-                .invoke_instantiated(declaration, &[ty], vec![raw], &control)
-                .unwrap();
+        let reference = NormalizedReferenceInterpreter::from_reader(
+            &reference_reader,
+            &program,
+            Default::default(),
+        )
+        .invoke_instantiated(declaration, &[ty], vec![raw], &control)
+        .unwrap();
         assert_eq!(production.0, NormalizedValue::I64(1));
         assert_eq!(production.0, reference.0);
         assert_eq!(
@@ -1345,10 +1372,14 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
         ];
         let error = if reference {
             let sink = std::sync::Mutex::new(None);
-            NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
-                .observing(&sink, &host)
-                .invoke_instantiated(fold.1, &[integer, integer], args, &control)
-                .unwrap_err()
+            NormalizedReferenceInterpreter::from_reader(
+                &reference_reader,
+                &program,
+                Default::default(),
+            )
+            .observing(&sink, &host)
+            .invoke_instantiated(fold.1, &[integer, integer], args, &control)
+            .unwrap_err()
         } else {
             let sink = std::sync::Mutex::new(None);
             super::super::NormalizedVm::new(&program, Default::default())
@@ -1438,6 +1469,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     }
     snapshot.types = schema.types.clone();
     super::super::super::prepared_types::complete(&mut program).unwrap();
+    let reference_reader = boundary_reader(&snapshot, &schema);
     let length = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && function.parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
         .map(|(i,_)| FunctionIndex(u32::try_from(i).unwrap(), program.value_origin)).unwrap();
     let hidden = || NormalizedValue::Function {
@@ -1449,12 +1481,13 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
         if reference {
             let sink = std::sync::Mutex::new(None);
-            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-                .observing(
-                    &sink,
-                    &super::super::super::reference::CoreNormalizedReferenceHost,
-                )
-                .invoke_instantiated(declaration, &[ty, unit], vec![value], control);
+            let result =
+                NormalizedReferenceInterpreter::from_reader(&reference_reader, &program, policy)
+                    .observing(
+                        &sink,
+                        &super::super::super::reference::CoreNormalizedReferenceHost,
+                    )
+                    .invoke_instantiated(declaration, &[ty, unit], vec![value], control);
             let observation = sink.into_inner().unwrap().unwrap();
             assert_eq!(
                 observation.live_call_frames_after
@@ -1584,17 +1617,18 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     Arc::make_mut(&mut erased.functions)[index.0 as usize].type_parameter_constraints =
         Arc::from([crate::platform::kernel::TypeParameterConstraints::None; 2]);
     let sink = std::sync::Mutex::new(None);
-    let rejected = NormalizedReferenceInterpreter::new(&snapshot, &erased, Default::default())
-        .observing(
-            &sink,
-            &super::super::super::reference::CoreNormalizedReferenceHost,
-        )
-        .invoke_instantiated(
-            declaration,
-            &[unsafe_list, unit],
-            vec![NormalizedValue::list(vec![]).unwrap()],
-            &ExecutionControl::uncancelled(),
-        );
+    let rejected =
+        NormalizedReferenceInterpreter::from_reader(&reference_reader, &erased, Default::default())
+            .observing(
+                &sink,
+                &super::super::super::reference::CoreNormalizedReferenceHost,
+            )
+            .invoke_instantiated(
+                declaration,
+                &[unsafe_list, unit],
+                vec![NormalizedValue::list(vec![]).unwrap()],
+                &ExecutionControl::uncancelled(),
+            );
     assert!(rejected.is_err());
     assert_eq!(sink.into_inner().unwrap().unwrap().calls, 0);
     println!("constraint-reference-production-metadata-erasure rejected-before-body=true");

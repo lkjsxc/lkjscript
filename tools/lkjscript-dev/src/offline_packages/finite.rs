@@ -410,6 +410,8 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     neutral(context, &consumer)?;
     context.apply(&mut library, "expression.i64 as=$eight value=8\nreplace.body function=alternation/finite-reset body=$eight\n")?;
     context.export(&mut library)?;
+    fs::remove_dir_all(&library.path)?;
+    // The consumer repairs/reviews its exact selection using retained transport alone.
     context.stage(&consumer, &library)?;
     context.apply(
         &mut consumer,
@@ -436,7 +438,6 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             context.evidence.join(format!("finite-{name}")),
         )?;
     }
-    fs::remove_dir_all(&library.path)?;
     fs::remove_dir_all(&consumer.path)?;
     context.cli(
         None,
