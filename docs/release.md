@@ -75,9 +75,13 @@ acceptance remain required. No new tag or publication is claimed; see the
 The repaired workflow/tooling source is frozen at `4306ef64783462a8dda48f2a855a88482d1faec8`,
 with 47 focused release tests and strict clippy passed. Its pushed source branch is
 `codex/stable-release-202609140703`; new read-only rehearsal `34786835189/1`, created
-2026-09-13T22:27:10Z, records that exact event SHA. Its final full/target/package/installed proof
-and selected immutable/public delivery are pending. Preserve the frozen branch and original readers;
-later reporting descendants do not change the release candidate.
+2026-09-13T22:27:10Z, records that exact event SHA and completed successfully at
+2026-09-14T00:12:35Z. All five authenticated artifacts are retained; original package, target and
+installed-pair readers pass, with the original prepare binding 26 fresh full gates and zero reuse.
+The exact-source 76-omission target test also passes with restored original bytes. This is admitted
+rehearsal, with publication/public jobs appropriately skipped. Selected immutable/public delivery
+continues through the existing protocol. Preserve the frozen branch and original readers; later
+reporting descendants do not change the release candidate.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

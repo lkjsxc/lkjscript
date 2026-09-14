@@ -198,8 +198,38 @@
       "frozen_clone": ".artifacts/stable-release-202609140703/candidate-source/",
       "policy": "New corrected-workflow dispatch after refreshing remote, permissions/rules and matching terminal runs. Event head_sha equals frozen source. Reporting descendants do not replace this source. No tag/control/publication mutation."
     },
-    "remaining": "Final 4306ef64 fresh full, six static-target owners, deterministic package, installed pair and five transferred owners; final target reader faults and original-reader admission; ordinary integration of the delivery repair; immutable publication, attestations and anonymous exact/latest installed public pair.",
-    "resumption": "Read run 34786835189/1 at a useful boundary. On completion authenticate original handoffs and final full/target/package/installed evidence with archived context, then exercise final target-reader omissions without live replay. Perform normal integration and selected v0.1.35 publication through docs/release.md; preserve candidate 4306ef64 and its branch/clone while reporting/main advances. Do not rerun 34779065098 or start a duplicate publisher.",
+    "remaining": "Normal integration of the accepted stable-source repair/report; frozen 4306ef64 v0.1.35 publication, attestations and anonymous exact/latest installed public pair plus original-reader admission.",
+    "resumption": "Use the frozen 4306ef64 clone after normal integration and refreshed unused tag/control/publisher checks. Original final rehearsal and 76 omissions are admitted; do not launch another rehearsal. Follow docs/release.md to publish v0.1.35 and complete public acceptance.",
+    "final_source_rehearsal_admission": {
+      "source": "4306ef64783462a8dda48f2a855a88482d1faec8",
+      "run": {
+        "id": 34786835189,
+        "attempt": 1,
+        "conclusion": "success"
+      },
+      "classification": "valid_reused_hosted_behavior_and_fresh_original_reader_admission",
+      "local_evidence": ".artifacts/requirement-202609140938/predecessor/retention-manifest.json",
+      "full": {
+        "classification": "original successful prepare authenticated; private reader not rerun",
+        "receipt_sha256": "4d14e56d3b1e2b79ccc53ac46394db6f57a1ed49d1c0b404e13262db0238c7f3",
+        "prepare_receipt_sha256": "56afec1002c191cbb7224251b8b2dab457d9f0e354d5862cb53e8cb3a983cdf4",
+        "fresh_gates": 26,
+        "reused": 0
+      },
+      "target_owners": 6,
+      "static_userlands": 2,
+      "package": "passed original reader",
+      "installed_pair": "passed original reader; local-pair-rehearsal, latest bound within same pair",
+      "faults": {
+        "classification": "fresh exact-source omission driver with original reader; no effects replayed",
+        "count": 76,
+        "summary": "reconstruction/home-runner/work/_temp/target-admission/acceptance/nominal-receipt-faults.json",
+        "sha256": "d7b566ee555429b1bf6b8c5c93e03d38e951c9bb00c6fd831298681f966e6cf9",
+        "baseline_and_recovery_passed": true,
+        "restored_bytes_equal": true
+      },
+      "publication": "selected; tag and publisher not yet started at this observation"
+    },
     "deployment": "Not selected; effects confined to owned disposable witnesses."
   },
   "preserved": "Unrelated August 31 stash, immutable releases, frozen release checkouts and reader inputs, operational state and unrelated services remain untouched. Failed attempts, authentic predecessor repositories, copied binaries and raw receipts are deliberately retained under existing .artifacts owners.",

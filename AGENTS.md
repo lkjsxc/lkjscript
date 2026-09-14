@@ -42,25 +42,24 @@ lifecycle state, not the newest filename.
 Paths below are relative to the repository root:
 
 - `src/bin/lkjscript.rs`: process dispatch, signals, output and process failure.
-- `src/platform/cli.rs`, `control/`, `change/`, `normalized_query.rs`: public graph workflows.
+- `src/platform/cli.rs`, `src/platform/control/`, `src/platform/change/`, `src/platform/normalized_query.rs`: public graph workflows.
 - `src/platform/kernel/`: typed records, identity, relations, substitutions and semantic validation.
-- `src/platform/publication/` and `GraphRepository`: accepted transitions; `storage/`: physical storage.
-- `src/platform/package_interface.rs`, `package_transport/`, `compiler/`: exact package and artifact boundaries.
+- `src/platform/publication/` and `GraphRepository`: accepted transitions; `src/platform/storage/`: physical storage.
+- `src/platform/package_interface.rs`, `src/platform/package_transport/`, `src/platform/compiler/`: exact package and artifact boundaries.
 - `src/platform/execution/normalized/`: prepared execution, values, codecs, resources and canonical reference logic.
-- `src/platform/execution/control.rs`, `runtime.rs`, `deployment.rs`: policy, lifecycle and operational binding.
+- `src/platform/execution/control.rs`, `src/platform/runtime.rs`, `src/platform/deployment.rs`: policy, lifecycle and operational binding.
 - `src/platform/installation/`: immutable runtime slots, selection, locking and recovery.
-- `src/platform/project_creation/`: recipe lowering; `contract/`: discovery and generated guides.
+- `src/platform/project_creation/`: recipe lowering; `src/platform/contract/`: discovery and generated guides.
 - `src/platform/builtin_standard.rs`: built-in integration; use the maintained graph writer for accepted assets.
 - `packages/standard/`, `applications/lkjournal/`: maintained consumers; `tests/`: public use.
 - `tools/lkjscript-dev/`: contributor verification, independent oracles, target admission and release tooling.
 
-Abbreviated sibling paths in a bullet share its `src/platform/` prefix. Follow actual callers and
-contracts before editing. `src/platform/contributor.rs` provides read-only observations; do not
+Follow actual callers and contracts before editing. `src/platform/contributor.rs` provides read-only observations; do not
 assume it can generate accepted graphs.
 
-Use `docs/spec/semantic-authority.md`, `semantic-storage.md`, `semantic-cli.md`, `language.md`,
-`effects-capabilities.md`, `packages-components.md` and the applicable runtime/data specifications
-as normative owners. `docs/spec/verification.md` and the actual check registry own proof requirements;
+Use the normative owners under `docs/spec/`: `semantic-authority.md`, `semantic-storage.md`,
+`semantic-cli.md`, `language.md`, `effects-capabilities.md`, `packages-components.md`, and the
+applicable runtime/data specifications. `docs/spec/verification.md` and the actual check registry own proof requirements;
 `docs/release.md` owns publication. `docs/status.md` and `docs/roadmap.md` describe current findings
 and contingent direction. Keep observed implementation, normative commitments, reported evidence
 and assumptions distinct. Regenerate `docs/generated/` through its owner. Campaign-local matrices,
@@ -82,9 +81,11 @@ preparation limit must not silently define the language. Keep detailed type/name
 their normative owners. Loaders independently admit producer content; caches bind actual context.
 
 Callable identity, declared effects and deployment grants are distinct. Invocation requires the
-current allowance and exact grants even through imports, binding and tail calls. Preserve affine
+current allowance and exact grants even through imports, binding and tail calls. Pure execution
+cannot invoke a task callable, even with an empty effect row. Preserve affine
 ownership, borrowing, consumption and raw/retained-value admission. A signature alone proves neither
 authority nor capture safety. Admit target/type/grant contracts before live adapters or secrets.
+Typed external entries reject invalid arguments and intrinsically unencodable results before effects.
 Earlier effects may remain visible after failure unless their actual transaction rolls them back.
 Never replay live effects for differential proof or infer safe retry from output/cleanup failure.
 Release and join owned resources on every exit; cancellation or dropping a future is not cleanup.

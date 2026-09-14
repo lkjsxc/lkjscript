@@ -100,9 +100,15 @@ unresolved and unmeasured, respectively.
 The admission repair is now frozen at `4306ef64783462a8dda48f2a855a88482d1faec8` on pushed
 branch `codex/stable-release-202609140703`. All 47 focused release-owner tests (including 12
 actual-Git/workflow-shell cases) and strict clippy pass. New read-only rehearsal `34786835189/1`,
-created 2026-09-13T22:27:10Z, selects that exact event SHA. Final full/target/package/installed
-proof, ordinary integration of this repair and immutable/public delivery remain open. Subsequent
-reporting commits describe that frozen source and are not replacement proof inputs.
+created 2026-09-13T22:27:10Z, completed successfully at 2026-09-14T00:12:35Z on that exact SHA.
+Its five authenticated original artifacts are retained locally. Original package, six target and
+installed-pair readers pass; the original prepare authenticates 26 fresh full gates with zero reuse.
+The final-source 76-omission target test passes with intact baseline/recovery and byte-identical
+restoration. These are rehearsal evidence and reader observations; immutable/public delivery is
+still selected and open. Reporting descendants do not replace its frozen inputs. The
+[requirement-parameter campaign](campaigns/202609140938.md) continues the unimplemented language
+capability while finishing this independent predecessor publication; its acceptance deferral has
+not begun.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,

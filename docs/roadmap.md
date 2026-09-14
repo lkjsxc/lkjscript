@@ -72,9 +72,13 @@ authority. Its new candidate still requires fresh full/target/package/installed 
 admission, normal integration of the repair and immutable installed/public delivery. v0.1.35 remains
 unused at reconciliation. Do not defer this selected delivery to requirement parameters or another
 semantic campaign; later reporting/main progress must not retarget its frozen proof source.
-Repair candidate `4306ef64` has now passed focused release-owner proof and strict clippy;
-new exact-source rehearsal `34786835189/1` is selected. Its required full/target/installed and
-immutable/public boundaries remain the next delivery obligation, before further semantic work.
+Repair candidate `4306ef64` passed exact-source rehearsal `34786835189/1`. Its original
+full-prepare binding, package, six target and installed-pair evidence are authenticated and retained;
+the final-source 76-omission reader test passes. Continue its independent v0.1.35 publisher and
+anonymous installed public acceptance without another rehearsal or retargeting frozen inputs.
+The [requirement-parameter mandate](campaigns/202609140938.md) now selects the missing ordinary
+library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No pre-existing implementation
+was found. Its engineering acceptance and one-campaign successor release deferral have not begun.
 
 Remaining observed burden is ordered flat expression/type assembly and request-wide creator
 symbols. If exact capability policy must still be repeated across packages/components, the next
